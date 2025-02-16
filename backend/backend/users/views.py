@@ -67,14 +67,29 @@ class RegisterView(APIView):
 
 class LoginView(APIView):
     permission_classes = [AllowAny]
+    authentication_classes = []  # Add this line
 
     def post(self, request):
         serializer = UserLoginSerializer(data=request.data)
         if serializer.is_valid():
-            user = authenticate(request,
-                email=serializer.validated_data['email_or_username'],
-                password=serializer.validated_data['password']
+            email_or_username = serializer.validated_data['email_or_username']
+            password = serializer.validated_data['password']
+
+            # Try to authenticate
+            user = authenticate(
+                request,
+                username=email_or_username,  # Backend will check both username and email
+                password=password
             )
+
+            if user is None:
+                # If first attempt fails, try with email explicitly
+                user = authenticate(
+                    request,
+                    email=email_or_username,
+                    password=password
+                )
+
             if user:
                 if not user.email_verified:
                     return Response({
@@ -94,16 +109,19 @@ class LoginView(APIView):
                         'full_name': user.full_name
                     }
                 })
+
             return Response({
                 "error": "Invalid credentials"
             }, status=status.HTTP_401_UNAUTHORIZED)
+
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class VerifyEmailView(APIView):
     permission_classes = [AllowAny]
+    authentication_classes = []  # Add this line to disable authentication
 
-    def get(self, request, token=None):  # Add this method for email link clicks
+    def get(self, request, token=None):
         if not token:
             return Response({
                 "error": "Token is required"
@@ -122,7 +140,7 @@ class VerifyEmailView(APIView):
                 "error": "Invalid token"
             }, status=status.HTTP_400_BAD_REQUEST)
 
-    def post(self, request):  # Keep this method for API verification
+    def post(self, request):
         token = request.data.get('token')
         if not token:
             return Response({
