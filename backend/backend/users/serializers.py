@@ -29,4 +29,13 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
 class UserLoginSerializer(serializers.Serializer):
     email_or_username = serializers.CharField(required=True)
-    password = serializers.CharField(required=True)
+    password = serializers.CharField(required=True, write_only=True)
+
+    def validate(self, attrs):
+        email_or_username = attrs.get('email_or_username')
+        password = attrs.get('password')
+
+        if not email_or_username or not password:
+            raise serializers.ValidationError('Both email/username and password are required.')
+
+        return attrs
