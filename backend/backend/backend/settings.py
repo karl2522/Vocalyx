@@ -13,6 +13,8 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 from pathlib import Path
 import os
 from datetime import timedelta
+
+from celery.schedules import crontab
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -45,6 +47,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework_simplejwt',
+    'django_celery_beat',
     'corsheaders',
     'users.apps.UsersConfig',
     'token_management.apps.TokenManagementConfig',
@@ -152,6 +155,13 @@ DATABASES = {
     }
 }
 
+CELERY_BEAT_SCHEDULE = {
+    'cleanup-expired-tokens': {
+        'task': 'token_management.tasks.cleanup_expired_tokens',
+        'schedule': crontab(hour= '0', minute= '0'),
+    }
+}
+
 MONGODB_ENFORCE_SCHEMA = False
 SILENCED_SYSTEM_CHECKS = ['djongo.W001']
 
@@ -197,3 +207,4 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'users.CustomUser'
+
