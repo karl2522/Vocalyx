@@ -19,7 +19,7 @@
             android:id="@+id/splash_logo"
             android:layout_width="200dp"
             android:layout_height="200dp"
-            android:src="@drawable/icon_account_circle" />
+            android:src="@drawable/vocalyxlogo" />
 
         <TextView
             android:layout_width="wrap_content"
