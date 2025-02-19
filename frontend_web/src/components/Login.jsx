@@ -1,14 +1,51 @@
-
+import { useState } from "react";
 import * as Checkbox from "@radix-ui/react-checkbox";
 import { FaCheck } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { google, microsoft } from "../assets";
+import { login } from "../services/api";
+import { toast } from "react-hot-toast";
 
 
 function Login() {
-
     const navigate = useNavigate();
+    const [formData, setFormData] = useState({
+      email: "",
+      password: "",
+      remember: false
+    });
+    const [loading, setLoading] = useState(false);
 
+    const handleChange = (e) => {
+      const { id, value} = e.target;
+      setFormData(prev => ({
+        ...prev,
+        [id]: value
+      }));
+    };
+
+    const handleSubmit = async (e) => {
+      e.preventDefault();
+
+      try {
+        setLoading(true);
+        const response = await login({
+          email: formData.email,
+          password: formData.password
+        });
+
+        if (formData.remember) {
+          localStorage.setItem('remember_token', response.token.refresh);
+        }
+
+        toast.success("Login successful");
+        navigate("/");
+      } catch (error) {
+        toast.error(error.message || "An error occurred. Please try again");
+      }finally {
+        setLoading(false);
+      }
+    };
 
     const toSignup = () => {
         navigate("/signup");
@@ -56,7 +93,7 @@ function Login() {
           </div>
 
           {/* Email Form */}
-          <form className="space-y-4">
+          <form className="space-y-4" onSubmit={handleSubmit}>
             <div className="space-y-2">
               <label className="text-sm font-medium text-black" htmlFor="email">
                 Email
@@ -64,7 +101,10 @@ function Login() {
               <input
                 id="email"
                 type="email"
+                value={formData.email}
+                onChange={handleChange}
                 placeholder="Enter your email"
+                required
                 className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none bg-white text-black focus:ring-2 focus:ring-[#2B3377]"
               />
             </div>
@@ -76,7 +116,10 @@ function Login() {
               <input
                 id="password"
                 type="password"
+                value={formData.password}
+                onChange={handleChange}
                 placeholder="Enter your password"
+                required
                 className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none bg-white text-black focus:ring-2 focus:ring-[#2B3377]"
               />
             </div>
@@ -86,6 +129,10 @@ function Login() {
                 <Checkbox.Root
                   className="flex h-3 w-3 appearance-none items-center justify-center rounded-sm border border-gray-300 bg-white"
                   id="remember"
+                  checked={formData.remember}
+                  onCheckedChange={(checked) => 
+                    setFormData(prev => ({...prev, remember: checked}))
+                  }
                 >
                   <Checkbox.Indicator className="text-[#2B3377]">
                     <FaCheck />
@@ -102,9 +149,10 @@ function Login() {
 
             <button
               type="submit"
+              disabled={loading}
               className="w-full bg-[#2B3377] hover:bg-[#232861] text-white py-2 rounded-lg transition duration-200"
             >
-              Login
+              {loading ? "Loading..." : "Login"}
             </button>
 
             <p className="text-center text-sm text-gray-600">
