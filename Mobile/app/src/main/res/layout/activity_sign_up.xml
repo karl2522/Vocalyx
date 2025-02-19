@@ -19,7 +19,7 @@
         <ImageView
             android:layout_width="160dp"
             android:layout_height="160dp"
-            android:src="@drawable/icon_account_circle" />
+            android:src="@drawable/vocalyxlogo" />
 
         <EditText
             android:id="@+id/fullname_input"
