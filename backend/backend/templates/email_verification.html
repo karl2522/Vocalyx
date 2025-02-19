@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Verification - Vocalyx</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center p-4">
+    <div class="max-w-md w-full bg-white rounded-2xl shadow-lg p-8 text-center">
+        {% if success %}
+        <div class="mb-6">
+            <div class="w-20 h-20 bg-green-100 rounded-full mx-auto flex items-center justify-center">
+                <svg class="w-10 h-10 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                </svg>
+            </div>
+        </div>
+        <h1 class="text-3xl font-bold text-gray-900 mb-4">Email Verified!</h1>
+        <p class="text-gray-600 mb-8">Your email has been successfully verified. You can now log in to your account.</p>
+        <a href="http://localhost:5173/login" class="inline-block bg-[#333D79] hover:bg-[#2B3377] text-white font-semibold px-6 py-3 rounded-lg transition duration-200">
+            Go to Login
+        </a>
+        {% else %}
+        <div class="mb-6">
+            <div class="w-20 h-20 bg-red-100 rounded-full mx-auto flex items-center justify-center">
+                <svg class="w-10 h-10 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </div>
+        </div>
+        <h1 class="text-3xl font-bold text-gray-900 mb-4">Verification Failed</h1>
+        <p class="text-gray-600 mb-8">{{ error_message }}</p>
+        <a href="http://localhost:5173/signup" class="inline-block bg-[#333D79] hover:bg-[#2B3377] text-white font-semibold px-6 py-3 rounded-lg transition duration-200">
+            Back to Sign Up
+        </a>
+        {% endif %}
+    </div>
+</body>
+</html>
