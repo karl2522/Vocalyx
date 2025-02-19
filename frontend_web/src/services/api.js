@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { setAuthState, clearAuthState } from '../utils/auth';
 
 const API_URL = 'http://127.0.0.1:8000/api';
 
@@ -9,13 +10,35 @@ const api = axios.create({
     },
 });
 
+
+api.interceptors.request.use(
+    (config) => {
+        console.log('Request:', config); 
+        return config;
+    },
+    (error) => {
+        console.error('Request error:', error);
+        return Promise.reject(error);
+    }
+);
+
+
+api.interceptors.response.use(
+    (response) => {
+        console.log('Response:', response);
+        return response;
+    },
+    (error) => {
+        console.error('Response error:', error);
+        return Promise.reject(error);
+    }
+);
+
 const setAuthToken = (token) => {
     if (token) {
         api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-        localStorage.setItem('token', token);
-    }else {
+    } else {
         delete api.defaults.headers.common['Authorization'];
-        localStorage.removeItem('token');
     }
 };
 
@@ -57,28 +80,44 @@ export const verifyEmail = async (token) => {
 export const login = async (credentials) => {
     try {
         const response = await api.post('/login/', credentials);
-        if(response.data.token) {
-            setAuthToken(response.token.access);
-            localStorage.setItem('refresh_token', response.data.token.refresh);
-            localStorage.setItem('user', JSON.stringify(response.data.user));
+        console.log('Login response:', response.data);
+        
+        const { tokens, user } = response.data;
+        
+        if (!tokens || !user) {
+            console.error('Invalid response structure:', response.data);
+            throw new Error('Invalid response from server');
         }
-        return response.data;
+        
+        setAuthState(tokens, user);
+        setAuthToken(tokens.access);
+        
+        return {
+            tokens,
+            user,
+            success: true
+        };
     } catch (error) {
-        throw error.response?.data || error.message;
+        console.error('Login error:', error);
+        if (error.response?.data?.error) {
+            throw new Error(error.response.data.error);
+        }
+        throw new Error('An error occurred during login');
     }
 };
-
 
 export const logout = async () => {
     try {
         const refresh_token = localStorage.getItem('refresh_token');
-        await api.post('/logout/', { refresh: refresh_token });
+        await api.post('/logout/', { refresh_token });
+        clearAuthState();
         setAuthToken(null);
-        localStorage.clear();
     } catch (error) {
         console.error('Logout error:', error);
+        clearAuthState();
+        setAuthToken(null);
     }
-}
+};
 
 
 

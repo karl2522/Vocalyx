@@ -26,26 +26,32 @@ function Login() {
 
     const handleSubmit = async (e) => {
       e.preventDefault();
-
+  
       try {
-        setLoading(true);
-        const response = await login({
-          email: formData.email,
-          password: formData.password
-        });
-
-        if (formData.remember) {
-          localStorage.setItem('remember_token', response.token.refresh);
-        }
-
-        toast.success("Login successful");
-        navigate("/");
+          setLoading(true);
+          const response = await login({
+              email: formData.email,
+              password: formData.password
+          });
+  
+          console.log('Login response in component:', response); 
+  
+          if (response.success && response.tokens) {
+              if (formData.remember) {
+                  localStorage.setItem('remember_token', response.tokens.refresh);
+              }
+              toast.success("Login successful!");
+              navigate("/");
+          } else {
+              throw new Error('Invalid response from server');
+          }
       } catch (error) {
-        toast.error(error.message || "An error occurred. Please try again");
-      }finally {
-        setLoading(false);
+          console.error('Login error in component:', error);
+          toast.error(error.message || "An error occurred during login");
+      } finally {
+          setLoading(false);
       }
-    };
+  };
 
     const toSignup = () => {
         navigate("/signup");
