@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     'django_celery_beat',
     'corsheaders',
     'users.apps.UsersConfig',
+    'drf_spectacular',
     'token_management.apps.TokenManagementConfig',
 ]
 
@@ -77,7 +78,26 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.AllowAny',
-    )
+    ),
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema'
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Vocalyx API',
+    'DESCRIPTION': 'Vocalyx Best Capstone',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'SWAGGER_UI_SETTINGS': {
+        'persistAuthorization': True,
+    },
+    'PREPROCESSING_HOOKS': [],
+    'SERVE_PERMISSIONS': ['rest_framework.permissions.AllowAny'],
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SCHEMA_PATH_PREFIX': '/api/',
+    'CONTACT': {
+        'name': 'Vaness Capuras',
+        'email': 'vanesscapuras@gmail.com'
+    },
 }
 
 
