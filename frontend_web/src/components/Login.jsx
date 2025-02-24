@@ -3,8 +3,8 @@ import { useState } from "react";
 import { toast } from "react-hot-toast";
 import { FaCheck } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
-import { google, microsoft } from "../assets";
 import { login } from "../services/api";
+import { google, microsoft } from "../utils";
 
 
 function Login() {
