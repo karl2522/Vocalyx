@@ -16,6 +16,15 @@ import androidx.core.view.WindowInsetsCompat
 import android.text.style.ClickableSpan
 import android.view.View
 
+/* Uncomment these imports when implementing Retrofit login
+import kotlinx.coroutines.launch
+import androidx.lifecycle.lifecycleScope
+import retrofit2.Response
+import com.example.vocalyxapk.api.RetrofitClient
+import com.example.vocalyxapk.models.LoginRequest
+import com.example.vocalyxapk.utils.TokenManager
+*/
+
 class LoginActivity : AppCompatActivity() {
     private lateinit var emailInput: EditText
     private lateinit var passwordInput: EditText
@@ -28,6 +37,11 @@ class LoginActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContentView(R.layout.activity_login)
+
+        /* Uncomment when implementing Retrofit login
+        // Initialize RetrofitClient with context
+        RetrofitClient.initialize(this)
+        */
 
         // Initialize views
         emailInput = findViewById(R.id.email_input)
@@ -58,9 +72,47 @@ class LoginActivity : AppCompatActivity() {
                     emailInput.error = "Please enter a valid email"
                 passwordInput.text.isEmpty() -> passwordInput.error = "Password is required"
                 else -> {
-                    // Proceed with login
+                    // Current implementation
                     Toast.makeText(this, "Login clicked", Toast.LENGTH_SHORT).show()
-                    // Add your login logic here
+                    
+                    /* Uncomment this block and comment out the Toast above when implementing Retrofit login
+                    lifecycleScope.launch {
+                        try {
+                            val loginRequest = LoginRequest(
+                                email = emailInput.text.toString(),
+                                password = passwordInput.text.toString()
+                            )
+                            
+                            val response = RetrofitClient.apiService.login(loginRequest)
+                            
+                            if (response.isSuccessful) {
+                                val loginResponse = response.body()
+                                if (loginResponse?.success == true) {
+                                    // Save the token
+                                    loginResponse.token?.let { token ->
+                                        TokenManager.saveToken(this@LoginActivity, token)
+                                    }
+                                    
+                                    // Navigate to main activity
+                                    startActivity(Intent(this@LoginActivity, MainActivity::class.java))
+                                    finish()
+                                } else {
+                                    Toast.makeText(this@LoginActivity, 
+                                        loginResponse?.message ?: "Login failed", 
+                                        Toast.LENGTH_SHORT).show()
+                                }
+                            } else {
+                                Toast.makeText(this@LoginActivity, 
+                                    "Login failed: ${response.message()}", 
+                                    Toast.LENGTH_SHORT).show()
+                            }
+                        } catch (e: Exception) {
+                            Toast.makeText(this@LoginActivity, 
+                                "Error: ${e.message}", 
+                                Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    */
                 }
             }
         }
