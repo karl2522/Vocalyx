@@ -2,6 +2,7 @@ import logging
 from django.shortcuts import render
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
+from drf_spectacular.utils import OpenApiExample, extend_schema, OpenApiParameter
 from rest_framework import status, generics
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -13,7 +14,7 @@ from django.conf import settings
 import uuid
 from .serializers import UserRegistrationSerializer, UserLoginSerializer
 from .models import CustomUser
-from .utils import send_verification_email
+from .utils import send_verification_email, get_current_utc_time, get_user_login
 
 logger = logging.getLogger(__name__)
 
@@ -22,21 +23,38 @@ class RegisterView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
 
+    @extend_schema(
+        request=UserRegistrationSerializer,
+        responses={201: dict},
+        description='Register a new user and send verification email',
+        summary="Register new user",
+        tags=['Authentication'],
+        examples=[
+            OpenApiExample(
+                'Successful Registration',
+                value={
+                    "message": "Registration successful. Please check your email to verify your account.",
+                    "user": {
+                        "email": "user@example.com",
+                        "firstName": "John",
+                        "lastName": "Doe"
+                    }
+                }
+            )
+        ]
+    )
     def post(self, request):
         serializer = UserRegistrationSerializer(data=request.data)
         if serializer.is_valid():
             try:
                 user = serializer.save()
 
-                # Generate verification token
                 verification_token = str(uuid.uuid4())
                 user.email_verification_token = verification_token
                 user.save()
 
-                # Create verification URL
                 verification_url = f"http://127.0.0.1:8000/api/verify-email/{verification_token}/"
 
-                # Render email template
                 html_message = render_to_string('email/verification_email.html', {
                     'user': user,
                     'verification_url': verification_url
@@ -44,7 +62,6 @@ class RegisterView(APIView):
                 plain_message = strip_tags(html_message)
 
                 try:
-                    # Send email with HTML content
                     email_sent = send_verification_email(
                         user.email,
                         'Welcome to Vocalyx - Verify Your Email',
@@ -88,6 +105,30 @@ class LoginView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
 
+    @extend_schema(
+        request=UserLoginSerializer,
+        responses={200: dict},
+        description='Login with email and password',
+        summary="User login",
+        tags=['Authentication'],
+        examples=[
+            OpenApiExample(
+                'Successful Login',
+                value={
+                    "tokens": {
+                        "refresh": "your-refresh-token",
+                        "access": "your-access-token"
+                    },
+                    "user": {
+                        "id": "user-id",
+                        "email": "user@example.com",
+                        "first_name": "John",
+                        "last_name": "Doe"
+                    }
+                }
+            )
+        ]
+    )
     def post(self, request):
         serializer = UserLoginSerializer(data=request.data)
         if serializer.is_valid():
@@ -124,6 +165,10 @@ class LoginView(APIView):
                         'email': user.email,
                         'first_name': user.first_name,
                         'last_name': user.last_name
+                    },
+                    'meta': {
+                        'login_time': get_current_utc_time(),
+                        'user_login': get_user_login()
                     }
                 })
 
@@ -138,6 +183,21 @@ class VerifyEmailView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
 
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name='token',
+                description='Email verification token',
+                required=True,
+                type=str,
+                location=OpenApiParameter.PATH
+            )
+        ],
+        responses={200: dict},
+        description='Verify user email with token',
+        summary="Verify email",
+        tags=['Authentication']
+    )
     def get(self, request, token=None):
         if not token:
             return render(request, 'email_verification.html', {
@@ -163,6 +223,13 @@ class VerifyEmailView(APIView):
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        request={'application/json': {'type': 'object', 'properties': {'refresh_token': {'type': 'string'}}}},
+        responses={200: dict},
+        description='Logout and blacklist the refresh token',
+        summary="User logout",
+        tags=['Authentication']
+    )
     def post(self, request):
         try:
             refresh_token = request.data["refresh_token"]

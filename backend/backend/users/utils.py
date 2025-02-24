@@ -1,6 +1,8 @@
+import datetime
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+import pytz
 from django.conf import settings
 
 
@@ -31,3 +33,11 @@ def send_verification_email(to_email, subject, text_content, html_content=None):
     except Exception as e:
         print(f"Email error: {str(e)}")
         return False
+
+
+
+def get_current_utc_time():
+    return datetime.datetime.now(pytz.UTC).strftime("%Y-%m-%d %H:%M:%S")
+
+def get_user_login():
+    return "user"

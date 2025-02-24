@@ -1,9 +1,24 @@
 from django.contrib.auth.password_validation import validate_password
+from drf_spectacular.utils import OpenApiExample, extend_schema_serializer
 from rest_framework import serializers
 
 from users.models import CustomUser
 
 
+@extend_schema_serializer(
+    examples=[
+        OpenApiExample(
+            'Valid Registration Example',
+            value={
+                'first_name': 'John',
+                'last_name': 'Doe',
+                'email': 'john.doe@example.com',
+                'password': 'securepassword123',
+                'password2': 'securepassword123'
+            }
+        )
+    ]
+)
 class UserRegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
     password2 = serializers.CharField(write_only=True, required=True)
@@ -31,6 +46,19 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         )
         return user
 
+
+
+@extend_schema_serializer(
+    examples=[
+        OpenApiExample(
+            'Valid Login Example',
+            value={
+                'email': 'john.doe@example.com',
+                'password': 'securepassword123'
+            }
+        )
+    ]
+)
 class UserLoginSerializer(serializers.Serializer):
     email = serializers.EmailField(required=True)
     password = serializers.CharField(required=True, write_only=True)
