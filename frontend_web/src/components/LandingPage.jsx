@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { display2, export1, logo, sync, voice } from "../utils";
+import { display2, export1, logo, microphone, notes, sync, voice } from "../utils";
 
 function LandingPage() {  
     return (
@@ -141,16 +141,56 @@ function LandingPage() {
         </div>
 
         {/* Third Page - Solutions Section */}
-        <div className="min-h-[100vh] w-screen bg-white flex">
-          <div className="w-full px-12 py-12">
-            <div className="max-w-7xl mx-auto">
-              <div className="flex flex-col space-y-4 items-center py-12 px-12">
-                <h1 className="text-5xl text-black font-bold">Why We <span className="text-[#333D79]">Built </span>Vocalyx</h1>
-                <p className="text-lg text-gray-600">Efficiency and Accuracy—Designed for Educators</p>
+        <div className="min-h-[100vh] w-full bg-white">
+          <div className="w-full px-12 py-24">
+            <div className="max-w-10xl mx-auto">
+              {/* Header Section */}
+              <div className="flex flex-col space-y-4 items-center text-center mb-16">
+                <h1 className="text-9xl md:text-6xl text-black font-bold">
+                  Why We <span className="text-[#333D79]">Built</span> Vocalyx
+                </h1>
+                <p className="text-xl text-gray-600">Efficiency and Accuracy—Designed for Educators</p>
+              </div>
+
+              {/* Stats Section */}
+              <div className="flex flex-col md:flex-row justify-center items-center gap-48 md:gap-48 mt-24 pt-20">
+                {/* 40% Section */}
+                <div className="flex items-center space-x-12">
+                  <img 
+                    src={microphone} 
+                    alt="Voice Powered" 
+                    className="w-32 h-32"
+                  />
+                  <div className="text-left">
+                    <h2 className="text-7xl md:text-8xl lg:text-9xl font-bold text-[#333D79]">40%</h2>
+                    <p className="text-xl md:text-2xl text-gray-600 mt-5 max-w-[400px] md:leading-relaxed">
+                      To cut grading time by 40% to focus more on teaching
+                    </p>
+                  </div>
+                </div>
+
+                {/* Vertical Divider */}
+                <div className="hidden md:block w-[2px] bg-gray-300 h-72" />
+
+                {/* 95% Section */}
+                <div className="flex items-center space-x-12">
+                  <img 
+                    src={notes}
+                    alt="Voice Accuracy" 
+                    className="w-32 h-32"
+                  />
+                  <div className="text-left">
+                    <h2 className="text-7xl md:text-8xl lg:text-9xl font-bold text-[#333D79]">95%</h2>
+                    <p className="text-xl md:text-2xl text-gray-600 mt-5 md:leading-relaxed">
+                      With 95% voice accuracy <br/>for seamless grading
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </div>
+
 
 
       </div>
