@@ -17,7 +17,8 @@ function LandingPage() {
               />
               <h1 className="text-3xl font-bold text-black pl-5">Vocalyx</h1>
             </div>
-  
+
+            {/* Nav Links */}
             <div className="flex items-center space-x-12">
               <Link href="#features" className="text-black hover:-translate-y-1 hover:text-[#333D79] text-base">
                 Features
@@ -25,10 +26,10 @@ function LandingPage() {
               <Link href="#solutions" className="text-black hover:-translate-y-1 hover:text-[#333D79] text-base">
                 Solutions
               </Link>
-              <Link href="#resources" className="text-black hover:-translate-y-1 hover:text-[#333D79] text-base">
+              <Link href="#about" className="text-black hover:-translate-y-1 hover:text-[#333D79] text-base">
                 About
               </Link>
-              <Link href="#about" className="text-black hover:-translate-y-1 hover:text-[#333D79] text-base">
+              <Link href="#contact" className="text-black hover:-translate-y-1 hover:text-[#333D79] text-base">
                 Contact
               </Link>
             </div>
@@ -75,7 +76,7 @@ function LandingPage() {
         </div>
 
         {/* Second Page - Features Section */}
-        <div className="min-h-screen w-screen bg-white flex px-[50px] py-[80px]">
+        <div className="min-h-[100vh] w-screen bg-white flex px-[50px] py-[80px]">
           <div className="w-full px-12 py-12">
             <div className="max-w-10xl mx-auto">
               <div className="flex flex-row justify-between py-12 px-12 mb-20">
@@ -138,6 +139,20 @@ function LandingPage() {
             </div>
           </div>
         </div>
+
+        {/* Third Page - Solutions Section */}
+        <div className="min-h-[100vh] w-screen bg-white flex">
+          <div className="w-full px-12 py-12">
+            <div className="max-w-7xl mx-auto">
+              <div className="flex flex-col space-y-4 items-center py-12 px-12">
+                <h1 className="text-5xl text-black font-bold">Why We <span className="text-[#333D79]">Built </span>Vocalyx</h1>
+                <p className="text-lg text-gray-600">Efficiency and Accuracy—Designed for Educators</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+
       </div>
     )
 }
