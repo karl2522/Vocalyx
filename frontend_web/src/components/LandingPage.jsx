@@ -1,5 +1,8 @@
+import { CornerLeftDown, CornerRightDown } from "lucide-react";
 import { Link } from "react-router-dom";
-import { display2, export1, logo, microphone, notes, sync, voice } from "../utils";
+import { about, display2, export1, logo, microphone, notes, sync, voice } from "../utils";
+
+
 
 function LandingPage() {  
     return (
@@ -189,6 +192,65 @@ function LandingPage() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Fourth Page - About Section */}
+        <div className="min-h-[100vh] w-full bg-white flex flex-col items-center">
+          <div className="w-screen md:w-11/12 lg:w-11/12">
+            <div className="flex flex-col items-center justify-center space-y-12">
+              <div className="relative">
+                <img 
+                  src={about} 
+                  alt="About us Header"
+                  className="w-full h-auto" 
+                />
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-white text-center px-4">
+                  <h1 className="text-7xl md:text-6xl font-bold">About Us</h1>
+                  <p className="text-sm md:text-base mt-5">Our story, our mission, and the people behind Vocalyx.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Mission Section */}
+          <div className="w-full md:11/12 lg:w-10/12 mt-10 flex flex-col md:flex-row justify-between items-center gap-6">
+            {/* Mission */}
+            <div className="w-full md:w-1/2 flex-col items-start">
+              <h2 className="text-4xl font-bold text-black flex items-center gap-2">
+                OUR
+                <span className="text-[#333D79]"> MISSION</span>
+                <CornerRightDown className="w-8 h-8 mt-5"/>
+              </h2>
+              <div className="mt-10 p-5 bg-[#333D79]/30 text-gray-800 rounded-xl py-6 px-8">
+                <p className="text-xl leading-loose">
+                We aim to make grading easier, faster, and more accurate through speech-to-text technology. 
+                By automating the process, teachers can save valuable time, reduce manual effort, 
+                and focus more on guiding and supporting their students. 
+                </p>
+              </div>
+            </div>
+
+            {/* Divider Line */}
+            <div className="hidden md:block w-[2px] bg-gray-300 h-80"/>
+
+            {/* Story Section */}
+            <div className="w-full md:w-1/2 flex flex-col items-end">
+              <h2 className="text-5xl font-bold text-black flex items-center gap-2">
+              <CornerLeftDown className="w-8 h-8 mt-5"/>
+                OUR 
+                <span className="text-[#333D79]">STORY</span>
+              </h2>
+              <div className="mt-10 p-5 bg-[#333D79]/30 text-gray-800 rounded-xl py-6 px-8">
+                <p className="text-xl leading-loose text-left">
+                  A group of IT students, driven by innovation, came together with a shared vision—creating
+                  something impactful for our capstone project. With the guidance of our adviser, we aimed
+                  to develop one of the best capstone projects in our batch, pushing the boundaries of
+                  technology to solve real-world challenges.
+                </p>
+              </div>
+            </div>
+          </div>
+
         </div>
 
 
