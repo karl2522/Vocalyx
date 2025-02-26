@@ -60,4 +60,12 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+
+    // Retrofit
+    implementation(libs.retrofit)
+    // Retrofit with Gson Converter
+    implementation(libs.converter.gson)
+    // OkHttp Logging Interceptor (optional but recommended for debugging)
+    implementation(libs.logging.interceptor)
+
 }
