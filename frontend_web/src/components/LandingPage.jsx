@@ -322,7 +322,7 @@ function LandingPage() {
                   Jes Emanuel Chavez
                 </h2>
                 <p className="text-md md:text-sm text-white text-center mt-2 pb-2">
-                  UFull-Stack Mobile Developer
+                  Full-Stack Mobile Developer
                 </p>
               </div>
               {/* Border Div - Team Member 5 */}
@@ -343,6 +343,92 @@ function LandingPage() {
           </div>
         </div>
 
+        {/* Contact Section */}
+        <div className="min-h-[100vh] w-full bg-white flex flex-col items-center pt-20">
+          <div className="w-screen md:w-11/12">
+            <div className="w-full h-auto bg-[#333D79]/50 rounded-2xl p-12">
+              <div className="flex flex-col items-center justify-center space-y-4">
+                <h1 className="text-9xl md:7xl lg:text-5xl font-bold text-white">
+                  CONNECT WITH VOCALYX
+                </h1>
+                <p className="text-xl md:text-lg text-white text-center pb-20">
+                  Stay updated and reach out to us anytime!
+                </p>
+                <div className="flex items-center bg-white rounded-full mb-20">
+                  <input 
+                    type="email" 
+                    placeholder="example@gmail.com" 
+                    className="bg-transparent outline-none text-black px-8 w-[30rem]"
+                  />
+                  <span
+                    className="bg-[#333D79] text-white font-medium rounded-full cursor-pointer px-14 py-4 hover:bg-[#222A5F]"
+                  >
+                    Contact Us
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer Section */}
+          <div className="w-full bg-white px-4 md:px-12 py-12">
+            <div className="max-w-8xl mx-auto flex flex-col justify-between gap-8 px-12 pt-10">
+              <div className="flex flex-row items-center space-x-[650px]">
+                <div className="flex flex-row items-center space-x-8">
+                  <img 
+                    src={logo} 
+                    alt="Vocalyx Logo" 
+                    className="h-56 w-auto"
+                  />
+                  <h2 className="text-black font-bold text-5xl">
+                    Vocalyx
+                  </h2>
+                </div>
+
+                {/* Links */}
+                <div className="flex flex-row space-x-20 justify-between">
+                  <div className="flex flex-col space-y-2">
+                    <h3 className="text-xl font-medium text-black cursor-pointer">
+                      Quick Links
+                    </h3>
+                    <ul className="text-gray-600 space-y-2">
+                      <li className="cursor-pointer hover:text-[#333D79]">Features</li>
+                      <li className="cursor-pointer hover:text-[#333D79]">Solutions</li>
+                      <li className="cursor-pointer hover:text-[#333D79]">About</li>
+                    </ul>
+                  </div>
+                  <div className="flex flex-col space-y-2">
+                    <h3 className="text-xl font-medium text-black cursor-pointer">
+                      Social
+                    </h3>
+                    <ul className="text-gray-600 space-y-2">
+                      <li className="cursor-pointer hover:text-[#333D79]">Instagram</li>
+                      <li className="cursor-pointer hover:text-[#333D79]">Github</li>
+                      <li className="cursor-pointer hover:text-[#333D79]">LinkedIn</li>
+                    </ul>
+                  </div>
+                  <div className="flex flex-col space-y-2">
+                    <h3 className="text-xl font-medium text-black cursor-pointer">
+                      Contact
+                    </h3>
+                    <ul className="text-gray-600 space-y-2">
+                      <li className="cursor-pointer hover:text-[#333D79]">support@vocalyx.com</li>
+                      <li className="cursor-pointer hover:text-[#333D79]">+63 9691122874</li>
+                      <li className="cursor-pointer hover:text-[#333D79]">N. Bacalso Ave, Cebu City</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer Divider */}
+          <div className="w-full h-[2px] bg-gray-300 mt-20">
+            <h4 className="text-left text-gray-600 text-lg px-12 py-4 mt-10">
+              © 2025 Vocalyx. All Rights Reserved
+            </h4>
+          </div>    
+        </div>
       </div>
     )
 }
