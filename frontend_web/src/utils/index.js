@@ -13,6 +13,7 @@ const github = "/assets/github-sign.png";
 const linkedin = "/assets/linkedin-logo.png";
 const microphone ="/assets/microphone.png";
 const notes = "/assets/notes.png";
+const about = "/assets/aboutus.png";
 
-export { display, display1, display2, export1, github, google, instagram, linkedin, logo, microphone, microsoft, notes, play, sync, voice };
+export { about, display, display1, display2, export1, github, google, instagram, linkedin, logo, microphone, microsoft, notes, play, sync, voice };
 
