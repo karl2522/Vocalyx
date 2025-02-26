@@ -51,6 +51,12 @@ class LoginActivity : AppCompatActivity() {
         microsoftButton = findViewById(R.id.microsoft_btn)
         signupLink = findViewById(R.id.signup_link)
 
+        // New temporary button
+        val tempHomeButton = findViewById<Button>(R.id.temp_home_button)
+        tempHomeButton.setOnClickListener {
+            startActivity(Intent(this@LoginActivity, HomeActivity::class.java))
+        }
+
         // Set hints
         emailInput.hint = "Email"
         passwordInput.hint = "Password"
@@ -72,47 +78,9 @@ class LoginActivity : AppCompatActivity() {
                     emailInput.error = "Please enter a valid email"
                 passwordInput.text.isEmpty() -> passwordInput.error = "Password is required"
                 else -> {
-                    // Current implementation
-                    Toast.makeText(this, "Login clicked", Toast.LENGTH_SHORT).show()
-                    
-                    /* Uncomment this block and comment out the Toast above when implementing Retrofit login
-                    lifecycleScope.launch {
-                        try {
-                            val loginRequest = LoginRequest(
-                                email = emailInput.text.toString(),
-                                password = passwordInput.text.toString()
-                            )
-                            
-                            val response = RetrofitClient.apiService.login(loginRequest)
-                            
-                            if (response.isSuccessful) {
-                                val loginResponse = response.body()
-                                if (loginResponse?.success == true) {
-                                    // Save the token
-                                    loginResponse.token?.let { token ->
-                                        TokenManager.saveToken(this@LoginActivity, token)
-                                    }
-                                    
-                                    // Navigate to main activity
-                                    startActivity(Intent(this@LoginActivity, MainActivity::class.java))
-                                    finish()
-                                } else {
-                                    Toast.makeText(this@LoginActivity, 
-                                        loginResponse?.message ?: "Login failed", 
-                                        Toast.LENGTH_SHORT).show()
-                                }
-                            } else {
-                                Toast.makeText(this@LoginActivity, 
-                                    "Login failed: ${response.message()}", 
-                                    Toast.LENGTH_SHORT).show()
-                            }
-                        } catch (e: Exception) {
-                            Toast.makeText(this@LoginActivity, 
-                                "Error: ${e.message}", 
-                                Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                    */
+                    // Navigate to HomeActivity after successful login
+                    startActivity(Intent(this@LoginActivity, HomeActivity::class.java))
+                    finish()
                 }
             }
         }

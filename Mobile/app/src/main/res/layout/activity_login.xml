@@ -163,6 +163,16 @@
             android:textSize="14sp"
             android:layout_gravity="center"/>
 
+        <Button
+            android:id="@+id/temp_home_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Go to Home"
+            android:layout_marginTop="16dp"
+            android:backgroundTint="@color/button_primary"
+            android:textColor="@color/white"
+            android:textAllCaps="false" />
+
     </LinearLayout>
 
 </RelativeLayout>
