@@ -14,6 +14,11 @@ const linkedin = "/assets/linkedin-logo.png";
 const microphone ="/assets/microphone.png";
 const notes = "/assets/notes.png";
 const about = "/assets/aboutus.png";
+const omen = "/assets/omen.png";
+const capuras = "/assets/capuras.png";  
+const chavez = "/assets/chavez.png";
+const gadiane = "/assets/gadiane.png";
+const pejana = "/assets/pejana.png";
 
-export { about, display, display1, display2, export1, github, google, instagram, linkedin, logo, microphone, microsoft, notes, play, sync, voice };
+export { about, capuras, chavez, display, display1, display2, export1, gadiane, github, google, instagram, linkedin, logo, microphone, microsoft, notes, omen, pejana, play, sync, voice };
 

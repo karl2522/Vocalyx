@@ -1,6 +1,6 @@
 import { CornerLeftDown, CornerRightDown } from "lucide-react";
 import { Link } from "react-router-dom";
-import { about, display2, export1, logo, microphone, notes, sync, voice } from "../utils";
+import { about, capuras, chavez, display2, export1, gadiane, logo, microphone, notes, omen, pejana, sync, voice } from "../utils";
 
 
 
@@ -250,10 +250,98 @@ function LandingPage() {
               </div>
             </div>
           </div>
-
         </div>
 
+        {/* Team Section */}
+        <div className="min-h-[100vh] w-full bg-white flex flex-col items-center md:px-8">
+          <div className="w-screen md:w-11/12 lg:w-11/12">
+            <div className="flex flex-col items-center justify-center space-y-4">
+              <h1 className="text-9xl md:text-7xl lg:text-5xl font-bold text-black pt-24">
+                The People 
+                <span className="text-[#333D79]"> Behind Vocalyx</span>
+              </h1>
+              <p className="text-xl md:text-lg text-gray-600">
+                Bringing efficiency to education—one voice at a time
+              </p>
+            </div>
+          </div>
 
+          {/* Team Members */}
+          <div className="w-full md:w-11/12 lg:w-10/12 mt-24 pt-24 pb-24 flex flex-col justify-between items-center gap-6">
+            <div className="flex flex-row items-center justify-between gap-10">
+              {/* Border Div - Team Member 1 */}
+              <div className="w-auto h-auto p-2 bg-[#333D79] rounded-xl">
+                <img 
+                  src={omen}
+                  alt="Jared Pic" 
+                  className="w-full max-h-[400px] object-cover rounded-lg"
+                />
+                <h2 className="text-2xl md:text-xl font-bold text-white text-center mt-4">  
+                  Jared Karl Omen
+                </h2>
+                <p className="text-md md:text-sm text-white text-center mt-2 pb-2">
+                  UI/UX Designer & Frontend Developer
+                </p>
+              </div>
+              {/* Border Div - Team Member 2 */}
+              <div className="w-auto h-auto p-2 bg-[#333D79] rounded-xl">
+                <img 
+                  src={capuras}
+                  alt="Vaness Pic" 
+                  className="w-full max-h-[400px] object-cover rounded-lg"
+                />
+                <h2 className="text-1xl md:text-lg font-bold text-white text-center mt-4">
+                  Vaness Leonard Capuras
+                </h2>
+                <p className="text-md md:text-sm text-white text-center mt-2 pb-2">
+                  Backend Developer & API Architect
+                </p>
+              </div>
+              {/* Border Div - Team Member 3 */}
+              <div className="w-auto h-auto p-2 bg-[#333D79] rounded-xl">
+                <img 
+                  src={gadiane}
+                  alt="John Pic" 
+                  className="w-full max-h-[400px] object-cover rounded-lg"
+                />
+                <h2 className="text-2xl md:text-xl font-bold text-white text-center mt-4">
+                  John Karl Gadiane
+                </h2>
+                <p className="text-md md:text-sm text-white text-center mt-2 pb-2">
+                  Full-Stack Mobile Developer
+                </p>
+              </div>
+              {/* Border Div - Team Member 4 */}
+              <div className="w-auto h-auto p-2 bg-[#333D79] rounded-xl">
+                <img 
+                  src={chavez}
+                  alt="Jes Pic" 
+                  className="w-full max-h-[400px] object-cover rounded-lg"
+                />
+                <h2 className="text-2xl md:text-xl font-bold text-white text-center mt-4">
+                  Jes Emanuel Chavez
+                </h2>
+                <p className="text-md md:text-sm text-white text-center mt-2 pb-2">
+                  UFull-Stack Mobile Developer
+                </p>
+              </div>
+              {/* Border Div - Team Member 5 */}
+              <div className="w-auto h-auto p-2 bg-[#333D79] rounded-xl">
+                <img 
+                  src={pejana}
+                  alt="Pejana Pic" 
+                  className="w-full max-h-[400px] object-cover rounded-lg"
+                />
+                <h2 className="text-2xl md:text-xl font-bold text-white text-center mt-4">
+                  Mary Therese Pejana
+                </h2>
+                <p className="text-md md:text-sm text-white text-center mt-2 pb-2">
+                  Project Manager & QA Tester
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
 
       </div>
     )
