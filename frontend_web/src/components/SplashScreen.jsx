@@ -92,7 +92,7 @@ const SplashScreen = ({ setShowSplash }) => {
                         className="bg-transparent outline-none text-white px-8 w-[30rem]"
                     />
                     <span
-                        className="bg-[#333D79] text-white font-medium rounded-full cursor-pointer px-14 py-4"    
+                        className="bg-[#333D79] text-white font-medium rounded-full cursor-pointer px-14 py-4 hover:bg-[#222A5F]"    
                     >
                         Book a Demo
                     </span>
