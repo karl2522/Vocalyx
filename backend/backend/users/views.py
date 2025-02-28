@@ -1,23 +1,30 @@
 import logging
+import jwt
 from django.shortcuts import render
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 from drf_spectacular.utils import OpenApiExample, extend_schema, OpenApiParameter
+from google.auth.transport import requests
+from google.oauth2 import id_token
+from msal import ConfidentialClientApplication
 from rest_framework import status, generics
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
-from django.contrib.auth import authenticate
+from django.contrib.auth import authenticate, login
 from django.core.mail import send_mail, BadHeaderError, EmailMessage
 from django.conf import settings
 import uuid
+import requests
+
+
 from .serializers import UserRegistrationSerializer, UserLoginSerializer
 from .models import CustomUser
 from .utils import send_verification_email, get_current_utc_time, get_user_login
 
 logger = logging.getLogger(__name__)
-
 
 class RegisterView(APIView):
     permission_classes = [AllowAny]
@@ -242,3 +249,142 @@ class LogoutView(APIView):
             return Response({
                 "error": "Invalid token"
             }, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def google_auth(request):
+    try:
+        token = request.data.get('id_token')
+        if not token:
+            return Response({'error': 'No token provided'}, status=400)
+
+        try:
+            idinfo = id_token.verify_oauth2_token(
+                token,
+                requests.Request(),
+                settings.GOOGLE_OAUTH2_CLIENT_ID
+            )
+
+            email = idinfo['email']
+            if not idinfo.get('email_verified'):
+                return Response({'error': 'Email not verified'}, status=400)
+
+            try:
+                user = CustomUser.objects.get(email=email)
+                logger.info(f"Found existing user: {user.email}")
+                user.first_name = idinfo.get('given_name', '')
+                user.last_name = idinfo.get('family_name', '')
+                user.google_id = idinfo['sub']
+                user.profile_picture = idinfo.get('picture', '')
+                user.email_verified = True
+                user.save()
+            except CustomUser.DoesNotExist:
+                username = f"google_{idinfo['sub']}"
+                user = CustomUser.objects.create_user(
+                    username=username,
+                    email=email,
+                    first_name=idinfo.get('given_name', ''),
+                    last_name=idinfo.get('family_name', ''),
+                    google_id=idinfo['sub'],
+                    profile_picture=idinfo.get('picture', ''),
+                    email_verified=True
+                )
+                logger.info(f"Created new user: {user.email}")
+
+            # Generate JWT tokens
+            refresh = RefreshToken.for_user(user)
+
+            response_data = {
+                'token': str(refresh.access_token),
+                'refresh': str(refresh),
+                'user': {
+                    'id': user.id,
+                    'email': user.email,
+                    'name': f"{user.first_name} {user.last_name}".strip(),
+                    'profile_picture': user.profile_picture
+                }
+            }
+            logger.info(f"Successfully authenticated user: {user.email}")
+            return Response(response_data)
+
+        except ValueError as e:
+            logger.error(f"Token verification failed: {str(e)}")
+            return Response({'error': f'Invalid token: {str(e)}'}, status=400)
+
+    except Exception as e:
+        logger.error(f"Error in google_auth: {str(e)}")
+        return Response({'error': str(e)}, status=400)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def microsoft_auth(request):
+    try:
+        access_token = request.data.get('access_token')
+        id_token = request.data.get('id_token')
+
+        if not access_token and not id_token:
+            return Response({'error': 'No tokens provided'}, status=400)
+
+        try:
+            # Get user info from Microsoft Graph API
+            graph_response = requests.get(
+                'https://graph.microsoft.com/v1.0/me',
+                headers={'Authorization': f'Bearer {access_token}'},
+                timeout=10
+            )
+
+            if not graph_response.ok:
+                return Response({'error': 'Failed to fetch user data from Microsoft'}, status=400)
+
+            graph_data = graph_response.json()
+
+            email = graph_data.get('userPrincipalName') or graph_data.get('mail')
+            if not email:
+                return Response({'error': 'Email not found in Microsoft response'}, status=400)
+
+            try:
+                user = CustomUser.objects.get(email=email)
+                logger.info(f"Found existing user: {user.email}")
+                # Update existing user
+                user.first_name = graph_data.get('givenName', '')
+                user.last_name = graph_data.get('surname', '')
+                user.microsoft_id = graph_data.get('id')
+                user.email_verified = True
+                user.save()
+            except CustomUser.DoesNotExist:
+                # Create new user
+                username = f"microsoft_{graph_data.get('id')}"
+                user = CustomUser.objects.create_user(
+                    username=username,
+                    email=email,
+                    first_name=graph_data.get('givenName', ''),
+                    last_name=graph_data.get('surname', ''),
+                    microsoft_id=graph_data.get('id'),
+                    email_verified=True
+                )
+                logger.info(f"Created new user: {user.email}")
+
+            # Generate JWT tokens
+            refresh = RefreshToken.for_user(user)
+
+            response_data = {
+                'token': str(refresh.access_token),
+                'refresh': str(refresh),
+                'user': {
+                    'id': user.id,
+                    'email': user.email,
+                    'name': f"{user.first_name} {user.last_name}".strip(),
+                }
+            }
+            logger.info(f"Successfully authenticated Microsoft user: {user.email}")
+            return Response(response_data)
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Microsoft Graph API request failed: {str(e)}")
+            return Response({'error': 'Failed to communicate with Microsoft'}, status=400)
+
+    except Exception as e:
+        logger.error(f"Error in microsoft_auth: {str(e)}")
+        return Response({'error': str(e)}, status=400)

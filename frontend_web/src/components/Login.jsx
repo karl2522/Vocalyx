@@ -5,10 +5,29 @@ import { FaCheck } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { login } from "../services/api";
 import { google, microsoft } from "../utils";
+import { useAuth } from "../auth/AuthContext";
+import { GoogleLogin } from '@react-oauth/google';
+import { useMsal } from "@azure/msal-react";
 
+
+const msalConfig = {
+  auth: {
+    clientId: '5a7221d3-d167-4f9d-b62e-79c987bb5d5f',
+    authority: 'https://login.microsoftonline.com/common',
+    redirectUri: 'http://localhost:5173',
+    postLogoutRedirectUri: 'http://localhost:5173',
+    navigateToLoginRequestUrl: true,
+  },
+  cache: {
+    cacheLocation: 'sessionStorage',
+    storeAuthStateInCookie: false,
+  }
+};
 
 function Login() {
+    const { instance } = useMsal();
     const navigate = useNavigate();
+    const { googleLogin, microsoftLogin } = useAuth();
     const [formData, setFormData] = useState({
       email: "",
       password: "",
@@ -23,6 +42,64 @@ function Login() {
         [id]: value
       }));
     };
+
+    const handleGoogleLogin = async (credentialResponse) => {
+      try {
+        console.log('Google Response:', credentialResponse);
+        if (credentialResponse.credential) {
+          const authResult = await googleLogin(credentialResponse);
+          if (authResult && authResult.token) {
+            toast.success("Google login successful!");
+            navigate("/");
+          } else {
+            throw new Error('Login failed');
+          }
+        } else {
+          throw new Error('No credential received from Google');
+        }
+      } catch (error) {
+        toast.error(error.message || "Google login failed");
+      }
+    };
+
+    const handleMicrosoftLogin = async () => {
+      try {
+        const loginRequest = {
+          scopes: ["User.Read", "profile", "email", "openid"],
+          prompt: "select_account"
+        };
+    
+        const response = await instance.loginPopup(loginRequest);
+        console.log('Microsoft auth response:', response); // For debugging
+    
+        if (response.accessToken) {
+          const res = await fetch('http://127.0.0.1:8000/api/auth/microsoft/', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              access_token: response.accessToken,
+              id_token: response.idToken
+            }),
+          });
+    
+          const data = await res.json();
+          if (res.ok) {
+            localStorage.setItem('token', data.token);
+            localStorage.setItem('user', JSON.stringify(data.user));
+            toast.success("Microsoft login successful!");
+            navigate("/");
+          } else {
+            throw new Error(data.error || 'Microsoft login failed');
+          }
+        }
+      } catch (error) {
+        console.error('Microsoft login error:', error);
+        toast.error(error.message || "Microsoft login failed");
+      }
+    };
+
 
     const handleSubmit = async (e) => {
       e.preventDefault();
@@ -71,15 +148,20 @@ function Login() {
 
           {/* Social Login Buttons */}
           <div className="flex gap-6">
-            <button className="flex-1 flex items-center justify-center gap-3 px-6 py-3.5 bg-white text-black border-none rounded-lg hover:bg-red-600 hover:border-none hover:text-white transition-all duration-150 text-lg">
-              <img 
-                src={google} 
-                alt="Google" 
-                className="w-6 h-6" 
-              />
-              <span>Google</span>
-            </button>
-            <button className="flex-1 flex items-center justify-center gap-3 px-6 py-3.5 bg-white text-black border-none rounded-lg hover:bg-blue-600 hover:text-white transition-all duration-150 text-lg">
+            <GoogleLogin
+            onSuccess={handleGoogleLogin}
+            onError={() => {
+              toast.error("Google login failed");
+            }}
+            useOneTap={false}
+            theme="filled_blue"
+            text="signin_with"
+            shape="rectangular"
+          />
+            <button 
+              onClick={handleMicrosoftLogin}
+              className="flex-1 flex items-center justify-center gap-3 px-6 py-3.5 bg-white text-black border-none rounded-lg hover:bg-blue-600 hover:text-white transition-all duration-150 text-lg"
+            >
               <img 
                 src={microsoft} 
                 alt="Microsoft" 
