@@ -25,7 +25,7 @@ class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private lateinit var textToSpeech: TextToSpeech
     private lateinit var speechRecognizer: SpeechRecognizer
     private val REQUEST_CODE_SPEECH_INPUT = 100
-    
+
     // Add state holders
     private var currentText by mutableStateOf("")
     private var isVoiceRecognitionActive by mutableStateOf(false)
@@ -76,9 +76,9 @@ class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                 HomePage(
                     text = currentText,
                     onTextChange = { newText -> currentText = newText },
-                    onStartVoiceRecognition = { 
+                    onStartVoiceRecognition = {
                         isVoiceRecognitionActive = true
-                        startVoiceRecognition() 
+                        startVoiceRecognition()
                     },
                     onSpeakOut = { speakOut(currentText) },
                     isVoiceRecognitionActive = isVoiceRecognitionActive
@@ -135,13 +135,13 @@ class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
         }
-        
+
         try {
             // Stop any existing recognition
             if (::speechRecognizer.isInitialized) {
                 speechRecognizer.cancel()
             }
-            
+
             // Start listening
             speechRecognizer.startListening(intent)
             Toast.makeText(this, "Listening... Please speak", Toast.LENGTH_SHORT).show()
