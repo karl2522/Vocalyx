@@ -63,14 +63,12 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'django.middleware.common.CommonMiddleware',
 ]
 
 AUTHENTICATION_BACKENDS = [
     'users.backends.EmailOrUsernameBackend',
     'django.contrib.auth.backends.ModelBackend',
 ]
-
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -124,8 +122,40 @@ SIMPLE_JWT = {
 
 
 #CORs settings
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
 CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+GOOGLE_OAUTH2_CLIENT_ID = '841187713627-6u60gs5iq5h6qalooub6q27nrulifoug.apps.googleusercontent.com'
+
+MICROSOFT_AUTH_CLIENT_ID = '5a7221d3-d167-4f9d-b62e-79c987bb5d5f'
+MICROSOFT_AUTH_TENANT_ID = 'common'
+
+MICROSOFT_AUTH_CLIENT_SECRET = '36831e3e-4390-41b4-a7d2-6248bf7e3a4b'
 
 #Email Settings
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
@@ -167,14 +197,19 @@ DATABASES = {
         'ENFORCE_SCHEMA': False,
         'CLIENT': {
             'host': os.getenv('MONGODB_URI'),
+            'port': 27017,
             'serverSelectionTimeoutMS': 30000,
             'connectTimeoutMS': 20000,
             'uuidRepresentation': 'standard',
-            'retryWrites': True,
-            'w': 'majority'
+            'authSource': os.getenv('MONGODB_AUTH_SOURCE', 'admin'),
+            'authMechanism': 'SCRAM-SHA-1'
         }
     }
 }
+
+DJONGO_MANAGE_MODELS = True
+
+
 
 CELERY_BEAT_SCHEDULE = {
     'cleanup-expired-tokens': {
