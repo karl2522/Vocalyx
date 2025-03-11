@@ -1,6 +1,7 @@
 package com.example.vocalyxapk
 
 import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -16,16 +17,46 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.text.style.TextAlign
-import com.example.vocalyxapk.ui.theme.VOCALYXAPKTheme
 import androidx.compose.ui.graphics.Color
+import com.example.vocalyxapk.viewmodel.LoginUIState
+import com.example.vocalyxapk.viewmodel.LoginViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
-fun LoginScreen() {
+fun LoginScreen(
+    viewModel: LoginViewModel = viewModel()
+) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var isError by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val uiState by viewModel.uiState.collectAsState()
+
+    if (uiState is LoginUIState.Loading) {
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text("Loading") },
+            text = { CircularProgressIndicator() },
+            confirmButton = { }
+        )
+    }
+    LaunchedEffect(uiState) {
+        when (uiState) {
+            is LoginUIState.Success -> {
+                context.startActivity(Intent(context, HomeActivity::class.java))
+            }
+            is LoginUIState.Error -> {
+                Toast.makeText(
+                    context,
+                    (uiState as LoginUIState.Error).message,
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+            else -> {}
+        }
+    }
+
+
 
     Column(
         modifier = Modifier
@@ -177,7 +208,7 @@ fun LoginScreen() {
                 if (email.isEmpty() || password.isEmpty()) {
                     isError = true
                 } else {
-                    context.startActivity(Intent(context, HomeActivity::class.java))
+                    viewModel.login(email, password)
                 }
             },
             modifier = Modifier
@@ -191,7 +222,7 @@ fun LoginScreen() {
             Text("Login")
         }
 
-        // Temporary Direct Access Button
+
         Button(
             onClick = { context.startActivity(Intent(context, HomeActivity::class.java)) },
             modifier = Modifier

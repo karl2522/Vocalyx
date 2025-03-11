@@ -20,7 +20,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.example.vocalyxapk.R
 import com.example.vocalyxapk.ui.theme.VOCALYXAPKTheme
 
 class MainActivity : ComponentActivity() {

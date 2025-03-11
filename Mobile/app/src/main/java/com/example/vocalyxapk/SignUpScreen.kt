@@ -1,6 +1,7 @@
 package com.example.vocalyxapk
 
 import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -16,9 +17,14 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
+import com.example.vocalyxapk.viewmodel.SignUpUIState
+import com.example.vocalyxapk.viewmodel.SignUpViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
-fun SignUpScreen() {
+fun SignUpScreen(
+    viewModel: SignUpViewModel = viewModel()
+) {
     var firstName by remember { mutableStateOf("") }
     var lastName by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
@@ -26,6 +32,38 @@ fun SignUpScreen() {
     var confirmPassword by remember { mutableStateOf("") }
     var isError by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val uiState by viewModel.uiState.collectAsState()
+
+    if (uiState is SignUpUIState.Loading) {
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text("Loading") },
+            text = { CircularProgressIndicator() },
+            confirmButton = { }
+        )
+    }
+
+    LaunchedEffect(uiState) {
+        when (uiState) {
+            is SignUpUIState.Success -> {
+                Toast.makeText(
+                    context,
+                    (uiState as SignUpUIState.Success).message,
+                    Toast.LENGTH_LONG
+                ).show()
+                context.startActivity(Intent(context, LoginActivity::class.java))
+            }
+            is SignUpUIState.Error -> {
+                Toast.makeText(
+                    context,
+                    (uiState as SignUpUIState.Error).message,
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+            else -> {}
+        }
+    }
+
 
     Column(
         modifier = Modifier
@@ -144,11 +182,19 @@ fun SignUpScreen() {
         // Sign Up Button
         Button(
             onClick = {
-                if (firstName.isEmpty() || lastName.isEmpty() || email.isEmpty() || 
-                    password.isEmpty() || confirmPassword.isEmpty() || password != confirmPassword) {
+                if (firstName.isEmpty() || lastName.isEmpty() || email.isEmpty() ||
+                    password.isEmpty() || confirmPassword.isEmpty()) {
                     isError = true
+                } else if (password != confirmPassword) {
+                    Toast.makeText(context, "Passwords don't match", Toast.LENGTH_LONG).show()
                 } else {
-                    context.startActivity(Intent(context, HomeActivity::class.java))
+                    viewModel.register(
+                        email = email,
+                        password = password,
+                        confirmPassword = confirmPassword,
+                        firstName = firstName,
+                        lastName = lastName
+                    )
                 }
             },
             modifier = Modifier

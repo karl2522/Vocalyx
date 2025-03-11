@@ -12,10 +12,8 @@ class SplashScreenActivity : AppCompatActivity() {
         enableEdgeToEdge()
         setContentView(R.layout.activity_splash_screen)
 
-        // Find the Get Started button
         val getStartedButton = findViewById<Button>(R.id.get_started_button)
-        
-        // Set click listener for the button
+
         getStartedButton.setOnClickListener {
             startActivity(Intent(this, LoginActivity::class.java))
             finish()
