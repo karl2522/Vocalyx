@@ -4,28 +4,31 @@ import android.content.Context
 import android.content.SharedPreferences
 
 object TokenManager {
-    private const val PREF_NAME = "VocalyxPrefs"
-    private const val KEY_TOKEN = "auth_token"
-    
+    private const val PREF_NAME = "AuthTokens"
+    private const val KEY_ACCESS_TOKEN = "access_token"
+    private const val KEY_REFRESH_TOKEN = "refresh_token"
+
     private fun getPreferences(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
     }
-    
-    fun saveToken(context: Context, token: String) {
+
+    fun saveTokens(context: Context, accessToken: String, refreshToken: String) {
         getPreferences(context).edit().apply {
-            putString(KEY_TOKEN, token)
+            putString(KEY_ACCESS_TOKEN, accessToken)
+            putString(KEY_REFRESH_TOKEN, refreshToken)
             apply()
         }
     }
-    
+
     fun getToken(context: Context): String? {
-        return getPreferences(context).getString(KEY_TOKEN, null)
+        return getPreferences(context).getString(KEY_ACCESS_TOKEN, null)
     }
-    
-    fun clearToken(context: Context) {
-        getPreferences(context).edit().apply {
-            remove(KEY_TOKEN)
-            apply()
-        }
+
+    fun getRefreshToken(context: Context): String? {
+        return getPreferences(context).getString(KEY_REFRESH_TOKEN, null)
+    }
+
+    fun clearTokens(context: Context) {
+        getPreferences(context).edit().clear().apply()
     }
 }
