@@ -22,16 +22,11 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.vocalyxapk.R
 import com.example.vocalyxapk.ui.theme.VOCALYXAPKTheme
-import com.example.vocalyxapk.utils.DatabaseInitializer
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        
-        // Initialize the database with sample data if needed
-        DatabaseInitializer.initializeDatabase(applicationContext)
-        
         setContent {
             VOCALYXAPKTheme {
                 ModernLandingPage()
@@ -132,3 +127,4 @@ fun ModernLandingPagePreview() {
         ModernLandingPage()
     }
 }
+
