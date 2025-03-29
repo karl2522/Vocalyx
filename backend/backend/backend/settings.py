@@ -33,7 +33,7 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*', '10.0.6.216']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*', '10.0.6.216', '192.168.1.10']
 
 
 # Application definition
@@ -194,24 +194,17 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'djongo',
-        'NAME': 'vocalyxdb',
-        'ENFORCE_SCHEMA': False,
-        'CLIENT': {
-            'host': os.getenv('MONGODB_URI'),
-            'port': 27017,
-            'serverSelectionTimeoutMS': 30000,
-            'connectTimeoutMS': 20000,
-            'uuidRepresentation': 'standard',
-            'authSource': os.getenv('MONGODB_AUTH_SOURCE', 'admin'),
-            'authMechanism': 'SCRAM-SHA-1'
-        }
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.getenv('DB_NAME', 'neondb'),
+        'USER': os.getenv('DB_USER', 'neondb_owner'),
+        'PASSWORD': os.getenv('DB_PASSWORD', 'npg_tqHT47PXvmKl'),
+        'HOST': os.getenv('DB_HOST', 'ep-royal-haze-a1cc1jto-pooler.ap-southeast-1.aws.neon.tech'),
+        'PORT': os.getenv('DB_PORT', '5432'),
+        'OPTIONS': {
+            'sslmode': 'require',
+        },
     }
 }
-
-DJONGO_MANAGE_MODELS = True
-
-
 
 CELERY_BEAT_SCHEDULE = {
     'cleanup-expired-tokens': {
@@ -220,8 +213,9 @@ CELERY_BEAT_SCHEDULE = {
     }
 }
 
-MONGODB_ENFORCE_SCHEMA = False
-SILENCED_SYSTEM_CHECKS = ['djongo.W001']
+# Remove MongoDB specific settings
+# MONGODB_ENFORCE_SCHEMA = False
+# SILENCED_SYSTEM_CHECKS = ['djongo.W001']
 
 
 # Password validation
@@ -290,4 +284,3 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'users.CustomUser'
-
