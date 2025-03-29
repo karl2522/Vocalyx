@@ -1,10 +1,11 @@
 import logging
 import jwt
+import uuid
 from django.shortcuts import render
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 from drf_spectacular.utils import OpenApiExample, extend_schema, OpenApiParameter
-from google.auth.transport import requests
+from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
 from msal import ConfidentialClientApplication
 from rest_framework import status, generics
@@ -16,9 +17,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate, login
 from django.core.mail import send_mail, BadHeaderError, EmailMessage
 from django.conf import settings
-import uuid
-import requests
-
+import requests as http_requests
 
 from .serializers import UserRegistrationSerializer, UserLoginSerializer
 from .models import CustomUser
@@ -260,9 +259,12 @@ def google_auth(request):
             return Response({'error': 'No token provided'}, status=400)
 
         try:
+            # Fix the name conflict by importing the Request class separately
+            from google.auth.transport import requests as google_requests
+
             idinfo = id_token.verify_oauth2_token(
                 token,
-                requests.Request(),
+                google_requests.Request(),  # Changed from requests.Request()
                 settings.GOOGLE_OAUTH2_CLIENT_ID
             )
 
@@ -328,8 +330,8 @@ def microsoft_auth(request):
             return Response({'error': 'No tokens provided'}, status=400)
 
         try:
-            # Get user info from Microsoft Graph API
-            graph_response = requests.get(
+            # Get user info from Microsoft Graph API - use http_requests instead of requests
+            graph_response = http_requests.get(
                 'https://graph.microsoft.com/v1.0/me',
                 headers={'Authorization': f'Bearer {access_token}'},
                 timeout=10
@@ -381,7 +383,7 @@ def microsoft_auth(request):
             logger.info(f"Successfully authenticated Microsoft user: {user.email}")
             return Response(response_data)
 
-        except requests.exceptions.RequestException as e:
+        except http_requests.exceptions.RequestException as e:
             logger.error(f"Microsoft Graph API request failed: {str(e)}")
             return Response({'error': 'Failed to communicate with Microsoft'}, status=400)
 

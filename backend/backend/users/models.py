@@ -3,7 +3,6 @@ from django.db import models
 from django.utils import timezone
 
 class CustomUser(AbstractUser):
-    # Remove _id field and just use Django's default id
     email = models.EmailField(unique=True)
     first_name = models.CharField(max_length=150)
     last_name = models.CharField(max_length=150)
@@ -19,7 +18,7 @@ class CustomUser(AbstractUser):
     REQUIRED_FIELDS = ['username', 'first_name', 'last_name']
 
     class Meta:
-        db_table = 'users'
+        db_table = 'custom_users'
 
     def __str__(self):
         return self.email

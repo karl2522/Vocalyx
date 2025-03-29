@@ -1,7 +1,6 @@
 from django.db import models
 from django.utils import timezone
-import pytz  # Add this import
-
+import pytz
 
 class BlacklistedToken(models.Model):
     token = models.CharField(max_length=500, unique=True)
@@ -10,12 +9,12 @@ class BlacklistedToken(models.Model):
 
     class Meta:
         indexes = [
-            models.Index(fields=['token']),
-            models.Index(fields=['expires_at'])
+            models.Index(fields=['token'], name='token_idx'),
+            models.Index(fields=['expires_at'], name='expires_idx')
         ]
+        db_table = 'blacklisted_tokens'
 
     def save(self, *args, **kwargs):
-        # Ensure expires_at is timezone-aware
         if self.expires_at and timezone.is_naive(self.expires_at):
             self.expires_at = timezone.make_aware(self.expires_at, pytz.UTC)
         super().save(*args, **kwargs)
