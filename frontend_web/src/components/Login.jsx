@@ -50,7 +50,7 @@ function Login() {
           const authResult = await googleLogin(credentialResponse);
           if (authResult && authResult.token) {
             toast.success("Google login successful!");
-            navigate("/");
+            navigate("/dashboard");
           } else {
             throw new Error('Login failed');
           }
@@ -89,7 +89,7 @@ function Login() {
             localStorage.setItem('token', data.token);
             localStorage.setItem('user', JSON.stringify(data.user));
             toast.success("Microsoft login successful!");
-            navigate("/");
+            navigate("/dashboard");
           } else {
             throw new Error(data.error || 'Microsoft login failed');
           }
@@ -118,7 +118,7 @@ function Login() {
                   localStorage.setItem('remember_token', response.tokens.refresh);
               }
               toast.success("Login successful!");
-              navigate("/");
+              navigate("/dashboard");
           } else {
               throw new Error('Invalid response from server');
           }
