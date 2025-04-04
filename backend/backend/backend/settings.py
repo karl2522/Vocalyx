@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'users.apps.UsersConfig',
     'drf_spectacular',
+    'excel',
     'token_management.apps.TokenManagementConfig',
 ]
 
@@ -77,7 +78,12 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.AllowAny',
     ),
-    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema'
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_PARSER_CLASSES': [
+        'rest_framework.parsers.JSONParser',
+        'rest_framework.parsers.FormParser',
+        'rest_framework.parsers.MultiPartParser',
+    ],
 }
 
 SPECTACULAR_SETTINGS = {
