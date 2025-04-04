@@ -9,6 +9,7 @@ import SplashScreen from './components/SplashScreen'
 import { AuthProvider } from './auth/AuthContext'
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import './index.css'
+import Dashboard from './components/Dashboard'
 
 function App() {
   const [showSplash, setShowSplash] = useState(true)
@@ -28,6 +29,7 @@ function App() {
             <Route path="/landing" element={<LandingPage />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
+            <Route path="/dashboard" element={<Dashboard />} />
           </Routes>
         </Router>
       </AuthProvider>
