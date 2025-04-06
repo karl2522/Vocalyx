@@ -1,256 +1,273 @@
-import { Link, useNavigate } from "react-router-dom";
-import { logo } from "../utils";
-import { Upload, FileSpreadsheet, Clock, LogOut, Download } from "lucide-react";
-import { useAuth } from "../auth/AuthContext";
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { FiPlus, FiClock, FiUsers, FiSpeaker, FiActivity } from 'react-icons/fi';
+import { MdKeyboardVoice, MdOutlinePublish, MdOutlineClass } from 'react-icons/md';
+import DashboardLayout from './layouts/DashboardLayout';
+import ProjectModal from './modals/ProjectModal';
 
-function Dashboard() {  
-    const { logout } = useAuth();
-    const navigate = useNavigate();
-    const [excelData, setExcelData] = useState(null);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
+const Dashboard = () => {
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState('recent');
+  const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
+  const [projects, setProjects] = useState([
+    { id: 1, name: "Customer Service AI", recordings: 32, lastUpdated: "2 hours ago", status: "Active" },
+    { id: 2, name: "Meeting Transcripts", recordings: 56, lastUpdated: "Yesterday", status: "Active" },
+    { id: 3, name: "Product Demo Voiceovers", recordings: 12, lastUpdated: "3 days ago", status: "Completed" },
+    { id: 4, name: "Training Presentations", recordings: 28, lastUpdated: "1 week ago", status: "Archived" },
+  ]);
 
-    const handleLogout = () => {
-        logout();
-        navigate('/');
+  const stats = [
+    { 
+      name: 'Total Classes', 
+      value: '24', 
+      icon: <MdOutlineClass size={24} className="text-[#333D79]" />,
+      change: '+12%',
+      trend: 'up'
+    },
+    { 
+      name: 'Recordings', 
+      value: '128', 
+      icon: <MdKeyboardVoice size={24} className="text-[#4A5491]" />,
+      change: '+8%',
+      trend: 'up'
+    },
+    { 
+      name: 'Team Members', 
+      value: '9', 
+      icon: <FiUsers size={24} className="text-[#5D69A5]" />,
+      change: '+2',
+      trend: 'up'
+    },
+    { 
+      name: 'Hours Processed', 
+      value: '187', 
+      icon: <FiClock size={24} className="text-[#6B77B7]" />,
+      change: '+24',
+      trend: 'up'
+    },
+  ];
+
+  const recentRecordings = [
+    { id: 1, name: "Marketing team standup.mp3", duration: "32:16", projectName: "Meeting Transcripts", date: "Today" },
+    { id: 2, name: "Product demo v2.mp3", duration: "18:45", projectName: "Product Demo Voiceovers", date: "Yesterday" },
+    { id: 3, name: "Customer call - issue #4582.mp3", duration: "12:03", projectName: "Customer Service AI", date: "2 days ago" },
+    { id: 4, name: "New feature walkthrough.mp3", duration: "24:30", projectName: "Training Presentations", date: "3 days ago" },
+  ];
+
+  // Handle adding a new project
+  const handleAddProject = (newProject) => {
+    const projectToAdd = {
+      id: projects.length + 1,
+      name: newProject.projectName,
+      recordings: 0,
+      lastUpdated: "Just now",
+      status: "Active"
     };
-
-    const handleExport = async (id) => {
-        try {
-            const response = await fetch(`http://127.0.0.1:8000/api/excel/${id}/download/`, {
-                headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-                },
-            });
     
-            if (!response.ok) {
-                throw new Error('Export failed');
-            }
-    
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'exported_data.xlsx';
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-        } catch (err) {
-            setError(err.message);
-        }
-    };
+    setProjects([projectToAdd, ...projects]);
+  };
 
-    const handleFileChange = async (event) => {
-        const file = event.target.files[0];
-        if (file) {
-            setLoading(true);
-            setError(null);
-            
-            const formData = new FormData();
-            formData.append('file', file);
-    
-            try {
-                const token = localStorage.getItem('authToken');
-                console.log('Sending request to:', 'http://127.0.0.1:8000/api/excel/upload/');
-                console.log('Token:', token);
-                
-                const response = await fetch('http://127.0.0.1:8000/api/excel/upload/', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                    },
-                    body: formData,
-                });
-    
-                console.log('Response status:', response.status);
-                
-                if (!response.ok) {
-                    let errorMessage;
-                    try {
-                        const errorData = await response.json();
-                        errorMessage = errorData.error || 'Upload failed';
-                    } catch (e) {
-                        errorMessage = `Upload failed with status ${response.status}`;
-                    }
-                    throw new Error(errorMessage);
-                }
-    
-                const data = await response.json();
-                console.log('Response data:', data);
-                setExcelData(data);
-            } catch (err) {
-                setError(err.message);
-                console.error('Upload error:', err);
-            } finally {
-                setLoading(false);
-            }
-        }
-    };
+  const handleClassClick = (id) => {
+    navigate(`/dashboard/class/${id}`);
+  };
 
-    return (
-        <div className="min-h-[100vh] w-screen bg-white flex flex-col">
-            {/* Navigation */}
-            <nav className="w-full px-12 py-6">
-                <div className="flex items-center justify-between">
-                    <div className="flex justify-center items-center">
-                        <img
-                            src={logo}
-                            alt="Vocalyx Logo"
-                            width={150}
-                            height={50}
-                            className="h-20 w-auto"
-                        />
-                        <h1 className="text-3xl font-bold text-black pl-5">Vocalyx</h1>
-                    </div>
-
-                    {/* Nav Links and Logout */}
-                    <div className="flex items-center space-x-12">
-                        <Link href="#features" className="text-black hover:-translate-y-1 hover:text-[#333D79] text-base">
-                            Features
-                        </Link>
-                        <Link href="#solutions" className="text-black hover:-translate-y-1 hover:text-[#333D79] text-base">
-                            Solutions
-                        </Link>
-                        <Link href="#about" className="text-black hover:-translate-y-1 hover:text-[#333D79] text-base">
-                            About
-                        </Link>
-                        <Link href="#contact" className="text-black hover:-translate-y-1 hover:text-[#333D79] text-base">
-                            Contact
-                        </Link>
-                        <button
-                            onClick={handleLogout}
-                            className="flex items-center space-x-2 px-4 py-2 bg-[#333D79] text-white rounded-xl hover:bg-[#222A5F] transition-all duration-300 hover:-translate-y-1"
-                        >
-                            <LogOut className="w-4 h-4" />
-                            <span>Logout</span>
-                        </button>
-                    </div>
-                </div>
-            </nav>
-
-            {/* Main Content */}
-            <div className="flex-1 px-12 py-8">
-                {/* Header Section */}
-                <div className="flex justify-between items-center mb-8">
-                    <div>
-                        <h2 className="text-4xl font-bold text-[#333D79]">Welcome</h2>
-                        <div className="flex items-center mt-2 text-gray-600">
-                            <Clock className="w-5 h-5 mr-2" />
-                            <span>2025-04-03 05:44:13 UTC</span>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Import Card */}
-                <div className="bg-gradient-to-br from-[#333D79] to-[#222A5F] rounded-2xl p-1">
-                    <div className="bg-white rounded-2xl p-8">
-                        <div className="flex flex-col items-center justify-center space-y-8">
-                            {/* Upload Area */}
-                            <div className="w-full max-w-3xl">
-                                <label 
-                                    htmlFor="file-upload"
-                                    className="group flex flex-col items-center justify-center w-full h-80 border-3 border-[#333D79] border-dashed rounded-xl cursor-pointer bg-gray-50 hover:bg-gray-100 transition-all duration-300"
-                                >
-                                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                                        <div className="relative">
-                                            <FileSpreadsheet className="w-24 h-24 text-[#333D79] mb-4 group-hover:scale-110 transition-transform duration-300" />
-                                            <Upload className="absolute bottom-4 right-0 w-10 h-10 text-[#333D79] bg-white rounded-full p-2 shadow-lg group-hover:scale-110 transition-transform duration-300" />
-                                        </div>
-                                        <p className="mb-2 text-2xl text-gray-700">
-                                            <span className="font-semibold">Drop your Excel file here</span>
-                                        </p>
-                                        <p className="text-base text-gray-500">or click to browse</p>
-                                        <p className="mt-2 text-sm text-[#333D79]">Supported formats: XLSX, XLS</p>
-                                    </div>
-                                    <input 
-                                        id="file-upload" 
-                                        type="file" 
-                                        className="hidden" 
-                                        accept=".xlsx,.xls" 
-                                        onChange={handleFileChange}
-                                    />
-                                </label>
-                            </div>
-
-                            {/* Import Button */}
-                            <button 
-                                className="group px-10 py-4 bg-[#333D79] text-white rounded-xl hover:bg-[#222A5F] transition-all duration-300 flex items-center space-x-3 text-lg shadow-lg hover:shadow-xl transform hover:-translate-y-1"
-                                onClick={() => document.getElementById('file-upload').click()}
-                            >
-                                <Upload className="w-6 h-6 group-hover:animate-bounce" />
-                                <span>Import Excel File</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {excelData && (
-                    <div className="bg-white rounded-xl shadow-lg p-8 mt-8">
-                        <div className="flex justify-between items-center mb-6">
-                            <h3 className="text-2xl font-bold text-[#333D79]">
-                                Imported Data: {excelData.file_name}
-                            </h3>
-                            <button
-                                onClick={() => handleExport(excelData.id)}
-                                className="flex items-center space-x-2 px-6 py-3 bg-[#333D79] text-white rounded-xl hover:bg-[#222A5F] transition-all duration-300"
-                            >
-                                <Download className="w-5 h-5" />
-                                <span>Export to Excel</span>
-                            </button>
-                        </div>
-                        
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
-                                    <tr>
-                                        {excelData.data && excelData.data[0] && 
-                                            Object.keys(excelData.data[0].row_data).map((header) => (
-                                                <th
-                                                    key={header}
-                                                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                                                >
-                                                    {header}
-                                                </th>
-                                            ))
-                                        }
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                    {excelData.data && excelData.data.map((row) => (
-                                        <tr key={row.row_index}>
-                                            {Object.values(row.row_data).map((value, idx) => (
-                                                <td
-                                                    key={idx}
-                                                    className="px-6 py-4 whitespace-nowrap text-sm text-gray-500"
-                                                >
-                                                    {value}
-                                                </td>
-                                            ))}
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                )}
-
-                {loading && (
-                    <div className="text-center py-4">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#333D79] mx-auto"></div>
-                    </div>
-                )}
-
-                {/* Error State */}
-                {error && (
-                    <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mt-4" role="alert">
-                        <strong className="font-bold">Error: </strong>
-                        <span className="block sm:inline">{error}</span>
-                    </div>
-                )}
+  return (
+    <DashboardLayout>
+      <div className="pb-6">
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-2xl font-bold text-gray-800">Welcome back, John</h1>
+          <button 
+            onClick={() => setIsProjectModalOpen(true)}
+            className="bg-[#333D79] hover:bg-[#4A5491] text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm"
+          >
+            <FiPlus size={20} />
+            <span>Create Class</span>
+          </button>
         </div>
-    );
-}
 
-export default Dashboard;
+        {/* Project Modal */}
+        <ProjectModal 
+          isOpen={isProjectModalOpen} 
+          onClose={() => setIsProjectModalOpen(false)} 
+          onAddProject={handleAddProject}
+        />
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {stats.map((stat) => (
+            <div key={stat.name} className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-sm font-medium text-gray-500">{stat.name}</p>
+                  <p className="text-2xl font-bold mt-1 text-gray-800">{stat.value}</p>
+                </div>
+                <div className="p-3 rounded-lg bg-[#F0F2F8]">{stat.icon}</div>
+              </div>
+              <div className="mt-4">
+                <span className={`text-sm ${stat.trend === 'up' ? 'text-green-500' : 'text-red-500'}`}>
+                  {stat.change} {stat.trend === 'up' ? '↑' : '↓'}
+                </span>
+                <span className="text-xs text-gray-500 ml-1">from last month</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Quick Access */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
+          <h2 className="text-lg font-semibold mb-4 text-gray-800">Quick Access</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <button className="flex flex-col items-center justify-center p-4 bg-[#EEF0F8] rounded-lg hover:bg-[#DCE0F2] transition-colors">
+              <MdKeyboardVoice size={28} className="text-[#333D79] mb-2" />
+              <span className="text-sm font-medium text-gray-700">New Recording</span>
+            </button>
+            <button className="flex flex-col items-center justify-center p-4 bg-[#EEF0F8] rounded-lg hover:bg-[#DCE0F2] transition-colors">
+              <MdOutlinePublish size={28} className="text-[#4A5491] mb-2" />
+              <span className="text-sm font-medium text-gray-700">Import Audio</span>
+            </button>
+            <button className="flex flex-col items-center justify-center p-4 bg-[#EEF0F8] rounded-lg hover:bg-[#DCE0F2] transition-colors">
+              <FiSpeaker size={28} className="text-[#5D69A5] mb-2" />
+              <span className="text-sm font-medium text-gray-700">Transcribe</span>
+            </button>
+            <button className="flex flex-col items-center justify-center p-4 bg-[#EEF0F8] rounded-lg hover:bg-[#DCE0F2] transition-colors">
+              <FiActivity size={28} className="text-[#6B77B7] mb-2" />
+              <span className="text-sm font-medium text-gray-700">Analytics</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Recent Activity */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="border-b border-gray-100">
+            <div className="flex">
+              <button
+                className={`px-4 py-3 font-medium text-sm ${
+                  activeTab === 'recent' ? 'text-[#333D79] border-b-2 border-[#333D79]' : 'text-gray-500 hover:text-gray-700'
+                }`}
+                onClick={() => setActiveTab('recent')}
+              >
+                Recent Class
+              </button>
+              <button
+                className={`px-4 py-3 font-medium text-sm ${
+                  activeTab === 'recordings' ? 'text-[#333D79] border-b-2 border-[#333D79]' : 'text-gray-500 hover:text-gray-700'
+                }`}
+                onClick={() => setActiveTab('recordings')}
+              >
+                Recent Recordings
+              </button>
+            </div>
+          </div>
+
+          {activeTab === 'recent' && (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-[#F5F7FB]">
+                  <tr>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Class Name
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Recordings
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Last Updated
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {projects.map((project) => (
+                    <tr 
+                      key={project.id} 
+                      className="hover:bg-[#F5F7FB] cursor-pointer transition-colors" 
+                      onClick={() => handleClassClick(project.id)}
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0 h-10 w-10 bg-[#EEF0F8] rounded-lg flex items-center justify-center">
+                            <MdOutlineClass className="h-5 w-5 text-[#333D79]" />
+                          </div>
+                          <div className="ml-4">
+                            <div className="text-sm font-medium text-gray-900">{project.name}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{project.recordings}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-500">{project.lastUpdated}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                          project.status === 'Active' ? 'bg-[#DCE3F9] text-[#333D79]' : 
+                          project.status === 'Completed' ? 'bg-[#E0F2ED] text-[#0F766E]' : 
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {project.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {activeTab === 'recordings' && (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-[#F5F7FB]">
+                  <tr>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Recording Name
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Duration
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Project
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Date
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {recentRecordings.map((recording) => (
+                    <tr key={recording.id} className="hover:bg-[#F5F7FB] cursor-pointer transition-colors">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0 h-10 w-10 bg-[#EEF0F8] rounded-lg flex items-center justify-center">
+                            <MdKeyboardVoice className="h-5 w-5 text-[#333D79]" />
+                          </div>
+                          <div className="ml-4">
+                            <div className="text-sm font-medium text-gray-900">{recording.name}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{recording.duration}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{recording.projectName}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-500">{recording.date}</div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </DashboardLayout>
+  );
+};
+
+export default Dashboard; 
