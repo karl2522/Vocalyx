@@ -8,13 +8,13 @@ import { HotTable } from '@handsontable/react';
 import { registerAllModules } from 'handsontable/registry';
 import 'handsontable/dist/handsontable.full.css';
 import * as XLSX from 'xlsx';
+import { classService } from '../services/api';
+import { debounce } from 'lodash';
 
-// Register all Handsontable modules
 registerAllModules();
 
-// Configuration for large files
-const MAX_VISIBLE_ROWS = 100; // Maximum rows to show initially
-const LAZY_LOAD_THRESHOLD = 50; // Load more rows when user scrolls to this many rows from the bottom
+const MAX_VISIBLE_ROWS = 100; 
+const LAZY_LOAD_THRESHOLD = 50; 
 
 const ClassDetails = () => {
   const { id } = useParams();
@@ -31,54 +31,76 @@ const ClassDetails = () => {
   const [activeSheet, setActiveSheet] = useState(0);
   const [visibleRowCount, setVisibleRowCount] = useState(MAX_VISIBLE_ROWS);
   const hotTableRef = useRef(null);
+  const [excelFiles, setExcelFiles] = useState([]);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const lastSavedData = useRef(null);
   
-  // Memoize visible data for large datasets with lazy loading support
   const visibleData = useMemo(() => {
     if (!excelData) return null;
     
-    // If dataset is small enough, show everything
     if (excelData.data.length <= visibleRowCount) {
       return excelData.data;
     }
     
-    // Otherwise, show the first visibleRowCount rows
     return excelData.data.slice(0, visibleRowCount);
   }, [excelData, visibleRowCount]);
 
-  // Simulate fetching class data
-  useEffect(() => {
-    // Mock API call
-    const fetchClassData = async () => {
-      try {
-        // In a real app, this would be an API call
-        // For demo purposes, we'll just use timeout to simulate network request
-        setTimeout(() => {
-          const mockClasses = [
-            { id: "1", name: "Customer Service AI", recordings: 32, lastUpdated: "2 hours ago", status: "Active" },
-            { id: "2", name: "Meeting Transcripts", recordings: 56, lastUpdated: "Yesterday", status: "Active" },
-            { id: "3", name: "Product Demo Voiceovers", recordings: 12, lastUpdated: "3 days ago", status: "Completed" },
-            { id: "4", name: "Training Presentations", recordings: 28, lastUpdated: "1 week ago", status: "Archived" },
-          ];
 
-          const classData = mockClasses.find(c => c.id === id);
-          if (classData) {
-            setClassData(classData);
-          } else {
-            // Handle case where class is not found
-            navigate('/dashboard', { replace: true });
-          }
-          setLoading(false);
-        }, 500);
-      } catch (error) {
-        console.error('Error fetching class data:', error);
-        setLoading(false);
-      }
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+        if (isDropdownOpen && !event.target.closest('.relative')) {
+            setIsDropdownOpen(false);
+        }
     };
 
-    fetchClassData();
-  }, [id, navigate]);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+}, [isDropdownOpen]);
 
-  // Setup scroll listener for lazy loading
+  useEffect(() => {
+    const fetchData = async () => {
+        try {
+            setLoading(true);
+            const [classResponse, excelResponse] = await Promise.all([
+                classService.getClassById(id),
+                classService.getClassExcelFiles(id)
+            ]);
+            
+            setClassData(classResponse.data);
+            
+            // If there are excel files, load the most recent one
+            if (excelResponse.data.length > 0) {
+                setExcelFiles(excelResponse.data);
+                const latestFile = excelResponse.data[0]; // Assuming they're sorted by date
+                
+                // Set the excel data
+                const headers = Object.keys(latestFile.sheet_data[0] || {});
+                const data = latestFile.sheet_data.map(row => 
+                    headers.map(header => row[header])
+                );
+                
+                setExcelData({
+                    headers,
+                    data,
+                    fileId: latestFile.id
+                });
+                setSelectedFile({ name: latestFile.file_name });
+            }
+        } catch (error) {
+            console.error('Error fetching data:', error);
+            if (error.response?.status === 404) {
+                navigate('/dashboard', { replace: true });
+            }
+            setError(error.response?.data?.error || 'Failed to fetch data');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    fetchData();
+}, [id, navigate]);
+
   useEffect(() => {
     if (!excelData || excelData.data.length <= MAX_VISIBLE_ROWS) return;
     
@@ -87,8 +109,7 @@ const ClassDetails = () => {
       const scrollPosition = container.scrollTop + container.clientHeight;
       const scrollHeight = container.scrollHeight;
       
-      // If we're near the bottom, load more rows
-      if (scrollHeight - scrollPosition < LAZY_LOAD_THRESHOLD * 28) { // 28px is our row height
+      if (scrollHeight - scrollPosition < LAZY_LOAD_THRESHOLD * 28) {
         if (visibleRowCount < excelData.data.length) {
           setVisibleRowCount(prev => Math.min(prev + LAZY_LOAD_THRESHOLD, excelData.data.length));
         }
@@ -102,7 +123,6 @@ const ClassDetails = () => {
     }
   }, [excelData, visibleRowCount]);
   
-  // Reset visible row count when changing sheets
   useEffect(() => {
     setVisibleRowCount(MAX_VISIBLE_ROWS);
   }, [activeSheet]);
@@ -120,7 +140,6 @@ const ClassDetails = () => {
     e.preventDefault();
     setIsDragging(false);
     
-    // Handle dropped files
     const droppedFiles = Array.from(e.dataTransfer.files);
     const validFiles = droppedFiles.filter(file => 
       file.name.endsWith('.xlsx') || 
@@ -139,23 +158,71 @@ const ClassDetails = () => {
     }
   };
 
-  // Safely extract data from a worksheet
+  
+  const handleDataChange = async (changes, source) => {
+    // Ignore loadData events and null changes
+    if (source === 'loadData' || !changes || changes.length === 0) return;
+    
+    // Only proceed if there are actual changes
+    const hasChanges = changes.some(([row, prop, oldValue, newValue]) => oldValue !== newValue);
+    if (!hasChanges) return;
+
+    try {
+        setIsSaving(true);
+        const currentData = hotTableRef.current.hotInstance.getData();
+        
+        const formattedData = currentData.map(row => {
+            const rowData = {};
+            excelData.headers.forEach((header, index) => {
+                let value = row[index];
+                if (value === "") {
+                    value = null;
+                } else if (typeof value === "string" && !isNaN(value)) {
+                    value = Number(value);
+                }
+                rowData[header] = value;
+            });
+            return rowData;
+        });
+
+        const currentDataString = JSON.stringify(formattedData);
+        if (currentDataString === lastSavedData.current) {
+            setIsSaving(false);
+            return;
+        }
+
+        console.log('Sending data update:', formattedData);
+
+        const response = await classService.updateExcelData(excelData.fileId, formattedData);
+        
+        lastSavedData.current = currentDataString;
+        
+        setExcelData(prev => ({
+            ...prev,
+            data: currentData
+        }));
+
+        setError(null);
+    } catch (error) {
+        console.error('Failed to update data:', error);
+        console.error('Error details:', error.response?.data); 
+        setError(error.response?.data?.error || 'Failed to save changes. Please try again.');
+    } finally {
+        setIsSaving(false);
+    }
+};
   const safeProcessWorksheet = (worksheet) => {
-    // If no worksheet or no reference, return empty data
     if (!worksheet || !worksheet['!ref']) {
       return { headers: ['No data'], data: [] };
     }
     
     try {
-      // Get the range
       const range = XLSX.utils.decode_range(worksheet['!ref']);
       const totalRows = range.e.r - range.s.r + 1;
       const totalCols = range.e.c - range.s.c + 1;
       
-      // Store file statistics
       setFileStats({ totalRows, totalCols });
       
-      // Prepare headers and data arrays
       let headers = [];
       let data = [];
       
@@ -219,69 +286,52 @@ const ClassDetails = () => {
     
     setFileLoading(true);
     setError(null);
-    setSelectedFile(file);
-    setExcelData(null);
-    setSheets([]);
-    setActiveSheet(0);
 
     try {
-      // Create a FileReader to read the file data
-      const reader = new FileReader();
-      
-      reader.onload = (event) => {
-        try {
-          if (!event.target || !event.target.result) {
-            throw new Error("Failed to read file");
-          }
-          
-          // Parse the Excel file using a safe approach with minimal options
-          const data = new Uint8Array(event.target.result);
-          const workbook = XLSX.read(data, {
-            type: 'array',
-            raw: true,
-            cellDates: true,
-            cellNF: false,
-            cellStyles: false
-          });
-          
-          // Get sheet names and validate
-          const sheetNames = workbook.SheetNames || [];
-          if (!sheetNames.length) {
-            throw new Error("No sheets found in Excel file");
-          }
-          
-          setSheets(sheetNames);
-          
-          // Process the first sheet
-          const firstSheet = workbook.Sheets[sheetNames[0]];
-          const parsedData = safeProcessWorksheet(firstSheet);
-          
-          if (!parsedData.data.length) {
-            throw new Error("No data found in Excel sheet");
-          }
-          
-          setExcelData(parsedData);
-          setFileLoading(false);
-        } catch (error) {
-          console.error("Excel processing error:", error);
-          setError(`Failed to process Excel file: ${error.message}`);
-          setFileLoading(false);
-        }
-      };
-      
-      reader.onerror = () => {
-        setError("Error reading file");
-        setFileLoading(false);
-      };
-      
-      // Read the file as an array buffer
-      reader.readAsArrayBuffer(file);
+        const response = await classService.uploadExcel(file, id);
+        
+        const { id: fileId, sheet_data, file_name } = response.data;
+        
+        // Add new file to excelFiles list
+        setExcelFiles(prev => [{
+            id: fileId,
+            file_name,
+            sheet_data,
+            uploaded_at: new Date().toISOString()
+        }, ...prev]);
+        
+        const headers = Object.keys(sheet_data[0] || {});
+        const data = sheet_data.map(row => 
+            headers.map(header => row[header])
+        );
+        
+        setSelectedFile({ name: file_name });
+        setExcelData({
+            headers,
+            data,
+            fileId
+        });
     } catch (error) {
-      console.error("File upload error:", error);
-      setError(`File upload error: ${error.message}`);
-      setFileLoading(false);
+        console.error("File upload error:", error);
+        setError(error.response?.data?.error || 'Failed to upload file');
+    } finally {
+        setFileLoading(false);
     }
-  };
+};
+
+const handleFileSwitch = (file) => {
+  const headers = Object.keys(file.sheet_data[0] || {});
+  const data = file.sheet_data.map(row => 
+      headers.map(header => row[header])
+  );
+  
+  setSelectedFile({ name: file.file_name });
+  setExcelData({
+      headers,
+      data,
+      fileId: file.id
+  });
+};
 
   const handleChangeSheet = (sheetIndex) => {
     if (!selectedFile || sheetIndex === activeSheet || sheetIndex >= sheets.length) {
@@ -342,46 +392,34 @@ const ClassDetails = () => {
     }
   };
 
-  const handleExport = () => {
-    if (!excelData || !excelData.data.length || !selectedFile) {
-      return;
-    }
+  const handleExport = async () => {
+    if (!excelData?.fileId) return;
     
     try {
-      setFileLoading(true);
-      
-      // Create a new workbook
-      const wb = XLSX.utils.book_new();
-      
-      // Get current data from the HotTable instance if available
-      let dataToExport = excelData.data;
-      if (hotTableRef.current && hotTableRef.current.hotInstance) {
-        const hotData = hotTableRef.current.hotInstance.getData();
-        if (Array.isArray(hotData) && hotData.length) {
-          dataToExport = hotData;
-        }
-      }
-      
-      // Convert data to worksheet format
-      const ws = XLSX.utils.aoa_to_sheet([excelData.headers, ...dataToExport]);
-      
-      // Add worksheet to workbook
-      const sheetName = sheets[activeSheet] || "Data";
-      XLSX.utils.book_append_sheet(wb, ws, sheetName);
-      
-      // Generate file name
-      const fileName = `${selectedFile.name.split('.')[0]}_${sheetName}.xlsx`;
-      
-      // Write file and trigger download
-      XLSX.writeFile(wb, fileName);
-      
-      setFileLoading(false);
+        setFileLoading(true);
+        
+        const response = await classService.downloadExcel(excelData.fileId);
+        
+        const blob = new Blob([response.data], { 
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+        });
+        
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${selectedFile.name.split('.')[0]}_exported.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        setFileLoading(false);
     } catch (error) {
-      console.error("Export error:", error);
-      setError(`Failed to export data: ${error.message}`);
-      setFileLoading(false);
+        console.error("Export error:", error);
+        setError(error.response?.data?.error || 'Failed to export file');
+        setFileLoading(false);
     }
-  };
+};
 
   const handleClearData = () => {
     setExcelData(null);
@@ -422,38 +460,73 @@ const ClassDetails = () => {
           </div>
           <div className="flex space-x-3">
             {excelData ? (
-              <>
-                <button
-                  onClick={handleClearData}
-                  className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm"
-                >
-                  <FiX size={18} />
-                  <span>Clear</span>
-                </button>
-                <button
-                  onClick={handleExport}
-                  className="bg-[#333D79] hover:bg-[#4A5491] text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm"
-                >
-                  <FiDownload size={18} />
-                  <span>Export Data</span>
-                </button>
-              </>
+                <>
+                    <div className="relative">
+                        <button
+                            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                            className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm"
+                        >
+                            <FiFileText size={18} />
+                            <span>Switch File ({excelFiles.length})</span>
+                        </button>
+                        {isDropdownOpen && (
+                            <div className="absolute right-0 mt-2 w-80 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50">
+                                <div className="py-1 max-h-60 overflow-auto">
+                                    {excelFiles.map(file => (
+                                        <button
+                                            key={file.id}
+                                            onClick={() => {
+                                                handleFileSwitch(file);
+                                                setIsDropdownOpen(false);
+                                            }}
+                                            className={`block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 ${
+                                                file.id === excelData.fileId ? 'bg-[#EEF0F8] text-[#333D79]' : 'text-gray-700'
+                                            }`}
+                                        >
+                                            {file.file_name}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    <label htmlFor="add-file" className="cursor-pointer">
+                        <div className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm hover:bg-gray-50">
+                            <FiUpload size={18} />
+                            <span>Add File</span>
+                        </div>
+                        <input 
+                            id="add-file" 
+                            type="file" 
+                            accept=".xlsx,.xls,.csv" 
+                            className="hidden"
+                            onChange={handleFileInput}
+                        />
+                    </label>
+                    <button
+                        onClick={handleExport}
+                        className="bg-[#333D79] hover:bg-[#4A5491] text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm"
+                    >
+                        <FiDownload size={18} />
+                        <span>Export Data</span>
+                    </button>
+                </>
             ) : (
-              <label htmlFor="file-upload" className="cursor-pointer">
-                <div className="bg-[#333D79] hover:bg-[#4A5491] text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm">
-                  <FiUpload size={18} />
-                  <span>Import Files</span>
-                </div>
-                <input 
-                  id="file-upload" 
-                  type="file" 
-                  accept=".xlsx,.xls,.csv" 
-                  className="hidden"
-                  onChange={handleFileInput}
-                />
-              </label>
+                <label htmlFor="file-upload" className="cursor-pointer">
+                    <div className="bg-[#333D79] hover:bg-[#4A5491] text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm">
+                        <FiUpload size={18} />
+                        <span>Import Files</span>
+                    </div>
+                    <input 
+                        id="file-upload" 
+                        type="file" 
+                        accept=".xlsx,.xls,.csv" 
+                        className="hidden"
+                        onChange={handleFileInput}
+                    />
+                </label>
             )}
-          </div>
+        </div>
         </div>
 
         {error && (
@@ -581,6 +654,7 @@ const ClassDetails = () => {
                       contextMenu={true}
                       columnSorting={true}
                       sortIndicator={true}
+                      afterChange={handleDataChange}
                       rowHeights={28}
                       fixedRowsTop={0}
                       fixedColumnsLeft={0}
@@ -613,6 +687,16 @@ const ClassDetails = () => {
             </div>
           )}
         </div>
+
+
+        {isSaving && (
+            <div className="fixed bottom-4 right-4 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg shadow-lg z-50">
+                <div className="flex items-center gap-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-[#333D79] border-t-transparent"></div>
+                    <span>Saving changes...</span>
+                </div>
+            </div>
+        )}
 
         {!excelData && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">

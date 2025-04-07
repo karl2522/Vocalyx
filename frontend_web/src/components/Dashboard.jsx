@@ -1,20 +1,31 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FiPlus, FiClock, FiUsers, FiSpeaker, FiActivity } from 'react-icons/fi';
 import { MdKeyboardVoice, MdOutlinePublish, MdOutlineClass } from 'react-icons/md';
 import DashboardLayout from './layouts/DashboardLayout';
 import ProjectModal from './modals/ProjectModal';
+import { useAuth } from '../auth/AuthContext';
+import { classService } from '../services/api';
+import { toast } from 'react-hot-toast';
 
 const Dashboard = () => {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('recent');
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
-  const [projects, setProjects] = useState([
-    { id: 1, name: "Customer Service AI", recordings: 32, lastUpdated: "2 hours ago", status: "Active" },
-    { id: 2, name: "Meeting Transcripts", recordings: 56, lastUpdated: "Yesterday", status: "Active" },
-    { id: 3, name: "Product Demo Voiceovers", recordings: 12, lastUpdated: "3 days ago", status: "Completed" },
-    { id: 4, name: "Training Presentations", recordings: 28, lastUpdated: "1 week ago", status: "Archived" },
-  ]);
+  const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+
+    useEffect(() => {
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+            navigate('/login');
+            return;
+        }
+
+        fetchClasses();
+    }, [navigate]);
 
   const stats = [
     { 
@@ -47,6 +58,24 @@ const Dashboard = () => {
     },
   ];
 
+  const fetchClasses = async () => {
+    try {
+        setLoading(true);
+        const response = await classService.getClasses();
+        setProjects(response.data);
+    } catch (error) {
+        console.error('Error fetching classes:', error);
+        if (error.response?.status === 401) {
+            toast.error('Session expired. Please login again.');
+            navigate('/login');
+        } else {
+            toast.error('Failed to load classes');
+        }
+    } finally {
+        setLoading(false);
+    }
+};
+
   const recentRecordings = [
     { id: 1, name: "Marketing team standup.mp3", duration: "32:16", projectName: "Meeting Transcripts", date: "Today" },
     { id: 2, name: "Product demo v2.mp3", duration: "18:45", projectName: "Product Demo Voiceovers", date: "Yesterday" },
@@ -54,17 +83,8 @@ const Dashboard = () => {
     { id: 4, name: "New feature walkthrough.mp3", duration: "24:30", projectName: "Training Presentations", date: "3 days ago" },
   ];
 
-  // Handle adding a new project
   const handleAddProject = (newProject) => {
-    const projectToAdd = {
-      id: projects.length + 1,
-      name: newProject.projectName,
-      recordings: 0,
-      lastUpdated: "Just now",
-      status: "Active"
-    };
-    
-    setProjects([projectToAdd, ...projects]);
+    setProjects([newProject, ...projects]);
   };
 
   const handleClassClick = (id) => {
@@ -75,7 +95,7 @@ const Dashboard = () => {
     <DashboardLayout>
       <div className="pb-6">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-2xl font-bold text-gray-800">Welcome back, John</h1>
+          <h1 className="text-2xl font-bold text-gray-800">Welcome Back {user.name}!</h1>
           <button 
             onClick={() => setIsProjectModalOpen(true)}
             className="bg-[#333D79] hover:bg-[#4A5491] text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm"
@@ -160,60 +180,88 @@ const Dashboard = () => {
           </div>
 
           {activeTab === 'recent' && (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
+                <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-[#F5F7FB]">
-                  <tr>
+                    <tr>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Class Name
+                        Class Name
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Recordings
+                        Recordings
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Last Updated
+                        Last Updated
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
+                        Status
                     </th>
-                  </tr>
+                    </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {projects.map((project) => (
-                    <tr 
-                      key={project.id} 
-                      className="hover:bg-[#F5F7FB] cursor-pointer transition-colors" 
-                      onClick={() => handleClassClick(project.id)}
-                    >
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0 h-10 w-10 bg-[#EEF0F8] rounded-lg flex items-center justify-center">
-                            <MdOutlineClass className="h-5 w-5 text-[#333D79]" />
-                          </div>
-                          <div className="ml-4">
-                            <div className="text-sm font-medium text-gray-900">{project.name}</div>
-                          </div>
+                    {loading ? (
+                    <tr>
+                        <td colSpan="4" className="px-6 py-12">
+                        <div className="flex flex-col items-center justify-center">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#333D79]"></div>
+                            <p className="mt-2 text-sm text-gray-500">Loading classes...</p>
                         </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{project.recordings}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-500">{project.lastUpdated}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          project.status === 'Active' ? 'bg-[#DCE3F9] text-[#333D79]' : 
-                          project.status === 'Completed' ? 'bg-[#E0F2ED] text-[#0F766E]' : 
-                          'bg-gray-100 text-gray-800'
-                        }`}>
-                          {project.status}
-                        </span>
-                      </td>
+                        </td>
                     </tr>
-                  ))}
+                    ) : projects.length === 0 ? (
+                    <tr>
+                        <td colSpan="4" className="px-6 py-12">
+                        <div className="flex flex-col items-center justify-center">
+                            <div className="flex-shrink-0 h-16 w-16 bg-[#EEF0F8] rounded-lg flex items-center justify-center mb-4">
+                            <MdOutlineClass className="h-8 w-8 text-[#333D79]" />
+                            </div>
+                            <p className="text-sm text-gray-500">No classes found.</p>
+                            <button 
+                            onClick={() => setIsProjectModalOpen(true)}
+                            className="mt-2 text-sm text-[#333D79] hover:text-[#4A5491] font-medium"
+                            >
+                            Create your first class
+                            </button>
+                        </div>
+                        </td>
+                    </tr>
+                    ) : (
+                    projects.map((project) => (
+                        <tr 
+                        key={project.id} 
+                        className="hover:bg-[#F5F7FB] cursor-pointer transition-colors" 
+                        onClick={() => handleClassClick(project.id)}
+                        >
+                        <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                            <div className="flex-shrink-0 h-10 w-10 bg-[#EEF0F8] rounded-lg flex items-center justify-center">
+                                <MdOutlineClass className="h-5 w-5 text-[#333D79]" />
+                            </div>
+                            <div className="ml-4">
+                                <div className="text-sm font-medium text-gray-900">{project.name}</div>
+                            </div>
+                            </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900">{project.recordings_count || 0}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-500">{project.last_updated}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            project.status === 'active' ? 'bg-[#DCE3F9] text-[#333D79]' : 
+                            project.status === 'completed' ? 'bg-[#E0F2ED] text-[#0F766E]' : 
+                            'bg-gray-100 text-gray-800'
+                            }`}>
+                            {project.status.charAt(0).toUpperCase() + project.status.slice(1)}
+                            </span>
+                        </td>
+                        </tr>
+                    ))
+                    )}
                 </tbody>
-              </table>
+                </table>
             </div>
           )}
 

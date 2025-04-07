@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'users.apps.UsersConfig',
     'drf_spectacular',
     'excel',
+    'classes',
     'token_management.apps.TokenManagementConfig',
 ]
 
@@ -203,8 +204,8 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': os.getenv('DB_NAME', 'neondb'),
         'USER': os.getenv('DB_USER', 'neondb_owner'),
-        'PASSWORD': os.getenv('DB_PASSWORD', 'npg_tqHT47PXvmKl'),
-        'HOST': os.getenv('DB_HOST', 'ep-royal-haze-a1cc1jto-pooler.ap-southeast-1.aws.neon.tech'),
+        'PASSWORD': os.getenv('DB_PASSWORD', 'npg_BC0EMfk4VXAL'),
+        'HOST': os.getenv('DB_HOST', 'ep-twilight-hat-a1o7vy4b-pooler.ap-southeast-1.aws.neon.tech'),
         'PORT': os.getenv('DB_PORT', '5432'),
         'OPTIONS': {
             'sslmode': 'require',

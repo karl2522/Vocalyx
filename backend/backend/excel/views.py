@@ -5,16 +5,15 @@ from rest_framework.permissions import IsAuthenticated
 import pandas as pd
 from django.http import HttpResponse
 from io import BytesIO
-from .models import ExcelFile, ExcelData
+from .models import ExcelFile
 from .serializers import ExcelFileSerializer
 from drf_spectacular.utils import extend_schema
-from rest_framework.parsers import MultiPartParser, FormParser
-
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
 class ExcelViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = ExcelFileSerializer
-    parser_classes = (MultiPartParser, FormParser)
+    parser_classes = (MultiPartParser, FormParser, JSONParser)
 
     def get_queryset(self):
         return ExcelFile.objects.filter(user=self.request.user)
@@ -39,34 +38,18 @@ class ExcelViewSet(viewsets.ModelViewSet):
             return Response({'error': 'File must be an Excel file'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            # Create ExcelFile instance
-            excel_file = ExcelFile.objects.create(
-                user=request.user,
-                file_name=file.name
-            )
-            print(f"ExcelFile created with ID: {excel_file.id}")
-
-            # Read Excel file
             df = pd.read_excel(file)
             print(f"DataFrame shape: {df.shape}")
 
-            # Handle NaN values and convert numeric types
             df = df.replace({pd.NA: None})
-            df = df.fillna("")  # Replace NaN with empty string
+            df = df.fillna("")
 
-            # Convert numeric columns to Python native types
             for column in df.select_dtypes(include=['float64', 'int64']).columns:
                 df[column] = df[column].apply(
                     lambda x: None if pd.isna(x) else float(x) if isinstance(x, float) else int(x))
 
-            # Convert to records
-            records = df.to_dict('records')
-            print(f"Number of records: {len(records)}")
-
-            # Create ExcelData objects
-            excel_data_objects = []
-            for idx, record in enumerate(records):
-                # Convert any remaining numpy types to Python native types
+            records = []
+            for record in df.to_dict('records'):
                 cleaned_record = {}
                 for key, value in record.items():
                     if pd.isna(value):
@@ -75,19 +58,14 @@ class ExcelViewSet(viewsets.ModelViewSet):
                         cleaned_record[key] = value.isoformat()
                     else:
                         cleaned_record[key] = value
+                records.append(cleaned_record)
 
-                excel_data_objects.append(
-                    ExcelData(
-                        excel_file=excel_file,
-                        sheet_name='Sheet1',
-                        row_data=cleaned_record,
-                        row_index=idx
-                    )
-                )
-
-            # Bulk create ExcelData objects
-            ExcelData.objects.bulk_create(excel_data_objects)
-            print("ExcelData objects created successfully")
+            excel_file = ExcelFile.objects.create(
+                user=request.user,
+                file_name=file.name,
+                sheet_data=records
+            )
+            print(f"ExcelFile created with ID: {excel_file.id}")
 
             serializer = self.get_serializer(excel_file)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -107,10 +85,7 @@ class ExcelViewSet(viewsets.ModelViewSet):
         excel_file = self.get_object()
 
         try:
-            excel_data = excel_file.data.all().order_by('row_index')
-
-            data = [row.row_data for row in excel_data]
-            df = pd.DataFrame(data)
+            df = pd.DataFrame(excel_file.sheet_data)
 
             buffer = BytesIO()
             df.to_excel(buffer, index=False)
@@ -125,3 +100,44 @@ class ExcelViewSet(viewsets.ModelViewSet):
 
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['PATCH'])
+    def update_data(self, request, pk=None):
+        try:
+            excel_file = self.get_object()
+            sheet_data = request.data.get('sheet_data')
+
+            if not sheet_data:
+                return Response(
+                    {'error': 'sheet_data is required'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            formatted_data = []
+            for row in sheet_data:
+                formatted_row = {}
+                for key, value in row.items():
+                    if value == "":
+                        formatted_row[key] = None
+                    elif isinstance(value, str) and value.replace('.', '', 1).isdigit():
+                        formatted_row[key] = float(value) if '.' in value else int(value)
+                    else:
+                        formatted_row[key] = value
+                formatted_data.append(formatted_row)
+
+            excel_file.sheet_data = formatted_data
+            excel_file.save()
+
+            return Response({
+                'message': 'Data updated successfully',
+                'sheet_data': excel_file.sheet_data
+            })
+
+        except Exception as e:
+            import traceback
+            print("Error updating data:", str(e))
+            print("Traceback:", traceback.format_exc())
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
