@@ -33,14 +33,31 @@ export const AuthProvider = ({ children }) => {
           console.error('MSAL initialization error:', error);
         }
       };
-  
+    
       initializeMsal();
       
-      const token = localStorage.getItem('authToken');
-      if (token) {
-        setUser(JSON.parse(localStorage.getItem('user') || '{}'));
-      }
-      setLoading(false);
+      // Check for auth token and user data
+      const checkAuth = () => {
+        const token = localStorage.getItem('authToken');
+        const userData = localStorage.getItem('user');
+        
+        if (token && userData) {
+          try {
+            const user = JSON.parse(userData);
+            setUser(user);
+          } catch (error) {
+            console.error('Error parsing user data:', error);
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('user');
+            setUser(null);
+          }
+        } else {
+          setUser(null);
+        }
+        setLoading(false);
+      };
+    
+      checkAuth();
     }, []);
 
     const handleAuthResponse = async (token, provider) => {

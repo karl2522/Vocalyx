@@ -1,34 +1,48 @@
 import { useState } from 'react';
 import PropTypes from 'prop-types';
 import { MdClose, MdOutlineClass } from 'react-icons/md';
+import { classService } from '../../services/api';
+import { toast } from 'react-hot-toast';
 
 const ProjectModal = ({ isOpen, onClose, onAddProject }) => {
   const [projectName, setProjectName] = useState('');
   const [description, setDescription] = useState('');
   const [semester, setSemester] = useState('');
   const [studentCount, setStudentCount] = useState('');
+  const [loading, setLoading] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
     
-    // Call the onAddProject callback with the form data
-    if (onAddProject) {
-      onAddProject({ 
-        projectName, 
-        description, 
+    try {
+      const response = await classService.createClass({
+        name: projectName,
+        description,
         semester,
-        studentCount: studentCount ? parseInt(studentCount, 10) : 0 
+        student_count: studentCount ? parseInt(studentCount, 10) : 0,
+        status: 'active'
       });
+
+      if (onAddProject) {
+        onAddProject(response.data);
+      }
+
+      toast.success('Class created successfully!');
+      
+      setProjectName('');
+      setDescription('');
+      setSemester('');
+      setStudentCount('');
+      onClose();
+    } catch (error) {
+      console.error('Error creating class:', error);
+      toast.error(error.response?.data?.message || 'Failed to create class');
+    } finally {
+      setLoading(false);
     }
-    
-    // Reset form and close modal
-    setProjectName('');
-    setDescription('');
-    setSemester('');
-    setStudentCount('');
-    onClose();
   };
 
   return (
@@ -123,11 +137,12 @@ const ProjectModal = ({ isOpen, onClose, onAddProject }) => {
               </div>
               
               <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse mt-4 -mx-6">
-                <button
+               <button
                   type="submit"
+                  disabled={loading}
                   className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-[#333D79] text-base font-medium text-white hover:bg-[#4A5491] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#333D79] sm:ml-3 sm:w-auto sm:text-sm transition-colors"
                 >
-                  Create Class
+                  {loading ? 'Creating...' : 'Create Class'}
                 </button>
                 <button
                   type="button"
