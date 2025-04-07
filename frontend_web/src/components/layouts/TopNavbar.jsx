@@ -3,13 +3,16 @@ import { FiBell, FiSearch, FiUser, FiChevronDown, FiSettings, FiLogOut } from 'r
 import { HiOutlineUserCircle } from 'react-icons/hi';
 import PropTypes from 'prop-types';
 import LogoutModal from '../modals/LogoutModal';
+import { useAuth } from '../../auth/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 const TopNavbar = ({ sidebarCollapsed }) => {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const dropdownRef = useRef(null);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -30,9 +33,8 @@ const TopNavbar = ({ sidebarCollapsed }) => {
   };
 
   const handleLogoutConfirm = () => {
-    // Perform the actual logout action here
-    // For example, clear tokens, cookies, and redirect to landing page
-    window.location.href = '/';
+    logout();
+    navigate('/login');
   };
 
   return (
@@ -63,28 +65,34 @@ const TopNavbar = ({ sidebarCollapsed }) => {
             </div>
 
             <div className="relative" ref={dropdownRef}>
-              <button
-                onClick={() => setShowProfileMenu(!showProfileMenu)}
-                className="flex items-center space-x-2 focus:outline-none group"
-              >
-                <div className="w-10 h-10 rounded-full bg-[#333D79] flex items-center justify-center text-white shadow-md overflow-hidden group-hover:ring-2 group-hover:ring-[#4A5491] transition-all">
+            <button
+              onClick={() => setShowProfileMenu(!showProfileMenu)}
+              className="flex items-center space-x-2 focus:outline-none group"
+            >
+              <div className="w-10 h-10 rounded-full bg-[#333D79] flex items-center justify-center text-white shadow-md overflow-hidden group-hover:ring-2 group-hover:ring-[#4A5491] transition-all">
+                {user?.profile_picture ? (
+                  <img src={user.profile_picture} alt={user.first_name} className="w-full h-full object-cover" />
+                ) : (
                   <FiUser size={20} />
-                  {/* If you have user images, you can use them like this */}
-                  {/* <img src="/path/to/user-image.jpg" alt="John Doe" className="w-full h-full object-cover" /> */}
-                </div>
-                <div className="hidden md:block text-left">
-                  <p className="text-sm font-medium group-hover:text-[#333D79] transition-colors">John Doe</p>
-                  <p className="text-xs text-gray-500">Admin</p>
-                </div>
-                <FiChevronDown size={16} className={`text-gray-500 transition-transform duration-200 ${showProfileMenu ? 'transform rotate-180' : ''}`} />
-              </button>
+                )}
+              </div>
+              <div className="hidden md:block text-left">
+                <p className="text-sm font-medium group-hover:text-[#333D79] transition-colors">
+                  {user ? `${user.name}` : 'Guest'}
+                </p>
+                <p className="text-xs text-gray-500">{user?.email}</p>
+              </div>
+              <FiChevronDown size={16} className={`text-gray-500 transition-transform duration-200 ${showProfileMenu ? 'transform rotate-180' : ''}`} />
+            </button>
 
-              {showProfileMenu && (
-                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl py-2 z-50 border border-gray-100 transform transition-all duration-200">
-                  <div className="px-4 py-3 border-b border-gray-100">
-                    <p className="text-sm font-semibold text-gray-900">John Doe</p>
-                    <p className="text-xs text-gray-500 mt-1">john.doe@example.com</p>
-                  </div>
+            {showProfileMenu && (
+              <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl py-2 z-50 border border-gray-100 transform transition-all duration-200">
+                <div className="px-4 py-3 border-b border-gray-100">
+                  <p className="text-sm font-semibold text-gray-900">
+                    {user ? `${user.name}` : 'Guest'}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">{user?.email}</p>
+                </div>
                   
                   <div className="py-1">
                     <a href="#profile" className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-[#EEF0F8] hover:text-[#333D79] transition-colors">

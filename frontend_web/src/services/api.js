@@ -1,5 +1,4 @@
 import axios from 'axios';
-import { setAuthState, clearAuthState } from '../utils/auth';
 
 const API_URL = 'http://127.0.0.1:8000/api';
 
@@ -13,7 +12,13 @@ const api = axios.create({
 
 api.interceptors.request.use(
     (config) => {
-        console.log('Request:', config); 
+        const token = localStorage.getItem('authToken');
+        
+        if (token) {
+            config.headers.Authorization = `Bearer ${token}`;
+        }
+        
+        console.log('Request config:', config);
         return config;
     },
     (error) => {
@@ -22,10 +27,8 @@ api.interceptors.request.use(
     }
 );
 
-
 api.interceptors.response.use(
     (response) => {
-        console.log('Response:', response);
         return response;
     },
     (error) => {
@@ -33,14 +36,6 @@ api.interceptors.response.use(
         return Promise.reject(error);
     }
 );
-
-const setAuthToken = (token) => {
-    if (token) {
-        api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    } else {
-        delete api.defaults.headers.common['Authorization'];
-    }
-};
 
 
 export const register = async (userData) => {
@@ -89,8 +84,9 @@ export const login = async (credentials) => {
             throw new Error('Invalid response from server');
         }
         
-        setAuthState(tokens, user);
-        setAuthToken(tokens.access);
+        localStorage.setItem('authToken', tokens.access);
+        localStorage.setItem('refreshToken', tokens.refresh);
+        localStorage.setItem('user', JSON.stringify(user));
         
         return {
             tokens,
@@ -108,16 +104,48 @@ export const login = async (credentials) => {
 
 export const logout = async () => {
     try {
-        const refresh_token = localStorage.getItem('refresh_token');
+        const refresh_token = localStorage.getItem('refreshToken');
         await api.post('/logout/', { refresh_token });
-        clearAuthState();
-        setAuthToken(null);
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('refreshToken');
+        localStorage.removeItem('user');
     } catch (error) {
         console.error('Logout error:', error);
-        clearAuthState();
-        setAuthToken(null);
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('refreshToken');
+        localStorage.removeItem('user');
     }
 };
 
+export const classService = {
+    getClasses: () => api.get('/classes/'),
+    createClass: (classData) => api.post('/classes/', classData),
+    getClass: (id) => api.get(`/classes/${id}/`),
+    updateClass: (id, classData) => api.patch(`/classes/${id}/`, classData),
+    deleteClass: (id) => api.delete(`/classes/${id}/`),
+    getClassById: (id) => api.get(`/classes/${id}/`),
+    getClassExcelFiles: (classId) => api.get(`/excel/?class_id=${classId}`),
+    updateExcelData: (fileId, data) => api.patch(
+        `/excel/${fileId}/update_data/`, 
+        { sheet_data: data },
+        {
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        }
+    ),
+    uploadExcel: (file, classId) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('class_id', classId);
+        return api.post('/excel/upload/', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
+    },
+    downloadExcel: (fileId) => api.get(`/excel/${fileId}/download/`),
+};
 
 
+export default api;
