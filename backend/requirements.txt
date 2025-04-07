@@ -18,3 +18,4 @@ google-auth
 requests
 msal
 psycopg2-binary
+django-celery-beat

@@ -11,9 +11,11 @@ import Dashboard from './components/Dashboard'
 import Projects from './components/Projects'
 import Recordings from './components/Recordings'
 import ClassDetails from './components/ClassDetails'
+import ProtectedRoute from './components/ProtectedRoute'
+import PublicRoute from './components/PublicRoute'
+import { Navigate } from 'react-router-dom'
 
 function App() {
-
   return (
     <GoogleOAuthProvider 
       clientId="841187713627-6u60gs5iq5h6qalooub6q27nrulifoug.apps.googleusercontent.com"
@@ -22,13 +24,48 @@ function App() {
         <Router>
           <Toaster position="top-right" />
           <Routes>
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/dashboard/projects" element={<Projects />} />
-            <Route path="/dashboard/recordings" element={<Recordings />} />
-            <Route path="/dashboard/class/:id" element={<ClassDetails />} />
+            <Route path="/" element={
+              <PublicRoute>
+                <LandingPage />
+              </PublicRoute>
+            } />
+            <Route path="/login" element={
+              <PublicRoute>
+                <Login />
+              </PublicRoute>
+            } />
+            <Route path="/signup" element={
+              <PublicRoute>
+                <Signup />
+              </PublicRoute>
+            } />
+
+            <Route path="/dashboard" element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/dashboard/projects" element={
+              <ProtectedRoute>
+                <Projects />
+              </ProtectedRoute>
+            } />
+            <Route path="/dashboard/recordings" element={
+              <ProtectedRoute>
+                <Recordings />
+              </ProtectedRoute>
+            } />
+            <Route path="/dashboard/class/:id" element={
+              <ProtectedRoute>
+                <ClassDetails />
+              </ProtectedRoute>
+            } />
+
+            <Route path="*" element={
+              <ProtectedRoute>
+                <Navigate to="/dashboard" replace />
+              </ProtectedRoute>
+            } />
           </Routes>
         </Router>
       </AuthProvider>
