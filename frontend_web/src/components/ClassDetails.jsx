@@ -804,34 +804,6 @@ const handleFileSwitch = (file) => {
     }
   };
   
-  const cancelExport = () => {
-    setShowExportOptions(false);
-  };
-        setFileLoading(true);
-        
-        const response = await classService.downloadExcel(excelData.fileId);
-        
-        const blob = new Blob([response.data], { 
-            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
-        });
-        
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${selectedFile.name.split('.')[0]}_exported.xlsx`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-        
-        setFileLoading(false);
-    } catch (error) {
-        console.error("Export error:", error);
-        setError(error.response?.data?.error || 'Failed to export file');
-        setFileLoading(false);
-    }
-};
-
   const handleClearData = () => {
     setExcelData(null);
     setSelectedFile(null);
