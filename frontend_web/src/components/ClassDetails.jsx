@@ -587,10 +587,12 @@ const ClassDetails = () => {
   };
   
   const cancelImport = async () => {  // Added async here
+  const cancelImport = () => {
     setSelectedFile(null);
     setShowPreview(false);
     setPreviewInfo(null);
     setImportProgress(0);
+  };
     setFileLoading(true);
     setError(null);
 
@@ -764,6 +766,47 @@ const handleFileSwitch = (file) => {
   const cancelExport = async () => {
     setShowExportOptions(false);
     try {
+      setExportLoading(true);
+      setShowExportOptions(false);
+      
+      // Create a new workbook
+      const wb = XLSX.utils.book_new();
+      
+      // Get current data from the HotTable instance if available
+      let dataToExport = excelData.data;
+      if (hotTableRef.current && hotTableRef.current.hotInstance) {
+        const hotData = hotTableRef.current.hotInstance.getData();
+        if (Array.isArray(hotData) && hotData.length) {
+          dataToExport = hotData;
+        }
+      }
+      
+      // Convert data to worksheet format
+      const ws = XLSX.utils.aoa_to_sheet([excelData.headers, ...dataToExport]);
+      
+      // Add worksheet to workbook
+      const sheetName = sheets[activeSheet] || "Data";
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      
+      // Generate file name with selected extension
+      const fileName = `${exportFileName || 'export'}.${exportFormat}`;
+      
+      // Use setTimeout to show loading animation
+      setTimeout(() => {
+        // Write file and trigger download
+        XLSX.writeFile(wb, fileName);
+        setExportLoading(false);
+      }, 1000);
+    } catch (error) {
+      console.error("Export error:", error);
+      setError(`Failed to export data: ${error.message}`);
+      setExportLoading(false);
+    }
+  };
+  
+  const cancelExport = () => {
+    setShowExportOptions(false);
+  };
         setFileLoading(true);
         
         const response = await classService.downloadExcel(excelData.fileId);
