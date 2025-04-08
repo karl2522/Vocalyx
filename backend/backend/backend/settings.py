@@ -226,9 +226,6 @@ CELERY_BEAT_SCHEDULE = {
     }
 }
 
-# Remove MongoDB specific settings
-# MONGODB_ENFORCE_SCHEMA = False
-# SILENCED_SYSTEM_CHECKS = ['djongo.W001']
 
 
 # Password validation
