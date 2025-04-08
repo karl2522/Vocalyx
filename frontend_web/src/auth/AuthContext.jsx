@@ -6,91 +6,101 @@ const AuthContext = createContext(null);
 
 
 const msalConfig = {
-    auth: {
-      clientId: '5a7221d3-d167-4f9d-b62e-79c987bb5d5f',
-      authority: 'https://login.microsoftonline.com/common',
-      redirectUri: 'http://localhost:5173',
-    },
-    cache: {
-      cacheLocation: 'sessionStorage',
-      storeAuthStateInCookie: false,
-    }
-  };
+  auth: {
+    clientId: '5a7221d3-d167-4f9d-b62e-79c987bb5d5f',
+    authority: 'https://login.microsoftonline.com/common',
+    redirectUri: process.env.NODE_ENV === 'production' 
+      ? 'https://your-heroku-app.herokuapp.com' 
+      : 'http://localhost:5173',
+  },
+  cache: {
+    cacheLocation: 'sessionStorage',
+    storeAuthStateInCookie: false,
+  }
+};
   
 const msalInstance = new PublicClientApplication(msalConfig);
-
-await msalInstance.initialize();
+msalInstance.initialize(); // Initialize without await
 
 export const AuthProvider = ({ children }) => {
-    const [user, setUser] = useState(null);
-    const [loading, setLoading] = useState(true);
-  
-    useEffect(() => {
-      const initializeMsal = async () => {
-        try {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [initialized, setInitialized] = useState(false);
+
+  useEffect(() => {
+    const initializeMsal = async () => {
+      try {
+        if (!initialized) {
           await msalInstance.initialize();
-        } catch (error) {
-          console.error('MSAL initialization error:', error);
+          setInitialized(true);
         }
-      };
+      } catch (error) {
+        console.error('MSAL initialization error:', error);
+      }
+    };
+  
+    initializeMsal();
     
-      initializeMsal();
+    // Check for auth token and user data
+    const checkAuth = () => {
+      const token = localStorage.getItem('authToken');
+      const userData = localStorage.getItem('user');
       
-      // Check for auth token and user data
-      const checkAuth = () => {
-        const token = localStorage.getItem('authToken');
-        const userData = localStorage.getItem('user');
-        
-        if (token && userData) {
-          try {
-            const user = JSON.parse(userData);
-            setUser(user);
-          } catch (error) {
-            console.error('Error parsing user data:', error);
-            localStorage.removeItem('authToken');
-            localStorage.removeItem('user');
-            setUser(null);
-          }
-        } else {
+      if (token && userData) {
+        try {
+          const user = JSON.parse(userData);
+          setUser(user);
+        } catch (error) {
+          console.error('Error parsing user data:', error);
+          localStorage.removeItem('authToken');
+          localStorage.removeItem('user');
           setUser(null);
         }
-        setLoading(false);
-      };
-    
-      checkAuth();
-    }, []);
+      } else {
+        setUser(null);
+      }
+      setLoading(false);
+    };
+  
+    checkAuth();
+  }, [initialized]);
 
-    const handleAuthResponse = async (token, provider) => {
-        try {
-          console.log('Sending auth request with token:', token);
-          const response = await fetch('http://127.0.0.1:8000/api/auth/google/', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              id_token: token,
-            }),
-            credentials: 'include',
-          });
+  const handleAuthResponse = async (token, provider) => {
+    try {
+      console.log('Sending auth request with token:', token);
+      const baseUrl = process.env.NODE_ENV === 'production' 
+        ? 'https://your-backend-heroku-app.herokuapp.com' 
+        : 'http://127.0.0.1:8000';
+        
+      const response = await fetch(`${baseUrl}/api/auth/google/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id_token: token,
+        }),
+        credentials: 'include',
+      });
+  
+      const data = await response.json();
+      console.log('Auth response:', data);
       
-          const data = await response.json();
-          console.log('Auth response:', data);
-          
-          if (response.ok) {
-            localStorage.setItem('authToken', data.token);
-            localStorage.setItem('refreshToken', data.refresh);
-            localStorage.setItem('user', JSON.stringify(data.user));
-            setUser(data.user);
-            return data;
-          } else {
-            throw new Error(data.error || 'Authentication failed');
-          }
-        } catch (error) {
-          console.error('Authentication error:', error);
-          throw error;
-        }
-      };
+      if (response.ok) {
+        localStorage.setItem('authToken', data.token);
+        localStorage.setItem('refreshToken', data.refresh);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        setUser(data.user);
+        return data;
+      } else {
+        throw new Error(data.error || 'Authentication failed');
+      }
+    } catch (error) {
+      console.error('Authentication error:', error);
+      throw error;
+    }
+};
+
 
       const googleLogin = async (response) => {
         try {
