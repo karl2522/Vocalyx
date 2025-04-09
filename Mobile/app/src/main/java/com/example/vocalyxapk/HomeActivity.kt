@@ -19,6 +19,7 @@ import com.example.vocalyxapk.ui.theme.VOCALYXAPKTheme
 import java.util.*
 import androidx.compose.ui.viewinterop.AndroidView
 import android.widget.Button
+import androidx.compose.ui.graphics.Color
 
 class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
@@ -151,6 +152,10 @@ class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         }
     }
 
+    private fun speakOut(text: String) {
+        textToSpeech.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
+    }
+
     // Add permission result handling
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
@@ -159,10 +164,6 @@ class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         } else {
             Toast.makeText(this, "Microphone permission is required for voice recognition", Toast.LENGTH_SHORT).show()
         }
-    }
-
-    private fun speakOut(text: String) {
-        textToSpeech.speak(text, TextToSpeech.QUEUE_FLUSH, null, "")
     }
 }
 
@@ -174,38 +175,53 @@ fun HomePage(
     onSpeakOut: (String) -> Unit,
     isVoiceRecognitionActive: Boolean
 ) {
+    val buttonColor = Color(0xFF333D79) // Deep blue color
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
         verticalArrangement = Arrangement.Center
     ) {
-        TextField(
+        OutlinedTextField(
             value = text,
             onValueChange = onTextChange,
             label = { Text("Enter text here") },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            colors = OutlinedTextFieldDefaults.colors(
+                unfocusedBorderColor = Color.Gray.copy(alpha = 0.3f),
+                focusedBorderColor = buttonColor
+            )
         )
         Spacer(modifier = Modifier.height(16.dp))
         Button(
             onClick = onStartVoiceRecognition,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = buttonColor
+            )
         ) {
-            Text(if (isVoiceRecognitionActive) "Listening..." else "Start Voice Recognition")
+            Text(
+                if (isVoiceRecognitionActive) "Listening..." else "Start Voice Recognition",
+                color = Color.White
+            )
         }
         if (isVoiceRecognitionActive) {
             Text(
                 "Speak now...",
                 modifier = Modifier.padding(8.dp),
-                color = MaterialTheme.colorScheme.primary
+                color = buttonColor
             )
         }
         Spacer(modifier = Modifier.height(16.dp))
         Button(
             onClick = { onSpeakOut(text) },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = buttonColor
+            )
         ) {
-            Text("Speak Text")
+            Text("Speak Text", color = Color.White)
         }
     }
 }

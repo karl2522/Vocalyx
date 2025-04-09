@@ -1,6 +1,5 @@
 package com.example.vocalyxapk
 
-import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
@@ -21,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import com.example.vocalyxapk.viewmodel.LoginUIState
 import com.example.vocalyxapk.viewmodel.LoginViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.vocalyxapk.utils.NavigationUtils
 
 @Composable
 fun LoginScreen(
@@ -43,7 +43,7 @@ fun LoginScreen(
     LaunchedEffect(uiState) {
         when (uiState) {
             is LoginUIState.Success -> {
-                context.startActivity(Intent(context, HomeActivity::class.java))
+                NavigationUtils.navigateToHome(context)
             }
             is LoginUIState.Error -> {
                 Toast.makeText(
@@ -55,8 +55,6 @@ fun LoginScreen(
             else -> {}
         }
     }
-
-
 
     Column(
         modifier = Modifier
@@ -88,7 +86,7 @@ fun LoginScreen(
             Text(
                 text = "Vocalyx",
                 style = MaterialTheme.typography.titleLarge,
-                color = Color(0xFF0C43EF)
+                color = Color(0xFF333D79)
             )
         }
 
@@ -179,7 +177,7 @@ fun LoginScreen(
             shape = RoundedCornerShape(8.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 unfocusedBorderColor = Color.Gray.copy(alpha = 0.3f),
-                focusedBorderColor = Color(0xFF0C43EF)
+                focusedBorderColor = Color(0xFF333D79)
             ),
             singleLine = true
         )
@@ -197,7 +195,7 @@ fun LoginScreen(
             shape = RoundedCornerShape(8.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 unfocusedBorderColor = Color.Gray.copy(alpha = 0.3f),
-                focusedBorderColor = Color(0xFF0C43EF)
+                focusedBorderColor = Color(0xFF333D79)
             ),
             singleLine = true
         )
@@ -216,25 +214,10 @@ fun LoginScreen(
                 .height(48.dp),
             shape = RoundedCornerShape(8.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF0C43EF)
+                containerColor = Color(0xFF333D79)
             )
         ) {
             Text("Login")
-        }
-
-
-        Button(
-            onClick = { context.startActivity(Intent(context, HomeActivity::class.java)) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp)
-                .height(48.dp),
-            shape = RoundedCornerShape(8.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.Gray
-            )
-        ) {
-            Text("Skip to Home (Temporary)")
         }
 
         // Sign up link
@@ -250,13 +233,28 @@ fun LoginScreen(
             Text(
                 "Create an Account",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFF0C43EF),
+                color = Color(0xFF333D79),
                 modifier = Modifier
                     .padding(start = 4.dp)
                     .clickable { 
-                        context.startActivity(Intent(context, SignUpActivity::class.java))
+                        NavigationUtils.navigateToSignUp(context)
                     }
             )
+        }
+
+        // Temporary button to directly go to home
+        Button(
+            onClick = { NavigationUtils.navigateToHome(context) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp)
+                .height(48.dp),
+            shape = RoundedCornerShape(8.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color.Gray
+            )
+        ) {
+            Text("Skip to Home (Temporary)")
         }
     }
 } 
