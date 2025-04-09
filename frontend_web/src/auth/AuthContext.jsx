@@ -103,7 +103,6 @@ export const AuthProvider = ({ children }) => {
     }
 };
 
-
       const googleLogin = async (response) => {
         try {
           if (!response || !response.credential) {
@@ -136,9 +135,18 @@ export const AuthProvider = ({ children }) => {
 
   return (
     <MsalProvider instance={msalInstance}>
-    <AuthContext.Provider value={{ user, loading, googleLogin, microsoftLogin, logout }}>
-      {children}
-    </AuthContext.Provider>
+      <AuthContext.Provider 
+        value={{ 
+          user, 
+          loading, 
+          googleLogin, 
+          microsoftLogin, 
+          logout,
+          setUser
+        }}
+      >
+        {children}
+      </AuthContext.Provider>
     </MsalProvider>
   );
 };

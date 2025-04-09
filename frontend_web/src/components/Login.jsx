@@ -13,7 +13,7 @@ import { useMsal } from "@azure/msal-react";
 function Login() {
     const { instance } = useMsal();
     const navigate = useNavigate();
-    const { googleLogin } = useAuth();
+    const { googleLogin, setUser } = useAuth();
     const [formData, setFormData] = useState({
       email: "",
       password: "",
@@ -100,11 +100,20 @@ function Login() {
           console.log('Login response in component:', response); 
   
           if (response.success && response.tokens) {
+              // Update auth context
+              const { user } = response;
+              setUser(user);  // Add this line to update context
+  
               if (formData.remember) {
                   localStorage.setItem('remember_token', response.tokens.refresh);
               }
+  
               toast.success("Login successful!");
-              navigate("/dashboard");
+              
+              // Force navigation after context is updated
+              setTimeout(() => {
+                  navigate("/dashboard", { replace: true });
+              }, 100);
           } else {
               throw new Error('Invalid response from server');
           }
