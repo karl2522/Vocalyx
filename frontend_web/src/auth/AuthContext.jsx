@@ -12,7 +12,7 @@ const msalConfig = {
     clientId: '5a7221d3-d167-4f9d-b62e-79c987bb5d5f',
     authority: 'https://login.microsoftonline.com/common',
     redirectUri: process.env.NODE_ENV === 'production' 
-    ? 'https://vocalyx-frontend-lfrqbtcn6-penguinman2s-projects.vercel.app' 
+    ? 'https://vocalyx-frontend.vercel.app/' 
     : 'http://localhost:5173',
   },
   cache: {

@@ -303,6 +303,8 @@ def google_auth(request):
                 'user': {
                     'id': user.id,
                     'email': user.email,
+                    'first_name': user.first_name,
+                    'last_name': user.last_name,
                     'name': f"{user.first_name} {user.last_name}".strip(),
                     'profile_picture': user.profile_picture
                 }
@@ -377,6 +379,8 @@ def microsoft_auth(request):
                 'user': {
                     'id': user.id,
                     'email': user.email,
+                    'first_name': user.first_name,  # Add this
+                    'last_name': user.last_name,
                     'name': f"{user.first_name} {user.last_name}".strip(),
                 }
             }
