@@ -56,7 +56,7 @@ function Login() {
         };
     
         const response = await instance.loginPopup(loginRequest);
-        console.log('Microsoft auth response:', response); // For debugging
+        console.log('Microsoft auth response:', response);
     
         if (response.accessToken) {
           const res = await fetch('https://vocalyx-c61a072bf25a.herokuapp.com/api/auth/microsoft/', {
@@ -72,8 +72,11 @@ function Login() {
     
           const data = await res.json();
           if (res.ok) {
-            localStorage.setItem('token', data.token);
+            // Update these lines to match your Google login storage pattern
+            localStorage.setItem('authToken', data.token); // Changed from 'token' to 'authToken'
+            localStorage.setItem('refreshToken', data.refresh); // Add this line if your backend sends refresh token
             localStorage.setItem('user', JSON.stringify(data.user));
+            setUser(data.user); // Add this line to update context
             toast.success("Microsoft login successful!");
             navigate("/dashboard");
           } else {
