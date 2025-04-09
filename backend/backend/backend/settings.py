@@ -138,7 +138,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5173",
     "http://10.0.6.216:8080",
     "http://10.0.6.216",
-    "https://vocalyx-frontend.herokuapp.com",
+    "https://vocalyx-frontend-lfrqbtcn6-penguinman2s-projects.vercel.app",
 ]
 
 CORS_ALLOW_CREDENTIALS = True

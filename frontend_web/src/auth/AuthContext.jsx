@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { PublicClientApplication } from '@azure/msal-browser';
 import { MsalProvider } from "@azure/msal-react";
 
+const baseUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
+
 const AuthContext = createContext(null);
 
 
@@ -10,8 +12,8 @@ const msalConfig = {
     clientId: '5a7221d3-d167-4f9d-b62e-79c987bb5d5f',
     authority: 'https://login.microsoftonline.com/common',
     redirectUri: process.env.NODE_ENV === 'production' 
-      ? 'https://your-heroku-app.herokuapp.com' 
-      : 'http://localhost:5173',
+    ? 'https://vocalyx-frontend-lfrqbtcn6-penguinman2s-projects.vercel.app' 
+    : 'http://localhost:5173',
   },
   cache: {
     cacheLocation: 'sessionStorage',
@@ -69,7 +71,7 @@ export const AuthProvider = ({ children }) => {
     try {
       console.log('Sending auth request with token:', token);
       const baseUrl = process.env.NODE_ENV === 'production' 
-        ? 'https://your-backend-heroku-app.herokuapp.com' 
+        ? 'https://vocalyx-c61a072bf25a.herokuapp.com' 
         : 'http://127.0.0.1:8000';
         
       const response = await fetch(`${baseUrl}/api/auth/google/`, {

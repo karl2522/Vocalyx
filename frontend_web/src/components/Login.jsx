@@ -59,7 +59,7 @@ function Login() {
         console.log('Microsoft auth response:', response); // For debugging
     
         if (response.accessToken) {
-          const res = await fetch('http://127.0.0.1:8000/api/auth/microsoft/', {
+          const res = await fetch('https://vocalyx-c61a072bf25a.herokuapp.com/api/auth/microsoft/', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

@@ -64,3 +64,4 @@ lerna-debug.log*
 # Windows system files
 Thumbs.db
 
+.vercel
