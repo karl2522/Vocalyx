@@ -1,1 +1,1 @@
-web: cd backend && gunicorn --pythonpath . backend.wsgi
+web: cd backend/backend && gunicorn --pythonpath . backend.wsgi:application --log-file -
