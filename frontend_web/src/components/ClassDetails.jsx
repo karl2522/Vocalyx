@@ -330,7 +330,6 @@ const ClassDetails = () => {
   const handleFileUpload = async (file) => {
     if (!file) return;
     
-
     // First show preview
     setSelectedFile(file);
     setError(null);
@@ -338,10 +337,10 @@ const ClassDetails = () => {
     
     // Create preview info
     const previewData = {
-      name: file.name,
-      size: formatFileSize(file.size),
-      type: file.type || getFileTypeFromExtension(file.name),
-      lastModified: new Date(file.lastModified).toLocaleString()
+        name: file.name,
+        size: formatFileSize(file.size),
+        type: file.type || getFileTypeFromExtension(file.name),
+        lastModified: new Date(file.lastModified).toLocaleString()
     };
     
     setPreviewInfo(previewData);
@@ -349,55 +348,87 @@ const ClassDetails = () => {
     
     // Try to generate a data preview
     try {
-      const reader = new FileReader();
-      
-      reader.onload = (event) => {
-        try {
-          if (!event.target || !event.target.result) {
-            throw new Error("Failed to read file for preview");
-          }
-          
-          // Parse the Excel file
-          const data = new Uint8Array(event.target.result);
-          const workbook = XLSX.read(data, {
-            type: 'array',
-            raw: true,
-            cellDates: true,
-            cellNF: false,
-            cellStyles: false
-          });
-          
-          // Get sheet names
-          const sheetNames = workbook.SheetNames || [];
-          if (!sheetNames.length) {
-            throw new Error("No sheets found in Excel file");
-          }
-          
-          // Process first sheet for preview (only first few rows)
-          const firstSheet = workbook.Sheets[sheetNames[0]];
-          
-          // Extract a limited number of rows for preview
-          const preview = extractPreviewData(firstSheet);
-          setPreviewData(preview);
-          
-        } catch (error) {
-          console.error("Preview generation error:", error);
-          setPreviewError(`Couldn't generate preview: ${error.message}`);
-        }
-      };
-      
-      reader.onerror = () => {
-        setPreviewError("Error reading file for preview");
-      };
-      
-      // Read the file
-      reader.readAsArrayBuffer(file);
-      
+        const reader = new FileReader();
+        
+        reader.onload = async (event) => {  // Made this async
+            try {
+                if (!event.target || !event.target.result) {
+                    throw new Error("Failed to read file for preview");
+                }
+                
+                // Parse the Excel file
+                const data = new Uint8Array(event.target.result);
+                const workbook = XLSX.read(data, {
+                    type: 'array',
+                    raw: true,
+                    cellDates: true,
+                    cellNF: false,
+                    cellStyles: false
+                });
+                
+                // Get sheet names
+                const sheetNames = workbook.SheetNames || [];
+                if (!sheetNames.length) {
+                    throw new Error("No sheets found in Excel file");
+                }
+                
+                // Process first sheet for preview (only first few rows)
+                const firstSheet = workbook.Sheets[sheetNames[0]];
+                
+                // Extract a limited number of rows for preview
+                const preview = extractPreviewData(firstSheet);
+                setPreviewData(preview);
+
+                // Add server upload here
+                setFileLoading(true);
+                try {
+                    const response = await classService.uploadExcel(file, id);
+                    
+                    const { id: fileId, sheet_data, file_name } = response.data;
+                    
+                    // Add new file to excelFiles list
+                    setExcelFiles(prev => [{
+                        id: fileId,
+                        file_name,
+                        sheet_data,
+                        uploaded_at: new Date().toISOString()
+                    }, ...prev]);
+                    
+                    const headers = Object.keys(sheet_data[0] || {});
+                    const data = sheet_data.map(row => 
+                        headers.map(header => row[header])
+                    );
+                    
+                    setExcelData({
+                        headers,
+                        data,
+                        fileId
+                    });
+                } catch (uploadError) {
+                    console.error("File upload error:", uploadError);
+                    setError(uploadError.response?.data?.error || 'Failed to upload file');
+                } finally {
+                    setFileLoading(false);
+                }
+                
+            } catch (error) {
+                console.error("Preview generation error:", error);
+                setPreviewError(`Couldn't generate preview: ${error.message}`);
+            }
+        };
+        
+        reader.onerror = () => {
+            setPreviewError("Error reading file for preview");
+        };
+        
+        // Read the file
+        reader.readAsArrayBuffer(file);
+        
     } catch (error) {
-      console.error("Preview error:", error);
-      setPreviewError(`Preview error: ${error.message}`);
+        console.error("Preview error:", error);
+        setPreviewError(`Preview error: ${error.message}`);
     }
-  };
+};
   
   // Extract a limited preview of data from a worksheet
   const extractPreviewData = (worksheet) => {
@@ -586,46 +617,12 @@ const ClassDetails = () => {
     }
   };
   
-  const cancelImport = async () => {  // Added async here
   const cancelImport = () => {
+    // Reset all states related to import
     setSelectedFile(null);
     setShowPreview(false);
     setPreviewInfo(null);
     setImportProgress(0);
-  };
-    setFileLoading(true);
-    setError(null);
-
-    try {
-        const response = await classService.uploadExcel(file, id);
-        
-        const { id: fileId, sheet_data, file_name } = response.data;
-        
-        // Add new file to excelFiles list
-        setExcelFiles(prev => [{
-            id: fileId,
-            file_name,
-            sheet_data,
-            uploaded_at: new Date().toISOString()
-        }, ...prev]);
-        
-        const headers = Object.keys(sheet_data[0] || {});
-        const data = sheet_data.map(row => 
-            headers.map(header => row[header])
-        );
-        
-        setSelectedFile({ name: file_name });
-        setExcelData({
-            headers,
-            data,
-            fileId
-        });
-    } catch (error) {
-        console.error("File upload error:", error);
-        setError(error.response?.data?.error || 'Failed to upload file');
-    } finally {
-        setFileLoading(false);
-    }
 };
 
 const handleFileSwitch = (file) => {

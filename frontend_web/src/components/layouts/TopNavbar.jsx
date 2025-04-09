@@ -78,7 +78,7 @@ const TopNavbar = ({ sidebarCollapsed }) => {
               </div>
               <div className="hidden md:block text-left">
                 <p className="text-sm font-medium group-hover:text-[#333D79] transition-colors">
-                  {user ? `${user.name}` : 'Guest'}
+                  {user ? `${user.username}` : 'Guest'}
                 </p>
                 <p className="text-xs text-gray-500">{user?.email}</p>
               </div>
