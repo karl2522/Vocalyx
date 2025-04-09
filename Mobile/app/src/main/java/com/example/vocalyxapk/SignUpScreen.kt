@@ -1,6 +1,5 @@
 package com.example.vocalyxapk
 
-import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -20,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import com.example.vocalyxapk.viewmodel.SignUpUIState
 import com.example.vocalyxapk.viewmodel.SignUpViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.vocalyxapk.utils.NavigationUtils
 
 @Composable
 fun SignUpScreen(
@@ -33,6 +33,7 @@ fun SignUpScreen(
     var isError by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
+    val themeColor = Color(0xFF333D79)
 
     if (uiState is SignUpUIState.Loading) {
         AlertDialog(
@@ -51,7 +52,7 @@ fun SignUpScreen(
                     (uiState as SignUpUIState.Success).message,
                     Toast.LENGTH_LONG
                 ).show()
-                context.startActivity(Intent(context, LoginActivity::class.java))
+                NavigationUtils.navigateToLogin(context)
             }
             is SignUpUIState.Error -> {
                 Toast.makeText(
@@ -63,7 +64,6 @@ fun SignUpScreen(
             else -> {}
         }
     }
-
 
     Column(
         modifier = Modifier
@@ -79,7 +79,7 @@ fun SignUpScreen(
             painter = painterResource(id = R.drawable.vocalyxlogo),
             contentDescription = "Logo",
             modifier = Modifier
-                .size(64.dp) // Even smaller logo to match design
+                .size(64.dp)
                 .padding(bottom = 16.dp)
         )
 
@@ -95,7 +95,7 @@ fun SignUpScreen(
             Text(
                 text = "Vocalyx!",
                 style = MaterialTheme.typography.titleLarge,
-                color = Color(0xFF0C43EF)
+                color = themeColor
             )
         }
 
@@ -110,7 +110,7 @@ fun SignUpScreen(
             shape = RoundedCornerShape(8.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 unfocusedBorderColor = Color.Gray.copy(alpha = 0.3f),
-                focusedBorderColor = Color(0xFF0C43EF)
+                focusedBorderColor = themeColor
             ),
             singleLine = true
         )
@@ -125,7 +125,7 @@ fun SignUpScreen(
             shape = RoundedCornerShape(8.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 unfocusedBorderColor = Color.Gray.copy(alpha = 0.3f),
-                focusedBorderColor = Color(0xFF0C43EF)
+                focusedBorderColor = themeColor
             ),
             singleLine = true
         )
@@ -140,7 +140,7 @@ fun SignUpScreen(
             shape = RoundedCornerShape(8.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 unfocusedBorderColor = Color.Gray.copy(alpha = 0.3f),
-                focusedBorderColor = Color(0xFF0C43EF)
+                focusedBorderColor = themeColor
             ),
             singleLine = true
         )
@@ -157,7 +157,7 @@ fun SignUpScreen(
             shape = RoundedCornerShape(8.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 unfocusedBorderColor = Color.Gray.copy(alpha = 0.3f),
-                focusedBorderColor = Color(0xFF0C43EF)
+                focusedBorderColor = themeColor
             ),
             singleLine = true
         )
@@ -174,7 +174,7 @@ fun SignUpScreen(
             shape = RoundedCornerShape(8.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 unfocusedBorderColor = Color.Gray.copy(alpha = 0.3f),
-                focusedBorderColor = Color(0xFF0C43EF)
+                focusedBorderColor = themeColor
             ),
             singleLine = true
         )
@@ -202,7 +202,7 @@ fun SignUpScreen(
                 .height(48.dp),
             shape = RoundedCornerShape(8.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF0C43EF)
+                containerColor = themeColor
             )
         ) {
             Text("Signup")
@@ -221,11 +221,11 @@ fun SignUpScreen(
             Text(
                 "Sign In",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFF0C43EF),
+                color = themeColor,
                 modifier = Modifier
                     .padding(start = 4.dp)
                     .clickable { 
-                        context.startActivity(Intent(context, LoginActivity::class.java))
+                        NavigationUtils.navigateToLogin(context)
                     }
             )
         }
