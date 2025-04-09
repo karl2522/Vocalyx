@@ -1,1 +1,1 @@
-web: cd backend && gunicorn backend.wsgi
+web: cd backend && gunicorn --pythonpath . backend.wsgi
