@@ -9,9 +9,15 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.List
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -72,9 +78,21 @@ class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Initialize TextToSpeech
+        textToSpeech = TextToSpeech(this, this)
+
+        // Initialize SpeechRecognizer
+        if (SpeechRecognizer.isRecognitionAvailable(this)) {
+            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
+            speechRecognizer.setRecognitionListener(speechRecognizerListener)
+        } else {
+            Toast.makeText(this, "Speech recognition is not supported on this device.", Toast.LENGTH_SHORT).show()
+        }
+
         setContent {
             VOCALYXAPKTheme {
-                HomePage(
+                HomeScreen(
                     text = currentText,
                     onTextChange = { newText -> currentText = newText },
                     onStartVoiceRecognition = {
@@ -85,17 +103,6 @@ class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                     isVoiceRecognitionActive = isVoiceRecognitionActive
                 )
             }
-        }
-
-        // Initialize TextToSpeech
-        textToSpeech = TextToSpeech(this, this)
-
-        // Initialize SpeechRecognizer with the listener
-        if (SpeechRecognizer.isRecognitionAvailable(this)) {
-            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
-            speechRecognizer.setRecognitionListener(speechRecognizerListener)
-        } else {
-            Toast.makeText(this, "Speech recognition is not supported on this device.", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -168,69 +175,131 @@ class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 }
 
 @Composable
-fun HomePage(
+fun HomeScreen(
     text: String,
     onTextChange: (String) -> Unit,
     onStartVoiceRecognition: () -> Unit,
     onSpeakOut: (String) -> Unit,
     isVoiceRecognitionActive: Boolean
 ) {
-    val buttonColor = Color(0xFF333D79) // Deep blue color
+    var selectedTab by remember { mutableStateOf(0) }
+    
+    val navigationItems = listOf(
+        Triple("Home", Icons.Rounded.Home, "Home"),
+        Triple("Voice", Icons.Rounded.Mic, "Voice"),
+        Triple("Manual", Icons.Rounded.Edit, "Manual"),
+        Triple("Classes", Icons.Rounded.List, "Classes")
+    )
+    
+    Scaffold(
+        bottomBar = {
+            NavigationBar {
+                navigationItems.forEachIndexed { index, (title, icon, label) ->
+                    NavigationBarItem(
+                        icon = { Icon(imageVector = icon, contentDescription = title) },
+                        label = { Text(label) },
+                        selected = selectedTab == index,
+                        onClick = { selectedTab = index }
+                    )
+                }
+            }
+        }
+    ) { paddingValues ->
+        when (selectedTab) {
+            0 -> HomeTab()
+            1 -> VoiceInputTab(
+                text = text,
+                onTextChange = onTextChange,
+                onStartVoiceRecognition = onStartVoiceRecognition,
+                onSpeakOut = onSpeakOut,
+                isVoiceRecognitionActive = isVoiceRecognitionActive,
+                modifier = Modifier.padding(paddingValues)
+            )
+            2 -> ManualInputTab(modifier = Modifier.padding(paddingValues))
+            3 -> ClassesTab(modifier = Modifier.padding(paddingValues))
+        }
+    }
+}
 
+@Composable
+fun HomeTab() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.Center
+            .padding(16.dp)
+    ) {
+        Text("Welcome to Vocalyx", style = MaterialTheme.typography.headlineMedium)
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("Select an option from the bottom navigation to get started.")
+    }
+}
+
+@Composable
+fun VoiceInputTab(
+    text: String,
+    onTextChange: (String) -> Unit,
+    onStartVoiceRecognition: () -> Unit,
+    onSpeakOut: (String) -> Unit,
+    isVoiceRecognitionActive: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(16.dp)
     ) {
         OutlinedTextField(
             value = text,
             onValueChange = onTextChange,
             label = { Text("Enter text here") },
-            modifier = Modifier.fillMaxWidth(),
-            colors = OutlinedTextFieldDefaults.colors(
-                unfocusedBorderColor = Color.Gray.copy(alpha = 0.3f),
-                focusedBorderColor = buttonColor
-            )
+            modifier = Modifier.fillMaxWidth()
         )
         Spacer(modifier = Modifier.height(16.dp))
         Button(
             onClick = onStartVoiceRecognition,
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = buttonColor
-            )
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Text(
-                if (isVoiceRecognitionActive) "Listening..." else "Start Voice Recognition",
-                color = Color.White
-            )
-        }
-        if (isVoiceRecognitionActive) {
-            Text(
-                "Speak now...",
-                modifier = Modifier.padding(8.dp),
-                color = buttonColor
-            )
+            Text(if (isVoiceRecognitionActive) "Listening..." else "Start Voice Recognition")
         }
         Spacer(modifier = Modifier.height(16.dp))
         Button(
             onClick = { onSpeakOut(text) },
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = buttonColor
-            )
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Text("Speak Text", color = Color.White)
+            Text("Speak Text")
         }
+    }
+}
+
+@Composable
+fun ManualInputTab(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        Text("Manual Input", style = MaterialTheme.typography.headlineMedium)
+        // Add manual input UI here
+    }
+}
+
+@Composable
+fun ClassesTab(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        Text("Classes", style = MaterialTheme.typography.headlineMedium)
+        // Add classes UI here
     }
 }
 
 @Preview(showBackground = true)
 @Composable
-fun HomePagePreview() {
+fun HomeScreenPreview() {
     VOCALYXAPKTheme {
-        HomePage(
+        HomeScreen(
             text = "",
             onTextChange = {},
             onStartVoiceRecognition = {},

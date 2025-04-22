@@ -1,3 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">VOCALYXAPK</string>
+    <string name="app_name">Vocalyx</string>
+    <string name="home">Home</string>
+    <string name="voice">Voice</string>
+    <string name="manual">Manual</string>
+    <string name="classes">Classes</string>
 </resources>
