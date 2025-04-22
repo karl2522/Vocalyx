@@ -1,4 +1,4 @@
-package com.example.vocalyxapk  // ✅ This must match your app package
+package com.example.vocalyxapk
 
 import android.content.Intent
 import android.os.Bundle
@@ -28,7 +28,12 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             VOCALYXAPKTheme {
-                ModernLandingPage()
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    ModernLandingPage()
+                }
             }
         }
     }
@@ -44,8 +49,8 @@ fun ModernLandingPage() {
             .background(
                 brush = Brush.verticalGradient(
                     colors = listOf(
-                        Color(0xFF0C43EF),
-                        Color(0xFFBF2424)
+                        Color(0xFF0C43EF),  // Blue
+                        Color(0xFFBF2424)   // Red
                     )
                 )
             )
@@ -84,7 +89,7 @@ fun ModernLandingPage() {
             
             Spacer(modifier = Modifier.height(48.dp))
             
-            // Login Button
+            // Get Started Button
             Button(
                 onClick = {
                     val intent = Intent(context, LoginActivity::class.java)
