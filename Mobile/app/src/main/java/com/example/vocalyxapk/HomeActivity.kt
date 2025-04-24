@@ -10,10 +10,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Home
-import androidx.compose.material.icons.rounded.Mic
-import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.List
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -26,6 +23,7 @@ import java.util.*
 import androidx.compose.ui.viewinterop.AndroidView
 import android.widget.Button
 import androidx.compose.ui.graphics.Color
+import kotlinx.coroutines.launch
 
 class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
@@ -76,6 +74,7 @@ class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         override fun onEvent(eventType: Int, params: Bundle?) {}
     }
 
+    @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
@@ -92,16 +91,195 @@ class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
         setContent {
             VOCALYXAPKTheme {
-                HomeScreen(
-                    text = currentText,
-                    onTextChange = { newText -> currentText = newText },
-                    onStartVoiceRecognition = {
-                        isVoiceRecognitionActive = true
-                        startVoiceRecognition()
-                    },
-                    onSpeakOut = { speakOut(currentText) },
-                    isVoiceRecognitionActive = isVoiceRecognitionActive
-                )
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    var drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+                    val scope = rememberCoroutineScope()
+                    var selectedTab by remember { mutableStateOf(0) }
+                    
+                    val navigationItems = listOf(
+                        Triple("Home", Icons.Rounded.Home, "Home"),
+                        Triple("Voice", Icons.Rounded.Mic, "Voice"),
+                        Triple("Manual", Icons.Rounded.Edit, "Manual"),
+                        Triple("Classes", Icons.Rounded.List, "Classes")
+                    )
+                    
+                    ModalNavigationDrawer(
+                        drawerState = drawerState,
+                        drawerContent = {
+                            ModalDrawerSheet {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    "Vocalyx Menu",
+                                    modifier = Modifier.padding(16.dp),
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Divider(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+                                
+                                // Drawer Menu Items
+                                NavigationDrawerItem(
+                                    icon = { Icon(Icons.Rounded.Notifications, contentDescription = "Notifications", tint = MaterialTheme.colorScheme.primary) },
+                                    label = { Text("Notifications", color = MaterialTheme.colorScheme.onSurface) },
+                                    selected = false,
+                                    onClick = { /* TODO: Implement notifications */ },
+                                    colors = NavigationDrawerItemDefaults.colors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                        unselectedContainerColor = Color.Transparent
+                                    )
+                                )
+                                
+                                NavigationDrawerItem(
+                                    icon = { Icon(Icons.Rounded.Download, contentDescription = "Export Reports", tint = MaterialTheme.colorScheme.primary) },
+                                    label = { Text("Export Reports", color = MaterialTheme.colorScheme.onSurface) },
+                                    selected = false,
+                                    onClick = { /* TODO: Implement export */ },
+                                    colors = NavigationDrawerItemDefaults.colors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                        unselectedContainerColor = Color.Transparent
+                                    )
+                                )
+                                
+                                NavigationDrawerItem(
+                                    icon = { Icon(Icons.Rounded.Person, contentDescription = "Profile", tint = MaterialTheme.colorScheme.primary) },
+                                    label = { Text("Profile", color = MaterialTheme.colorScheme.onSurface) },
+                                    selected = false,
+                                    onClick = { /* TODO: Implement profile */ },
+                                    colors = NavigationDrawerItemDefaults.colors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                        unselectedContainerColor = Color.Transparent
+                                    )
+                                )
+                                
+                                NavigationDrawerItem(
+                                    icon = { Icon(Icons.Rounded.Settings, contentDescription = "Settings", tint = MaterialTheme.colorScheme.primary) },
+                                    label = { Text("Settings", color = MaterialTheme.colorScheme.onSurface) },
+                                    selected = false,
+                                    onClick = { /* TODO: Implement settings */ },
+                                    colors = NavigationDrawerItemDefaults.colors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                        unselectedContainerColor = Color.Transparent
+                                    )
+                                )
+                                
+                                NavigationDrawerItem(
+                                    icon = { Icon(Icons.Rounded.Info, contentDescription = "About/Help", tint = MaterialTheme.colorScheme.primary) },
+                                    label = { Text("About/Help", color = MaterialTheme.colorScheme.onSurface) },
+                                    selected = false,
+                                    onClick = { /* TODO: Implement about/help */ },
+                                    colors = NavigationDrawerItemDefaults.colors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                        unselectedContainerColor = Color.Transparent
+                                    )
+                                )
+                                
+                                Divider(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+                                
+                                NavigationDrawerItem(
+                                    icon = { Icon(Icons.Rounded.Logout, contentDescription = "Logout", tint = MaterialTheme.colorScheme.primary) },
+                                    label = { Text("Logout", color = MaterialTheme.colorScheme.onSurface) },
+                                    selected = false,
+                                    onClick = { 
+                                        // Navigate to login screen
+                                        val intent = Intent(this@HomeActivity, LoginActivity::class.java)
+                                        startActivity(intent)
+                                        finish()
+                                    },
+                                    colors = NavigationDrawerItemDefaults.colors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                        unselectedContainerColor = Color.Transparent
+                                    )
+                                )
+                            }
+                        }
+                    ) {
+                        Scaffold(
+                            topBar = {
+                                TopAppBar(
+                                    title = { 
+                                        Text(
+                                            "Vocalyx",
+                                            color = MaterialTheme.colorScheme.onPrimary
+                                        ) 
+                                    },
+                                    colors = TopAppBarDefaults.topAppBarColors(
+                                        containerColor = MaterialTheme.colorScheme.primary
+                                    ),
+                                    navigationIcon = {
+                                        IconButton(onClick = { 
+                                            scope.launch {
+                                                drawerState.open()
+                                            }
+                                        }) {
+                                            Icon(
+                                                Icons.Rounded.Menu,
+                                                contentDescription = "Menu",
+                                                tint = MaterialTheme.colorScheme.onPrimary
+                                            )
+                                        }
+                                    }
+                                )
+                            },
+                            bottomBar = {
+                                NavigationBar(
+                                    containerColor = MaterialTheme.colorScheme.primary
+                                ) {
+                                    navigationItems.forEachIndexed { index, (title, icon, label) ->
+                                        NavigationBarItem(
+                                            icon = { 
+                                                Icon(
+                                                    imageVector = icon,
+                                                    contentDescription = title,
+                                                    tint = if (selectedTab == index) 
+                                                        MaterialTheme.colorScheme.onPrimary 
+                                                    else 
+                                                        MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
+                                                ) 
+                                            },
+                                            label = { 
+                                                Text(
+                                                    label,
+                                                    color = if (selectedTab == index) 
+                                                        MaterialTheme.colorScheme.onPrimary 
+                                                    else 
+                                                        MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
+                                                ) 
+                                            },
+                                            selected = selectedTab == index,
+                                            onClick = { selectedTab = index },
+                                            colors = NavigationBarItemDefaults.colors(
+                                                selectedIconColor = MaterialTheme.colorScheme.onPrimary,
+                                                unselectedIconColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
+                                                selectedTextColor = MaterialTheme.colorScheme.onPrimary,
+                                                unselectedTextColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
+                                                indicatorColor = MaterialTheme.colorScheme.primary
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                        ) { paddingValues ->
+                            when (selectedTab) {
+                                0 -> HomeTab()
+                                1 -> VoiceInputTab(
+                                    text = currentText,
+                                    onTextChange = { newText -> currentText = newText },
+                                    onStartVoiceRecognition = {
+                                        isVoiceRecognitionActive = true
+                                        startVoiceRecognition()
+                                    },
+                                    onSpeakOut = { speakOut(currentText) },
+                                    isVoiceRecognitionActive = isVoiceRecognitionActive,
+                                    modifier = Modifier.padding(paddingValues)
+                                )
+                                2 -> ManualInputTab(modifier = Modifier.padding(paddingValues))
+                                3 -> ClassesTab(modifier = Modifier.padding(paddingValues))
+                            }
+                        }
+                    }
+                }
             }
         }
     }

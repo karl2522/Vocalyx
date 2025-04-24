@@ -15,12 +15,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import com.example.vocalyxapk.viewmodel.LoginUIState
 import com.example.vocalyxapk.viewmodel.LoginViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.vocalyxapk.utils.NavigationUtils
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 
 @Composable
 fun LoginScreen(
@@ -29,6 +33,7 @@ fun LoginScreen(
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var isError by remember { mutableStateOf(false) }
+    var passwordVisible by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
 
@@ -187,8 +192,17 @@ fun LoginScreen(
             value = password,
             onValueChange = { password = it },
             label = { Text("Password", color = Color.Gray) },
-            visualTransformation = PasswordVisualTransformation(),
+            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            trailingIcon = {
+                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                    Icon(
+                        imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                        contentDescription = if (passwordVisible) "Hide password" else "Show password",
+                        tint = Color.Gray
+                    )
+                }
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = 24.dp),
