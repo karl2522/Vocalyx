@@ -14,9 +14,11 @@ from pathlib import Path
 import os
 from datetime import timedelta
 import dj_database_url
+import firebase_admin
 
 from celery.schedules import crontab
 from dotenv import load_dotenv
+from firebase_admin import credentials
 
 load_dotenv()
 
@@ -34,7 +36,13 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*', '10.0.6.216', '192.168.1.10', '.herokuapp.com']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*', '10.0.191.212', '192.168.1.10', '.herokuapp.com']
+
+FIREBASE_SERVICE_ACCOUNT_PATH = os.path.join(BASE_DIR.parent, 'firebase-service-account.json')
+
+if not firebase_admin._apps:
+    cred = credentials.Certificate(FIREBASE_SERVICE_ACCOUNT_PATH)
+    firebase_admin.initialize_app(cred)
 
 
 # Application definition
@@ -136,8 +144,8 @@ SIMPLE_JWT = {
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-    "http://10.0.6.216:8080",
-    "http://10.0.6.216",
+    "http://10.0.191.212:8080",
+    "http://10.0.191.212",
     "https://vocalyx-frontend.vercel.app",
 ]
 

@@ -1,27 +1,23 @@
 import logging
-import jwt
 import uuid
 from django.shortcuts import render
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 from drf_spectacular.utils import OpenApiExample, extend_schema, OpenApiParameter
-from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
-from msal import ConfidentialClientApplication
-from rest_framework import status, generics
+from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
-from django.contrib.auth import authenticate, login
-from django.core.mail import send_mail, BadHeaderError, EmailMessage
+from django.contrib.auth import authenticate
 from django.conf import settings
 import requests as http_requests
-
 from .serializers import UserRegistrationSerializer, UserLoginSerializer
 from .models import CustomUser
 from .utils import send_verification_email, get_current_utc_time, get_user_login
+from firebase_admin import auth
 
 logger = logging.getLogger(__name__)
 
@@ -393,4 +389,87 @@ def microsoft_auth(request):
 
     except Exception as e:
         logger.error(f"Error in microsoft_auth: {str(e)}")
+        return Response({'error': str(e)}, status=400)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def firebase_auth_view(request):
+    try:
+        firebase_token = request.data.get('firebase_token')
+        if not firebase_token:
+            return Response({'error': 'No token provided'}, status=400)
+
+        try:
+            decoded_token = auth.verify_id_token(firebase_token)
+        except Exception as e:
+            logger.error(f"Firebase token verification failed: {str(e)}")
+            return Response({'error': f'Invalid Firebase token: {str(e)}'}, status=400)
+
+        uid = decoded_token.get('uid')
+        email = decoded_token.get('email')
+        if not email:
+            try:
+                user_record = auth.get_user(uid)
+                email = user_record.email
+            except Exception as e:
+                logger.error(f"Failed to get Firebase user: {str(e)}")
+                return Response({'error': 'No email found in token or user record'}, status=400)
+
+        provider_data = decoded_token.get('firebase', {}).get('sign_in_provider', '')
+        is_google = 'google.com' in provider_data
+        is_microsoft = 'microsoft.com' in provider_data
+
+        try:
+            user = CustomUser.objects.get(email=email)
+            if is_google:
+                user.google_id = uid
+            elif is_microsoft:
+                user.microsoft_id = uid
+
+            user.email_verified = True
+            user.save()
+            logger.info(f"Updated existing user via Firebase: {user.email}")
+        except CustomUser.DoesNotExist:
+            username = f"firebase_{uid}"
+
+            name = decoded_token.get('name', '')
+            names = name.split(' ', 1) if name else ['', '']
+            first_name = names[0]
+            last_name = names[1] if len(names) > 1 else ''
+
+            user = CustomUser.objects.create_user(
+                username=username,
+                email=email,
+                first_name=first_name,
+                last_name=last_name,
+                email_verified=True
+            )
+
+            if is_google:
+                user.google_id = uid
+            elif is_microsoft:
+                user.microsoft_id = uid
+
+            user.save()
+            logger.info(f"Created new user via Firebase: {user.email}")
+
+        refresh = RefreshToken.for_user(user)
+
+        response_data = {
+            'token': str(refresh.access_token),
+            'refresh': str(refresh),
+            'user': {
+                'id': user.id,
+                'email': user.email,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+                'name': f"{user.first_name} {user.last_name}".strip(),
+            }
+        }
+
+        return Response(response_data)
+
+    except Exception as e:
+        logger.error(f"Error in firebase_auth: {str(e)}")
         return Response({'error': str(e)}, status=400)

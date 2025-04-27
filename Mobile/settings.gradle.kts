@@ -16,9 +16,10 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        maven { url = uri("https://pkgs.dev.azure.com/MicrosoftDeviceSDK/DuoSDK-Public/_packaging/Duo-SDK-Feed/maven/v1") }
+        maven { url = uri("https://maven.pkg.github.com/AzureAD/microsoft-authentication-library-for-android") }
     }
 }
 
 rootProject.name = "VOCALYXAPK"
 include(":app")
- 

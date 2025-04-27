@@ -1,7 +1,7 @@
 from django.urls import path
 from .views import (
     RegisterView, LoginView, VerifyEmailView,
-    google_auth, LogoutView, microsoft_auth
+    google_auth, LogoutView, microsoft_auth, firebase_auth_view
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -14,4 +14,6 @@ urlpatterns = [
     path('auth/google/', google_auth, name='google_auth'),
 
     path('auth/microsoft/', microsoft_auth, name='microsoft_auth'),
+
+    path('firebase-auth/', firebase_auth_view, name='firebase_auth'),
 ]
