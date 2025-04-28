@@ -28,9 +28,8 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
-                    android:host="com.example.vocalyxapk"
-                    android:path="/yHXpIO0F+hwBcxIFhBgKrc3hzcQ="
-                    android:scheme="msauth" />
+                    android:host="auth"
+                    android:scheme="msal5a7221d3-d167-4f9d-b62e-79c987bb5d5f" />
             </intent-filter>
         </activity>
 

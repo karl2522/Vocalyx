@@ -65,17 +65,31 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun configureMSAL() {
         try {
+            val packageName = context.packageName
+            Log.d("MicrosoftAuth", "Package name: $packageName")
+
             PublicClientApplication.createMultipleAccountPublicClientApplication(
                 context,
                 R.raw.msal_config,
                 object : IPublicClientApplication.IMultipleAccountApplicationCreatedListener {
                     override fun onCreated(application: IMultipleAccountPublicClientApplication) {
                         msalPublicClientApp = application
-                        Log.d("MicrosoftAuth", "MSAL application created successfully")
+
+                        try {
+                            val config = application.configuration
+                            Log.d("MicrosoftAuth", "MSAL redirect URI: ${config.redirectUri}")
+                            Log.d("MicrosoftAuth", "MSAL application created successfully")
+                        } catch (e: Exception) {
+                            Log.e("MicrosoftAuth", "Error getting configuration", e)
+                        }
                     }
 
                     override fun onError(exception: MsalException) {
                         Log.e("MicrosoftAuth", "Error creating MSAL application", exception)
+
+                        if (exception is MsalClientException) {
+                            Log.e("MicrosoftAuth", "Client exception code: ${exception.errorCode}")
+                        }
                     }
                 }
             )
@@ -132,47 +146,11 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         if (app is IMultipleAccountPublicClientApplication) {
-            try {
-                val accounts = app.accounts
-
-                if (accounts != null && accounts.isNotEmpty()) {
-                    Log.d("MicrosoftAuth", "Found existing accounts: ${accounts.size}")
-                    acquireTokenSilently(app, accounts[0])
-                } else {
-                    Log.d("MicrosoftAuth", "No existing accounts, starting interactive auth")
-                    acquireTokenInteractively(app, activity)
-                }
-            } catch (e: MsalException) {
-                Log.e("MicrosoftAuth", "Error getting accounts", e)
-                _uiState.value = LoginUIState.Error("Error loading Microsoft accounts: ${e.message}")
-
-                acquireTokenInteractively(app, activity)
-            }
+            acquireTokenInteractively(app, activity)
         } else {
             _uiState.value = LoginUIState.Error("Microsoft authentication client is of incorrect type")
             Log.e("MicrosoftAuth", "MSAL app is not IMultipleAccountPublicClientApplication")
         }
-    }
-
-    private fun acquireTokenSilently(app: IPublicClientApplication, account: IAccount) {
-        val parameters = AcquireTokenSilentParameters.Builder()
-            .withScopes(listOf(*scopes))
-            .fromAuthority("https://login.microsoftonline.com/common")
-            .forAccount(account)
-            .withCallback(object : SilentAuthenticationCallback {
-                override fun onSuccess(authenticationResult: IAuthenticationResult) {
-                    Log.d("MicrosoftAuth", "Silent authentication successful")
-                    processAuthenticationResult(authenticationResult)
-                }
-
-                override fun onError(exception: MsalException) {
-                    Log.d("MicrosoftAuth", "Silent auth failed, trying interactive", exception)
-                    _uiState.value = LoginUIState.Error("Silent authentication failed: ${exception.message}")
-                }
-            })
-            .build()
-
-        app.acquireTokenSilentAsync(parameters)
     }
 
     private fun acquireTokenInteractively(app: IPublicClientApplication, activity: Activity?) {

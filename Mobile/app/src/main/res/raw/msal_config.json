@@ -1,7 +1,8 @@
 {
-  "client_id" : "5a7221d3-d167-4f9d-b62e-79c987bb5d5f",
-  "authorization_user_agent" : "DEFAULT",
-  "authorities" : [
+  "client_id": "5a7221d3-d167-4f9d-b62e-79c987bb5d5f",
+  "authorization_user_agent": "DEFAULT",
+  "redirect_uri": "msal5a7221d3-d167-4f9d-b62e-79c987bb5d5f://auth",
+  "authorities": [
     {
       "type": "AAD",
       "audience": {
