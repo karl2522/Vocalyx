@@ -95,7 +95,7 @@ const Dashboard = () => {
     <DashboardLayout>
       <div className="pb-6">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-2xl font-bold text-gray-800">Welcome Back {user.name}!</h1>
+          <h1 className="text-2xl font-bold text-gray-800">Welcome Back {user?.first_name}!</h1>
           <button 
             onClick={() => setIsProjectModalOpen(true)}
             className="bg-[#333D79] hover:bg-[#4A5491] text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm"

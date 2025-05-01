@@ -1,3 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">VOCALYXAPK</string>
+    <string name="app_name">Vocalyx</string>
+    <string name="home">Home</string>
+    <string name="voice">Voice</string>
+    <string name="manual">Manual</string>
+    <string name="classes">Classes</string>
+    <string name="default_web_client_id">841187713627-6u60gs5iq5h6qalooub6q27nrulifoug.apps.googleusercontent.com</string>
 </resources>

@@ -40,3 +40,18 @@ data class RegisterResponse(
     val message: String,
     val user: User
 )
+
+data class FirebaseAuthRequest(
+    val firebase_token: String
+)
+
+data class AuthResponse(
+    val token: String,
+    val refresh: String,
+    val user: User
+)
+
+data class MicrosoftAuthRequest(
+    val access_token: String,
+    val id_token: String? = null
+)

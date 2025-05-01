@@ -19,3 +19,8 @@ requests
 msal
 psycopg2-binary
 django-celery-beat
+gunicorn==21.2.0
+whitenoise==6.6.0
+dj-database-url==2.1.0
+openpyxl>=3.0.0
+firebase-admin

@@ -1,0 +1,19 @@
+{
+  "name": "vocalyx",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build-frontend": "cd frontend_web && npm install --include=dev && npm run build",
+    "build-backend": "cd backend && python -m pip install -r requirements.txt",
+    "build": "npm run build-frontend && npm run build-backend",
+    "start": "cd backend && python manage.py collectstatic --noinput && python manage.py migrate && gunicorn backend.wsgi",
+    "heroku-postbuild": "npm run build"
+  },
+  "engines": {
+    "node": "18.x",
+    "npm": "9.x"
+  },
+  "cacheDirectories": [
+    "frontend_web/node_modules"
+  ]
+}

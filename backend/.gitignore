@@ -36,3 +36,5 @@ media/
 # MongoDB
 *.mongodb
 mongod.log
+
+firebase-service-account.json

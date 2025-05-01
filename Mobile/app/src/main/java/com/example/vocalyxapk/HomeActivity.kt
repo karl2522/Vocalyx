@@ -9,9 +9,12 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -19,6 +22,8 @@ import com.example.vocalyxapk.ui.theme.VOCALYXAPKTheme
 import java.util.*
 import androidx.compose.ui.viewinterop.AndroidView
 import android.widget.Button
+import androidx.compose.ui.graphics.Color
+import kotlinx.coroutines.launch
 
 class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
@@ -69,32 +74,213 @@ class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         override fun onEvent(eventType: Int, params: Bundle?) {}
     }
 
+    @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent {
-            VOCALYXAPKTheme {
-                HomePage(
-                    text = currentText,
-                    onTextChange = { newText -> currentText = newText },
-                    onStartVoiceRecognition = {
-                        isVoiceRecognitionActive = true
-                        startVoiceRecognition()
-                    },
-                    onSpeakOut = { speakOut(currentText) },
-                    isVoiceRecognitionActive = isVoiceRecognitionActive
-                )
-            }
-        }
-
+        
         // Initialize TextToSpeech
         textToSpeech = TextToSpeech(this, this)
 
-        // Initialize SpeechRecognizer with the listener
+        // Initialize SpeechRecognizer
         if (SpeechRecognizer.isRecognitionAvailable(this)) {
             speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
             speechRecognizer.setRecognitionListener(speechRecognizerListener)
         } else {
             Toast.makeText(this, "Speech recognition is not supported on this device.", Toast.LENGTH_SHORT).show()
+        }
+
+        setContent {
+            VOCALYXAPKTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    var drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+                    val scope = rememberCoroutineScope()
+                    var selectedTab by remember { mutableStateOf(0) }
+                    
+                    val navigationItems = listOf(
+                        Triple("Home", Icons.Rounded.Home, "Home"),
+                        Triple("Voice", Icons.Rounded.Mic, "Voice"),
+                        Triple("Manual", Icons.Rounded.Edit, "Manual"),
+                        Triple("Classes", Icons.Rounded.List, "Classes")
+                    )
+                    
+                    ModalNavigationDrawer(
+                        drawerState = drawerState,
+                        drawerContent = {
+                            ModalDrawerSheet {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    "Vocalyx Menu",
+                                    modifier = Modifier.padding(16.dp),
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Divider(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+                                
+                                // Drawer Menu Items
+                                NavigationDrawerItem(
+                                    icon = { Icon(Icons.Rounded.Notifications, contentDescription = "Notifications", tint = MaterialTheme.colorScheme.primary) },
+                                    label = { Text("Notifications", color = MaterialTheme.colorScheme.onSurface) },
+                                    selected = false,
+                                    onClick = { /* TODO: Implement notifications */ },
+                                    colors = NavigationDrawerItemDefaults.colors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                        unselectedContainerColor = Color.Transparent
+                                    )
+                                )
+                                
+                                NavigationDrawerItem(
+                                    icon = { Icon(Icons.Rounded.Download, contentDescription = "Export Reports", tint = MaterialTheme.colorScheme.primary) },
+                                    label = { Text("Export Reports", color = MaterialTheme.colorScheme.onSurface) },
+                                    selected = false,
+                                    onClick = { /* TODO: Implement export */ },
+                                    colors = NavigationDrawerItemDefaults.colors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                        unselectedContainerColor = Color.Transparent
+                                    )
+                                )
+                                
+                                NavigationDrawerItem(
+                                    icon = { Icon(Icons.Rounded.Person, contentDescription = "Profile", tint = MaterialTheme.colorScheme.primary) },
+                                    label = { Text("Profile", color = MaterialTheme.colorScheme.onSurface) },
+                                    selected = false,
+                                    onClick = { /* TODO: Implement profile */ },
+                                    colors = NavigationDrawerItemDefaults.colors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                        unselectedContainerColor = Color.Transparent
+                                    )
+                                )
+                                
+                                NavigationDrawerItem(
+                                    icon = { Icon(Icons.Rounded.Settings, contentDescription = "Settings", tint = MaterialTheme.colorScheme.primary) },
+                                    label = { Text("Settings", color = MaterialTheme.colorScheme.onSurface) },
+                                    selected = false,
+                                    onClick = { /* TODO: Implement settings */ },
+                                    colors = NavigationDrawerItemDefaults.colors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                        unselectedContainerColor = Color.Transparent
+                                    )
+                                )
+                                
+                                NavigationDrawerItem(
+                                    icon = { Icon(Icons.Rounded.Info, contentDescription = "About/Help", tint = MaterialTheme.colorScheme.primary) },
+                                    label = { Text("About/Help", color = MaterialTheme.colorScheme.onSurface) },
+                                    selected = false,
+                                    onClick = { /* TODO: Implement about/help */ },
+                                    colors = NavigationDrawerItemDefaults.colors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                        unselectedContainerColor = Color.Transparent
+                                    )
+                                )
+                                
+                                Divider(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+                                
+                                NavigationDrawerItem(
+                                    icon = { Icon(Icons.Rounded.Logout, contentDescription = "Logout", tint = MaterialTheme.colorScheme.primary) },
+                                    label = { Text("Logout", color = MaterialTheme.colorScheme.onSurface) },
+                                    selected = false,
+                                    onClick = { 
+                                        // Navigate to login screen
+                                        val intent = Intent(this@HomeActivity, LoginActivity::class.java)
+                                        startActivity(intent)
+                                        finish()
+                                    },
+                                    colors = NavigationDrawerItemDefaults.colors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                        unselectedContainerColor = Color.Transparent
+                                    )
+                                )
+                            }
+                        }
+                    ) {
+                        Scaffold(
+                            topBar = {
+                                TopAppBar(
+                                    title = { 
+                                        Text(
+                                            "Vocalyx",
+                                            color = MaterialTheme.colorScheme.onPrimary
+                                        ) 
+                                    },
+                                    colors = TopAppBarDefaults.topAppBarColors(
+                                        containerColor = MaterialTheme.colorScheme.primary
+                                    ),
+                                    navigationIcon = {
+                                        IconButton(onClick = { 
+                                            scope.launch {
+                                                drawerState.open()
+                                            }
+                                        }) {
+                                            Icon(
+                                                Icons.Rounded.Menu,
+                                                contentDescription = "Menu",
+                                                tint = MaterialTheme.colorScheme.onPrimary
+                                            )
+                                        }
+                                    }
+                                )
+                            },
+                            bottomBar = {
+                                NavigationBar(
+                                    containerColor = MaterialTheme.colorScheme.primary
+                                ) {
+                                    navigationItems.forEachIndexed { index, (title, icon, label) ->
+                                        NavigationBarItem(
+                                            icon = { 
+                                                Icon(
+                                                    imageVector = icon,
+                                                    contentDescription = title,
+                                                    tint = if (selectedTab == index) 
+                                                        MaterialTheme.colorScheme.onPrimary 
+                                                    else 
+                                                        MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
+                                                ) 
+                                            },
+                                            label = { 
+                                                Text(
+                                                    label,
+                                                    color = if (selectedTab == index) 
+                                                        MaterialTheme.colorScheme.onPrimary 
+                                                    else 
+                                                        MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
+                                                ) 
+                                            },
+                                            selected = selectedTab == index,
+                                            onClick = { selectedTab = index },
+                                            colors = NavigationBarItemDefaults.colors(
+                                                selectedIconColor = MaterialTheme.colorScheme.onPrimary,
+                                                unselectedIconColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
+                                                selectedTextColor = MaterialTheme.colorScheme.onPrimary,
+                                                unselectedTextColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
+                                                indicatorColor = MaterialTheme.colorScheme.primary
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                        ) { paddingValues ->
+                            when (selectedTab) {
+                                0 -> HomeTab()
+                                1 -> VoiceInputTab(
+                                    text = currentText,
+                                    onTextChange = { newText -> currentText = newText },
+                                    onStartVoiceRecognition = {
+                                        isVoiceRecognitionActive = true
+                                        startVoiceRecognition()
+                                    },
+                                    onSpeakOut = { speakOut(currentText) },
+                                    isVoiceRecognitionActive = isVoiceRecognitionActive,
+                                    modifier = Modifier.padding(paddingValues)
+                                )
+                                2 -> ManualInputTab(modifier = Modifier.padding(paddingValues))
+                                3 -> ClassesTab(modifier = Modifier.padding(paddingValues))
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -151,6 +337,10 @@ class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         }
     }
 
+    private fun speakOut(text: String) {
+        textToSpeech.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
+    }
+
     // Add permission result handling
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
@@ -160,27 +350,83 @@ class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             Toast.makeText(this, "Microphone permission is required for voice recognition", Toast.LENGTH_SHORT).show()
         }
     }
-
-    private fun speakOut(text: String) {
-        textToSpeech.speak(text, TextToSpeech.QUEUE_FLUSH, null, "")
-    }
 }
 
 @Composable
-fun HomePage(
+fun HomeScreen(
     text: String,
     onTextChange: (String) -> Unit,
     onStartVoiceRecognition: () -> Unit,
     onSpeakOut: (String) -> Unit,
     isVoiceRecognitionActive: Boolean
 ) {
+    var selectedTab by remember { mutableStateOf(0) }
+    
+    val navigationItems = listOf(
+        Triple("Home", Icons.Rounded.Home, "Home"),
+        Triple("Voice", Icons.Rounded.Mic, "Voice"),
+        Triple("Manual", Icons.Rounded.Edit, "Manual"),
+        Triple("Classes", Icons.Rounded.List, "Classes")
+    )
+    
+    Scaffold(
+        bottomBar = {
+            NavigationBar {
+                navigationItems.forEachIndexed { index, (title, icon, label) ->
+                    NavigationBarItem(
+                        icon = { Icon(imageVector = icon, contentDescription = title) },
+                        label = { Text(label) },
+                        selected = selectedTab == index,
+                        onClick = { selectedTab = index }
+                    )
+                }
+            }
+        }
+    ) { paddingValues ->
+        when (selectedTab) {
+            0 -> HomeTab()
+            1 -> VoiceInputTab(
+                text = text,
+                onTextChange = onTextChange,
+                onStartVoiceRecognition = onStartVoiceRecognition,
+                onSpeakOut = onSpeakOut,
+                isVoiceRecognitionActive = isVoiceRecognitionActive,
+                modifier = Modifier.padding(paddingValues)
+            )
+            2 -> ManualInputTab(modifier = Modifier.padding(paddingValues))
+            3 -> ClassesTab(modifier = Modifier.padding(paddingValues))
+        }
+    }
+}
+
+@Composable
+fun HomeTab() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.Center
+            .padding(16.dp)
     ) {
-        TextField(
+        Text("Welcome to Vocalyx", style = MaterialTheme.typography.headlineMedium)
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("Select an option from the bottom navigation to get started.")
+    }
+}
+
+@Composable
+fun VoiceInputTab(
+    text: String,
+    onTextChange: (String) -> Unit,
+    onStartVoiceRecognition: () -> Unit,
+    onSpeakOut: (String) -> Unit,
+    isVoiceRecognitionActive: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        OutlinedTextField(
             value = text,
             onValueChange = onTextChange,
             label = { Text("Enter text here") },
@@ -193,13 +439,6 @@ fun HomePage(
         ) {
             Text(if (isVoiceRecognitionActive) "Listening..." else "Start Voice Recognition")
         }
-        if (isVoiceRecognitionActive) {
-            Text(
-                "Speak now...",
-                modifier = Modifier.padding(8.dp),
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
         Spacer(modifier = Modifier.height(16.dp))
         Button(
             onClick = { onSpeakOut(text) },
@@ -210,11 +449,35 @@ fun HomePage(
     }
 }
 
+@Composable
+fun ManualInputTab(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        Text("Manual Input", style = MaterialTheme.typography.headlineMedium)
+        // Add manual input UI here
+    }
+}
+
+@Composable
+fun ClassesTab(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        Text("Classes", style = MaterialTheme.typography.headlineMedium)
+        // Add classes UI here
+    }
+}
+
 @Preview(showBackground = true)
 @Composable
-fun HomePagePreview() {
+fun HomeScreenPreview() {
     VOCALYXAPKTheme {
-        HomePage(
+        HomeScreen(
             text = "",
             onTextChange = {},
             onStartVoiceRecognition = {},

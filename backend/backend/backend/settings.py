@@ -13,9 +13,12 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 from pathlib import Path
 import os
 from datetime import timedelta
+import dj_database_url
+import firebase_admin
 
 from celery.schedules import crontab
 from dotenv import load_dotenv
+from firebase_admin import credentials
 
 load_dotenv()
 
@@ -33,7 +36,13 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*', '10.0.6.216', '192.168.1.10']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*', '10.0.191.212', '192.168.1.10', '.herokuapp.com']
+
+FIREBASE_SERVICE_ACCOUNT_PATH = os.path.join(BASE_DIR.parent, 'firebase-service-account.json')
+
+if not firebase_admin._apps:
+    cred = credentials.Certificate(FIREBASE_SERVICE_ACCOUNT_PATH)
+    firebase_admin.initialize_app(cred)
 
 
 # Application definition
@@ -57,14 +66,16 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+
 ]
 
 AUTHENTICATION_BACKENDS = [
@@ -124,16 +135,18 @@ SIMPLE_JWT = {
     'USER_ID_CLAIM': 'user_id',
     'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
     'TOKEN_TYPE_CLAIM': 'token_type',
+    'AUTH_COOKIE_SECURE': True,
+    'AUTH_COOKIE_SAMESITE': 'None' if not DEBUG else 'Lax',
 }
-
 
 
 #CORs settings
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-    "http://10.0.6.216:8080",
-    "http://10.0.6.216"
+    "http://10.0.191.212:8080",
+    "http://10.0.191.212",
+    "https://vocalyx-frontend.vercel.app",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
@@ -200,18 +213,19 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('DB_NAME', 'neondb'),
-        'USER': os.getenv('DB_USER', 'neondb_owner'),
-        'PASSWORD': os.getenv('DB_PASSWORD', 'npg_BC0EMfk4VXAL'),
-        'HOST': os.getenv('DB_HOST', 'ep-twilight-hat-a1o7vy4b-pooler.ap-southeast-1.aws.neon.tech'),
-        'PORT': os.getenv('DB_PORT', '5432'),
-        'OPTIONS': {
-            'sslmode': 'require',
-        },
-    }
+    'default': dj_database_url.config(
+        default=os.getenv('DATABASE_URL',
+            'postgres://neondb_owner:npg_BC0EMfk4VXAL@ep-twilight-hat-a1o7vy4b-pooler.ap-southeast-1.aws.neon.tech/neondb'
+        ),
+        conn_max_age=600,
+        ssl_require=True
+    )
 }
+
+SECURE_SSL_REDIRECT = not DEBUG
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
 
 CELERY_BEAT_SCHEDULE = {
     'cleanup-expired-tokens': {
@@ -220,9 +234,6 @@ CELERY_BEAT_SCHEDULE = {
     }
 }
 
-# Remove MongoDB specific settings
-# MONGODB_ENFORCE_SCHEMA = False
-# SILENCED_SYSTEM_CHECKS = ['djongo.W001']
 
 
 # Password validation
@@ -284,7 +295,9 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field

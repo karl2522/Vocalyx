@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -40,7 +41,6 @@ android {
 }
 
 dependencies {
-
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
@@ -53,6 +53,7 @@ dependencies {
     implementation(libs.material)
     implementation(libs.androidx.activity)
     implementation(libs.androidx.constraintlayout)
+    implementation("androidx.compose.material:material-icons-extended:1.5.4")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -62,11 +63,18 @@ dependencies {
     debugImplementation(libs.androidx.ui.test.manifest)
 
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.2")
+
     // Retrofit
     implementation(libs.retrofit)
-    // Retrofit with Gson Converter
     implementation(libs.converter.gson)
-    // OkHttp Logging Interceptor (optional but recommended for debugging)
     implementation(libs.logging.interceptor)
 
+    // Firebase
+    implementation(platform("com.google.firebase:firebase-bom:32.7.0"))
+    implementation("com.google.firebase:firebase-analytics")
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.android.gms:play-services-auth:20.6.0")
+
+    implementation("com.firebaseui:firebase-ui-auth:8.0.2")
+    implementation("com.microsoft.identity.client:msal:2.0.12")
 }

@@ -12,7 +12,7 @@ import java.util.concurrent.TimeUnit
 
 @SuppressLint("StaticFieldLeak")
 object RetrofitClient {
-    private const val BASE_URL = "http://10.0.6.216:8000/"
+    private const val BASE_URL = "http://10.0.191.212:8000/"
     private var context: Context? = null
 
     fun initialize(context: Context) {
