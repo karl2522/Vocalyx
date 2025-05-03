@@ -55,7 +55,7 @@ class RegisterView(APIView):
                 user.email_verification_token = verification_token
                 user.save()
 
-                verification_url = f"https://vocalyx-c61a072bf25a.herokuapp.com/api/verify-email/{verification_token}/"
+                verification_url = f"http://127.0.0.1:8000/api/verify-email/{verification_token}/"
 
                 html_message = render_to_string('email/verification_email.html', {
                     'user': user,
