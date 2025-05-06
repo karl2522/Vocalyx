@@ -46,6 +46,8 @@ fun LoginScreen(
     )
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var emailError by remember { mutableStateOf<String?>(null) }
+    var passwordError by remember { mutableStateOf<String?>(null) }
     var isError by remember { mutableStateOf(false) }
     var passwordVisible by remember { mutableStateOf(false) }
     val activity = context as Activity
@@ -238,23 +240,41 @@ fun LoginScreen(
         // Email field
         OutlinedTextField(
             value = email,
-            onValueChange = { email = it },
+            onValueChange = { 
+                email = it
+                emailError = null // Clear error when user types
+            },
             label = { Text("Email", color = Color.Gray) },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 16.dp),
+                .padding(bottom = if (emailError != null) 4.dp else 16.dp),
             shape = RoundedCornerShape(8.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                unfocusedBorderColor = Color.Gray.copy(alpha = 0.3f),
-                focusedBorderColor = Color(0xFF333D79)
+                unfocusedBorderColor = if (emailError != null) Color.Red.copy(alpha = 0.5f) else Color.Gray.copy(alpha = 0.3f),
+                focusedBorderColor = if (emailError != null) Color.Red else Color(0xFF333D79),
+                errorBorderColor = Color.Red
             ),
-            singleLine = true
+            singleLine = true,
+            isError = emailError != null
         )
+        if (emailError != null) {
+            Text(
+                text = emailError!!,
+                color = Color.Red,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier
+                    .padding(start = 4.dp, bottom = 16.dp)
+                    .align(Alignment.Start)
+            )
+        }
 
         // Password field
         OutlinedTextField(
             value = password,
-            onValueChange = { password = it },
+            onValueChange = { 
+                password = it
+                passwordError = null // Clear error when user types
+            },
             label = { Text("Password", color = Color.Gray) },
             visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -269,21 +289,46 @@ fun LoginScreen(
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 24.dp),
+                .padding(bottom = if (passwordError != null) 4.dp else 24.dp),
             shape = RoundedCornerShape(8.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                unfocusedBorderColor = Color.Gray.copy(alpha = 0.3f),
-                focusedBorderColor = Color(0xFF333D79)
+                unfocusedBorderColor = if (passwordError != null) Color.Red.copy(alpha = 0.5f) else Color.Gray.copy(alpha = 0.3f),
+                focusedBorderColor = if (passwordError != null) Color.Red else Color(0xFF333D79),
+                errorBorderColor = Color.Red
             ),
-            singleLine = true
+            singleLine = true,
+            isError = passwordError != null
         )
+        if (passwordError != null) {
+            Text(
+                text = passwordError!!,
+                color = Color.Red,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier
+                    .padding(start = 4.dp, bottom = 24.dp)
+                    .align(Alignment.Start)
+            )
+        }
 
         // Login Button
         Button(
             onClick = {
-                if (email.isEmpty() || password.isEmpty()) {
-                    isError = true
-                } else {
+                var hasError = false
+                
+                if (email.isEmpty()) {
+                    emailError = "Email is required"
+                    hasError = true
+                } else if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                    emailError = "Please enter a valid email address"
+                    hasError = true
+                }
+                
+                if (password.isEmpty()) {
+                    passwordError = "Password is required"
+                    hasError = true
+                }
+
+                if (!hasError) {
                     viewModel.login(email, password)
                 }
             },
