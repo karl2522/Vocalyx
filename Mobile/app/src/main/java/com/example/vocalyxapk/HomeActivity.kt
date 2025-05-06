@@ -8,11 +8,19 @@ import android.speech.tts.TextToSpeech
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.background
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -224,7 +232,8 @@ class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                             },
                             bottomBar = {
                                 NavigationBar(
-                                    containerColor = MaterialTheme.colorScheme.primary
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.height(64.dp)
                                 ) {
                                     navigationItems.forEachIndexed { index, (title, icon, label) ->
                                         NavigationBarItem(
@@ -235,7 +244,8 @@ class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                                                     tint = if (selectedTab == index) 
                                                         MaterialTheme.colorScheme.onPrimary 
                                                     else 
-                                                        MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
+                                                        MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
+                                                    modifier = Modifier.size(24.dp)
                                                 ) 
                                             },
                                             label = { 
@@ -244,7 +254,8 @@ class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                                                     color = if (selectedTab == index) 
                                                         MaterialTheme.colorScheme.onPrimary 
                                                     else 
-                                                        MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
+                                                        MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
+                                                    style = MaterialTheme.typography.labelSmall
                                                 ) 
                                             },
                                             selected = selectedTab == index,
@@ -461,17 +472,169 @@ fun ManualInputTab(modifier: Modifier = Modifier) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ClassesTab(modifier: Modifier = Modifier) {
-    Column(
+    var searchQuery by remember { mutableStateOf("") }
+    
+    val classes = remember {
+        listOf(
+            ClassData("Mathematics 101", "Section A", 25, 3),
+            ClassData("Physics 201", "Section B", 30, 5),
+            ClassData("Chemistry 101", "Section C", 28, 0),
+            ClassData("Biology 201", "Section D", 32, 8),
+            ClassData("Computer Science", "Section E", 35, 2)
+        )
+    }
+
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .background(Color.White)
     ) {
-        Text("Classes", style = MaterialTheme.typography.headlineMedium)
-        // Add classes UI here
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 20.dp)
+        ) {
+            // Header
+            Text(
+                "My Classes",
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    color = Color(0xFF333D79)
+                ),
+                modifier = Modifier.padding(top = 24.dp, bottom = 16.dp)
+            )
+
+            // Search Bar
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 20.dp)
+                    .height(52.dp),
+                placeholder = { Text("Search classes...", color = Color(0xFF666666)) },
+                leadingIcon = {
+                    Icon(
+                        Icons.Rounded.Search,
+                        contentDescription = "Search",
+                        tint = Color(0xFF666666),
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                colors = TextFieldDefaults.outlinedTextFieldColors(
+                    focusedBorderColor = Color(0xFFE0E0E0),
+                    unfocusedBorderColor = Color(0xFFE0E0E0),
+                    containerColor = Color.White
+                )
+            )
+
+            // Class Cards Grid
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(bottom = 80.dp), // Add padding for FAB
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                items(classes) { classData ->
+                    ClassCard(classData = classData)
+                }
+            }
+        }
+
+        // Floating Action Button
+        FloatingActionButton(
+            onClick = { /* TODO: Implement add class */ },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 20.dp, bottom = 20.dp)
+                .size(56.dp),
+            containerColor = Color(0xFF333D79),
+            shape = CircleShape
+        ) {
+            Icon(
+                Icons.Rounded.Add,
+                contentDescription = "Add Class",
+                tint = Color.White,
+                modifier = Modifier.size(24.dp)
+            )
+        }
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ClassCard(classData: ClassData) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(120.dp)
+            .clickable { /* TODO: Navigate to class details */ },
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFFF8F9FA)
+        ),
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(12.dp)
+                .fillMaxWidth()
+        ) {
+            Text(
+                classData.name,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    color = Color(0xFF333D79)
+                ),
+                maxLines = 1
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                classData.section,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFF666666),
+                maxLines = 1
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Start,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "${classData.totalStudents} students",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF666666)
+                )
+                if (classData.ungradedCount > 0) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Surface(
+                        color = Color(0xFFFFEBEE),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            "${classData.ungradedCount} ungraded",
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFFE57373)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+data class ClassData(
+    val name: String,
+    val section: String,
+    val totalStudents: Int,
+    val ungradedCount: Int
+)
 
 @Preview(showBackground = true)
 @Composable
