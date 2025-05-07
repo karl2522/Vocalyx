@@ -34,7 +34,13 @@ fun SignUpScreen(
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
-    var isError by remember { mutableStateOf(false) }
+    
+    var firstNameError by remember { mutableStateOf<String?>(null) }
+    var lastNameError by remember { mutableStateOf<String?>(null) }
+    var emailError by remember { mutableStateOf<String?>(null) }
+    var passwordError by remember { mutableStateOf<String?>(null) }
+    var confirmPasswordError by remember { mutableStateOf<String?>(null) }
+    
     var passwordVisible by remember { mutableStateOf(false) }
     var confirmPasswordVisible by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -105,55 +111,107 @@ fun SignUpScreen(
             )
         }
 
-        // Input Fields with updated styling
+        // Input Fields with error handling
         OutlinedTextField(
             value = firstName,
-            onValueChange = { firstName = it },
+            onValueChange = { 
+                firstName = it
+                firstNameError = null
+            },
             label = { Text("First Name", color = Color.Gray) },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 16.dp),
+                .padding(bottom = if (firstNameError != null) 4.dp else 16.dp),
             shape = RoundedCornerShape(8.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                unfocusedBorderColor = Color.Gray.copy(alpha = 0.3f),
-                focusedBorderColor = themeColor
+                unfocusedBorderColor = if (firstNameError != null) Color.Red.copy(alpha = 0.5f) else Color.Gray.copy(alpha = 0.3f),
+                focusedBorderColor = if (firstNameError != null) Color.Red else themeColor,
+                errorBorderColor = Color.Red
             ),
-            singleLine = true
+            singleLine = true,
+            isError = firstNameError != null
         )
+        if (firstNameError != null) {
+            Text(
+                text = firstNameError!!,
+                color = Color.Red,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier
+                    .padding(start = 4.dp, bottom = 16.dp)
+                    .align(Alignment.Start)
+            )
+        }
 
         OutlinedTextField(
             value = lastName,
-            onValueChange = { lastName = it },
+            onValueChange = { 
+                lastName = it
+                lastNameError = null
+            },
             label = { Text("Last Name", color = Color.Gray) },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 16.dp),
+                .padding(bottom = if (lastNameError != null) 4.dp else 16.dp),
             shape = RoundedCornerShape(8.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                unfocusedBorderColor = Color.Gray.copy(alpha = 0.3f),
-                focusedBorderColor = themeColor
+                unfocusedBorderColor = if (lastNameError != null) Color.Red.copy(alpha = 0.5f) else Color.Gray.copy(alpha = 0.3f),
+                focusedBorderColor = if (lastNameError != null) Color.Red else themeColor,
+                errorBorderColor = Color.Red
             ),
-            singleLine = true
+            singleLine = true,
+            isError = lastNameError != null
         )
+        if (lastNameError != null) {
+            Text(
+                text = lastNameError!!,
+                color = Color.Red,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier
+                    .padding(start = 4.dp, bottom = 16.dp)
+                    .align(Alignment.Start)
+            )
+        }
 
         OutlinedTextField(
             value = email,
-            onValueChange = { email = it },
+            onValueChange = { 
+                email = it
+                emailError = null
+            },
             label = { Text("Email", color = Color.Gray) },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 16.dp),
+                .padding(bottom = if (emailError != null) 4.dp else 16.dp),
             shape = RoundedCornerShape(8.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                unfocusedBorderColor = Color.Gray.copy(alpha = 0.3f),
-                focusedBorderColor = themeColor
+                unfocusedBorderColor = if (emailError != null) Color.Red.copy(alpha = 0.5f) else Color.Gray.copy(alpha = 0.3f),
+                focusedBorderColor = if (emailError != null) Color.Red else themeColor,
+                errorBorderColor = Color.Red
             ),
-            singleLine = true
+            singleLine = true,
+            isError = emailError != null
         )
+        if (emailError != null) {
+            Text(
+                text = emailError!!,
+                color = Color.Red,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier
+                    .padding(start = 4.dp, bottom = 16.dp)
+                    .align(Alignment.Start)
+            )
+        }
 
         OutlinedTextField(
             value = password,
-            onValueChange = { password = it },
+            onValueChange = { 
+                password = it
+                passwordError = null
+                // Also clear confirm password error if it was a match error
+                if (confirmPasswordError == "Passwords don't match") {
+                    confirmPasswordError = null
+                }
+            },
             label = { Text("Password", color = Color.Gray) },
             visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -168,18 +226,33 @@ fun SignUpScreen(
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 16.dp),
+                .padding(bottom = if (passwordError != null) 4.dp else 16.dp),
             shape = RoundedCornerShape(8.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                unfocusedBorderColor = Color.Gray.copy(alpha = 0.3f),
-                focusedBorderColor = themeColor
+                unfocusedBorderColor = if (passwordError != null) Color.Red.copy(alpha = 0.5f) else Color.Gray.copy(alpha = 0.3f),
+                focusedBorderColor = if (passwordError != null) Color.Red else themeColor,
+                errorBorderColor = Color.Red
             ),
-            singleLine = true
+            singleLine = true,
+            isError = passwordError != null
         )
+        if (passwordError != null) {
+            Text(
+                text = passwordError!!,
+                color = Color.Red,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier
+                    .padding(start = 4.dp, bottom = 16.dp)
+                    .align(Alignment.Start)
+            )
+        }
 
         OutlinedTextField(
             value = confirmPassword,
-            onValueChange = { confirmPassword = it },
+            onValueChange = { 
+                confirmPassword = it
+                confirmPasswordError = null
+            },
             label = { Text("Confirm Password", color = Color.Gray) },
             visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -194,24 +267,67 @@ fun SignUpScreen(
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 24.dp),
+                .padding(bottom = if (confirmPasswordError != null) 4.dp else 24.dp),
             shape = RoundedCornerShape(8.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                unfocusedBorderColor = Color.Gray.copy(alpha = 0.3f),
-                focusedBorderColor = themeColor
+                unfocusedBorderColor = if (confirmPasswordError != null) Color.Red.copy(alpha = 0.5f) else Color.Gray.copy(alpha = 0.3f),
+                focusedBorderColor = if (confirmPasswordError != null) Color.Red else themeColor,
+                errorBorderColor = Color.Red
             ),
-            singleLine = true
+            singleLine = true,
+            isError = confirmPasswordError != null
         )
+        if (confirmPasswordError != null) {
+            Text(
+                text = confirmPasswordError!!,
+                color = Color.Red,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier
+                    .padding(start = 4.dp, bottom = 24.dp)
+                    .align(Alignment.Start)
+            )
+        }
 
         // Sign Up Button
         Button(
             onClick = {
-                if (firstName.isEmpty() || lastName.isEmpty() || email.isEmpty() ||
-                    password.isEmpty() || confirmPassword.isEmpty()) {
-                    isError = true
+                var hasError = false
+
+                if (firstName.isEmpty()) {
+                    firstNameError = "First name is required"
+                    hasError = true
+                }
+
+                if (lastName.isEmpty()) {
+                    lastNameError = "Last name is required"
+                    hasError = true
+                }
+
+                if (email.isEmpty()) {
+                    emailError = "Email is required"
+                    hasError = true
+                } else if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                    emailError = "Please enter a valid email address"
+                    hasError = true
+                }
+
+                if (password.isEmpty()) {
+                    passwordError = "Password is required"
+                    hasError = true
+                } else if (password.length < 6) {
+                    passwordError = "Password must be at least 6 characters"
+                    hasError = true
+                }
+
+                if (confirmPassword.isEmpty()) {
+                    confirmPasswordError = "Please confirm your password"
+                    hasError = true
                 } else if (password != confirmPassword) {
-                    Toast.makeText(context, "Passwords don't match", Toast.LENGTH_LONG).show()
-                } else {
+                    confirmPasswordError = "Passwords don't match"
+                    hasError = true
+                }
+
+                if (!hasError) {
                     viewModel.register(
                         email = email,
                         password = password,
@@ -229,7 +345,7 @@ fun SignUpScreen(
                 containerColor = themeColor
             )
         ) {
-            Text("Signup")
+            Text("Sign Up")
         }
 
         // Sign in link

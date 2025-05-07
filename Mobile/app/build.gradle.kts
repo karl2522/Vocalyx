@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     id("com.google.gms.google-services")
+    id("kotlin-parcelize")
 }
 
 android {
@@ -77,4 +78,11 @@ dependencies {
 
     implementation("com.firebaseui:firebase-ui-auth:8.0.2")
     implementation("com.microsoft.identity.client:msal:2.0.12")
+
+    // Apache POI for Excel files
+    implementation("org.apache.poi:poi:5.2.3")
+    implementation("org.apache.poi:poi-ooxml:5.2.3")
+    
+    // OpenCSV for CSV files
+    implementation("com.opencsv:opencsv:5.7.1")
 }

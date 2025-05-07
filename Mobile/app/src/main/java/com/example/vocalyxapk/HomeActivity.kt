@@ -8,14 +8,23 @@ import android.speech.tts.TextToSpeech
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.background
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.vocalyxapk.ui.theme.VOCALYXAPKTheme
@@ -24,6 +33,11 @@ import androidx.compose.ui.viewinterop.AndroidView
 import android.widget.Button
 import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.launch
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.ActivityResultLauncher
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import kotlinx.parcelize.Parcelize
 
 class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
@@ -224,7 +238,8 @@ class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                             },
                             bottomBar = {
                                 NavigationBar(
-                                    containerColor = MaterialTheme.colorScheme.primary
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.height(64.dp)
                                 ) {
                                     navigationItems.forEachIndexed { index, (title, icon, label) ->
                                         NavigationBarItem(
@@ -235,7 +250,8 @@ class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                                                     tint = if (selectedTab == index) 
                                                         MaterialTheme.colorScheme.onPrimary 
                                                     else 
-                                                        MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
+                                                        MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
+                                                    modifier = Modifier.size(24.dp)
                                                 ) 
                                             },
                                             label = { 
@@ -244,7 +260,8 @@ class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                                                     color = if (selectedTab == index) 
                                                         MaterialTheme.colorScheme.onPrimary 
                                                     else 
-                                                        MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
+                                                        MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
+                                                    style = MaterialTheme.typography.labelSmall
                                                 ) 
                                             },
                                             selected = selectedTab == index,
@@ -404,10 +421,14 @@ fun HomeTab() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("Welcome to Vocalyx", style = MaterialTheme.typography.headlineMedium)
-        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "Welcome to Vocalyx",
+            style = MaterialTheme.typography.headlineMedium,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
         Text("Select an option from the bottom navigation to get started.")
     }
 }
@@ -461,15 +482,197 @@ fun ManualInputTab(modifier: Modifier = Modifier) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ClassesTab(modifier: Modifier = Modifier) {
-    Column(
+    var searchQuery by remember { mutableStateOf("") }
+    val context = LocalContext.current
+
+    // File picker launcher
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            // Start FileViewerActivity with the selected file URI
+            val intent = Intent(context, FileViewerActivity::class.java).apply {
+                data = uri
+            }
+            context.startActivity(intent)
+        }
+    }
+
+    // Observe imported classes
+    val importedClasses = ClassRepository.classes
+    val filteredClasses = importedClasses.filter {
+        it.name.contains(searchQuery, ignoreCase = true) ||
+        it.section.contains(searchQuery, ignoreCase = true)
+    }
+
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .background(Color.White)
     ) {
-        Text("Classes", style = MaterialTheme.typography.headlineMedium)
-        // Add classes UI here
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 20.dp)
+        ) {
+            // Header
+            Text(
+                "My Classes",
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    color = Color(0xFF333D79)
+                ),
+                modifier = Modifier.padding(top = 24.dp, bottom = 16.dp)
+            )
+
+            // Search Bar
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 20.dp)
+                    .height(52.dp),
+                placeholder = { Text("Search classes...", color = Color(0xFF666666)) },
+                leadingIcon = {
+                    Icon(
+                        Icons.Rounded.Search,
+                        contentDescription = "Search",
+                        tint = Color(0xFF666666),
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                colors = TextFieldDefaults.outlinedTextFieldColors(
+                    focusedBorderColor = Color(0xFFE0E0E0),
+                    unfocusedBorderColor = Color(0xFFE0E0E0),
+                    containerColor = Color.White
+                )
+            )
+
+            // Class Cards Grid
+            if (filteredClasses.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(bottom = 80.dp), // Add padding for FAB
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            Icons.Rounded.Upload,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(64.dp)
+                                .padding(bottom = 16.dp),
+                            tint = Color(0xFF666666)
+                        )
+                        Text(
+                            "No classes found",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color(0xFF666666),
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        Text(
+                            "Import an Excel or CSV file to create your first class",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFF666666),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    contentPadding = PaddingValues(bottom = 80.dp), // Add padding for FAB
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(filteredClasses) { classData ->
+                        ImportedClassCard(classData = classData)
+                    }
+                }
+            }
+        }
+
+        // Floating Action Button for Import
+        FloatingActionButton(
+            onClick = { filePickerLauncher.launch("*/*") },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 20.dp, bottom = 20.dp)
+                .size(56.dp),
+            containerColor = Color(0xFF333D79),
+            shape = CircleShape
+        ) {
+            Icon(
+                Icons.Rounded.Upload,
+                contentDescription = "Import Excel/CSV",
+                tint = Color.White,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ImportedClassCard(classData: ImportedClass) {
+    val context = LocalContext.current
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(120.dp)
+            .clickable {
+                val fileTableData = FileTableData(
+                    fileData = classData.fileData,
+                    fileName = classData.name,
+                    section = classData.section
+                )
+                val intent = Intent(context, FileViewerActivity::class.java).apply {
+                    putExtra("file_table_data", fileTableData)
+                }
+                context.startActivity(intent)
+            },
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFFF8F9FA)
+        ),
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(12.dp)
+                .fillMaxWidth()
+        ) {
+            Text(
+                classData.name,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    color = Color(0xFF333D79)
+                ),
+                maxLines = 1
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                classData.section,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFF666666),
+                maxLines = 1
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                "Imported file rows: ${classData.fileData.size}",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF666666)
+            )
+        }
     }
 }
 
