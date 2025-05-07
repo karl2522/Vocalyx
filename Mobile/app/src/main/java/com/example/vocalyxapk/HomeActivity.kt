@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.vocalyxapk.ui.theme.VOCALYXAPKTheme
@@ -32,6 +33,11 @@ import androidx.compose.ui.viewinterop.AndroidView
 import android.widget.Button
 import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.launch
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.ActivityResultLauncher
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import kotlinx.parcelize.Parcelize
 
 class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
@@ -415,10 +421,14 @@ fun HomeTab() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("Welcome to Vocalyx", style = MaterialTheme.typography.headlineMedium)
-        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "Welcome to Vocalyx",
+            style = MaterialTheme.typography.headlineMedium,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
         Text("Select an option from the bottom navigation to get started.")
     }
 }
@@ -476,15 +486,26 @@ fun ManualInputTab(modifier: Modifier = Modifier) {
 @Composable
 fun ClassesTab(modifier: Modifier = Modifier) {
     var searchQuery by remember { mutableStateOf("") }
-    
-    val classes = remember {
-        listOf(
-            ClassData("Mathematics 101", "Section A", 25, 3),
-            ClassData("Physics 201", "Section B", 30, 5),
-            ClassData("Chemistry 101", "Section C", 28, 0),
-            ClassData("Biology 201", "Section D", 32, 8),
-            ClassData("Computer Science", "Section E", 35, 2)
-        )
+    val context = LocalContext.current
+
+    // File picker launcher
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            // Start FileViewerActivity with the selected file URI
+            val intent = Intent(context, FileViewerActivity::class.java).apply {
+                data = uri
+            }
+            context.startActivity(intent)
+        }
+    }
+
+    // Observe imported classes
+    val importedClasses = ClassRepository.classes
+    val filteredClasses = importedClasses.filter {
+        it.name.contains(searchQuery, ignoreCase = true) ||
+        it.section.contains(searchQuery, ignoreCase = true)
     }
 
     Box(
@@ -533,22 +554,57 @@ fun ClassesTab(modifier: Modifier = Modifier) {
             )
 
             // Class Cards Grid
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                contentPadding = PaddingValues(bottom = 80.dp), // Add padding for FAB
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                items(classes) { classData ->
-                    ClassCard(classData = classData)
+            if (filteredClasses.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(bottom = 80.dp), // Add padding for FAB
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            Icons.Rounded.Upload,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(64.dp)
+                                .padding(bottom = 16.dp),
+                            tint = Color(0xFF666666)
+                        )
+                        Text(
+                            "No classes found",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color(0xFF666666),
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        Text(
+                            "Import an Excel or CSV file to create your first class",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFF666666),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    contentPadding = PaddingValues(bottom = 80.dp), // Add padding for FAB
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(filteredClasses) { classData ->
+                        ImportedClassCard(classData = classData)
+                    }
                 }
             }
         }
 
-        // Floating Action Button
+        // Floating Action Button for Import
         FloatingActionButton(
-            onClick = { /* TODO: Implement add class */ },
+            onClick = { filePickerLauncher.launch("*/*") },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = 20.dp, bottom = 20.dp)
@@ -557,8 +613,8 @@ fun ClassesTab(modifier: Modifier = Modifier) {
             shape = CircleShape
         ) {
             Icon(
-                Icons.Rounded.Add,
-                contentDescription = "Add Class",
+                Icons.Rounded.Upload,
+                contentDescription = "Import Excel/CSV",
                 tint = Color.White,
                 modifier = Modifier.size(24.dp)
             )
@@ -568,12 +624,23 @@ fun ClassesTab(modifier: Modifier = Modifier) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ClassCard(classData: ClassData) {
+fun ImportedClassCard(classData: ImportedClass) {
+    val context = LocalContext.current
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .height(120.dp)
-            .clickable { /* TODO: Navigate to class details */ },
+            .clickable {
+                val fileTableData = FileTableData(
+                    fileData = classData.fileData,
+                    fileName = classData.name,
+                    section = classData.section
+                )
+                val intent = Intent(context, FileViewerActivity::class.java).apply {
+                    putExtra("file_table_data", fileTableData)
+                }
+                context.startActivity(intent)
+            },
         colors = CardDefaults.cardColors(
             containerColor = Color(0xFFF8F9FA)
         ),
@@ -600,41 +667,14 @@ fun ClassCard(classData: ClassData) {
                 maxLines = 1
             )
             Spacer(modifier = Modifier.weight(1f))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Start,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    "${classData.totalStudents} students",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF666666)
-                )
-                if (classData.ungradedCount > 0) {
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Surface(
-                        color = Color(0xFFFFEBEE),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text(
-                            "${classData.ungradedCount} ungraded",
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFFE57373)
-                        )
-                    }
-                }
-            }
+            Text(
+                "Imported file rows: ${classData.fileData.size}",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF666666)
+            )
         }
     }
 }
-
-data class ClassData(
-    val name: String,
-    val section: String,
-    val totalStudents: Int,
-    val ungradedCount: Int
-)
 
 @Preview(showBackground = true)
 @Composable
