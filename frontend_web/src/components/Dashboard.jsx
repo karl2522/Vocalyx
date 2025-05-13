@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { FiPlus, FiClock, FiUsers, FiSpeaker, FiActivity } from 'react-icons/fi';
 import { MdKeyboardVoice, MdOutlinePublish, MdOutlineClass } from 'react-icons/md';
 import DashboardLayout from './layouts/DashboardLayout';
-import ProjectModal from './modals/ProjectModal';
+import ClassModal from './modals/ClassModal';
 import { useAuth } from '../auth/AuthContext';
 import { classService } from '../services/api';
 import { toast } from 'react-hot-toast';
@@ -12,8 +12,8 @@ const Dashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('recent');
-  const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
-  const [projects, setProjects] = useState([]);
+  const [isClassModalOpen, setIsClassModalOpen] = useState(false);
+  const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
 
 
@@ -62,7 +62,7 @@ const Dashboard = () => {
     try {
         setLoading(true);
         const response = await classService.getClasses();
-        setProjects(response.data);
+        setClasses(response.data);
     } catch (error) {
         console.error('Error fetching classes:', error);
         if (error.response?.status === 401) {
@@ -83,8 +83,8 @@ const Dashboard = () => {
     { id: 4, name: "New feature walkthrough.mp3", duration: "24:30", projectName: "Training Presentations", date: "3 days ago" },
   ];
 
-  const handleAddProject = (newProject) => {
-    setProjects([newProject, ...projects]);
+  const handleAddClass = (newClass) => {
+    setClasses([newClass, ...classes]);
   };
 
   const handleClassClick = (id) => {
@@ -97,7 +97,7 @@ const Dashboard = () => {
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-2xl font-bold text-gray-800">Welcome back, {user?.first_name}!</h1>
           <button 
-            onClick={() => setIsProjectModalOpen(true)}
+            onClick={() => setIsClassModalOpen(true)}
             className="bg-[#333D79] hover:bg-[#4A5491] text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm"
           >
             <FiPlus size={20} />
@@ -105,11 +105,11 @@ const Dashboard = () => {
           </button>
         </div>
 
-        {/* Project Modal */}
-        <ProjectModal 
-          isOpen={isProjectModalOpen} 
-          onClose={() => setIsProjectModalOpen(false)} 
-          onAddProject={handleAddProject}
+        {/* Class Modal */}
+        <ClassModal 
+          isOpen={isClassModalOpen} 
+          onClose={() => setIsClassModalOpen(false)} 
+          onAddClass={handleAddClass}
         />
 
         {/* Stats Cards */}
@@ -208,7 +208,7 @@ const Dashboard = () => {
                         </div>
                         </td>
                     </tr>
-                    ) : projects.length === 0 ? (
+                    ) : classes.length === 0 ? (
                     <tr>
                         <td colSpan="4" className="px-6 py-12">
                         <div className="flex flex-col items-center justify-center">
@@ -217,7 +217,7 @@ const Dashboard = () => {
                             </div>
                             <p className="text-sm text-gray-500">No classes found.</p>
                             <button 
-                            onClick={() => setIsProjectModalOpen(true)}
+                            onClick={() => setIsClassModalOpen(true)}
                             className="mt-2 text-sm text-[#333D79] hover:text-[#4A5491] font-medium"
                             >
                             Create your first class
@@ -226,11 +226,11 @@ const Dashboard = () => {
                         </td>
                     </tr>
                     ) : (
-                    projects.map((project) => (
+                    classes.map((classItem) => (
                         <tr 
-                        key={project.id} 
+                        key={classItem.id} 
                         className="hover:bg-[#F5F7FB] cursor-pointer transition-colors" 
-                        onClick={() => handleClassClick(project.id)}
+                        onClick={() => handleClassClick(classItem.id)}
                         >
                         <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center">
@@ -238,23 +238,23 @@ const Dashboard = () => {
                                 <MdOutlineClass className="h-5 w-5 text-[#333D79]" />
                             </div>
                             <div className="ml-4">
-                                <div className="text-sm font-medium text-gray-900">{project.name}</div>
+                                <div className="text-sm font-medium text-gray-900">{classItem.name}</div>
                             </div>
                             </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">{project.recordings_count || 0}</div>
+                            <div className="text-sm text-gray-900">{classItem.recordings_count || 0}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-500">{project.last_updated}</div>
+                            <div className="text-sm text-gray-500">{classItem.last_updated}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                             <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                            project.status === 'active' ? 'bg-[#DCE3F9] text-[#333D79]' : 
-                            project.status === 'completed' ? 'bg-[#E0F2ED] text-[#0F766E]' : 
+                            classItem.status === 'active' ? 'bg-[#DCE3F9] text-[#333D79]' : 
+                            classItem.status === 'completed' ? 'bg-[#E0F2ED] text-[#0F766E]' : 
                             'bg-gray-100 text-gray-800'
                             }`}>
-                            {project.status.charAt(0).toUpperCase() + project.status.slice(1)}
+                            {classItem.status.charAt(0).toUpperCase() + classItem.status.slice(1)}
                             </span>
                         </td>
                         </tr>

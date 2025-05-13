@@ -8,7 +8,7 @@ import { AuthProvider } from './auth/AuthContext'
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import './index.css'
 import Dashboard from './components/Dashboard'
-import Projects from './components/Projects'
+import Classes from './components/Classes'
 import Recordings from './components/Recordings'
 import ClassDetails from './components/ClassDetails'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -45,9 +45,9 @@ function App() {
                 <Dashboard />
               </ProtectedRoute>
             } />
-            <Route path="/dashboard/projects" element={
+            <Route path="/dashboard/classes" element={
               <ProtectedRoute>
-                <Projects />
+                <Classes />
               </ProtectedRoute>
             } />
             <Route path="/dashboard/recordings" element={

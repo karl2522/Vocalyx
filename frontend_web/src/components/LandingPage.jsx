@@ -656,7 +656,7 @@ function LandingPage() {
                   alt="About us Header"
                   className="w-full h-[250px] sm:h-[300px] md:h-[400px] object-cover rounded-lg"
               />
-              <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center text-white text-center px-4 rounded-lg">
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-white text-center px-4 rounded-lg">
                 <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold">About Us</h2>
                 <p className="text-xs sm:text-sm md:text-base mt-2 sm:mt-3 max-w-2xl">
                   Our story, our mission, and the people behind Vocalyx.

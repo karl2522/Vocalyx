@@ -30,7 +30,7 @@ const Sidebar = ({ onCollapse }) => {
 
   const navItems = [
     { name: 'Dashboard', icon: <FiHome size={20} />, path: '/dashboard' },
-    { name: 'Classes', icon: <MdOutlineClass size={20} />, path: '/dashboard/projects' },
+    { name: 'Classes', icon: <MdOutlineClass size={20} />, path: '/dashboard/classes' },
     { name: 'Recordings', icon: <MdKeyboardVoice size={20} />, path: '/dashboard/recordings' },
     { name: 'Team', icon: <FiUsers size={20} />, path: '/dashboard/team' },
     { name: 'Settings', icon: <FiSettings size={20} />, path: '/dashboard/settings' },
