@@ -16,7 +16,11 @@ class ExcelViewSet(viewsets.ModelViewSet):
     parser_classes = (MultiPartParser, FormParser, JSONParser)
 
     def get_queryset(self):
-        return ExcelFile.objects.filter(user=self.request.user)
+        queryset = ExcelFile.objects.filter(user=self.request.user)
+        class_id = self.request.query_params.get('class_id', None)
+        if class_id:
+            queryset = queryset.filter(class_ref_id=class_id)
+        return queryset
 
     @extend_schema(
         description='Upload Excel file',
@@ -36,6 +40,16 @@ class ExcelViewSet(viewsets.ModelViewSet):
 
         if not file.name.endswith(('.xlsx', '.xls')):
             return Response({'error': 'File must be an Excel file'}, status=status.HTTP_400_BAD_REQUEST)
+
+        class_id = request.data.get('class_id')
+        if not class_id:
+            return Response({'error': 'class_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            from classes.models import Class
+            class_obj = Class.objects.get(id=class_id, user=request.user)
+        except Class.DoesNotExist:
+            return Response({'error': 'Class not found'}, status=status.HTTP_404_NOT_FOUND)
 
         try:
             df = pd.read_excel(file)
@@ -60,8 +74,10 @@ class ExcelViewSet(viewsets.ModelViewSet):
                         cleaned_record[key] = value
                 records.append(cleaned_record)
 
+            # Updated line to include class_ref
             excel_file = ExcelFile.objects.create(
                 user=request.user,
+                class_ref=class_obj,  # This now references the Class object
                 file_name=file.name,
                 sheet_data=records
             )

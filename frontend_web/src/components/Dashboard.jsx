@@ -58,7 +58,7 @@ const Dashboard = () => {
     },
   ];
 
-  const fetchClasses = async () => {
+ const fetchClasses = async () => {
     try {
         setLoading(true);
         const response = await classService.getClasses();
@@ -67,7 +67,9 @@ const Dashboard = () => {
         console.error('Error fetching classes:', error);
         if (error.response?.status === 401) {
             toast.error('Session expired. Please login again.');
-            navigate('/login');
+            localStorage.removeItem('authToken');
+            window.location.href = '/login';
+            return;
         } else {
             toast.error('Failed to load classes');
         }
