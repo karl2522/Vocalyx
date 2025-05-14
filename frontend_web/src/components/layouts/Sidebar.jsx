@@ -1,9 +1,16 @@
-import { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { FiHome, FiUsers, FiSettings, FiLogOut } from 'react-icons/fi';
-import { MdKeyboardVoice, MdOutlineClass } from 'react-icons/md';
-import { BsChevronLeft, BsChevronRight } from 'react-icons/bs';
 import PropTypes from 'prop-types';
+import { useEffect, useState } from 'react';
+import { FiLogOut } from 'react-icons/fi';
+import { HiOutlineUserGroup } from 'react-icons/hi';
+import {
+  MdChevronLeft,
+  MdChevronRight,
+  MdKeyboardVoice,
+  MdOutlineClass,
+  MdOutlineDashboard,
+  MdOutlineSettings
+} from 'react-icons/md';
+import { Link, useLocation } from 'react-router-dom';
 import LogoutModal from '../modals/LogoutModal';
 
 const Sidebar = ({ onCollapse }) => {
@@ -29,65 +36,87 @@ const Sidebar = ({ onCollapse }) => {
   };
 
   const navItems = [
-    { name: 'Dashboard', icon: <FiHome size={20} />, path: '/dashboard' },
-    { name: 'Classes', icon: <MdOutlineClass size={20} />, path: '/dashboard/classes' },
-    { name: 'Recordings', icon: <MdKeyboardVoice size={20} />, path: '/dashboard/recordings' },
-    { name: 'Team', icon: <FiUsers size={20} />, path: '/dashboard/team' },
-    { name: 'Settings', icon: <FiSettings size={20} />, path: '/dashboard/settings' },
+    { name: 'Dashboard', icon: <MdOutlineDashboard size={22} />, path: '/dashboard' },
+    { name: 'Classes', icon: <MdOutlineClass size={22} />, path: '/dashboard/classes' },
+    { name: 'Recordings', icon: <MdKeyboardVoice size={22} />, path: '/dashboard/recordings' },
+    { name: 'Team', icon: <HiOutlineUserGroup size={22} />, path: '/dashboard/team' },
+    { name: 'Settings', icon: <MdOutlineSettings size={22} />, path: '/dashboard/settings' },
   ];
 
   return (
     <>
       <div 
-        className={`bg-[#333D79] text-white h-screen transition-all duration-300 ease-in-out ${
+        className={`bg-gradient-to-b from-[#2C365E] to-[#333D79] text-white h-screen transition-all duration-300 ease-in-out ${
           collapsed ? 'w-20' : 'w-64'
-        } fixed left-0 top-0 z-50 shadow-lg`}
+        } fixed left-0 top-0 z-50 shadow-xl backdrop-blur-sm`}
       >
-        <div className="flex justify-between items-center p-4 border-b border-[#4A5491]">
+        <div className="flex justify-between items-center p-5">
           {!collapsed && (
             <div className="flex items-center space-x-2">
-              <MdKeyboardVoice size={24} className="text-white" />
-              <h2 className="text-xl font-bold">Vocalyx</h2>
+              <div className="w-8 h-8 rounded-md bg-white bg-opacity-10 flex items-center justify-center backdrop-blur-sm">
+                <MdKeyboardVoice size={20} className="text-white" />
+              </div>
+              <h2 className="text-xl font-bold tracking-wide bg-clip-text text-transparent bg-gradient-to-r from-white to-blue-100">Vocalyx</h2>
             </div>
           )}
-          {collapsed && <MdKeyboardVoice size={24} className="text-white mx-auto" />}
+          {collapsed && (
+            <div className="w-8 h-8 rounded-md bg-white bg-opacity-10 flex items-center justify-center backdrop-blur-sm mx-auto">
+              <MdKeyboardVoice size={20} className="text-white" />
+            </div>
+          )}
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className="p-1.5 rounded-full hover:bg-[#4A5491] transition-all duration-200"
+            className="p-1.5 rounded-full bg-white bg-opacity-5 hover:bg-opacity-15 transition-all duration-200"
           >
-            {collapsed ? <BsChevronRight size={18} /> : <BsChevronLeft size={18} />}
+            {collapsed ? <MdChevronRight size={20} /> : <MdChevronLeft size={20} />}
           </button>
         </div>
 
-        <div className="py-4">
-          <ul className="space-y-1">
-            {navItems.map((item) => (
-              <li key={item.name}>
-                <Link
-                  to={item.path}
-                  className={`flex items-center py-3 px-4 relative ${
-                    location.pathname === item.path
-                      ? 'bg-gradient-to-r from-[#404A8C] to-[#4A5491] text-white font-medium shadow-sm before:absolute before:left-0 before:top-0 before:h-full before:w-1 before:bg-white'
-                      : 'text-gray-100 hover:bg-[#404A8C]'
-                  } ${collapsed ? 'justify-center' : 'space-x-3'} transition-colors duration-200`}
-                >
-                  <span>{item.icon}</span>
-                  {!collapsed && <span>{item.name}</span>}
-                </Link>
-              </li>
-            ))}
+        <div className="py-6 px-2">
+          <ul className="space-y-2">
+            {navItems.map((item) => {
+              const isActive = location.pathname === item.path || 
+                             (item.path !== '/dashboard' && location.pathname.startsWith(item.path));
+              return (
+                <li key={item.name}>
+                  <Link
+                    to={item.path}
+                    className={`flex items-center py-3 px-4 relative rounded-xl ${
+                      isActive
+                        ? 'bg-white bg-opacity-15 text-white font-medium shadow-md before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-2/3 before:w-1 before:bg-white before:rounded-full'
+                        : 'text-gray-100 hover:bg-white hover:bg-opacity-10'
+                    } ${collapsed ? 'justify-center' : 'space-x-3'} transition-all duration-200 group`}
+                  >
+                    <span className={`${isActive ? 'text-white' : 'text-blue-100'} transition-colors group-hover:scale-110 duration-200`}>{item.icon}</span>
+                    {!collapsed && <span className="tracking-wide">{item.name}</span>}
+                    {collapsed && (
+                      <div className={`absolute left-14 bg-[#333D79] text-white px-2 py-1 rounded text-sm whitespace-nowrap opacity-0 -translate-x-3 pointer-events-none group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 z-50 ${isActive ? 'font-medium' : ''}`}>
+                        {item.name}
+                      </div>
+                    )}
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         </div>
 
-        <div className="absolute bottom-0 w-full border-t border-[#4A5491] py-4">
+        <div className="absolute bottom-5 w-full px-2">
           <button
             onClick={handleLogoutClick}
-            className={`flex items-center py-3 px-4 text-gray-100 hover:bg-[#404A8C] w-full ${
+            className={`flex items-center py-3 px-4 rounded-xl text-gray-100 hover:bg-red-500 hover:bg-opacity-20 w-full ${
               collapsed ? 'justify-center' : 'space-x-3'
-            } transition-colors duration-200`}
+            } transition-all duration-200 group relative`}
           >
-            <FiLogOut size={20} />
+            <span className="text-red-200 group-hover:scale-110 transition-transform duration-200">
+              <FiLogOut size={22} />
+            </span>
             {!collapsed && <span>Logout</span>}
+            {collapsed && (
+              <div className="absolute left-14 bg-[#333D79] text-white px-2 py-1 rounded text-sm whitespace-nowrap opacity-0 -translate-x-3 pointer-events-none group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 z-50">
+                Logout
+              </div>
+            )}
           </button>
         </div>
       </div>

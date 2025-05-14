@@ -1,16 +1,15 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { FiUpload, FiFileText, FiDownload, FiFilter, FiX, FiCheckCircle, FiInfo } from 'react-icons/fi';
-import { MdOutlineClass, MdDragIndicator } from 'react-icons/md';
-import { HiSwitchHorizontal } from 'react-icons/hi';
-import { BsFiletypeXlsx, BsFiletypeCsv, BsFileEarmarkSpreadsheet } from 'react-icons/bs';
-import DashboardLayout from './layouts/DashboardLayout';
 import { HotTable } from '@handsontable/react';
-import { registerAllModules } from 'handsontable/registry';
 import 'handsontable/dist/handsontable.full.css';
+import { registerAllModules } from 'handsontable/registry';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { BsFileEarmarkSpreadsheet, BsFiletypeCsv, BsFiletypeXlsx } from 'react-icons/bs';
+import { FiCheckCircle, FiDownload, FiFileText, FiFilter, FiInfo, FiUpload, FiX } from 'react-icons/fi';
+import { HiSwitchHorizontal } from 'react-icons/hi';
+import { MdDragIndicator, MdOutlineClass } from 'react-icons/md';
+import { useNavigate, useParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { classService } from '../services/api';
-import { debounce } from 'lodash';
+import DashboardLayout from './layouts/DashboardLayout';
 
 registerAllModules();
 
@@ -974,16 +973,41 @@ const handleFileSwitch = (file) => {
                       </div>
                     </div>
                   ) : !previewData ? (
-                    <div className="flex-1 flex items-center justify-center">
+                    <div 
+                      className={`border-2 border-dashed rounded-lg p-8 text-center ${
+                        isDragging ? 'border-[#333D79] bg-[#EEF0F8]' : 'border-gray-300'
+                      }`}
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDrop}
+                    >
                       <div className="flex flex-col items-center">
-                        <div className="relative">
-                          <div className="w-12 h-12 border-3 border-[#EEF0F8] border-t-[#333D79] rounded-full animate-spin mb-3"></div>
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <FiFilter className="h-5 w-5 text-[#333D79]" />
+                        <div className={`mb-4 rounded-full bg-[#EEF0F8] p-4 ${isDragging ? 'animate-pulse-custom' : ''}`}>
+                          <MdDragIndicator className="h-12 w-12 text-[#333D79]" />
                           </div>
+                        <h3 className="text-lg font-medium text-gray-700 mb-2">Import Students</h3>
+                        <p className="text-sm text-gray-500 mb-4 max-w-md">
+                          Upload a spreadsheet with your student data to get started
+                        </p>
+                        <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                          <label htmlFor="file-upload-placeholder" className="cursor-pointer">
+                            <div className="bg-[#333D79] hover:bg-[#4A5491] text-white px-5 py-2.5 rounded-lg flex items-center gap-2 transition-colors">
+                              <FiUpload size={18} />
+                              <span>Upload Students</span>
                         </div>
-                        <p className="text-gray-700 font-medium mb-1">Analyzing file data...</p>
-                        <p className="text-sm text-gray-500">Generating preview of your spreadsheet</p>
+                            <input 
+                              id="file-upload-placeholder" 
+                              type="file" 
+                              accept=".xlsx,.xls,.csv" 
+                              className="hidden"
+                              onChange={handleFileInput}
+                            />
+                          </label>
+                        </div>
+                        <div className="text-xs text-gray-500 flex items-center mt-2">
+                          <FiInfo className="mr-1 text-[#333D79]" size={12} />
+                          <span>Supported formats: .xlsx, .xls, .csv</span>
+                        </div>
                       </div>
                     </div>
                   ) : (
@@ -1421,13 +1445,26 @@ const handleFileSwitch = (file) => {
           </div>
         )}
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold text-gray-800">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8 relative overflow-hidden">
+          <div className="absolute -top-20 -right-20 w-40 h-40 bg-blue-50 rounded-full opacity-20 blur-3xl"></div>
+          <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-purple-50 rounded-full opacity-20 blur-3xl"></div>
+          
+          <div className="flex justify-between items-center mb-4 relative z-10">
+            <div className="flex items-center">
+              <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-[#EEF0F8] to-[#DCE3F9] flex items-center justify-center mr-3 shadow-sm">
+                {excelData ? (
+                  <BsFileEarmarkSpreadsheet className="h-5 w-5 text-[#333D79]" />
+                ) : (
+                  <MdOutlineClass className="h-5 w-5 text-[#333D79]" />
+                )}
+              </div>
+              <h2 className="text-lg font-semibold text-gray-800 relative">
               {excelData ? 'Excel Data' : 'Class Data'}
+                <div className="absolute -top-1 -right-4 w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
             </h2>
+            </div>
             {selectedFile && (
-              <div className="text-sm text-gray-500 flex items-center">
+              <div className="text-sm text-gray-500 flex items-center px-3 py-1.5 bg-gray-50 rounded-full border border-gray-100 hover:bg-gray-100 hover:border-gray-200 transition-colors">
                 <FiFileText className="mr-2 text-[#333D79]" />
                 {selectedFile.name}
               </div>
@@ -1435,7 +1472,7 @@ const handleFileSwitch = (file) => {
           </div>
 
           {fileLoading ? (
-            <div className="flex flex-col items-center justify-center py-12">
+            <div className="flex flex-col items-center justify-center py-12 relative z-10">
               <div className="relative">
                 <div className="w-16 h-16 border-4 border-[#EEF0F8] border-t-[#333D79] rounded-full animate-spin mb-3"></div>
                 <div className="absolute inset-0 flex items-center justify-center">
@@ -1445,32 +1482,38 @@ const handleFileSwitch = (file) => {
               <p className="text-gray-700 font-medium mb-1">Processing your file...</p>
               <p className="text-sm text-gray-500">This may take a moment for larger files</p>
               <div className="mt-4 w-64 h-2 bg-gray-200 rounded-full overflow-hidden">
-                <div className="h-full bg-[#333D79] rounded-full transition-all duration-500" 
+                <div className="h-full bg-gradient-to-r from-[#333D79] to-[#4A5491] rounded-full transition-all duration-500" 
                      style={{ width: `${importProgress}%` }}></div>
               </div>
             </div>
           ) : !excelData ? (
             <div 
-              className={`border-2 border-dashed rounded-lg p-8 text-center ${
-                isDragging ? 'border-[#333D79] bg-[#EEF0F8]' : 'border-gray-300'
-              }`}
+              className={`border-2 border-dashed rounded-lg p-8 text-center relative z-10 ${
+                isDragging ? 'border-[#333D79] bg-[#EEF0F8] bg-opacity-30' : 'border-gray-300 bg-gradient-to-b from-gray-50 to-white'
+              } transition-all duration-300 backdrop-blur-sm`}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
             >
+              <div className="absolute top-5 right-10 w-2 h-2 bg-blue-400 rounded-full animate-ping"></div>
+              <div className="absolute bottom-10 left-10 w-3 h-3 bg-purple-400 rounded-full animate-ping" style={{ animationDelay: '1s' }}></div>
+              
               <div className="flex flex-col items-center">
-                <div className={`mb-4 rounded-full bg-[#EEF0F8] p-4 ${isDragging ? 'animate-pulse-custom' : ''}`}>
-                  <MdDragIndicator className="h-12 w-12 text-[#333D79]" />
+                <div className={`mb-4 rounded-full bg-gradient-to-br from-[#333D79] to-[#4A5491] p-4 ${isDragging ? 'animate-pulse-custom transform scale-110' : ''} transition-all duration-300 shadow-md`}>
+                  <MdDragIndicator className="h-12 w-12 text-white" />
                 </div>
-                <h3 className="text-lg font-medium text-gray-700 mb-2">Upload your spreadsheet</h3>
+                <h3 className="text-lg font-medium text-gray-700 mb-2 relative">
+                  Import Students
+                  <div className="absolute -top-1 -right-4 w-1.5 h-1.5 bg-purple-500 rounded-full"></div>
+                </h3>
                 <p className="text-sm text-gray-500 mb-4 max-w-md">
-                  Drag and drop your Excel or CSV file here, or click the button below to browse
+                  Upload a spreadsheet with your student data to get started
                 </p>
                 <div className="flex flex-col sm:flex-row gap-3 mb-4">
                   <label htmlFor="file-upload-placeholder" className="cursor-pointer">
-                    <div className="bg-[#333D79] hover:bg-[#4A5491] text-white px-5 py-2.5 rounded-lg flex items-center gap-2 transition-colors">
-                      <FiUpload size={18} />
-                      <span>Browse Files</span>
+                    <div className="bg-gradient-to-r from-[#333D79] to-[#4A5491] hover:from-[#4A5491] hover:to-[#333D79] text-white px-5 py-2.5 rounded-lg flex items-center gap-2 transition-all duration-300 shadow-sm hover:shadow transform hover:-translate-y-0.5">
+                      <FiUpload size={18} className="transform group-hover:rotate-12 transition-transform" />
+                      <span>Upload Students</span>
                     </div>
                     <input 
                       id="file-upload-placeholder" 
@@ -1481,24 +1524,15 @@ const handleFileSwitch = (file) => {
                     />
                   </label>
                 </div>
-                <div className="grid grid-cols-3 gap-3 text-center mb-2">
-                  <div className="flex flex-col items-center p-3 rounded-lg border border-gray-200">
-                    <BsFiletypeXlsx className="h-7 w-7 text-[#217346] mb-1" />
-                    <span className="text-xs text-gray-600">Excel (.xlsx)</span>
+                <div className="text-xs flex items-center gap-1 mt-2 px-3 py-1.5 bg-white bg-opacity-70 rounded-full shadow-sm backdrop-blur-sm">
+                  <FiInfo className="text-[#333D79]" size={12} />
+                  <span className="text-gray-500">Supported formats: </span>
+                  <span className="font-medium text-[#333D79]">.xlsx</span>
+                  <span className="text-gray-400">|</span>
+                  <span className="font-medium text-[#333D79]">.xls</span>
+                  <span className="text-gray-400">|</span>
+                  <span className="font-medium text-[#333D79]">.csv</span>
                   </div>
-                  <div className="flex flex-col items-center p-3 rounded-lg border border-gray-200">
-                    <BsFiletypeXlsx className="h-7 w-7 text-[#9faf4a] mb-1" />
-                    <span className="text-xs text-gray-600">Excel (.xls)</span>
-                  </div>
-                  <div className="flex flex-col items-center p-3 rounded-lg border border-gray-200">
-                    <BsFiletypeCsv className="h-7 w-7 text-[#333D79] mb-1" />
-                    <span className="text-xs text-gray-600">CSV (.csv)</span>
-                  </div>
-                </div>
-                <div className="text-xs text-gray-500 flex items-center mt-2">
-                  <FiInfo className="mr-1 text-[#333D79]" size={12} />
-                  <span>Max file size: 10MB</span>
-                </div>
               </div>
             </div>
           ) : (
@@ -1597,7 +1631,6 @@ const handleFileSwitch = (file) => {
           )}
         </div>
 
-
         {isSaving && (
             <div className="fixed bottom-4 right-4 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg shadow-lg z-50">
                 <div className="flex items-center gap-2">
@@ -1607,29 +1640,77 @@ const handleFileSwitch = (file) => {
             </div>
         )}
 
-        {!excelData && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <h2 className="text-lg font-semibold text-gray-800 mb-4">Class Information</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-[#F5F7FB] p-4 rounded-lg">
-                <div className="text-sm text-gray-500 mb-1">Status</div>
-                <div className="flex items-center">
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    classData.status === 'Active' ? 'bg-[#DCE3F9] text-[#333D79]' : 
-                    classData.status === 'Completed' ? 'bg-[#E0F2ED] text-[#0F766E]' : 
-                    'bg-gray-100 text-gray-800'
-                  }`}>
-                    {classData.status}
-                  </span>
-                </div>
+        {/* Mobile Recorded Data Section */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 pt-16 mb-8 relative overflow-hidden group">
+          <div className="absolute -top-20 -right-20 w-40 h-40 bg-blue-100 rounded-full opacity-20 blur-3xl"></div>
+          <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-purple-100 rounded-full opacity-20 blur-3xl"></div>
+          <div className="absolute top-12 right-10 w-2 h-2 bg-blue-400 rounded-full animate-ping"></div>
+          <div className="absolute bottom-10 left-10 w-3 h-3 bg-purple-400 rounded-full animate-ping" style={{ animationDelay: '1s' }}></div>
+          <div className="absolute bottom-20 right-20 w-2 h-2 bg-green-400 rounded-full animate-ping" style={{ animationDelay: '1.5s' }}></div>
+          
+          {/* Section Label */}
+          <div className="absolute top-8 left-6 px-4 py-1.5 bg-[#333D79] text-white text-sm font-medium rounded-full shadow-md z-10 flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+              <path d="M8.25 4.5a3.75 3.75 0 117.5 0v8.25a3.75 3.75 0 11-7.5 0V4.5z" />
+              <path d="M6 10.5a.75.75 0 01.75.75v1.5a5.25 5.25 0 1010.5 0v-1.5a.75.75 0 011.5 0v1.5a6.751 6.751 0 01-6 6.709v2.291h3a.75.75 0 010 1.5h-7.5a.75.75 0 010-1.5h3v-2.291a6.751 6.751 0 01-6-6.709v-1.5A.75.75 0 016 10.5z" />
+            </svg>
+            <span>Mobile Recordings</span>
+          </div>
+          
+          <div className="flex flex-col items-center text-center relative z-10">
+            <div className="w-20 h-20 mb-4 bg-gradient-to-br from-[#333D79] to-[#4A5491] rounded-2xl shadow-lg flex items-center justify-center transform rotate-3 relative hover:rotate-0 hover:scale-110 transition-all duration-300 cursor-pointer">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" className="h-10 w-10 animate-pulse-custom">
+                <path d="M12 16a4 4 0 0 0 4-4V6a4 4 0 0 0-8 0v6a4 4 0 0 0 4 4zm0-12a2 2 0 0 1 2 2v5a2 2 0 1 1-4 0V6a2 2 0 0 1 2-2z"/>
+                <path d="M19 12a1 1 0 0 1-2 0 5 5 0 0 0-10 0 1 1 0 0 1-2 0 7 7 0 0 1 14 0z"/>
+                <path d="M12 20a8 8 0 0 1-8-8 1 1 0 0 1 2 0 6 6 0 0 0 12 0 1 1 0 0 1 2 0 8 8 0 0 1-8 8z"/>
+              </svg>
+              <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full animate-pulse"></div>
+              <div className="absolute -top-2 -left-2 w-5 h-5 bg-white bg-opacity-30 rounded-full"></div>
               </div>
-              <div className="bg-[#F5F7FB] p-4 rounded-lg">
-                <div className="text-sm text-gray-500 mb-1">Recordings</div>
-                <div className="text-lg font-medium">{classData.recordings}</div>
+            <h3 className="text-gray-800 font-medium text-lg mb-2 relative">
+              No Recordings Yet
+              <div className="absolute -top-1 -right-4 w-2 h-2 bg-purple-500 rounded-full"></div>
+            </h3>
+            <p className="text-gray-500 text-sm max-w-md mb-6 leading-relaxed">
+              Recordings from mobile devices will appear here once they are uploaded. Use the Vocalyx mobile app to record and sync your classroom sessions.
+            </p>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full max-w-2xl mb-4">
+              <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-100 flex flex-col items-center transform transition-all duration-300 hover:scale-105 hover:shadow-md hover:border-blue-200 cursor-pointer relative group/card">
+                <div className="w-8 h-8 rounded-full bg-[#EEF0F8] flex items-center justify-center mb-2 group-hover/card:bg-gradient-to-r group-hover/card:from-[#EEF0F8] group-hover/card:to-[#DCE3F9] transition-all duration-300">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-[#333D79]" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2H7V7a3 3 0 015.905-.75 1 1 0 001.937-.5A5.002 5.002 0 0010 2z" />
+                  </svg>
+              </div>
+                <p className="text-xs text-gray-600 text-center group-hover/card:text-[#333D79] transition-colors">Record audio with the mobile app</p>
+                <div className="absolute inset-0 bg-blue-50 rounded-lg opacity-0 group-hover/card:opacity-10 transition-opacity duration-300"></div>
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-[#333D79] to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
+            </div>
+              
+              <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-100 flex flex-col items-center transform transition-all duration-300 hover:scale-105 hover:shadow-md hover:border-blue-200 cursor-pointer relative group/card">
+                <div className="w-8 h-8 rounded-full bg-[#EEF0F8] flex items-center justify-center mb-2 group-hover/card:bg-gradient-to-r group-hover/card:from-[#EEF0F8] group-hover/card:to-[#DCE3F9] transition-all duration-300">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-[#333D79]" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+          </div>
+                <p className="text-xs text-gray-600 text-center group-hover/card:text-[#333D79] transition-colors">Sync data automatically to the cloud</p>
+                <div className="absolute inset-0 bg-blue-50 rounded-lg opacity-0 group-hover/card:opacity-10 transition-opacity duration-300"></div>
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-[#333D79] to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
+              </div>
+              
+              <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-100 flex flex-col items-center transform transition-all duration-300 hover:scale-105 hover:shadow-md hover:border-blue-200 cursor-pointer relative group/card">
+                <div className="w-8 h-8 rounded-full bg-[#EEF0F8] flex items-center justify-center mb-2 group-hover/card:bg-gradient-to-r group-hover/card:from-[#EEF0F8] group-hover/card:to-[#DCE3F9] transition-all duration-300">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-[#333D79]" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2h-1V9a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <p className="text-xs text-gray-600 text-center group-hover/card:text-[#333D79] transition-colors">Analyze speech data in the dashboard</p>
+                <div className="absolute inset-0 bg-blue-50 rounded-lg opacity-0 group-hover/card:opacity-10 transition-opacity duration-300"></div>
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-[#333D79] to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300"></div>
               </div>
             </div>
           </div>
-        )}
+        </div>
       </div>
     </DashboardLayout>
   );

@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { FiPlus, FiSearch, FiFilter, FiMoreVertical } from 'react-icons/fi';
+import { useEffect, useState } from 'react';
+import { toast } from 'react-hot-toast';
+import { FiFilter, FiMoreVertical, FiPlus, FiSearch } from 'react-icons/fi';
 import { MdOutlineClass } from 'react-icons/md';
+import { useNavigate } from 'react-router-dom';
+import { classService } from '../services/api';
 import DashboardLayout from "./layouts/DashboardLayout.jsx";
 import ClassModal from './modals/ClassModal';
-import { toast } from 'react-hot-toast';
-import { classService } from '../services/api';
 
 const Classes = () => {
   const navigate = useNavigate();
