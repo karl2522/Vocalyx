@@ -1,14 +1,14 @@
 import PropTypes from 'prop-types';
 import { useState } from 'react';
 import { toast } from 'react-hot-toast';
-import { MdClose, MdOutlineClass } from 'react-icons/md';
+import { MdClose, MdOutlineClass, MdOutlineWatchLater } from 'react-icons/md';
 import { classService } from '../../services/api';
 
-const ClassModal = ({ isOpen, onClose, onAddClass }) => {
+const ClassModal = ({ isOpen, onClose, onAddClass, courseId, courseName }) => {
     const [className, setClassName] = useState('');
-    const [description, setDescription] = useState('');
-    const [semester, setSemester] = useState('');
-    const [academicYear, setAcademicYear] = useState('');
+    const [section, setSection] = useState('');
+    const [studentCount, setStudentCount] = useState('');
+    const [schedule, setSchedule] = useState('');
     const [loading, setLoading] = useState(false);
 
     if (!isOpen) return null;
@@ -20,10 +20,11 @@ const ClassModal = ({ isOpen, onClose, onAddClass }) => {
         try {
             const response = await classService.createClass({
                 name: className,
-                description,
-                semester,
-                academic_year: academicYear,
-                status: 'active'
+                section,
+                student_count: studentCount,
+                schedule,
+                status: 'active',
+                course_id: courseId
             });
 
             if (onAddClass) {
@@ -33,9 +34,9 @@ const ClassModal = ({ isOpen, onClose, onAddClass }) => {
             toast.success('Class created successfully!');
 
             setClassName('');
-            setDescription('');
-            setSemester('');
-            setAcademicYear('');
+            setSection('');
+            setStudentCount('');
+            setSchedule('');
             onClose();
         } catch (error) {
             console.error('Error creating class:', error);
@@ -60,11 +61,11 @@ const ClassModal = ({ isOpen, onClose, onAddClass }) => {
                     <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                         <div className="flex justify-between items-center mb-4">
                             <div className="flex items-center">
-                                <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-[#EEF0F8] sm:mx-0 sm:h-10 sm:w-10">
-                                    <MdOutlineClass className="h-6 w-6 text-[#333D79]" />
+                                <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-gradient-to-br from-[#333D79] to-[#4A5491] sm:mx-0 sm:h-10 sm:w-10">
+                                    <MdOutlineClass className="h-6 w-6 text-white" />
                                 </div>
                                 <h3 className="text-lg leading-6 font-medium text-gray-900 ml-3" id="modal-title">
-                                    Create New Class
+                                    {courseId ? `Add Class to ${courseName || 'Course'}` : 'Create New Class'}
                                 </h3>
                             </div>
                             <button
@@ -84,7 +85,7 @@ const ClassModal = ({ isOpen, onClose, onAddClass }) => {
                                     type="text"
                                     id="className"
                                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#333D79] focus:border-transparent"
-                                    placeholder="Enter class name (e.g. Introduction to Data Science)"
+                                    placeholder="Enter class name"
                                     value={className}
                                     onChange={(e) => setClassName(e.target.value)}
                                     required
@@ -92,56 +93,64 @@ const ClassModal = ({ isOpen, onClose, onAddClass }) => {
                             </div>
 
                             <div className="mb-4">
-                                <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
-                                    Description
+                                <label htmlFor="section" className="block text-sm font-medium text-gray-700 mb-1">
+                                    Section *
                                 </label>
-                                <textarea
-                                    id="description"
-                                    rows="3"
+                                <input
+                                    type="text"
+                                    id="section"
                                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#333D79] focus:border-transparent"
-                                    placeholder="Describe your class content and objectives"
-                                    value={description}
-                                    onChange={(e) => setDescription(e.target.value)}
-                                ></textarea>
+                                    placeholder="e.g. A, B, C"
+                                    value={section}
+                                    onChange={(e) => setSection(e.target.value)}
+                                    required
+                                />
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                                <div>
-                                    <label htmlFor="semester" className="block text-sm font-medium text-gray-700 mb-1">
-                                        Semester
-                                    </label>
-                                    <input
-                                        type="text"
-                                        id="semester"
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#333D79] focus:border-transparent"
-                                        placeholder="e.g. Fall 2023"
-                                        value={semester}
-                                        onChange={(e) => setSemester(e.target.value)}
-                                    />
-                                </div>
+                            <div className="mb-4">
+                                <label htmlFor="studentCount" className="block text-sm font-medium text-gray-700 mb-1">
+                                    Number of Students *
+                                </label>
+                                <input
+                                    type="number"
+                                    id="studentCount"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#333D79] focus:border-transparent"
+                                    placeholder="e.g. 30"
+                                    min="1"
+                                    value={studentCount}
+                                    onChange={(e) => setStudentCount(e.target.value)}
+                                    required
+                                />
+                            </div>
 
-                                <div>
-                                    <label htmlFor="academicYear" className="block text-sm font-medium text-gray-700 mb-1">
-                                        Academic Year
-                                    </label>
+                            <div className="mb-4">
+                                <label htmlFor="schedule" className="block text-sm font-medium text-gray-700 mb-1">
+                                    Schedule *
+                                </label>
+                                <div className="relative">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <MdOutlineWatchLater className="h-5 w-5 text-gray-400" />
+                                    </div>
                                     <input
                                         type="text"
-                                        id="academicYear"
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#333D79] focus:border-transparent"
-                                        placeholder="e.g. 2023-2024"
-                                        value={academicYear}
-                                        onChange={(e) => setAcademicYear(e.target.value)}
+                                        id="schedule"
+                                        className="w-full pl-10 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#333D79] focus:border-transparent"
+                                        placeholder="e.g. M,W,F 1:30 - 3:00PM"
+                                        value={schedule}
+                                        onChange={(e) => setSchedule(e.target.value)}
+                                        required
                                     />
                                 </div>
+                                <p className="mt-1 text-xs text-gray-500">Format: Days, Time Range (e.g. M,W,F 1:30 - 3:00PM)</p>
                             </div>
 
                             <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse mt-4 -mx-6">
                                 <button
                                     type="submit"
                                     disabled={loading}
-                                    className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-[#333D79] text-base font-medium text-white hover:bg-[#4A5491] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#333D79] sm:ml-3 sm:w-auto sm:text-sm transition-colors"
+                                    className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-gradient-to-r from-[#333D79] to-[#4A5491] text-base font-medium text-white hover:from-[#4A5491] hover:to-[#5d6ba9] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#333D79] sm:ml-3 sm:w-auto sm:text-sm transition-all"
                                 >
-                                    {loading ? 'Creating...' : 'Create Class'}
+                                    {loading ? 'Creating...' : courseId ? 'Add Class' : 'Create Class'}
                                 </button>
                                 <button
                                     type="button"
@@ -162,7 +171,9 @@ const ClassModal = ({ isOpen, onClose, onAddClass }) => {
 ClassModal.propTypes = {
     isOpen: PropTypes.bool.isRequired,
     onClose: PropTypes.func.isRequired,
-    onAddClass: PropTypes.func
+    onAddClass: PropTypes.func,
+    courseId: PropTypes.string,
+    courseName: PropTypes.string
 };
 
 export default ClassModal;

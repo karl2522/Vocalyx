@@ -1,19 +1,21 @@
+import { GoogleOAuthProvider } from '@react-oauth/google'
 import { Toaster } from 'react-hot-toast'
-import { Route, BrowserRouter as Router, Routes } from 'react-router-dom'
+import { Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom'
 import './App.css'
+import { AuthProvider } from './auth/AuthContext'
+import ClassDetails from './components/ClassDetails'
+import Classes from './components/Classes'
+import CourseDetail from './components/CourseDetail'
+import Courses from './components/Courses'
+import Dashboard from './components/Dashboard'
 import LandingPage from './components/LandingPage'
 import Login from './components/Login'
-import Signup from './components/Signup'
-import { AuthProvider } from './auth/AuthContext'
-import { GoogleOAuthProvider } from '@react-oauth/google';
-import './index.css'
-import Dashboard from './components/Dashboard'
-import Classes from './components/Classes'
-import Recordings from './components/Recordings'
-import ClassDetails from './components/ClassDetails'
+import Profile from './components/Profile'
 import ProtectedRoute from './components/ProtectedRoute'
 import PublicRoute from './components/PublicRoute'
-import { Navigate } from 'react-router-dom'
+import Recordings from './components/Recordings'
+import Signup from './components/Signup'
+import './index.css'
 
 function App() {
   return (
@@ -45,9 +47,24 @@ function App() {
                 <Dashboard />
               </ProtectedRoute>
             } />
+            <Route path="/dashboard/courses" element={
+              <ProtectedRoute>
+                <Courses />
+              </ProtectedRoute>
+            } />
+            <Route path="/dashboard/course/:id" element={
+              <ProtectedRoute>
+                <CourseDetail />
+              </ProtectedRoute>
+            } />
             <Route path="/dashboard/classes" element={
               <ProtectedRoute>
                 <Classes />
+              </ProtectedRoute>
+            } />
+            <Route path="/dashboard/class/:id" element={
+              <ProtectedRoute>
+                <ClassDetails />
               </ProtectedRoute>
             } />
             <Route path="/dashboard/recordings" element={
@@ -55,9 +72,9 @@ function App() {
                 <Recordings />
               </ProtectedRoute>
             } />
-            <Route path="/dashboard/class/:id" element={
+            <Route path="/dashboard/profile" element={
               <ProtectedRoute>
-                <ClassDetails />
+                <Profile />
               </ProtectedRoute>
             } />
 
