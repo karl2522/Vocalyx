@@ -14,6 +14,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 import PublicRoute from './components/PublicRoute'
 import Recordings from './components/Recordings'
 import Signup from './components/Signup'
+import Schedule from './components/Schedule'
 import ToastDemo from './components/ToastDemo'
 import './index.css'
 
@@ -105,6 +106,11 @@ function App() {
             <Route path="/dashboard/toast-demo" element={
               <ProtectedRoute>
                 <ToastDemo />
+              </ProtectedRoute>
+            } />
+            <Route path="/dashboard/schedule" element={
+              <ProtectedRoute>
+                <Schedule />
               </ProtectedRoute>
             } />
 

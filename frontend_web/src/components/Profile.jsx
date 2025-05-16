@@ -5,6 +5,8 @@ import { MdOutlineAlternateEmail, MdOutlineEmail, MdOutlineSchool } from 'react-
 import { RiGraduationCapLine, RiUserSettingsLine } from 'react-icons/ri';
 import { useAuth } from '../auth/AuthContext';
 import DashboardLayout from './layouts/DashboardLayout';
+import { userService } from '../services/api';
+import { showToast } from '../utils/toast';
 
 // Custom animation styles
 const profileStyles = `
@@ -54,12 +56,13 @@ const Profile = () => {
     first_name: '',
     last_name: '',
     email: '',
-    institution: '',
-    position: '',
+    institution: 'Cebu Institute of Technology - University', // Default value
+    position: 'Teacher/Instructor', // Default value
     bio: '',
   });
   const [loadingImage, setLoadingImage] = useState(false);
   const [activeTab, setActiveTab] = useState('profile');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -67,8 +70,8 @@ const Profile = () => {
         first_name: user.first_name || '',
         last_name: user.last_name || '',
         email: user.email || '',
-        institution: user.institution || '',
-        position: user.position || '',
+        institution: user.institution || 'Cebu Institute of Technology - University',
+        position: user.position || 'Teacher/Instructor',
         bio: user.bio || '',
       });
     }
@@ -84,26 +87,29 @@ const Profile = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setIsSubmitting(true);
     
     try {
-      // In a real implementation, this would make an API call to update the user profile
-      // For demonstration, we'll just update the local state
-      
-      // Mock successful update
-      const updatedUser = {
-        ...user,
-        ...formData
-      };
+      const response = await userService.updateProfile({
+        first_name: formData.first_name,
+        last_name: formData.last_name,
+        institution: formData.institution,
+        position: formData.position,
+        bio: formData.bio
+      });
       
       // Update local storage and context
+      const updatedUser = response.data.user;
       localStorage.setItem('user', JSON.stringify(updatedUser));
       setUser(updatedUser);
       
       setIsEditing(false);
-      toast.success('Profile updated successfully');
+      showToast.success('Profile updated successfully');
     } catch (error) {
       console.error('Error updating profile:', error);
-      toast.error('Failed to update profile');
+      showToast.error('Failed to update profile');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -113,13 +119,13 @@ const Profile = () => {
 
     // Check file type
     if (!file.type.match('image.*')) {
-      toast.error('Please select an image file');
+      showToast.error('Please select an image file');
       return;
     }
 
     // Check file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
-      toast.error('Image size should be less than 5MB');
+      showToast.error('Image size should be less than 5MB');
       return;
     }
 
@@ -127,25 +133,31 @@ const Profile = () => {
 
     // Create a reader to preview the image
     const reader = new FileReader();
-    reader.onload = () => {
-      // In a real implementation, this would upload the file to a server
-      // For demonstration, we'll just update the local state with the data URL
-      
-      const updatedUser = {
-        ...user,
-        profile_picture: reader.result
-      };
-      
-      // Update local storage and context
-      localStorage.setItem('user', JSON.stringify(updatedUser));
-      setUser(updatedUser);
-      setLoadingImage(false);
-      toast.success('Profile picture updated');
+    reader.onload = async () => {
+      try {
+        // In a real implementation, we would upload to server
+        // For now we'll just update the local data
+        
+        const updatedUser = {
+          ...user,
+          profile_picture: reader.result
+        };
+        
+        // Update local storage and context
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        setUser(updatedUser);
+        showToast.success('Profile picture updated');
+      } catch (error) {
+        console.error('Error updating profile picture:', error);
+        showToast.error('Failed to update profile picture');
+      } finally {
+        setLoadingImage(false);
+      }
     };
 
     reader.onerror = () => {
       setLoadingImage(false);
-      toast.error('Failed to read file');
+      showToast.error('Failed to read file');
     };
 
     reader.readAsDataURL(file);
@@ -208,25 +220,21 @@ const Profile = () => {
                     <span className="text-white/90">{user?.email}</span>
                   </div>
                   
-                  {user?.institution && (
-                    <div className="flex items-center gap-2">
-                      <div className="hidden md:block text-white/50">•</div>
-                      <MdOutlineSchool className="text-white/70" />
-                      <span className="text-white/90">{user.institution}</span>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2">
+                    <div className="hidden md:block text-white/50">•</div>
+                    <MdOutlineSchool className="text-white/70" />
+                    <span className="text-white/90">{formData.institution}</span>
+                  </div>
                   
-                  {user?.position && (
-                    <div className="flex items-center gap-2">
-                      <div className="hidden md:block text-white/50">•</div>
-                      <RiGraduationCapLine className="text-white/70" />
-                      <span className="text-white/90">{user.position}</span>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2">
+                    <div className="hidden md:block text-white/50">•</div>
+                    <RiGraduationCapLine className="text-white/70" />
+                    <span className="text-white/90">{formData.position}</span>
+                  </div>
                 </div>
                 
-                {user?.bio && (
-                  <p className="text-white/80 max-w-2xl">{user.bio}</p>
+                {formData.bio && (
+                  <p className="text-white/80 max-w-2xl">{formData.bio}</p>
                 )}
               </div>
               
@@ -389,16 +397,27 @@ const Profile = () => {
                           type="button"
                           onClick={() => setIsEditing(false)}
                           className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg mr-3 hover:bg-gray-50 transition-colors"
+                          disabled={isSubmitting}
                         >
                           Cancel
                         </button>
                         
                         <button
                           type="submit"
-                          className="px-6 py-2.5 bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white rounded-lg hover:from-[#4A5491] hover:to-[#5D69A5] transition-all shadow-md hover:shadow-lg flex items-center gap-2"
+                          className={`px-6 py-2.5 bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white rounded-lg hover:from-[#4A5491] hover:to-[#5D69A5] transition-all shadow-md hover:shadow-lg flex items-center gap-2 ${isSubmitting ? 'opacity-75' : ''}`}
+                          disabled={isSubmitting}
                         >
-                          <FiSave size={18} />
-                          <span>Save Changes</span>
+                          {isSubmitting ? (
+                            <>
+                              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                              <span>Saving...</span>
+                            </>
+                          ) : (
+                            <>
+                              <FiSave size={18} />
+                              <span>Save Changes</span>
+                            </>
+                          )}
                         </button>
                       </div>
                     </form>
@@ -407,33 +426,33 @@ const Profile = () => {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                         <div>
                           <h3 className="text-sm font-medium text-gray-500 mb-1">First Name</h3>
-                          <p className="text-gray-800">{user?.first_name || '-'}</p>
+                          <p className="text-gray-800">{formData.first_name || '-'}</p>
                         </div>
                         
                         <div>
                           <h3 className="text-sm font-medium text-gray-500 mb-1">Last Name</h3>
-                          <p className="text-gray-800">{user?.last_name || '-'}</p>
+                          <p className="text-gray-800">{formData.last_name || '-'}</p>
                         </div>
                         
                         <div>
                           <h3 className="text-sm font-medium text-gray-500 mb-1">Email</h3>
-                          <p className="text-gray-800">{user?.email || '-'}</p>
+                          <p className="text-gray-800">{formData.email || '-'}</p>
                         </div>
                         
                         <div>
                           <h3 className="text-sm font-medium text-gray-500 mb-1">Institution</h3>
-                          <p className="text-gray-800">{user?.institution || '-'}</p>
+                          <p className="text-gray-800">{formData.institution || '-'}</p>
                         </div>
                         
                         <div>
                           <h3 className="text-sm font-medium text-gray-500 mb-1">Position</h3>
-                          <p className="text-gray-800">{user?.position || '-'}</p>
+                          <p className="text-gray-800">{formData.position || '-'}</p>
                         </div>
                       </div>
                       
                       <div className="mb-4">
                         <h3 className="text-sm font-medium text-gray-500 mb-1">Bio</h3>
-                        <p className="text-gray-800">{user?.bio || 'No bio provided yet.'}</p>
+                        <p className="text-gray-800">{formData.bio || 'No bio provided yet.'}</p>
                       </div>
                       
                       <div className="pt-4 border-t border-gray-100">
@@ -457,7 +476,7 @@ const Profile = () => {
                     <div>
                       <p className="text-[#333D79] font-medium mb-1">Account Information</p>
                       <p className="text-gray-600 text-sm">
-                        You signed up using {user?.has_google ? 'Google' : user?.has_microsoft ? 'Microsoft' : 'Email'} authentication. 
+                        You signed up using {user?.google_id ? 'Google' : user?.microsoft_id ? 'Microsoft' : 'Email'} authentication. 
                         Some account settings may be managed through your authentication provider.
                       </p>
                     </div>
@@ -493,17 +512,17 @@ const Profile = () => {
                           <div>
                             <p className="text-gray-800 font-medium">Google</p>
                             <p className="text-xs text-gray-500">
-                              {user?.has_google ? 'Connected' : 'Not connected'}
+                              {user?.google_id ? 'Connected' : 'Not connected'}
                             </p>
                           </div>
                         </div>
                         
                         <button className={`px-3 py-1.5 text-xs rounded-lg ${
-                          user?.has_google 
+                          user?.google_id 
                             ? 'bg-red-50 text-red-600 hover:bg-red-100'
                             : 'bg-[#EEF0F8] text-[#333D79] hover:bg-[#DCE3F9]'
                         } transition-colors`}>
-                          {user?.has_google ? 'Disconnect' : 'Connect'}
+                          {user?.google_id ? 'Disconnect' : 'Connect'}
                         </button>
                       </div>
                       
@@ -515,17 +534,17 @@ const Profile = () => {
                           <div>
                             <p className="text-gray-800 font-medium">Microsoft</p>
                             <p className="text-xs text-gray-500">
-                              {user?.has_microsoft ? 'Connected' : 'Not connected'}
+                              {user?.microsoft_id ? 'Connected' : 'Not connected'}
                             </p>
                           </div>
                         </div>
                         
                         <button className={`px-3 py-1.5 text-xs rounded-lg ${
-                          user?.has_microsoft 
+                          user?.microsoft_id 
                             ? 'bg-red-50 text-red-600 hover:bg-red-100'
                             : 'bg-[#EEF0F8] text-[#333D79] hover:bg-[#DCE3F9]'
                         } transition-colors`}>
-                          {user?.has_microsoft ? 'Disconnect' : 'Connect'}
+                          {user?.microsoft_id ? 'Disconnect' : 'Connect'}
                         </button>
                       </div>
                     </div>
@@ -540,4 +559,4 @@ const Profile = () => {
   );
 };
 
-export default Profile; 
+export default Profile;

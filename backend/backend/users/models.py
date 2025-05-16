@@ -2,6 +2,7 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.utils import timezone
 
+
 class CustomUser(AbstractUser):
     email = models.EmailField(unique=True)
     first_name = models.CharField(max_length=150)
@@ -13,6 +14,9 @@ class CustomUser(AbstractUser):
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
     microsoft_id = models.CharField(max_length=255, null=True, blank=True)
+    institution = models.CharField(max_length=255, default="Cebu Institute of Technology - University")
+    position = models.CharField(max_length=255, default="Teacher/Instructor")
+    bio = models.TextField(blank=True, null=True)
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username', 'first_name', 'last_name']
@@ -26,3 +30,11 @@ class CustomUser(AbstractUser):
     @property
     def full_name(self):
         return f'{self.first_name} {self.last_name}'
+
+    @property
+    def has_google(self):
+        return self.google_id is not None and self.google_id != ''
+
+    @property
+    def has_microsoft(self):
+        return self.microsoft_id is not None and self.microsoft_id != ''

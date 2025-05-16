@@ -210,19 +210,20 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 
 
 DATABASES = {
-    'default': dj_database_url.config(
-        default=os.getenv('DATABASE_URL',
-            'postgres://neondb_owner:npg_BC0EMfk4VXAL@ep-twilight-hat-a1o7vy4b-pooler.ap-southeast-1.aws.neon.tech/neondb'
-        ),
-        conn_max_age=600,
-        ssl_require=True
-    )
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.getenv('DB_NAME'),
+        'USER': os.getenv('DB_USER'),
+        'PASSWORD': os.getenv('DB_PASSWORD'),
+        'HOST': os.getenv('DB_HOST'),
+        'PORT': os.getenv('DB_PORT'),
+    }
 }
 
-SECURE_SSL_REDIRECT = not DEBUG
+SECURE_SSL_REDIRECT = False if DEBUG else True
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
+SESSION_COOKIE_SECURE = False if DEBUG else True
+CSRF_COOKIE_SECURE = False if DEBUG else True
 
 CELERY_BEAT_SCHEDULE = {
     'cleanup-expired-tokens': {

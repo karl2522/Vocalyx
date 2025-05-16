@@ -1,7 +1,7 @@
 import { useMsal } from "@azure/msal-react";
 import * as Checkbox from "@radix-ui/react-checkbox";
 import { GoogleLogin } from '@react-oauth/google';
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { FaCheck, FaEnvelope, FaLock } from "react-icons/fa";
 import { FcGoogle } from "react-icons/fc";
 import { useNavigate } from "react-router-dom";
@@ -9,11 +9,13 @@ import { useAuth } from "../auth/AuthContext";
 import { login } from "../services/api";
 import { microsoft } from "../utils";
 import { showToast } from "../utils/toast.jsx";
+import LogoutReasonModal from "./modals/LogoutReasonModal.jsx";
+import SessionTimeoutModal from "./modals/SessionTimeoutModal.jsx";
 
 function Login() {
     const { instance } = useMsal();
     const navigate = useNavigate();
-    const { googleLogin, setUser } = useAuth();
+    const { googleLogin, setUser, showSessionTimeoutModal, handleStayLoggedIn, handleLogout } = useAuth();
     const [formData, setFormData] = useState({
       email: "",
       password: "",
@@ -28,6 +30,18 @@ function Login() {
         [id]: value
       }));
     };
+
+    const [showLogoutModal, setShowLogoutModal] = useState(false);
+    const [logoutReason, setLogoutReason] = useState(null);
+
+     useEffect(() => {
+    const reason = localStorage.getItem('logout_reason');
+    if (reason) {
+      setLogoutReason(reason);
+      setShowLogoutModal(true);
+      localStorage.removeItem('logout_reason');
+    }
+  }, []);
 
     const handleGoogleLogin = async (credentialResponse) => {
       try {
@@ -310,6 +324,18 @@ function Login() {
           </div>
         </div>
       </div>
+
+       <SessionTimeoutModal
+        isOpen={showSessionTimeoutModal}
+        onStayLoggedIn={handleStayLoggedIn}
+        onLogout={() => handleLogout('session_expired')}
+      />
+
+       <LogoutReasonModal
+        isOpen={showLogoutModal}
+        onClose={() => setShowLogoutModal(false)}
+        reason={logoutReason}
+      />
     </div>
   );
 }

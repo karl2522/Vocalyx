@@ -4,7 +4,7 @@ import { MdOutlineClass, MdOutlinePublish, MdOutlineSchool } from 'react-icons/m
 import { RiBookOpenLine, RiSoundModuleLine } from 'react-icons/ri';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
-import { classService } from '../services/api';
+import { courseService } from '../services/api.js';
 import { showToast } from '../utils/toast.jsx';
 import DashboardLayout from './layouts/DashboardLayout';
 import CourseModal from './modals/CourseModal';
@@ -144,10 +144,8 @@ const Dashboard = () => {
 
     fetchCourses();
 
-    // Check if notification has been shown before
     const hasShownNotification = localStorage.getItem('hasShownNotification');
     
-    // Only show notification if it hasn't been shown before
     if (!hasShownNotification) {
       const timer = setTimeout(() => {
         showToast.notification(
@@ -155,7 +153,6 @@ const Dashboard = () => {
           'New Notification Feature',
           { duration: 5000, position: 'bottom-right' }
         );
-        // Mark notification as shown
         localStorage.setItem('hasShownNotification', 'true');
       }, 2000);
       
@@ -232,8 +229,7 @@ const Dashboard = () => {
   const fetchCourses = async () => {
     try {
       setLoading(true);
-      // Using the existing classes API endpoint for now
-      const response = await classService.getClasses();
+      const response = await courseService.getCourses();
       setCourses(response.data);
     } catch (error) {
       console.error('Error fetching courses:', error);

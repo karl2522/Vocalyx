@@ -31,7 +31,43 @@ api.interceptors.response.use(
     (response) => {
         return response;
     },
-    (error) => {
+    async (error) => {
+        // Handle 401 errors for token refresh
+        const originalRequest = error.config;
+        
+        // If error is 401 (Unauthorized) and we haven't tried refreshing yet
+        if (error.response?.status === 401 && !originalRequest._retry) {
+            originalRequest._retry = true;
+            
+            try {
+                const refreshTokenStr = localStorage.getItem('refreshToken');
+                if (refreshTokenStr) {
+                    // Try to refresh the token
+                    const response = await refreshToken(refreshTokenStr);
+                    
+                    if (response && response.access) {
+                        // Update the token in localStorage
+                        localStorage.setItem('authToken', response.access);
+                        
+                        // Update the authorization header
+                        originalRequest.headers.Authorization = `Bearer ${response.access}`;
+                        api.defaults.headers.common['Authorization'] = `Bearer ${response.access}`;
+                        
+                        // Retry the original request
+                        return api(originalRequest);
+                    }
+                }
+            } catch (refreshError) {
+                console.error('Token refresh failed:', refreshError);
+                // Set logout reason
+                localStorage.setItem('logout_reason', 'session_expired');
+                // Clear auth data
+                localStorage.removeItem('authToken');
+                localStorage.removeItem('refreshToken');
+                localStorage.removeItem('user');
+            }
+        }
+        
         console.error('Response error:', error);
         return Promise.reject(error);
     }
@@ -117,6 +153,25 @@ export const logout = async () => {
     }
 };
 
+// Add refresh token function
+export const refreshToken = async (refreshTokenStr) => {
+    try {
+        const response = await api.post('/refresh-token/', {
+            refresh: refreshTokenStr
+        });
+        return response.data;
+    } catch (error) {
+        console.error('Refresh token error:', error);
+        if (error.response) {
+            throw error.response.data;
+        } else if (error.request) {
+            throw new Error('No response from server');
+        } else {
+            throw new Error('Error setting up refresh token request');
+        }
+    }
+};
+
 export const classService = {
     getClasses: () => api.get('/classes/'),
     createClass: (classData) => api.post('/classes/', classData),
@@ -147,5 +202,26 @@ export const classService = {
     downloadExcel: (fileId) => api.get(`/excel/${fileId}/download/`),
 };
 
+export const courseService = {
+    getCourses: () => api.get('/courses/'),
+    createCourse: (courseData) => api.post('/courses/', courseData),
+    getCourse: (id) => api.get(`/courses/${id}/`),
+    updateCourse: (id, courseData) => api.patch(`/courses/${id}/`, courseData),
+    deleteCourse: (id) => api.delete(`/courses/${id}/`),
+    getCourseClasses: (courseId) => api.get(`/classes/?course_id=${courseId}`),
+};
+
+export const userService = {
+    updateProfile: (userData) => api.put('/update-profile/', userData),
+    uploadProfilePicture: (file) => {
+        const formData = new FormData();
+        formData.append('profile_picture', file);
+        return api.post('/upload-profile-picture/', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
+    },
+};
 
 export default api;

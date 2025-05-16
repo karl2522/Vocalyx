@@ -1,6 +1,6 @@
 import PropTypes from 'prop-types';
 import { useEffect, useState } from 'react';
-import { FiBell, FiLogOut } from 'react-icons/fi';
+import { FiBell, FiLogOut, FiCalendar } from 'react-icons/fi'; 
 import { HiOutlineUserGroup } from 'react-icons/hi';
 import {
     MdChevronLeft,
@@ -16,7 +16,6 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import LogoutModal from '../modals/LogoutModal';
 
-// Add custom animation styles
 const sidebarStyles = `
   @keyframes pulse-light {
     0% { opacity: 0.8; }
@@ -82,6 +81,11 @@ const Sidebar = ({ onCollapse }) => {
       name: 'Courses', 
       icon: <RiBookOpenLine size={22} />, 
       path: '/dashboard/courses' 
+    },
+    { 
+      name: 'Schedule', 
+      icon: <FiCalendar size={22} />, 
+      path: '/dashboard/schedule' 
     },
     { 
       name: 'Recordings', 
@@ -202,4 +206,4 @@ Sidebar.propTypes = {
   onCollapse: PropTypes.func
 };
 
-export default Sidebar; 
+export default Sidebar;

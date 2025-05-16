@@ -1,46 +1,99 @@
 import PropTypes from 'prop-types';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MdClose, MdOutlineClass, MdOutlineWatchLater } from 'react-icons/md';
 import { classService } from '../../services/api';
 import { showToast } from '../../utils/toast.jsx';
 
-const ClassModal = ({ isOpen, onClose, onAddClass, courseId, courseName }) => {
+const ClassModal = ({ isOpen, onClose, onAddClass, onUpdateClass, courseId, courseName, isEditMode, currentClass }) => {
     const [className, setClassName] = useState('');
     const [section, setSection] = useState('');
     const [studentCount, setStudentCount] = useState('');
     const [schedule, setSchedule] = useState('');
+    const [status, setStatus] = useState('active');
     const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (isEditMode && currentClass) {
+            setClassName(currentClass.name || '');
+            setSection(currentClass.section || '');
+            setStudentCount(currentClass.student_count || '');
+            setSchedule(currentClass.schedule || '');
+            setStatus(currentClass.status || 'active');
+        } else {
+            resetForm();
+        }
+    }, [isEditMode, currentClass, isOpen]);
+
+    const resetForm = () => {
+        setClassName('');
+        setSection('');
+        setStudentCount('');
+        setSchedule('');
+        setStatus('active');
+    };
 
     if (!isOpen) return null;
 
+    const validateForm = () => {
+        if (!className) {
+            showToast.error('Class name is required');
+            return false;
+        }
+        if (!section) {
+            showToast.error('Section is required');
+            return false;
+        }
+        if (!studentCount) {
+            showToast.error('Number of students is required');
+            return false;
+        }
+        if (parseInt(studentCount) < 1) {
+            showToast.error('Number of students must be at least 1');
+            return false;
+        }
+        if (!schedule) {
+            showToast.error('Schedule is required');
+            return false;
+        }
+        return true;
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
+        
+        if (!validateForm()) return;
+        
         setLoading(true);
 
-        try {
-            const response = await classService.createClass({
-                name: className,
-                section,
-                student_count: studentCount,
-                schedule,
-                status: 'active',
-                course_id: courseId
-            });
+        const classData = {
+            name: className,
+            section,
+            student_count: studentCount,
+            schedule,
+            status,
+            ...(courseId && !isEditMode ? { course_id: courseId } : {})
+        };
 
-            if (onAddClass) {
-                onAddClass(response.data);
+        try {
+            if (isEditMode) {
+                const response = await classService.updateClass(currentClass.id, classData);
+                if (onUpdateClass) {
+                    onUpdateClass(response.data);
+                }
+                showToast.success('Class updated successfully!');
+            } else {
+                const response = await classService.createClass(classData);
+                if (onAddClass) {
+                    onAddClass(response.data);
+                }
+                showToast.success('Class created successfully!', 'New Class Added');
             }
 
-            showToast.success('Class created successfully!', 'New Class Added');
-
-            setClassName('');
-            setSection('');
-            setStudentCount('');
-            setSchedule('');
+            resetForm();
             onClose();
         } catch (error) {
-            console.error('Error creating class:', error);
-            showToast.error(error.response?.data?.message || 'Failed to create class');
+            console.error('Error saving class:', error);
+            showToast.error(error.response?.data?.message || `Failed to ${isEditMode ? 'update' : 'create'} class`);
         } finally {
             setLoading(false);
         }
@@ -65,7 +118,7 @@ const ClassModal = ({ isOpen, onClose, onAddClass, courseId, courseName }) => {
                                     <MdOutlineClass className="h-6 w-6 text-white" />
                                 </div>
                                 <h3 className="text-lg leading-6 font-medium text-gray-900 ml-3" id="modal-title">
-                                    {courseId ? `Add Class to ${courseName || 'Course'}` : 'Create New Class'}
+                                    {isEditMode ? 'Edit Class' : courseId ? `Add Class to ${courseName || 'Course'}` : 'Create New Class'}
                                 </h3>
                             </div>
                             <button
@@ -144,13 +197,31 @@ const ClassModal = ({ isOpen, onClose, onAddClass, courseId, courseName }) => {
                                 <p className="mt-1 text-xs text-gray-500">Format: Days, Time Range (e.g. M,W,F 1:30 - 3:00PM)</p>
                             </div>
 
+                            {isEditMode && (
+                                <div className="mb-4">
+                                    <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">
+                                        Status
+                                    </label>
+                                    <select
+                                        id="status"
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#333D79] focus:border-transparent"
+                                        value={status}
+                                        onChange={(e) => setStatus(e.target.value)}
+                                    >
+                                        <option value="active">Active</option>
+                                        <option value="completed">Completed</option>
+                                        <option value="archived">Archived</option>
+                                    </select>
+                                </div>
+                            )}
+
                             <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse mt-4 -mx-6">
                                 <button
                                     type="submit"
                                     disabled={loading}
                                     className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-gradient-to-r from-[#333D79] to-[#4A5491] text-base font-medium text-white hover:from-[#4A5491] hover:to-[#5d6ba9] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#333D79] sm:ml-3 sm:w-auto sm:text-sm transition-all"
                                 >
-                                    {loading ? 'Creating...' : courseId ? 'Add Class' : 'Create Class'}
+                                    {loading ? (isEditMode ? 'Updating...' : 'Creating...') : (isEditMode ? 'Update Class' : courseId ? 'Add Class' : 'Create Class')}
                                 </button>
                                 <button
                                     type="button"
@@ -172,8 +243,16 @@ ClassModal.propTypes = {
     isOpen: PropTypes.bool.isRequired,
     onClose: PropTypes.func.isRequired,
     onAddClass: PropTypes.func,
+    onUpdateClass: PropTypes.func,
     courseId: PropTypes.string,
-    courseName: PropTypes.string
+    courseName: PropTypes.string,
+    isEditMode: PropTypes.bool,
+    currentClass: PropTypes.object
+};
+
+ClassModal.defaultProps = {
+    isEditMode: false,
+    currentClass: null
 };
 
 export default ClassModal;

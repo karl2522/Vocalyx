@@ -3,6 +3,9 @@ import { MsalProvider } from "@azure/msal-react";
 import PropTypes from 'prop-types';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { clearAuthState } from '../utils/auth';
+import { showToast } from '../utils/toast';
+import sessionTimer from '../utils/sessiontimer';
+import { refreshToken } from '../services/api';
 
 // Environment variables
 const REDIRECT_URI = import.meta.env.NODE_ENV === 'production' 
@@ -33,6 +36,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [initialized, setInitialized] = useState(false);
+  const [showSessionTimeoutModal, setShowSessionTimeoutModal] = useState(false);
 
   useEffect(() => {
     const initializeMsal = async () => {
@@ -57,6 +61,9 @@ export const AuthProvider = ({ children }) => {
         try {
           const user = JSON.parse(userData);
           setUser(user);
+          
+          // Start session timer when user is authenticated
+          startSessionTimer();
         } catch (error) {
           console.error('Error parsing user data:', error);
           localStorage.removeItem('authToken');
@@ -71,6 +78,87 @@ export const AuthProvider = ({ children }) => {
   
     checkAuth();
   }, [initialized]);
+
+  // Set up activity listeners to refresh session timer
+  useEffect(() => {
+    if (user) {
+      const events = ['mousedown', 'keydown', 'touchstart', 'scroll'];
+      const activityHandler = () => sessionTimer.resetTimersOnActivity();
+      
+      events.forEach(event => {
+        window.addEventListener(event, activityHandler);
+      });
+      
+      return () => {
+        events.forEach(event => {
+          window.removeEventListener(event, activityHandler);
+        });
+      };
+    }
+  }, [user]);
+
+  const startSessionTimer = () => {
+    sessionTimer.start(
+      // Logout callback
+      () => {
+        handleLogout('session_expired');
+      },
+      // Warning callback (5 minutes before)
+      () => {
+        setShowSessionTimeoutModal(true);
+      }
+    );
+  };
+
+  const handleLogout = (reason = 'manual_logout') => {
+    // Clear session timer
+    sessionTimer.clear();
+    
+    // Clear auth data
+    clearAuthState();
+    
+    // Set logout reason
+    if (reason !== 'manual_logout') {
+      localStorage.setItem('logout_reason', reason);
+    } else {
+      localStorage.removeItem('logout_reason');
+    }
+    
+    // Clear user state
+    setUser(null);
+    
+    // Close modal if open
+    setShowSessionTimeoutModal(false);
+  };
+
+  const handleStayLoggedIn = async () => {
+    try {
+      setShowSessionTimeoutModal(false);
+      
+      // Try to refresh the token
+      const refreshTokenStr = localStorage.getItem('refreshToken');
+      if (refreshTokenStr) {
+        const response = await refreshToken(refreshTokenStr);
+        
+        if (response && response.access) {
+          localStorage.setItem('authToken', response.access);
+          
+          // Reset session timer
+          sessionTimer.clear();
+          startSessionTimer();
+          
+          showToast.success('Session extended successfully');
+          return;
+        }
+      }
+      
+      // If refresh token failed, logout
+      handleLogout('session_expired');
+    } catch (error) {
+      console.error('Error refreshing token:', error);
+      handleLogout('session_expired');
+    }
+  };
 
   const handleAuthResponse = async (token) => {
     try {
@@ -95,6 +183,10 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem('refreshToken', data.refresh);
         localStorage.setItem('user', JSON.stringify(data.user));
         setUser(data.user);
+        
+        // Start session timer when user logs in
+        startSessionTimer();
+        
         return data;
       } else {
         throw new Error(data.error || 'Authentication failed');
@@ -130,8 +222,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
-    clearAuthState();
-    setUser(null);
+    handleLogout('manual_logout');
   };
 
   return (
@@ -143,7 +234,10 @@ export const AuthProvider = ({ children }) => {
           googleLogin, 
           microsoftLogin, 
           logout,
-          setUser
+          setUser,
+          showSessionTimeoutModal,
+          handleStayLoggedIn,
+          handleLogout
         }}
       >
         {children}

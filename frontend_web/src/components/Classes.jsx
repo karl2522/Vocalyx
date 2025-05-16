@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
-import { FiFilter, FiMoreVertical, FiPlus, FiSearch } from 'react-icons/fi';
-import { MdOutlineClass } from 'react-icons/md';
+import { useEffect, useState, useRef } from 'react';
+import { FiEdit, FiFilter, FiMoreVertical, FiPlus, FiSearch, FiTrash2 } from 'react-icons/fi';
+import { MdArchive, MdOutlineClass } from 'react-icons/md';
 import { useNavigate } from 'react-router-dom';
 import { classService } from '../services/api';
 import { showToast } from '../utils/toast.jsx';
@@ -13,11 +13,26 @@ const Classes = () => {
   const [filter, setFilter] = useState('all');
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [isClassModalOpen, setIsClassModalOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [currentClass, setCurrentClass] = useState(null);
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [activeDropdown, setActiveDropdown] = useState(null);
+  const dropdownRef = useRef(null);
 
   useEffect(() => {
     fetchClasses();
+    
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setActiveDropdown(null);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, []);
 
   const fetchClasses = async () => {
@@ -42,13 +57,64 @@ const Classes = () => {
     setClasses([newClass, ...classes]);
   };
 
-  // Filter classes based on search term and filter selection
+  const handleEditClass = (classItem) => {
+    setCurrentClass(classItem);
+    setIsEditMode(true);
+    setIsClassModalOpen(true);
+    setActiveDropdown(null);
+  };
+
+  const handleUpdateClass = (updatedClass) => {
+    setClasses(classes.map(c => 
+      c.id === updatedClass.id ? updatedClass : c
+    ));
+  };
+
+  const handleUpdateStatus = async (classId, newStatus) => {
+    try {
+      const classToUpdate = classes.find(c => c.id === classId);
+      if (!classToUpdate) return;
+      
+      await classService.updateClass(classId, { status: newStatus });
+      
+      setClasses(classes.map(c => 
+        c.id === classId ? { ...c, status: newStatus } : c
+      ));
+      
+      showToast.success(`Class marked as ${newStatus}`);
+    } catch (error) {
+      console.error(`Error updating class status:`, error);
+      showToast.error('Failed to update class status');
+    } finally {
+      setActiveDropdown(null);
+    }
+  };
+
+  const handleDeleteClass = async (classId) => {
+    if (!window.confirm('Are you sure you want to delete this class? This action cannot be undone.')) {
+      return;
+    }
+    
+    try {
+      await classService.deleteClass(classId);
+      setClasses(classes.filter(c => c.id !== classId));
+      showToast.success('Class deleted successfully');
+    } catch (error) {
+      console.error('Error deleting class:', error);
+      showToast.error('Failed to delete class');
+    } finally {
+      setActiveDropdown(null);
+    }
+  };
+
+  const toggleDropdown = (classId) => {
+    setActiveDropdown(activeDropdown === classId ? null : classId);
+  };
+
   const filteredClasses = classes.filter(classItem => {
-    // Apply search filter
     const matchesSearch = classItem.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           classItem.description?.toLowerCase().includes(searchTerm.toLowerCase());
     
-    // Apply status filter
     if (filter === 'all') return matchesSearch;
     return matchesSearch && classItem.status?.toLowerCase() === filter.toLowerCase();
   });
@@ -59,7 +125,11 @@ const Classes = () => {
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-gray-800">Classes</h1>
           <button 
-            onClick={() => setIsClassModalOpen(true)}
+            onClick={() => {
+              setIsEditMode(false);
+              setCurrentClass(null);
+              setIsClassModalOpen(true);
+            }}
             className="bg-[#333D79] hover:bg-[#4A5491] text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm"
           >
             <FiPlus size={20} />
@@ -70,8 +140,15 @@ const Classes = () => {
         {/* Class Modal */}
         <ClassModal 
           isOpen={isClassModalOpen} 
-          onClose={() => setIsClassModalOpen(false)} 
+          onClose={() => {
+            setIsClassModalOpen(false);
+            setIsEditMode(false);
+            setCurrentClass(null);
+          }} 
           onAddClass={handleAddClass}
+          onUpdateClass={handleUpdateClass}
+          isEditMode={isEditMode}
+          currentClass={currentClass}
         />
 
         {/* Filters and search */}
@@ -94,7 +171,7 @@ const Classes = () => {
                 className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-[#F0F2F8] transition-colors"
               >
                 <FiFilter size={18} className="text-[#4A5491]" />
-                <span>Filter: {filter === 'all' ? 'All Classes' : filter}</span>
+                <span>Filter: {filter === 'all' ? 'All Classes' : filter.charAt(0).toUpperCase() + filter.slice(1)}</span>
               </button>
               
               {showFilterDropdown && (
@@ -141,12 +218,14 @@ const Classes = () => {
               {filteredClasses.map((classItem) => (
                 <div 
                   key={classItem.id} 
-                  className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
-                  onClick={() => navigate(`/dashboard/class/${classItem.id}`)}
+                  className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-all duration-300 transform hover:-translate-y-1"
                 >
                   <div className="border-b border-gray-100">
                     <div className="flex items-center justify-between p-4">
-                      <div className="flex items-center space-x-3">
+                      <div 
+                        className="flex items-center space-x-3 cursor-pointer"
+                        onClick={() => navigate(`/dashboard/class/${classItem.id}`)}
+                      >
                         <div className="w-10 h-10 rounded-lg bg-[#EEF0F8] flex items-center justify-center">
                           <MdOutlineClass className="text-[#333D79]" size={20} />
                         </div>
@@ -155,20 +234,78 @@ const Classes = () => {
                           <p className="text-sm text-gray-500">{classItem.category || 'General'}</p>
                         </div>
                       </div>
-                      <button 
-                        className="p-1.5 rounded-full hover:bg-[#F0F2F8] text-gray-500 hover:text-[#333D79] transition-colors"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          // Add dropdown menu functionality here
-                        }}
-                      >
-                        <FiMoreVertical size={18} />
-                      </button>
+                      <div className="relative" ref={dropdownRef}>
+                        <button 
+                          className="p-1.5 rounded-full hover:bg-[#F0F2F8] text-gray-500 hover:text-[#333D79] transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleDropdown(classItem.id);
+                          }}
+                        >
+                          <FiMoreVertical size={18} />
+                        </button>
+                        
+                        {/* Dropdown Menu */}
+                        {activeDropdown === classItem.id && (
+                          <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-50 py-1 border border-gray-100">
+                            <button 
+                              className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                              onClick={() => handleEditClass(classItem)}
+                            >
+                              <FiEdit className="mr-2" size={14} />
+                              Edit Class
+                            </button>
+                            
+                            {classItem.status !== 'completed' && (
+                              <button 
+                                className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                                onClick={() => handleUpdateStatus(classItem.id, 'completed')}
+                              >
+                                <MdOutlineClass className="mr-2" size={14} />
+                                Mark as Completed
+                              </button>
+                            )}
+                            
+                            {classItem.status !== 'archived' && (
+                              <button 
+                                className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                                onClick={() => handleUpdateStatus(classItem.id, 'archived')}
+                              >
+                                <MdArchive className="mr-2" size={14} />
+                                Archive Class
+                              </button>
+                            )}
+                            
+                            {classItem.status !== 'active' && (
+                              <button 
+                                className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                                onClick={() => handleUpdateStatus(classItem.id, 'active')}
+                              >
+                                <MdOutlineClass className="mr-2" size={14} />
+                                Set as Active
+                              </button>
+                            )}
+                            
+                            <div className="border-t border-gray-100 my-1"></div>
+                            
+                            <button 
+                              className="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left"
+                              onClick={() => handleDeleteClass(classItem.id)}
+                            >
+                              <FiTrash2 className="mr-2" size={14} />
+                              Delete Class
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                   
-                  <div className="p-4">
-                    <p className="text-sm text-gray-600 mb-4 line-clamp-2">{classItem.description}</p>
+                  <div 
+                    className="p-4 cursor-pointer"
+                    onClick={() => navigate(`/dashboard/class/${classItem.id}`)}
+                  >
+                    <p className="text-sm text-gray-600 mb-4 line-clamp-2">{classItem.description || 'No description available.'}</p>
                     
                     <div className="flex justify-between text-sm text-gray-500 mb-3">
                       <div>
@@ -204,7 +341,11 @@ const Classes = () => {
                 <h3 className="text-lg font-medium text-gray-900 mb-1">No classes found</h3>
                 <p className="text-gray-500 mb-4">Try adjusting your search or filter to find what you&apos;re looking for.</p>
                 <button 
-                  onClick={() => setIsClassModalOpen(true)}
+                  onClick={() => {
+                    setIsEditMode(false);
+                    setCurrentClass(null);
+                    setIsClassModalOpen(true);
+                  }}
                   className="bg-[#333D79] hover:bg-[#4A5491] text-white px-4 py-2 rounded-lg transition-colors inline-flex items-center shadow-sm"
                 >
                   <FiPlus size={18} className="mr-2" />
@@ -219,4 +360,4 @@ const Classes = () => {
   );
 };
 
-export default Classes; 
+export default Classes;

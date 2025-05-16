@@ -166,7 +166,13 @@ class LoginView(APIView):
                         'id': user.id,
                         'email': user.email,
                         'first_name': user.first_name,
-                        'last_name': user.last_name
+                        'last_name': user.last_name,
+                        'institution': user.institution,
+                        'position': user.position,
+                        'bio': user.bio,
+                        'has_google': user.has_google,
+                        'has_microsoft': user.has_microsoft,
+                        'profile_picture': user.profile_picture
                     },
                     'meta': {
                         'login_time': get_current_utc_time(),
@@ -302,7 +308,12 @@ def google_auth(request):
                     'first_name': user.first_name,
                     'last_name': user.last_name,
                     'name': f"{user.first_name} {user.last_name}".strip(),
-                    'profile_picture': user.profile_picture
+                    'profile_picture': user.profile_picture,
+                    'institution': user.institution,
+                    'position': user.position,
+                    'bio': user.bio,
+                    'has_google': user.has_google,
+                    'has_microsoft': user.has_microsoft
                 }
             }
             logger.info(f"Successfully authenticated user: {user.email}")
@@ -375,9 +386,15 @@ def microsoft_auth(request):
                 'user': {
                     'id': user.id,
                     'email': user.email,
-                    'first_name': user.first_name,  # Add this
+                    'first_name': user.first_name,
                     'last_name': user.last_name,
                     'name': f"{user.first_name} {user.last_name}".strip(),
+                    'profile_picture': user.profile_picture,
+                    'institution': user.institution,
+                    'position': user.position,
+                    'bio': user.bio,
+                    'has_google': user.has_google,
+                    'has_microsoft': user.has_microsoft
                 }
             }
             logger.info(f"Successfully authenticated Microsoft user: {user.email}")
@@ -473,3 +490,32 @@ def firebase_auth_view(request):
     except Exception as e:
         logger.error(f"Error in firebase_auth: {str(e)}")
         return Response({'error': str(e)}, status=400)
+
+
+@api_view(['PUT'])
+@permission_classes([IsAuthenticated])
+def update_profile(request):
+    user = request.user
+
+    allowed_fields = ['first_name', 'last_name', 'institution', 'position', 'bio']
+
+    for field in allowed_fields:
+        if field in request.data:
+            setattr(user, field, request.data[field])
+
+    user.save()
+
+    return Response({
+        'user': {
+            'id': user.id,
+            'email': user.email,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'institution': user.institution,
+            'position': user.position,
+            'bio': user.bio,
+            'has_google': user.has_google,
+            'has_microsoft': user.has_microsoft,
+            'profile_picture': user.profile_picture
+        }
+    })

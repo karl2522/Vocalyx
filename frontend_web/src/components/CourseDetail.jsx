@@ -1,18 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { toast } from 'react-hot-toast';
-import { FiEdit, FiPlus, FiSearch } from 'react-icons/fi';
+import { FiEdit, FiMoreVertical, FiPlus, FiSearch, FiTrash2 } from 'react-icons/fi';
 import {
-    MdArrowForward,
-    MdOutlineCalendarToday,
-    MdOutlineClass,
-    MdOutlinePersonOutline,
-    MdOutlineSchool,
-    MdOutlineWatchLater
+    MdArchive, MdArrowForward, MdOutlineCalendarToday, MdOutlineClass,
+    MdOutlinePersonOutline, MdOutlineSchool, MdOutlineWatchLater
 } from 'react-icons/md';
 import { useNavigate, useParams } from 'react-router-dom';
-import { classService } from '../services/api';
 import DashboardLayout from "./layouts/DashboardLayout.jsx";
 import ClassModal from './modals/ClassModal';
+import { courseService, classService } from '../services/api';
+import { showToast } from '../utils/toast.jsx';
 
 // Add some animation style elements
 const AnimationStyles = () => {
@@ -140,31 +137,99 @@ const CourseDetail = () => {
   const [loading, setLoading] = useState(true);
   const [isClassModalOpen, setIsClassModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [activeClassDropdown, setActiveClassDropdown] = useState(null);
+  const [isEditClassMode, setIsEditClassMode] = useState(false);
+  const [currentClass, setCurrentClass] = useState(null);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setActiveClassDropdown(null);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   useEffect(() => {
     fetchCourseData();
   }, [id]);
 
+  const toggleClassDropdown = (classId) => {
+    setActiveClassDropdown(activeClassDropdown === classId ? null : classId);
+  };
+
+  const handleEditClass = (classItem) => {
+    setCurrentClass(classItem);
+    setIsEditClassMode(true);
+    setIsClassModalOpen(true);
+    setActiveClassDropdown(null);
+  };
+
+  const handleDeleteClass = async (classId) => {
+    if (!window.confirm('Are you sure you want to delete this class? This action cannot be undone.')) {
+      return;
+    }
+    
+    try {
+      await classService.deleteClass(classId);
+      setClasses(classes.filter(c => c.id !== classId));
+      showToast.success('Class deleted successfully');
+
+      fetchCourseData();
+    } catch (error) {
+      console.error('Error deleting class:', error);
+      showToast.error('Failed to delete class');
+    } finally {
+      setActiveClassDropdown(null);
+    }
+  };
+
+  const handleUpdateClass = (updatedClass) => {
+    setClasses(classes.map(c => 
+      c.id === updatedClass.id ? updatedClass : c
+    ));
+
+    fetchCourseData();
+  };
+
+  const handleUpdateClassStatus = async (classId, newStatus) => {
+    try {
+      const classToUpdate = classes.find(c => c.id === classId);
+      if (!classToUpdate) return;
+      
+      await classService.updateClass(classId, { status: newStatus });
+      
+      setClasses(classes.map(c => 
+        c.id === classId ? { ...c, status: newStatus } : c
+      ));
+      
+      showToast.success(`Class marked as ${newStatus}`);
+    } catch (error) {
+      console.error(`Error updating class status:`, error);
+      showToast.error('Failed to update class status');
+    } finally {
+      setActiveClassDropdown(null);
+    }
+  };
+
   const fetchCourseData = async () => {
     try {
       setLoading(true);
-      // In a real implementation this would be a separate API call for course details
-      // For now, we'll simulate it using the existing class API
-      const response = await classService.getClassById(id);
       
-      // Simulate course data structure
-      const courseData = {
+      const response = await courseService.getCourse(id);
+      setCourseData({
         ...response.data,
-        courseCode: response.data.courseCode || 'CS101',
-        academicYear: response.data.academic_year || '2023-2024',
-      };
+        academicYear: response.data.academic_year
+      });
       
-      setCourseData(courseData);
+      const classesResponse = await courseService.getCourseClasses(id);
+      setClasses(classesResponse.data);
       
-      // Fetch classes for this course
-      // This would be a separate API call in a real implementation
-      // For now, let's just show an empty array or mock data
-      setClasses([]);
     } catch (error) {
       console.error('Error fetching course data:', error);
       if (error.response?.status === 404) {
@@ -188,6 +253,8 @@ const CourseDetail = () => {
       course_id: id
     };
     setClasses([classWithCourseId, ...classes]);
+
+    fetchCourseData();
   };
 
   const filteredClasses = classes.filter(classItem => 
@@ -244,10 +311,12 @@ const CourseDetail = () => {
                     <span className="text-gray-700">{courseData?.semester || 'Not specified'} · {courseData?.academicYear}</span>
                   </div>
                   
-                  <div className="inline-flex items-center px-3 py-1.5 bg-gray-50 rounded-lg border border-gray-100">
-                    <MdOutlinePersonOutline className="text-[#333D79] mr-2" />
-                    <span className="text-gray-700">0 Students Enrolled</span>
-                  </div>
+                 <div className="inline-flex items-center px-3 py-1.5 bg-gray-50 rounded-lg border border-gray-100">
+                  <MdOutlinePersonOutline className="text-[#333D79] mr-2" />
+                  <span className="text-gray-700">
+                    {courseData?.student_count || 0} Students Enrolled
+                  </span>
+                </div>
                   
                   <div className="inline-flex items-center px-3 py-1.5 rounded-lg border" 
                     style={{
@@ -284,7 +353,11 @@ const CourseDetail = () => {
               </div>
             </div>
             <button 
-              onClick={() => setIsClassModalOpen(true)}
+              onClick={() => {
+                setIsEditClassMode(false);
+                setCurrentClass(null);
+                setIsClassModalOpen(true);
+              }}
               className="bg-gradient-to-r from-[#333D79] to-[#4A5491] hover:from-[#4A5491] hover:to-[#5d6ba9] text-white px-4 py-2.5 rounded-lg flex items-center gap-2 transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
             >
               <FiPlus size={18} />
@@ -295,10 +368,17 @@ const CourseDetail = () => {
           {/* Class Modal */}
           <ClassModal 
             isOpen={isClassModalOpen} 
-            onClose={() => setIsClassModalOpen(false)} 
+            onClose={() => {
+              setIsClassModalOpen(false);
+              setIsEditClassMode(false);
+              setCurrentClass(null);
+            }} 
             onAddClass={handleAddClass}
+            onUpdateClass={handleUpdateClass}
             courseId={id}
             courseName={courseData?.name}
+            isEditMode={isEditClassMode}
+            currentClass={currentClass}
           />
           
           {/* Search */}
@@ -321,12 +401,14 @@ const CourseDetail = () => {
               {filteredClasses.map((classItem) => (
                 <div 
                   key={classItem.id} 
-                  className="class-card bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden cursor-pointer"
-                  onClick={() => navigate(`/dashboard/class/${classItem.id}`)}
+                  className="class-card bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"
                 >
                   <div className="border-b border-gray-100 bg-gradient-to-r from-[#f8f9ff] to-[#f0f4ff]">
                     <div className="flex items-center justify-between p-4">
-                      <div className="flex items-center space-x-3">
+                      <div 
+                        className="flex items-center space-x-3 cursor-pointer"
+                        onClick={() => navigate(`/dashboard/class/${classItem.id}`)}
+                      >
                         <div className="w-10 h-10 rounded-lg bg-[#333D79] bg-opacity-10 flex items-center justify-center">
                           <MdOutlineClass className="text-[#333D79]" size={20} />
                         </div>
@@ -337,10 +419,94 @@ const CourseDetail = () => {
                           </p>
                         </div>
                       </div>
+                      
+                      {/* Three-dot menu button */}
+                      <div className="relative" ref={dropdownRef}>
+                        <button 
+                          className="p-1.5 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleClassDropdown(classItem.id);
+                          }}
+                        >
+                          <FiMoreVertical size={16} />
+                        </button>
+                        
+                        {/* Dropdown menu */}
+                        {activeClassDropdown === classItem.id && (
+                          <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 py-1 border border-gray-100">
+                            <button 
+                              className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEditClass(classItem);
+                              }}
+                            >
+                              <FiEdit className="mr-2" size={14} />
+                              Edit Class
+                            </button>
+                            
+                            {classItem.status !== 'completed' && (
+                              <button 
+                                className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleUpdateClassStatus(classItem.id, 'completed');
+                                }}
+                              >
+                                <MdOutlineClass className="mr-2" size={14} />
+                                Mark as Completed
+                              </button>
+                            )}
+                            
+                            {classItem.status !== 'archived' && (
+                              <button 
+                                className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleUpdateClassStatus(classItem.id, 'archived');
+                                }}
+                              >
+                                <MdArchive className="mr-2" size={14} />
+                                Archive Class
+                              </button>
+                            )}
+                            
+                            {classItem.status !== 'active' && (
+                              <button 
+                                className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleUpdateClassStatus(classItem.id, 'active');
+                                }}
+                              >
+                                <MdOutlineClass className="mr-2" size={14} />
+                                Set as Active
+                              </button>
+                            )}
+                            
+                            <div className="border-t border-gray-100 my-1"></div>
+                            
+                            <button 
+                              className="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteClass(classItem.id);
+                              }}
+                            >
+                              <FiTrash2 className="mr-2" size={14} />
+                              Delete Class
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                   
-                  <div className="p-4">
+                  <div 
+                    className="p-4 cursor-pointer"
+                    onClick={() => navigate(`/dashboard/class/${classItem.id}`)}
+                  >
                     <div className="flex items-center mb-3">
                       <MdOutlineWatchLater className="text-[#333D79] mr-2" size={16} />
                       <span className="text-sm text-gray-700">
@@ -363,45 +529,49 @@ const CourseDetail = () => {
                 </div>
               ))}
             </div>
-                      ) : (
-              <div className="empty-state-animation bg-white rounded-xl shadow-sm border border-gray-100 p-10 text-center relative overflow-hidden">
-                <div className="absolute -top-20 -right-20 w-64 h-64 bg-[#333D79] opacity-5 rounded-full blur-3xl"></div>
-                <div className="absolute -bottom-32 -left-32 w-64 h-64 bg-[#6B77B7] opacity-5 rounded-full blur-3xl"></div>
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent animate-pulse opacity-30"></div>
-                
-                <div className="relative z-10 max-w-lg mx-auto">
-                  <div className="flex justify-center mb-6">
-                    <div className="relative">
-                      <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-[#333D79] to-[#4A5491] flex items-center justify-center floating shadow-lg">
-                        <MdOutlineClass className="text-white" size={40} />
-                      </div>
-                      <div className="absolute -bottom-2 -right-2 w-10 h-10 rounded-full bg-white shadow-md flex items-center justify-center">
-                        <FiPlus className="text-[#333D79]" size={20} />
-                      </div>
+          ) : (
+            <div className="empty-state-animation bg-white rounded-xl shadow-sm border border-gray-100 p-10 text-center relative overflow-hidden">
+              <div className="absolute -top-20 -right-20 w-64 h-64 bg-[#333D79] opacity-5 rounded-full blur-3xl"></div>
+              <div className="absolute -bottom-32 -left-32 w-64 h-64 bg-[#6B77B7] opacity-5 rounded-full blur-3xl"></div>
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent animate-pulse opacity-30"></div>
+              
+              <div className="relative z-10 max-w-lg mx-auto">
+                <div className="flex justify-center mb-6">
+                  <div className="relative">
+                    <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-[#333D79] to-[#4A5491] flex items-center justify-center floating shadow-lg">
+                      <MdOutlineClass className="text-white" size={40} />
+                    </div>
+                    <div className="absolute -bottom-2 -right-2 w-10 h-10 rounded-full bg-white shadow-md flex items-center justify-center">
+                      <FiPlus className="text-[#333D79]" size={20} />
                     </div>
                   </div>
-                  
-                  <h3 className="text-2xl font-bold text-gray-900 mb-3">No classes in this course yet</h3>
-                  <p className="text-gray-600 mb-8 mx-auto">
-                    Create your first class to start managing your course content, schedule sessions, track attendance and monitor student progress.
-                  </p>
-                  
-                  <div className="inline-flex space-x-3">
-                    <button 
-                      onClick={() => setIsClassModalOpen(true)}
-                      className="bg-gradient-to-r from-[#333D79] to-[#4A5491] hover:from-[#4A5491] hover:to-[#5d6ba9] text-white px-6 py-3.5 rounded-xl transition-all shadow-md hover:shadow-lg transform hover:scale-105 inline-flex items-center"
-                    >
-                      <FiPlus size={18} className="mr-2" />
-                      <span className="font-medium">Create First Class</span>
-                    </button>
-                  </div>
+                </div>
+                
+                <h3 className="text-2xl font-bold text-gray-900 mb-3">No classes in this course yet</h3>
+                <p className="text-gray-600 mb-8 mx-auto">
+                  Create your first class to start managing your course content, schedule sessions, track attendance and monitor student progress.
+                </p>
+                
+                <div className="inline-flex space-x-3">
+                  <button 
+                    onClick={() => {
+                      setIsEditClassMode(false);
+                      setCurrentClass(null);
+                      setIsClassModalOpen(true);
+                    }}
+                    className="bg-gradient-to-r from-[#333D79] to-[#4A5491] hover:from-[#4A5491] hover:to-[#5d6ba9] text-white px-6 py-3.5 rounded-xl transition-all shadow-md hover:shadow-lg transform hover:scale-105 inline-flex items-center"
+                  >
+                    <FiPlus size={18} className="mr-2" />
+                    <span className="font-medium">Create First Class</span>
+                  </button>
                 </div>
               </div>
-            )}
+            </div>
+          )}
         </div>
       </div>
     </DashboardLayout>
   );
 };
 
-export default CourseDetail; 
+export default CourseDetail;

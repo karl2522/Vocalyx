@@ -1,57 +1,108 @@
 import PropTypes from 'prop-types';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MdClose, MdOutlineSchool } from 'react-icons/md';
-import { classService } from '../../services/api';
+import { courseService } from '../../services/api';
 import { showToast } from '../../utils/toast.jsx';
 
-const CourseModal = ({ isOpen, onClose, onAddCourse }) => {
+const CourseModal = ({ isOpen, onClose, onAddCourse, onUpdateCourse, isEditMode, currentCourse }) => {
     const [courseCode, setCourseCode] = useState('');
     const [courseName, setCourseName] = useState('');
     const [description, setDescription] = useState('');
     const [semester, setSemester] = useState('');
     const [academicYear, setAcademicYear] = useState('');
+    const [status, setStatus] = useState('active');
     const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (isEditMode && currentCourse) {
+            setCourseCode(currentCourse.courseCode || '');
+            setCourseName(currentCourse.name || '');
+            setDescription(currentCourse.description || '');
+            setSemester(currentCourse.semester || '');
+            setAcademicYear(currentCourse.academic_year || '');
+            setStatus(currentCourse.status || 'active');
+        } else {
+            // Reset form when opening in create mode
+            resetForm();
+        }
+    }, [isEditMode, currentCourse, isOpen]);
+
+    const resetForm = () => {
+        setCourseCode('');
+        setCourseName('');
+        setDescription('');
+        setSemester('');
+        setAcademicYear('');
+        setStatus('active');
+    };
 
     if (!isOpen) return null;
 
+    const validateForm = () => {
+        if (!courseName) {
+            showToast.error('Course name is required');
+            return false;
+        }
+        if (!courseCode) {
+            showToast.error('Course code is required');
+            return false;
+        }
+        if (!semester) {
+            showToast.error('Semester is required');
+            return false;
+        }
+        if (!academicYear) {
+            showToast.error('Academic year is required');
+            return false;
+        }
+
+        const academicYearPattern = /^\d{4}-\d{4}$/;
+        if (!academicYearPattern.test(academicYear)) {
+            showToast.error('Academic year must be in format YYYY-YYYY');
+            return false;
+        }
+
+        return true;
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
+        
+        if (!validateForm()) return;
+        
         setLoading(true);
 
+        const courseData = {
+            name: courseName,
+            courseCode,
+            description,
+            semester,
+            academic_year: academicYear,
+            status
+        };
+
         try {
-            // This would need to be updated with an actual API call for course creation
-            // For now, using the existing class API for demo purposes
-            const response = await classService.createClass({
-                name: courseName,
-                description,
-                semester,
-                academic_year: academicYear,
-                courseCode,
-                status: 'active'
-            });
-
-            // Add course-specific fields to the response data
-            const courseData = {
-                ...response.data,
-                courseCode,
-                classes_count: 0
-            };
-
-            if (onAddCourse) {
-                onAddCourse(courseData);
+            if (isEditMode) {
+                // Update existing course
+                const response = await courseService.updateCourse(currentCourse.id, courseData);
+                if (onUpdateCourse) {
+                    onUpdateCourse(response.data);
+                }
+                showToast.success('Course updated successfully!');
+            } else {
+                // Create new course
+                const response = await courseService.createCourse(courseData);
+                if (onAddCourse) {
+                    onAddCourse(response.data);
+                }
+                showToast.success('Course created successfully!');
             }
 
-            showToast.success('Course created successfully!', 'New Course Added');
-
-            setCourseCode('');
-            setCourseName('');
-            setDescription('');
-            setSemester('');
-            setAcademicYear('');
+            resetForm();
             onClose();
         } catch (error) {
-            console.error('Error creating course:', error);
-            showToast.error(error.response?.data?.message || 'Failed to create course');
+            console.error('Error saving course:', error);
+            showToast.error(error.response?.data?.message || `Failed to ${isEditMode ? 'update' : 'create'} course`);
         } finally {
             setLoading(false);
         }
@@ -76,7 +127,7 @@ const CourseModal = ({ isOpen, onClose, onAddCourse }) => {
                                     <MdOutlineSchool className="h-6 w-6 text-[#333D79]" />
                                 </div>
                                 <h3 className="text-lg leading-6 font-medium text-gray-900 ml-3" id="modal-title">
-                                    Add New Course
+                                    {isEditMode ? 'Edit Course' : 'Add New Course'}
                                 </h3>
                             </div>
                             <button
@@ -156,7 +207,7 @@ const CourseModal = ({ isOpen, onClose, onAddCourse }) => {
 
                                 <div>
                                     <label htmlFor="academicYear" className="block text-sm font-medium text-gray-700 mb-1">
-                                        School Year *
+                                        Academic Year *
                                     </label>
                                     <input
                                         type="text"
@@ -167,8 +218,27 @@ const CourseModal = ({ isOpen, onClose, onAddCourse }) => {
                                         onChange={(e) => setAcademicYear(e.target.value)}
                                         required
                                     />
+                                    <small className="text-gray-500">Format: YYYY-YYYY</small>
                                 </div>
                             </div>
+
+                            {isEditMode && (
+                                <div className="mb-4">
+                                    <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">
+                                        Status
+                                    </label>
+                                    <select
+                                        id="status"
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#333D79] focus:border-transparent"
+                                        value={status}
+                                        onChange={(e) => setStatus(e.target.value)}
+                                    >
+                                        <option value="active">Active</option>
+                                        <option value="completed">Completed</option>
+                                        <option value="archived">Archived</option>
+                                    </select>
+                                </div>
+                            )}
 
                             <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse mt-4 -mx-6">
                                 <button
@@ -176,7 +246,7 @@ const CourseModal = ({ isOpen, onClose, onAddCourse }) => {
                                     disabled={loading}
                                     className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-[#333D79] text-base font-medium text-white hover:bg-[#4A5491] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#333D79] sm:ml-3 sm:w-auto sm:text-sm transition-colors"
                                 >
-                                    {loading ? 'Creating...' : 'Add Course'}
+                                    {loading ? (isEditMode ? 'Updating...' : 'Creating...') : (isEditMode ? 'Update Course' : 'Add Course')}
                                 </button>
                                 <button
                                     type="button"
@@ -197,7 +267,15 @@ const CourseModal = ({ isOpen, onClose, onAddCourse }) => {
 CourseModal.propTypes = {
     isOpen: PropTypes.bool.isRequired,
     onClose: PropTypes.func.isRequired,
-    onAddCourse: PropTypes.func
+    onAddCourse: PropTypes.func,
+    onUpdateCourse: PropTypes.func,
+    isEditMode: PropTypes.bool,
+    currentCourse: PropTypes.object
 };
 
-export default CourseModal; 
+CourseModal.defaultProps = {
+    isEditMode: false,
+    currentCourse: null
+};
+
+export default CourseModal;

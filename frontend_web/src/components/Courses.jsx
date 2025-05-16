@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { toast } from 'react-hot-toast';
-import { FiBook, FiFilter, FiMoreVertical, FiPlus, FiSearch, FiUsers } from 'react-icons/fi';
-import { MdOutlineSchool } from 'react-icons/md';
+import { FiBook, FiEdit, FiFilter, FiMoreVertical, FiPlus, FiSearch, FiTrash2, FiUsers } from 'react-icons/fi';
+import { MdArchive, MdOutlineSchool } from 'react-icons/md';
 import { useNavigate } from 'react-router-dom';
-import { classService } from '../services/api';
 import DashboardLayout from "./layouts/DashboardLayout.jsx";
 import CourseModal from './modals/CourseModal';
+import { courseService } from '../services/api';
 
 // Animation styles component
 const AnimationStyles = () => {
@@ -44,19 +44,45 @@ const Courses = () => {
   const [filter, setFilter] = useState('all');
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [isCourseModalOpen, setIsCourseModalOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [currentCourse, setCurrentCourse] = useState(null);
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [activeDropdown, setActiveDropdown] = useState(null);
+  const dropdownRef = useRef(null);
 
   useEffect(() => {
     fetchCourses();
+    
+    // Close dropdown when clicking outside
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setActiveDropdown(null);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, []);
+
+    useEffect(() => {
+    const refreshCoursesOnFocus = () => {
+      fetchCourses();
+    };
+    
+    window.addEventListener('focus', refreshCoursesOnFocus);
+    return () => {
+      window.removeEventListener('focus', refreshCoursesOnFocus);
+    };
+  }, []);
+
 
   const fetchCourses = async () => {
     try {
       setLoading(true);
-      // This would need to be updated with an actual API call for courses
-      // For now, we'll use the existing classes endpoint for demo purposes
-      const response = await classService.getClasses();
+      const response = await courseService.getCourses();
       setCourses(response.data);
     } catch (error) {
       console.error('Error fetching courses:', error);
@@ -73,6 +99,62 @@ const Courses = () => {
 
   const handleAddCourse = (newCourse) => {
     setCourses([newCourse, ...courses]);
+  };
+
+  const handleEditCourse = (course) => {
+    setCurrentCourse(course);
+    setIsEditMode(true);
+    setIsCourseModalOpen(true);
+    setActiveDropdown(null);
+  };
+
+  const handleUpdateCourse = (updatedCourse) => {
+    setCourses(courses.map(course => 
+      course.id === updatedCourse.id ? updatedCourse : course
+    ));
+  };
+
+  const handleUpdateStatus = async (courseId, newStatus) => {
+    try {
+      const courseToUpdate = courses.find(course => course.id === courseId);
+      if (!courseToUpdate) return;
+      
+      const updatedCourse = { ...courseToUpdate, status: newStatus };
+      
+      await courseService.updateCourse(courseId, { status: newStatus });
+      
+      setCourses(courses.map(course => 
+        course.id === courseId ? { ...course, status: newStatus } : course
+      ));
+      
+      toast.success(`Course marked as ${newStatus}`);
+    } catch (error) {
+      console.error(`Error updating course status:`, error);
+      toast.error('Failed to update course status');
+    } finally {
+      setActiveDropdown(null);
+    }
+  };
+  
+  const handleDeleteCourse = async (courseId) => {
+    if (!window.confirm('Are you sure you want to delete this course? This action cannot be undone.')) {
+      return;
+    }
+    
+    try {
+      await courseService.deleteCourse(courseId);
+      setCourses(courses.filter(course => course.id !== courseId));
+      toast.success('Course deleted successfully');
+    } catch (error) {
+      console.error('Error deleting course:', error);
+      toast.error('Failed to delete course');
+    } finally {
+      setActiveDropdown(null);
+    }
+  };
+
+  const toggleDropdown = (courseId) => {
+    setActiveDropdown(activeDropdown === courseId ? null : courseId);
   };
 
   // Filter courses based on search term and filter selection
@@ -105,6 +187,7 @@ const Courses = () => {
     <DashboardLayout>
       <AnimationStyles />
       <div className="pb-6">
+        {/* Header section remains the same... */}
         <div className="course-header bg-white rounded-lg shadow-sm border border-gray-100 p-6 mb-6">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <div className="flex items-center gap-4">
@@ -117,7 +200,11 @@ const Courses = () => {
               </div>
             </div>
             <button 
-              onClick={() => setIsCourseModalOpen(true)}
+              onClick={() => {
+                setIsEditMode(false);
+                setCurrentCourse(null);
+                setIsCourseModalOpen(true);
+              }}
               className="bg-[#333D79] hover:bg-[#4A5491] text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
             >
               <FiPlus size={18} />
@@ -129,11 +216,18 @@ const Courses = () => {
         {/* Course Modal */}
         <CourseModal 
           isOpen={isCourseModalOpen} 
-          onClose={() => setIsCourseModalOpen(false)} 
+          onClose={() => {
+            setIsCourseModalOpen(false);
+            setIsEditMode(false);
+            setCurrentCourse(null);
+          }} 
           onAddCourse={handleAddCourse}
+          onUpdateCourse={handleUpdateCourse}
+          isEditMode={isEditMode}
+          currentCourse={currentCourse}
         />
 
-        {/* Filters and search */}
+        {/* Filters and search - remains the same... */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-6">
           <div className="flex flex-col space-y-4 md:flex-row md:space-y-0 md:space-x-4 md:items-center">
             <div className="relative flex-1">
@@ -194,7 +288,7 @@ const Courses = () => {
           </div>
         </div>
 
-        {/* Stats Section */}
+        {/* Stats Section - remains the same... */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex items-center">
             <div className="w-12 h-12 rounded-lg bg-[#EEF0F8] flex items-center justify-center mr-4">
@@ -231,7 +325,7 @@ const Courses = () => {
           </div>
         </div>
 
-        {/* Courses Grid */}
+        {/* Courses Grid - updated with dropdown menu */}
         {loading ? (
           <div className="flex justify-center items-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#333D79]"></div>
@@ -243,12 +337,11 @@ const Courses = () => {
                 {filteredCourses.map((course) => (
                   <div 
                     key={course.id} 
-                    className={`course-card bg-white rounded-lg shadow-sm ${getCourseStatusClasses(course.status)} overflow-hidden cursor-pointer`}
-                    onClick={() => navigate(`/dashboard/course/${course.id}`)}
+                    className={`course-card bg-white rounded-lg shadow-sm ${getCourseStatusClasses(course.status)} overflow-hidden`}
                   >
                     <div className="p-5">
                       <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center">
+                        <div className="flex items-center cursor-pointer" onClick={() => navigate(`/dashboard/course/${course.id}`)}>
                           <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center mr-3">
                             <MdOutlineSchool className="text-[#333D79]" size={20} />
                           </div>
@@ -261,22 +354,77 @@ const Courses = () => {
                             </div>
                           </div>
                         </div>
-                        <div>
+                        <div className="relative" ref={dropdownRef}>
                           <button 
                             className="p-1.5 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
                             onClick={(e) => {
                               e.stopPropagation();
-                              // Add dropdown menu functionality here
+                              toggleDropdown(course.id);
                             }}
                           >
                             <FiMoreVertical size={16} />
                           </button>
+                          
+                          {activeDropdown === course.id && (
+                            <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 py-1 border border-gray-100">
+                              <button 
+                                className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                                onClick={() => handleEditCourse(course)}
+                              >
+                                <FiEdit className="mr-2" size={14} />
+                                Edit Course
+                              </button>
+                              
+                              {course.status !== 'completed' && (
+                                <button 
+                                  className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                                  onClick={() => handleUpdateStatus(course.id, 'completed')}
+                                >
+                                  <FiBook className="mr-2" size={14} />
+                                  Mark as Completed
+                                </button>
+                              )}
+                              
+                              {course.status !== 'archived' && (
+                                <button 
+                                  className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                                  onClick={() => handleUpdateStatus(course.id, 'archived')}
+                                >
+                                  <MdArchive className="mr-2" size={14} />
+                                  Archive Course
+                                </button>
+                              )}
+                              
+                              {course.status !== 'active' && (
+                                <button 
+                                  className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                                  onClick={() => handleUpdateStatus(course.id, 'active')}
+                                >
+                                  <FiBook className="mr-2" size={14} />
+                                  Set as Active
+                                </button>
+                              )}
+                              
+                              <div className="border-t border-gray-100 my-1"></div>
+                              
+                              <button 
+                                className="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left"
+                                onClick={() => handleDeleteCourse(course.id)}
+                              >
+                                <FiTrash2 className="mr-2" size={14} />
+                                Delete Course
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
                       
-                      <p className="text-sm text-gray-600 mb-4 line-clamp-2 h-10">
+                      <div 
+                        className="text-sm text-gray-600 mb-4 line-clamp-2 h-10 cursor-pointer" 
+                        onClick={() => navigate(`/dashboard/course/${course.id}`)}
+                      >
                         {course.description || 'No description available for this course.'}
-                      </p>
+                      </div>
                       
                       <div className="flex items-center justify-between border-t border-gray-100 pt-3">
                         <div className="flex items-center space-x-3">
@@ -318,7 +466,11 @@ const Courses = () => {
                   </p>
                   
                   <button 
-                    onClick={() => setIsCourseModalOpen(true)}
+                    onClick={() => {
+                      setIsEditMode(false);
+                      setCurrentCourse(null);
+                      setIsCourseModalOpen(true);
+                    }}
                     className="bg-[#333D79] hover:bg-[#4A5491] text-white px-4 py-2 rounded-lg inline-flex items-center transition-colors"
                   >
                     <FiPlus size={16} className="mr-2" />
@@ -334,4 +486,4 @@ const Courses = () => {
   );
 };
 
-export default Courses; 
+export default Courses;
