@@ -1,9 +1,9 @@
 import * as Checkbox from "@radix-ui/react-checkbox";
 import { useState } from "react";
-import { toast } from "react-hot-toast";
 import { FaCheck, FaEnvelope, FaLock, FaUser } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { register } from "../services/api";
+import { showToast } from "../utils/toast.jsx";
 
 function Signup() {
   const navigate = useNavigate();
@@ -30,24 +30,24 @@ function Signup() {
     e.preventDefault();
 
     if(!formData.agreeToTerms) {
-      toast.error("Please agree to the terms and conditions");
+      showToast.error("Please agree to the terms and conditions");
       return;
     }
 
     if(formData.password !== formData.confirmPassword) {
-      toast.error("Passwords do not match");
+      showToast.error("Passwords do not match");
       return;
     }
 
     try {
       setLoading(true);
-      const response = await register(formData);
-      toast.success(response.message);
-      toast.success("Please check your email to verify your account");
+      await register(formData);
+      showToast.success("Account created successfully!", "Registration Complete");
+      showToast.info("Please check your email to verify your account", null, { duration: 6000 });
       // Redirect to login page after successful registration
       setTimeout(() => navigate('/login'), 2000);
     } catch (error) {
-      toast.error(error.message || "An error occurred. Please try again");
+      showToast.error(error.message || "An error occurred. Please try again");
     } finally {
       setLoading(false);
     }

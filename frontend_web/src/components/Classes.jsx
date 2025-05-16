@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { toast } from 'react-hot-toast';
 import { FiFilter, FiMoreVertical, FiPlus, FiSearch } from 'react-icons/fi';
 import { MdOutlineClass } from 'react-icons/md';
 import { useNavigate } from 'react-router-dom';
 import { classService } from '../services/api';
+import { showToast } from '../utils/toast.jsx';
 import DashboardLayout from "./layouts/DashboardLayout.jsx";
 import ClassModal from './modals/ClassModal';
 
@@ -28,10 +28,10 @@ const Classes = () => {
     } catch (error) {
       console.error('Error fetching classes:', error);
       if (error.response?.status === 401) {
-        toast.error('Session expired. Please login again.');
+        showToast.error('Session expired. Please login again.');
         navigate('/login');
       } else {
-        toast.error('Failed to load classes');
+        showToast.error('Failed to load classes');
       }
     } finally {
       setLoading(false);

@@ -1,8 +1,8 @@
 import PropTypes from 'prop-types';
 import { useState } from 'react';
-import { toast } from 'react-hot-toast';
 import { MdClose, MdOutlineSchool } from 'react-icons/md';
 import { classService } from '../../services/api';
+import { showToast } from '../../utils/toast.jsx';
 
 const CourseModal = ({ isOpen, onClose, onAddCourse }) => {
     const [courseCode, setCourseCode] = useState('');
@@ -41,7 +41,7 @@ const CourseModal = ({ isOpen, onClose, onAddCourse }) => {
                 onAddCourse(courseData);
             }
 
-            toast.success('Course created successfully!');
+            showToast.success('Course created successfully!', 'New Course Added');
 
             setCourseCode('');
             setCourseName('');
@@ -51,7 +51,7 @@ const CourseModal = ({ isOpen, onClose, onAddCourse }) => {
             onClose();
         } catch (error) {
             console.error('Error creating course:', error);
-            toast.error(error.response?.data?.message || 'Failed to create course');
+            showToast.error(error.response?.data?.message || 'Failed to create course');
         } finally {
             setLoading(false);
         }

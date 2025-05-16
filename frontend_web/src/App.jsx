@@ -1,7 +1,6 @@
 import { GoogleOAuthProvider } from '@react-oauth/google'
 import { Toaster } from 'react-hot-toast'
 import { Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom'
-import './App.css'
 import { AuthProvider } from './auth/AuthContext'
 import ClassDetails from './components/ClassDetails'
 import Classes from './components/Classes'
@@ -15,6 +14,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 import PublicRoute from './components/PublicRoute'
 import Recordings from './components/Recordings'
 import Signup from './components/Signup'
+import ToastDemo from './components/ToastDemo'
 import './index.css'
 
 function App() {
@@ -24,7 +24,32 @@ function App() {
     >
       <AuthProvider>
         <Router>
-          <Toaster position="top-right" />
+          <Toaster 
+            position="top-right"
+            toastOptions={{
+              duration: 4000,
+              style: {
+                background: '#fff',
+                color: '#333',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                borderRadius: '8px',
+                padding: '16px',
+                maxWidth: '420px'
+              },
+              success: {
+                iconTheme: {
+                  primary: '#10B981',
+                  secondary: '#FFFFFF'
+                }
+              },
+              error: {
+                iconTheme: {
+                  primary: '#EF4444',
+                  secondary: '#FFFFFF'
+                }
+              }
+            }}
+          />
           <Routes>
             <Route path="/" element={
               <PublicRoute>
@@ -75,6 +100,11 @@ function App() {
             <Route path="/dashboard/profile" element={
               <ProtectedRoute>
                 <Profile />
+              </ProtectedRoute>
+            } />
+            <Route path="/dashboard/toast-demo" element={
+              <ProtectedRoute>
+                <ToastDemo />
               </ProtectedRoute>
             } />
 

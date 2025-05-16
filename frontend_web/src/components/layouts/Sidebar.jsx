@@ -1,6 +1,6 @@
 import PropTypes from 'prop-types';
 import { useEffect, useState } from 'react';
-import { FiLogOut } from 'react-icons/fi';
+import { FiBell, FiLogOut } from 'react-icons/fi';
 import { HiOutlineUserGroup } from 'react-icons/hi';
 import {
     MdChevronLeft,
@@ -12,7 +12,8 @@ import {
     RiBookOpenLine,
     RiSoundModuleLine
 } from 'react-icons/ri';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../auth/AuthContext';
 import LogoutModal from '../modals/LogoutModal';
 
 // Add custom animation styles
@@ -55,6 +56,8 @@ const Sidebar = ({ onCollapse }) => {
   const [collapsed, setCollapsed] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { logout } = useAuth();
 
   // Notify parent component when collapsed state changes
   useEffect(() => {
@@ -69,8 +72,8 @@ const Sidebar = ({ onCollapse }) => {
   };
 
   const handleLogoutConfirm = () => {
-    // Redirecting to landing page when confirmed
-    window.location.href = '/';
+    logout();
+    navigate('/login');
   };
 
   const navItems = [
@@ -86,6 +89,7 @@ const Sidebar = ({ onCollapse }) => {
       path: '/dashboard/recordings' 
     },
     { name: 'Team', icon: <HiOutlineUserGroup size={22} />, path: '/dashboard/team' },
+    { name: 'Toast Demo', icon: <FiBell size={22} />, path: '/dashboard/toast-demo' },
     { name: 'Settings', icon: <MdOutlineSettings size={22} />, path: '/dashboard/settings' },
   ];
 

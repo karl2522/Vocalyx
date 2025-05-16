@@ -108,7 +108,7 @@ const ClassDetails = () => {
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isDropdownOpen]);
+}, [isDropdownOpen]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -151,7 +151,7 @@ const ClassDetails = () => {
     };
 
     fetchData();
-  }, [id, navigate]);
+}, [id, navigate]);
 
   useEffect(() => {
     if (!excelData || excelData.data.length <= MAX_VISIBLE_ROWS) return;
@@ -1104,7 +1104,7 @@ const handleFileSwitch = (file) => {
     );
   }
 
-    return (
+  return (
     <DashboardLayout>
       {/* Show the full screen Excel view when in full screen mode */}
       {isFullScreen && excelData ? (
@@ -1131,7 +1131,7 @@ const handleFileSwitch = (file) => {
               </div>
               
               {/* Class header */}
-              <div className="flex justify-between items-center mb-6">
+            <div className="flex justify-between items-center mb-6">
               <div className="flex items-center">
                 <div className="h-12 w-12 rounded-lg bg-[#EEF0F8] flex items-center justify-center mr-4">
                   <MdOutlineClass className="h-6 w-6 text-[#333D79]" />
@@ -1645,27 +1645,27 @@ const handleFileSwitch = (file) => {
                       <p className="mt-1 text-xs text-gray-500">
                         Enter the maximum possible score for this column (e.g., 100 for percentage, 10 for points)
                       </p>
-                    </div>
-                  )}
-                </div>
+              </div>
+            )}
+          </div>
                 
-                <div className="px-5 py-4 border-t border-gray-100 flex justify-end space-x-3">
-                  <button
-                    onClick={() => setShowAddColumnModal(false)}
-                    className="px-4 py-2 text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleAddCustomColumn}
-                    className="px-4 py-2 text-white bg-[#333D79] hover:bg-[#4A5491] rounded-lg transition-colors"
-                  >
-                    Add Column
-                  </button>
+                  <div className="px-5 py-4 border-t border-gray-100 flex justify-end space-x-3">
+                    <button
+                      onClick={() => setShowAddColumnModal(false)}
+                      className="px-4 py-2 text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleAddCustomColumn}
+                      className="px-4 py-2 text-white bg-[#333D79] hover:bg-[#4A5491] rounded-lg transition-colors"
+                    >
+                      Add Column
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
         </>
       )}
       

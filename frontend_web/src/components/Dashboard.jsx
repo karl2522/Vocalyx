@@ -1,24 +1,11 @@
 import { useEffect, useState } from 'react';
-import { toast } from 'react-hot-toast';
-import {
-    FiActivity,
-    FiBell,
-    FiCalendar,
-    FiClock,
-    FiPlus,
-    FiSpeaker,
-    FiTrendingUp,
-    FiUsers
-} from 'react-icons/fi';
-import {
-    MdOutlineClass,
-    MdOutlinePublish,
-    MdOutlineSchool
-} from 'react-icons/md';
+import { FiActivity, FiCalendar, FiClock, FiPlus, FiSpeaker, FiTrendingUp, FiUsers } from 'react-icons/fi';
+import { MdOutlineClass, MdOutlinePublish, MdOutlineSchool } from 'react-icons/md';
 import { RiBookOpenLine, RiSoundModuleLine } from 'react-icons/ri';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { classService } from '../services/api';
+import { showToast } from '../utils/toast.jsx';
 import DashboardLayout from './layouts/DashboardLayout';
 import CourseModal from './modals/CourseModal';
 
@@ -157,43 +144,23 @@ const Dashboard = () => {
 
     fetchCourses();
 
-    // Show a notification toast after a short delay to demonstrate the feature
-    const timer = setTimeout(() => {
-      toast.custom((t) => (
-        <div className={`${t.visible ? 'animate-enter' : 'animate-leave'} max-w-md w-full bg-white shadow-lg rounded-lg pointer-events-auto flex ring-1 ring-black ring-opacity-5`}>
-          <div className="flex-1 p-4">
-            <div className="flex items-start">
-              <div className="flex-shrink-0 pt-0.5">
-                <div className="h-10 w-10 rounded-full bg-[#333D79] flex items-center justify-center text-white">
-                  <FiBell size={18} />
-                </div>
-              </div>
-              <div className="ml-3 flex-1">
-                <p className="text-sm font-medium text-gray-900">
-                  New Notification Feature
-                </p>
-                <p className="mt-1 text-sm text-gray-500">
-                  Click the bell icon in the top right to see your notifications!
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="flex border-l border-gray-200">
-            <button
-              onClick={() => toast.dismiss(t.id)}
-              className="w-full border border-transparent rounded-none rounded-r-lg p-4 flex items-center justify-center text-sm font-medium text-[#333D79] hover:text-[#4A5491] focus:outline-none"
-            >
-              Dismiss
-            </button>
-          </div>
-        </div>
-      ), {
-        duration: 5000,
-        position: 'bottom-right',
-      });
-    }, 2000);
+    // Check if notification has been shown before
+    const hasShownNotification = localStorage.getItem('hasShownNotification');
     
-    return () => clearTimeout(timer);
+    // Only show notification if it hasn't been shown before
+    if (!hasShownNotification) {
+      const timer = setTimeout(() => {
+        showToast.notification(
+          'Click the bell icon in the top right to see your notifications!',
+          'New Notification Feature',
+          { duration: 5000, position: 'bottom-right' }
+        );
+        // Mark notification as shown
+        localStorage.setItem('hasShownNotification', 'true');
+      }, 2000);
+      
+      return () => clearTimeout(timer);
+    }
   }, [navigate]);
 
   const stats = [
@@ -271,12 +238,12 @@ const Dashboard = () => {
     } catch (error) {
       console.error('Error fetching courses:', error);
       if (error.response?.status === 401) {
-        toast.error('Session expired. Please login again.');
+        showToast.error('Session expired. Please login again.');
         localStorage.removeItem('authToken');
         window.location.href = '/login';
         return;
       } else {
-        toast.error('Failed to load courses');
+        showToast.error('Failed to load courses');
       }
     } finally {
       setLoading(false);

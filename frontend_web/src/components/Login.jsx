@@ -1,14 +1,14 @@
+import { useMsal } from "@azure/msal-react";
 import * as Checkbox from "@radix-ui/react-checkbox";
+import { GoogleLogin } from '@react-oauth/google';
 import { useState } from "react";
-import { toast } from "react-hot-toast";
 import { FaCheck, FaEnvelope, FaLock } from "react-icons/fa";
 import { FcGoogle } from "react-icons/fc";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../auth/AuthContext";
 import { login } from "../services/api";
 import { microsoft } from "../utils";
-import { useAuth } from "../auth/AuthContext";
-import { GoogleLogin } from '@react-oauth/google';
-import { useMsal } from "@azure/msal-react";
+import { showToast } from "../utils/toast.jsx";
 
 function Login() {
     const { instance } = useMsal();
@@ -35,7 +35,7 @@ function Login() {
         if (credentialResponse.credential) {
           const authResult = await googleLogin(credentialResponse);
           if (authResult && authResult.token) {
-            toast.success("Google login successful!");
+            showToast.success("Login successful!", "Google Authentication");
             navigate("/dashboard");
           } else {
             throw new Error('Login failed');
@@ -44,7 +44,7 @@ function Login() {
           throw new Error('No credential received from Google');
         }
       } catch (error) {
-        toast.error(error.message || "Google login failed");
+        showToast.error(error.message || "Google login failed");
       }
     };
 
@@ -77,7 +77,7 @@ function Login() {
             localStorage.setItem('refreshToken', data.refresh); // Add this line if your backend sends refresh token
             localStorage.setItem('user', JSON.stringify(data.user));
             setUser(data.user); // Add this line to update context
-            toast.success("Microsoft login successful!");
+            showToast.success("Microsoft login successful!");
             navigate("/dashboard");
           } else {
             throw new Error(data.error || 'Microsoft login failed');
@@ -85,33 +85,29 @@ function Login() {
         }
       } catch (error) {
         console.error('Microsoft login error:', error);
-        toast.error(error.message || "Microsoft login failed");
+        showToast.error(error.message || "Microsoft login failed");
       }
     };
 
 
     const handleSubmit = async (e) => {
       e.preventDefault();
+      setLoading(true);
 
       try {
-          setLoading(true);
-          const response = await login({
-              email: formData.email,
-              password: formData.password
-          });
+          const response = await login(formData);
+          console.log('Login response:', response);
 
-          console.log('Login response in component:', response); 
-
-          if (response.success && response.tokens) {
-              // Update auth context
-              const { user } = response;
-              setUser(user);  // Add this line to update context
-
+          if (response && response.tokens && response.user) {
+              setUser(response.user);
+              localStorage.setItem('authToken', response.tokens.access);
+              localStorage.setItem('user', JSON.stringify(response.user));
+              
               if (formData.remember) {
                   localStorage.setItem('remember_token', response.tokens.refresh);
               }
 
-              toast.success("Login successful!");
+              showToast.success("Login successful!");
 
               // Force navigation after context is updated
               setTimeout(() => {
@@ -122,7 +118,7 @@ function Login() {
           }
       } catch (error) {
           console.error('Login error in component:', error);
-          toast.error(error.message || "An error occurred during login");
+          showToast.error(error.message || "An error occurred during login");
       } finally {
           setLoading(false);
       }
@@ -152,7 +148,7 @@ function Login() {
                 <GoogleLogin
                   onSuccess={handleGoogleLogin}
                   onError={() => {
-                    toast.error("Google login failed");
+                    showToast.error("Google login failed");
                   }}
                   useOneTap={false}
                   type="standard"

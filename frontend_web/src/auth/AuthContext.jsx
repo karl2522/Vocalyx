@@ -1,19 +1,24 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
 import { PublicClientApplication } from '@azure/msal-browser';
 import { MsalProvider } from "@azure/msal-react";
+import PropTypes from 'prop-types';
+import { createContext, useContext, useEffect, useState } from 'react';
+import { clearAuthState } from '../utils/auth';
 
-const baseUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
+// Environment variables
+const REDIRECT_URI = import.meta.env.NODE_ENV === 'production' 
+  ? 'https://vocalyx-frontend.vercel.app/' 
+  : 'http://localhost:5173';
+const BACKEND_URL = import.meta.env.NODE_ENV === 'production' 
+  ? 'https://vocalyx-c61a072bf25a.herokuapp.com' 
+  : 'http://127.0.0.1:8000';
 
 const AuthContext = createContext(null);
-
 
 const msalConfig = {
   auth: {
     clientId: '5a7221d3-d167-4f9d-b62e-79c987bb5d5f',
     authority: 'https://login.microsoftonline.com/common',
-    redirectUri: process.env.NODE_ENV === 'production' 
-    ? 'https://vocalyx-frontend.vercel.app/' 
-    : 'http://localhost:5173',
+    redirectUri: REDIRECT_URI,
   },
   cache: {
     cacheLocation: 'sessionStorage',
@@ -67,14 +72,11 @@ export const AuthProvider = ({ children }) => {
     checkAuth();
   }, [initialized]);
 
-  const handleAuthResponse = async (token, provider) => {
+  const handleAuthResponse = async (token) => {
     try {
       console.log('Sending auth request with token:', token);
-      const baseUrl = process.env.NODE_ENV === 'production' 
-        ? 'https://vocalyx-c61a072bf25a.herokuapp.com' 
-        : 'http://127.0.0.1:8000';
         
-      const response = await fetch(`${baseUrl}/api/auth/google/`, {
+      const response = await fetch(`${BACKEND_URL}/api/auth/google/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -101,26 +103,26 @@ export const AuthProvider = ({ children }) => {
       console.error('Authentication error:', error);
       throw error;
     }
-};
+  };
 
-      const googleLogin = async (response) => {
-        try {
-          if (!response || !response.credential) {
-            throw new Error('No ID token received from Google');
-          }
-          return await handleAuthResponse(response.credential, 'google-oauth2');
-        } catch (error) {
-          console.error('Google login error:', error);
-          throw error;
-        }
-      };
+  const googleLogin = async (response) => {
+    try {
+      if (!response || !response.credential) {
+        throw new Error('No ID token received from Google');
+      }
+      return await handleAuthResponse(response.credential);
+    } catch (error) {
+      console.error('Google login error:', error);
+      throw error;
+    }
+  };
 
   const microsoftLogin = async () => {
     try {
       const result = await msalInstance.loginPopup({
         scopes: ['user.read'],
       });
-      await handleAuthResponse(result.accessToken, 'microsoft-graph');
+      await handleAuthResponse(result.accessToken);
     } catch (error) {
       console.error('Microsoft login error:', error);
       throw error;
@@ -128,8 +130,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('user');
+    clearAuthState();
     setUser(null);
   };
 
@@ -149,6 +150,10 @@ export const AuthProvider = ({ children }) => {
       </AuthContext.Provider>
     </MsalProvider>
   );
+};
+
+AuthProvider.propTypes = {
+  children: PropTypes.node.isRequired
 };
 
 export const useAuth = () => {

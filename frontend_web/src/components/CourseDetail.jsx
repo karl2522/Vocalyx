@@ -322,7 +322,7 @@ const CourseDetail = () => {
                 <div 
                   key={classItem.id} 
                   className="class-card bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden cursor-pointer"
-                  onClick={() => navigate(`/class/${classItem.id}`)}
+                  onClick={() => navigate(`/dashboard/class/${classItem.id}`)}
                 >
                   <div className="border-b border-gray-100 bg-gradient-to-r from-[#f8f9ff] to-[#f0f4ff]">
                     <div className="flex items-center justify-between p-4">
