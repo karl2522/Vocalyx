@@ -77,8 +77,6 @@ const ClassDetails = () => {
   const [previewTab, setPreviewTab] = useState('info');
   const [previewRowsToShow, setPreviewRowsToShow] = useState(10);
   const [exportPreviewData, setExportPreviewData] = useState(null);
-  const [excelFiles, setExcelFiles] = useState([]);
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const lastSavedData = useRef(null);
   const [detectedNameColumn, setDetectedNameColumn] = useState(null);
@@ -99,16 +97,10 @@ const ClassDetails = () => {
     return excelData.data.slice(0, visibleRowCount);
   }, [excelData, visibleRowCount]);
 
+  // No need for dropdown event handlers anymore
   useEffect(() => {
-    const handleClickOutside = (event) => {
-        if (isDropdownOpen && !event.target.closest('.relative')) {
-            setIsDropdownOpen(false);
-        }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-}, [isDropdownOpen]);
+    // This effect can be used for other document-level event listeners if needed
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -123,7 +115,6 @@ const ClassDetails = () => {
             
             // If there are excel files, load the most recent one
             if (excelResponse.data.length > 0) {
-                setExcelFiles(excelResponse.data);
                 const latestFile = excelResponse.data[0]; // Assuming they're sorted by date
                 
                 // Set the excel data
@@ -391,14 +382,6 @@ const ClassDetails = () => {
                     const response = await classService.uploadExcel(file, id);
                     
                     const { id: fileId, sheet_data, file_name } = response.data;
-                    
-                    // Add new file to excelFiles list
-                    setExcelFiles(prev => [{
-                        id: fileId,
-                        file_name,
-                        sheet_data,
-                        uploaded_at: new Date().toISOString()
-                    }, ...prev]);
                     
                     const headers = Object.keys(sheet_data[0] || {});
                     const data = sheet_data.map(row => 
@@ -687,20 +670,6 @@ const ClassDetails = () => {
     setImportProgress(0);
 };
 
-const handleFileSwitch = (file) => {
-  const headers = Object.keys(file.sheet_data[0] || {});
-  const data = file.sheet_data.map(row => 
-      headers.map(header => row[header])
-  );
-  
-  setSelectedFile({ name: file.file_name });
-  setExcelData({
-      headers,
-      data,
-      fileId: file.id
-  });
-};
-
   const handleChangeSheet = (sheetIndex) => {
     if (!selectedFile || sheetIndex === activeSheet || sheetIndex >= sheets.length) {
       return;
@@ -965,7 +934,7 @@ const handleFileSwitch = (file) => {
   // Render the full screen Excel view
   const renderExcelView = () => {
     return (
-      <div className={`${isFullScreen ? 'fixed inset-0 z-50 bg-white' : ''}`}>
+      <div className={`${isFullScreen ? 'fixed inset-0 z-50 bg-white excel-fullscreen-container' : ''}`}>
         <div className={`${isFullScreen ? 'h-screen flex flex-col' : ''}`}>
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b bg-white">
@@ -1037,14 +1006,8 @@ const handleFileSwitch = (file) => {
           {/* Excel Content */}
           <div className={`flex-1 overflow-hidden ${isFullScreen ? 'h-full' : ''}`}>
             <div className="h-full flex flex-col">
-              <div className="flex items-center justify-between p-2 bg-gray-50 border-b">
-                <div className="flex items-center text-sm text-gray-500">
-                  <FiFilter className="mr-2" />
-                  <span>Use filters and context menu for advanced operations</span>
-                </div>
-              </div>
               
-              <div className="flex-1 overflow-hidden">
+              <div className="flex-1 overflow-hidden excel-wrapper">
                 <HotTable
                   ref={hotTableRef}
                   data={visibleData || []}
@@ -1054,9 +1017,9 @@ const handleFileSwitch = (file) => {
                   width="100%"
                   licenseKey="non-commercial-and-evaluation"
                   className="htCustom"
-                  stretchH="all"
+                  stretchH="none"
                   autoColumnSize={false}
-                  colWidths={120}
+                  colWidths={100}
                   readOnly={false}
                   manualColumnResize={true}
                   manualRowResize={true}
@@ -1067,8 +1030,8 @@ const handleFileSwitch = (file) => {
                   sortIndicator={true}
                   afterChange={handleDataChange}
                   rowHeights={28}
-                  fixedRowsTop={0}
-                  fixedColumnsLeft={0}
+                  fixedRowsTop={1}
+                  fixedColumnsLeft={1}
                   wordWrap={true}
                   outsideClickDeselects={false}
                   columnHeaderHeight={40}
@@ -1081,10 +1044,13 @@ const handleFileSwitch = (file) => {
                     minSpareRows: 0,
                     minSpareCols: 0,
                     renderAllRows: false,
-                    viewportColumnRenderingOffset: 10,
-                    viewportRowRenderingOffset: 10,
-                    preventOverflow: 'horizontal'
+                    viewportColumnRenderingOffset: 15,
+                    viewportRowRenderingOffset: 15,
+                    preventOverflow: false,
+                    fixedRowsTop: 1,
+                    fixedColumnsLeft: 1
                   }}
+                  tableClassName="excel-table-container"
                 />
               </div>
             </div>
@@ -1149,35 +1115,6 @@ const handleFileSwitch = (file) => {
               <div className="flex space-x-3">
                 {excelData ? (
                     <>
-                        <div className="relative">
-                            <button
-                                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                                className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm"
-                            >
-                                <FiFileText size={18} />
-                                <span>Switch File ({excelFiles.length})</span>
-                            </button>
-                            {isDropdownOpen && (
-                                <div className="absolute right-0 mt-2 w-80 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50">
-                                    <div className="py-1 max-h-60 overflow-auto">
-                                        {excelFiles.map(file => (
-                                            <button
-                                                key={file.id}
-                                                onClick={() => {
-                                                    handleFileSwitch(file);
-                                                    setIsDropdownOpen(false);
-                                                }}
-                                                className={`block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 ${
-                                                    file.id === excelData.fileId ? 'bg-[#EEF0F8] text-[#333D79]' : 'text-gray-700'
-                                                }`}
-                                            >
-                                                {file.file_name}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
                         <label htmlFor="add-file" className="cursor-pointer">
                             <div className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm hover:bg-gray-50">
                                 <FiUpload size={18} />
@@ -1193,7 +1130,7 @@ const handleFileSwitch = (file) => {
                         </label>
                         <button
                             onClick={handleExport}
-                            className="bg-[#333D79] hover:bg-[#4A5491] text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm"
+                            className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm hover:bg-gray-50"
                         >
                             <FiDownload size={18} />
                             <span>Export Data</span>
@@ -1428,21 +1365,46 @@ const handleFileSwitch = (file) => {
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center text-sm text-gray-500">
                       <FiFilter className="mr-2" />
-                      <span>Use filters and context menu for advanced operations</span>
+                                              <span>Use filters and context menu for advanced operations</span>
+                      </div>
+                      <div className="bg-[#F5F7FB] px-3 py-1.5 rounded-md text-sm text-gray-600 font-medium">
+                        {fileStats ? 
+                          `${fileStats.totalRows.toLocaleString()} rows × ${fileStats.totalCols.toLocaleString()} columns` :
+                          `${excelData.data.length.toLocaleString()} rows × ${excelData.headers.length} columns`
+                        }
+                        {excelData.data.length > visibleRowCount && 
+                          ` (showing ${visibleRowCount.toLocaleString()} rows)`}
+                      </div>
                     </div>
-                    <div className="bg-[#F5F7FB] px-3 py-1.5 rounded-md text-sm text-gray-600 font-medium">
-                      {fileStats ? 
-                        `${fileStats.totalRows.toLocaleString()} rows × ${fileStats.totalCols.toLocaleString()} columns` :
-                        `${excelData.data.length.toLocaleString()} rows × ${excelData.headers.length} columns`
-                      }
-                      {excelData.data.length > visibleRowCount && 
-                        ` (showing ${visibleRowCount.toLocaleString()} rows)`}
-                    </div>
-                  </div>
                   
-                  <div className="relative mb-4">
-                    <div className="overflow-auto border rounded-lg shadow-sm" style={{ maxHeight: '70vh', maxWidth: '100%' }}>
-                      <div style={{ minWidth: '100%', width: Math.max(excelData.headers.length * 120, 800) + 'px' }}>
+                  <div className="excel-wrapper relative mb-4 border rounded-lg shadow-sm">
+                    <div className="bg-white px-3 py-2 border-b border-gray-100 flex justify-between items-center">
+                      <div className="flex items-center">
+                        <div className="h-8 w-8 rounded-full bg-[#EEF0F8] flex items-center justify-center mr-2">
+                          <BsFileEarmarkSpreadsheet className="h-4 w-4 text-[#333D79]" />
+                        </div>
+                        <span className="text-sm font-medium text-gray-700">{selectedFile ? selectedFile.name : 'Excel Data'}</span>
+                      </div>
+                      <div className="flex items-center">
+                        <button
+                          onClick={handleExport}
+                          className="text-gray-500 hover:text-[#333D79] p-1.5 rounded-md hover:bg-gray-50 mr-1"
+                          title="Export Data"
+                        >
+                          <FiDownload size={16} />
+                        </button>
+                        <button
+                          onClick={toggleFullScreen}
+                          className="text-gray-500 hover:text-[#333D79] p-1.5 rounded-md hover:bg-gray-50"
+                          title="Enter Full Screen"
+                        >
+                          <FiMaximize size={16} />
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <div className="overflow-hidden" style={{ maxHeight: 'calc(70vh - 45px)' }}>
+                      <div className="overflow-auto excel-scroll-container" style={{ maxHeight: 'calc(70vh - 45px)', maxWidth: '100%' }}>
                         <HotTable
                           ref={hotTableRef}
                           data={visibleData || []}
@@ -1454,7 +1416,7 @@ const handleFileSwitch = (file) => {
                           className="htCustom"
                           stretchH="none"
                           autoColumnSize={false}
-                          colWidths={120}
+                          colWidths={100}
                           readOnly={false}
                           manualColumnResize={true}
                           manualRowResize={true}
@@ -1465,8 +1427,8 @@ const handleFileSwitch = (file) => {
                           sortIndicator={true}
                           afterChange={handleDataChange}
                           rowHeights={28}
-                          fixedRowsTop={0}
-                          fixedColumnsLeft={0}
+                          fixedRowsTop={1}
+                          fixedColumnsLeft={1}
                           wordWrap={true}
                           outsideClickDeselects={false}
                           columnHeaderHeight={40}
@@ -1479,10 +1441,13 @@ const handleFileSwitch = (file) => {
                             minSpareRows: 0,
                             minSpareCols: 0,
                             renderAllRows: false,
-                            viewportColumnRenderingOffset: 10,
-                            viewportRowRenderingOffset: 10,
-                            preventOverflow: 'horizontal'
+                            viewportColumnRenderingOffset: 15,
+                            viewportRowRenderingOffset: 15,
+                            preventOverflow: false,
+                            fixedRowsTop: 1,
+                            fixedColumnsLeft: 1
                           }}
+                          tableClassName="excel-table-container"
                         />
                       </div>
                     </div>
@@ -2466,13 +2431,7 @@ const handleFileSwitch = (file) => {
           </div>
         </div>
       )}
-
-      {/* Modify your existing Excel view to use renderExcelView when not in full screen */}
-      {excelData && !isFullScreen && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          {renderExcelView()}
-        </div>
-      )}
+        
     </DashboardLayout>
   );
 };

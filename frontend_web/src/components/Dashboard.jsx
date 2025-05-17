@@ -1,131 +1,132 @@
-import { useEffect, useState } from 'react';
-import { FiActivity, FiCalendar, FiClock, FiPlus, FiSpeaker, FiTrendingUp, FiUsers } from 'react-icons/fi';
-import { MdOutlineClass, MdOutlinePublish, MdOutlineSchool } from 'react-icons/md';
+import { useEffect, useMemo, useState } from 'react';
+import { FiCalendar, FiClock, FiPlus, FiTrendingUp, FiUsers } from 'react-icons/fi';
+import { MdOutlineClass, MdOutlineSchool } from 'react-icons/md';
 import { RiBookOpenLine, RiSoundModuleLine } from 'react-icons/ri';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { courseService } from '../services/api.js';
+import { commonHeaderAnimations } from '../utils/animation.js';
 import { showToast } from '../utils/toast.jsx';
 import DashboardLayout from './layouts/DashboardLayout';
 import CourseModal from './modals/CourseModal';
 
-// Custom animation styles
-const dashboardStyles = `
-  @keyframes fadeInUp {
-    from {
+// Custom animation styles - optimized to prevent blinking
+const DashboardStyles = () => {
+  const styles = useMemo(() => `
+    ${commonHeaderAnimations}
+    
+    @keyframes pulse-subtle {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.02); }
+      100% { transform: scale(1); }
+    }
+    
+    .pulse-on-hover {
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    
+    .pulse-on-hover:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 25px -5px rgba(51, 61, 121, 0.1);
+    }
+    
+    .stat-card {
+      position: relative;
+      overflow: hidden;
+      transition: all 0.3s ease;
+      will-change: transform, box-shadow;
+    }
+    
+    .stat-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 25px -5px rgba(51, 61, 121, 0.1);
+    }
+    
+    .stat-card::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, rgba(51, 61, 121, 0.05) 0%, rgba(74, 84, 145, 0.05) 100%);
       opacity: 0;
-      transform: translateY(20px);
+      transition: opacity 0.3s ease;
     }
-    to {
+    
+    .stat-card:hover::before {
       opacity: 1;
-      transform: translateY(0);
     }
-  }
+    
+    .book-icon-container {
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .book-icon-container::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at center, rgba(51, 61, 121, 0.1) 0%, transparent 70%);
+      z-index: -1;
+    }
+    
+    .book-icon-glow {
+      filter: drop-shadow(0 0 8px rgba(51, 61, 121, 0.3));
+    }
+
+    .team-card {
+      transition: all 0.3s ease;
+      border: 1px solid #f1f1f1;
+      position: relative;
+      overflow: hidden;
+      will-change: transform, box-shadow;
+    }
+    
+    .team-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 10px 25px -5px rgba(51, 61, 121, 0.1);
+    }
+    
+    .team-card::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, rgba(51, 61, 121, 0.02) 0%, rgba(74, 84, 145, 0.02) 100%);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    
+    .team-card:hover::before {
+      opacity: 1;
+    }
+    
+    .team-member-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      overflow: hidden;
+      border: 2px solid white;
+      margin-left: -8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: #E6EAFF;
+      font-size: 10px;
+      color: #333D79;
+      font-weight: 600;
+    }
+    
+    .team-member-avatar:first-child {
+      margin-left: 0;
+    }
+  `, []);
   
-  @keyframes pulse-subtle {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.02); }
-    100% { transform: scale(1); }
-  }
-  
-  @keyframes float {
-    0% { transform: translateY(0px); }
-    50% { transform: translateY(-5px); }
-    100% { transform: translateY(0px); }
-  }
-  
-  .fade-in-up {
-    animation: fadeInUp 0.5s ease-out forwards;
-  }
-  
-  .pulse-on-hover {
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
-  }
-  
-  .pulse-on-hover:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 10px 25px -5px rgba(51, 61, 121, 0.1);
-  }
-  
-  .float-animation {
-    animation: float 6s ease-in-out infinite;
-  }
-  
-  .stat-card {
-    position: relative;
-    overflow: hidden;
-    transition: all 0.3s ease;
-  }
-  
-  .stat-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 10px 25px -5px rgba(51, 61, 121, 0.1);
-  }
-  
-  .stat-card::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(135deg, rgba(51, 61, 121, 0.05) 0%, rgba(74, 84, 145, 0.05) 100%);
-    opacity: 0;
-    transition: opacity 0.3s ease;
-  }
-  
-  .stat-card:hover::before {
-    opacity: 1;
-  }
-  
-  .quick-action-button {
-    transition: all 0.3s ease;
-    position: relative;
-    overflow: hidden;
-  }
-  
-  .quick-action-button::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 100%);
-    opacity: 0;
-    transition: opacity 0.3s ease;
-  }
-  
-  .quick-action-button:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 6px 15px -3px rgba(51, 61, 121, 0.1);
-  }
-  
-  .quick-action-button:hover::after {
-    opacity: 1;
-  }
-  
-  .hero-gradient {
-    background: linear-gradient(135deg, #eef0f8 0%, #dce0f2 100%);
-  }
-  
-  .book-icon-container {
-    position: relative;
-    overflow: hidden;
-  }
-  
-  .book-icon-container::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: radial-gradient(circle at center, rgba(51, 61, 121, 0.1) 0%, transparent 70%);
-    z-index: -1;
-  }
-  
-  .book-icon-glow {
-    filter: drop-shadow(0 0 8px rgba(51, 61, 121, 0.3));
-  }
-`;
+  return <style>{styles}</style>;
+};
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -134,6 +135,47 @@ const Dashboard = () => {
   const [isCourseModalOpen, setIsCourseModalOpen] = useState(false);
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [teamData, setTeamData] = useState([
+    {
+      id: 1,
+      name: "Teaching Team Alpha",
+      role: "Lead Teacher",
+      members: [
+        { id: 1, name: "John Doe", initial: "JD" },
+        { id: 2, name: "Sarah Lee", initial: "SL" },
+        { id: 3, name: "Mark Rivers", initial: "MR" },
+        { id: 4, name: "Anna Kim", initial: "AK" }
+      ],
+      courseCount: 7,
+      lastActive: "Today"
+    },
+    {
+      id: 2,
+      name: "Academic Department",
+      role: "Member",
+      members: [
+        { id: 5, name: "James Wilson", initial: "JW" },
+        { id: 6, name: "Lisa Chen", initial: "LC" },
+        { id: 7, name: "Michael Brown", initial: "MB" }
+      ],
+      courseCount: 4,
+      lastActive: "Yesterday"
+    },
+    {
+      id: 3,
+      name: "Research Group Beta",
+      role: "Co-Lead",
+      members: [
+        { id: 8, name: "Robert Garcia", initial: "RG" },
+        { id: 9, name: "Emily Davis", initial: "ED" },
+        { id: 10, name: "Thomas Smith", initial: "TS" },
+        { id: 11, name: "Rachel Green", initial: "RG" },
+        { id: 12, name: "David Park", initial: "DP" }
+      ],
+      courseCount: 3,
+      lastActive: "2 days ago"
+    }
+  ]);
 
   useEffect(() => {
     const token = localStorage.getItem('authToken');
@@ -177,7 +219,7 @@ const Dashboard = () => {
       change: '+8%',
       trend: 'up',
       color: 'from-[#4A5491] to-[#5D69A5]',
-      delay: '0.1s'
+      delay: '0s'
     },
     {
       name: 'Team Members',
@@ -186,7 +228,7 @@ const Dashboard = () => {
       change: '+2',
       trend: 'up',
       color: 'from-[#5D69A5] to-[#6B77B7]',
-      delay: '0.2s'
+      delay: '0s'
     },
     {
       name: 'Hours Processed',
@@ -195,34 +237,7 @@ const Dashboard = () => {
       change: '+24',
       trend: 'up',
       color: 'from-[#6B77B7] to-[#7B85C9]',
-      delay: '0.3s'
-    },
-  ];
-
-  const quickActions = [
-    {
-      name: 'New Recording',
-      icon: <RiSoundModuleLine size={28} />,
-      color: 'from-[#333D79] to-[#4A5491]',
-      delay: '0.1s'
-    },
-    {
-      name: 'Import Audio',
-      icon: <MdOutlinePublish size={28} />,
-      color: 'from-[#4A5491] to-[#5D69A5]',
-      delay: '0.2s'
-    },
-    {
-      name: 'Transcribe',
-      icon: <FiSpeaker size={28} />,
-      color: 'from-[#5D69A5] to-[#6B77B7]',
-      delay: '0.3s'
-    },
-    {
-      name: 'Analytics',
-      icon: <FiActivity size={28} />,
-      color: 'from-[#6B77B7] to-[#7B85C9]',
-      delay: '0.4s'
+      delay: '0s'
     },
   ];
 
@@ -261,21 +276,65 @@ const Dashboard = () => {
     navigate(`/dashboard/course/${id}`);
   };
 
+  // Function to toggle empty teams state for testing
+  const toggleTeamsVisibility = () => {
+    setTeamData(current => current.length ? [] : [
+      {
+        id: 1,
+        name: "Teaching Team Alpha",
+        role: "Lead Teacher",
+        members: [
+          { id: 1, name: "John Doe", initial: "JD" },
+          { id: 2, name: "Sarah Lee", initial: "SL" },
+          { id: 3, name: "Mark Rivers", initial: "MR" },
+          { id: 4, name: "Anna Kim", initial: "AK" }
+        ],
+        courseCount: 7,
+        lastActive: "Today"
+      },
+      {
+        id: 2,
+        name: "Academic Department",
+        role: "Member",
+        members: [
+          { id: 5, name: "James Wilson", initial: "JW" },
+          { id: 6, name: "Lisa Chen", initial: "LC" },
+          { id: 7, name: "Michael Brown", initial: "MB" }
+        ],
+        courseCount: 4,
+        lastActive: "Yesterday"
+      },
+      {
+        id: 3,
+        name: "Research Group Beta",
+        role: "Co-Lead",
+        members: [
+          { id: 8, name: "Robert Garcia", initial: "RG" },
+          { id: 9, name: "Emily Davis", initial: "ED" },
+          { id: 10, name: "Thomas Smith", initial: "TS" },
+          { id: 11, name: "Rachel Green", initial: "RG" },
+          { id: 12, name: "David Park", initial: "DP" }
+        ],
+        courseCount: 3,
+        lastActive: "2 days ago"
+      }
+    ]);
+  };
+
   return (
     <DashboardLayout>
-      {/* Add custom styles */}
-      <style>{dashboardStyles}</style>
+      <DashboardStyles />
       
       <div className="pb-6">
         {/* Hero Section */}
-        <div className="hero-gradient rounded-xl mb-8 p-6 md:p-8 shadow-sm border border-gray-100 overflow-hidden relative" style={{animationDelay: '0s'}}>
+        <div className="hero-gradient rounded-xl mb-8 p-6 md:p-8 shadow-sm border border-gray-100 overflow-hidden relative">
           {/* Background Elements */}
-          <div className="absolute -top-24 -right-24 w-64 h-64 bg-blue-300 opacity-10 rounded-full blur-3xl"></div>
-          <div className="absolute -bottom-32 -left-32 w-64 h-64 bg-indigo-200 opacity-10 rounded-full blur-3xl"></div>
-          <div className="absolute top-1/2 -translate-y-1/2 right-6 md:right-20 w-32 h-32 rounded-full bg-gradient-to-r from-[#333D79]/10 to-[#4A5491]/5 float-animation hidden md:block"></div>
+          <div className="bg-blur-circle bg-blur-circle-top"></div>
+          <div className="bg-blur-circle bg-blur-circle-bottom"></div>
+          <div className="bg-floating-circle hidden md:block"></div>
           
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center relative z-10">
-            <div className="fade-in-up" style={{animationDelay: '0.1s'}}>
+            <div className="fade-in-up" style={{animationDelay: '0s'}}>
               <h1 className="text-3xl font-bold mb-2 bg-clip-text text-transparent bg-gradient-to-r from-[#333D79] to-[#4A5491]">
                 Welcome back, {user?.first_name}!
               </h1>
@@ -292,12 +351,12 @@ const Dashboard = () => {
                   <span>Add New Course</span>
                 </button>
                 
-                <button 
+                <Link to="/dashboard/schedule"
                   className="px-5 py-2.5 border border-[#333D79]/20 text-[#333D79] rounded-lg hover:bg-[#333D79]/5 transition-colors flex items-center gap-2"
                 >
                   <FiCalendar size={18} />
-                  <span>View Calendar</span>
-                </button>
+                  <span>View Schedule</span>
+                </Link>
               </div>
             </div>
             
@@ -339,8 +398,7 @@ const Dashboard = () => {
           {stats.map((stat) => (
             <div 
               key={stat.name} 
-              className="stat-card fade-in-up bg-white rounded-xl p-6 shadow-sm border border-gray-100 pulse-on-hover"
-              style={{animationDelay: stat.delay}}
+              className="stat-card bg-white rounded-xl p-6 shadow-sm border border-gray-100 pulse-on-hover"
             >
               <div className="flex justify-between items-start mb-4">
                 <div>
@@ -361,32 +419,122 @@ const Dashboard = () => {
           ))}
         </div>
 
-        {/* Quick Access */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8 fade-in-up" style={{animationDelay: '0.5s'}}>
-          <h2 className="text-lg font-semibold mb-5 text-gray-800 flex items-center">
-            <span className="bg-[#EEF0F8] p-1.5 rounded-md mr-2">
-              <FiActivity size={18} className="text-[#333D79]" />
-            </span>
-            Quick Actions
-          </h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {quickActions.map((action) => (
-              <button 
-                key={action.name}
-                className="quick-action-button flex flex-col items-center justify-center p-5 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-all group fade-in-up"
-                style={{animationDelay: action.delay}}
-              >
-                <div className={`p-3 rounded-full bg-gradient-to-r ${action.color} shadow-md text-white mb-3 group-hover:scale-110 transition-transform`}>
-                  {action.icon}
+        {/* Teams Section */}
+        {teamData.length > 0 ? (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
+            <div className="flex justify-between items-center mb-5">
+              <h2 className="text-lg font-semibold text-gray-800 flex items-center">
+                <span className="bg-[#EEF0F8] p-1.5 rounded-md mr-2">
+                  <FiUsers size={18} className="text-[#333D79]" />
+                </span>
+                Your Teams
+              </h2>
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={toggleTeamsVisibility}
+                  className="text-xs text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded transition-colors"
+                  title="Toggle teams visibility (for testing)"
+                >
+                  Toggle Empty
+                </button>
+                <Link to="/dashboard/team" className="text-sm text-[#333D79] font-medium hover:underline flex items-center">
+                  View All Teams
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </Link>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {teamData.map(team => (
+                <div key={team.id} className="team-card rounded-xl p-5 bg-white shadow-sm hover:shadow-md border border-gray-100">
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <h3 className="text-base font-semibold text-gray-800">{team.name}</h3>
+                      <span className="inline-block px-2 py-1 bg-[#EEF0F8] text-[#333D79] text-xs font-medium rounded-md mt-1">
+                        {team.role}
+                      </span>
+                    </div>
+                    <span className="text-xs text-gray-500">{team.lastActive}</span>
+                  </div>
+                  
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex">
+                      {team.members.slice(0, 4).map((member, index) => (
+                        <div key={member.id} className="team-member-avatar shadow-sm" style={{zIndex: 10-index}}>
+                          {member.initial}
+                        </div>
+                      ))}
+                      {team.members.length > 4 && (
+                        <div className="team-member-avatar shadow-sm bg-[#333D79] text-white" style={{zIndex: 1}}>
+                          +{team.members.length - 4}
+                        </div>
+                      )}
+                    </div>
+                    <span className="text-sm text-gray-600 flex items-center">
+                      <RiBookOpenLine className="mr-1 text-gray-400" size={14} />
+                      {team.courseCount} Courses
+                    </span>
+                  </div>
+                  
+                  <Link
+                    to={`/dashboard/team#${team.id}`}
+                    className="w-full py-2 mt-2 bg-gray-50 text-[#333D79] text-sm font-medium rounded-lg hover:bg-[#EEF0F8] transition-colors border border-gray-100 flex items-center justify-center"
+                  >
+                    View Team Details
+                  </Link>
                 </div>
-                <span className="text-sm font-medium text-gray-700">{action.name}</span>
-              </button>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
+            <div className="flex justify-between items-center mb-5">
+              <h2 className="text-lg font-semibold text-gray-800 flex items-center">
+                <span className="bg-[#EEF0F8] p-1.5 rounded-md mr-2">
+                  <FiUsers size={18} className="text-[#333D79]" />
+                </span>
+                Teams
+              </h2>
+              <button 
+                onClick={toggleTeamsVisibility}
+                className="text-xs text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded transition-colors"
+                title="Toggle teams visibility (for testing)"
+              >
+                Show Teams
+              </button>
+            </div>
+            
+            <div className="py-8 px-4 text-center">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-[#EEF0F8] rounded-full mb-4 float-animation">
+                <FiUsers className="h-8 w-8 text-[#333D79]" />
+              </div>
+              <h3 className="text-lg font-medium text-gray-800 mb-2">No Teams Yet</h3>
+              <p className="text-gray-600 max-w-md mx-auto mb-6">
+                Create or join a team to collaborate with other teachers, share resources, and manage courses together.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <Link 
+                  to="/dashboard/team" 
+                  className="px-5 py-2.5 bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white rounded-lg shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-2"
+                >
+                  <FiPlus size={16} className="transition-transform duration-300" />
+                  <span>Create Team</span>
+                </Link>
+                <Link 
+                  to="/dashboard/team" 
+                  className="px-5 py-2.5 border border-[#333D79]/20 text-[#333D79] rounded-lg hover:bg-[#333D79]/5 transition-colors flex items-center justify-center gap-2"
+                >
+                  <span>Join Existing Team</span>
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Recent Activity */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden fade-in-up" style={{animationDelay: '0.7s'}}>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="border-b border-gray-100 bg-gradient-to-r from-[#f8f9ff] to-[#f0f4ff]">
             <div className="flex">
               <button
@@ -404,7 +552,7 @@ const Dashboard = () => {
                 }`}
                 onClick={() => setActiveTab('recordings')}
               >
-                <RiSoundModuleLine size={18} />
+                <RiBookOpenLine size={18} />
                 Recent Recordings
               </button>
             </div>

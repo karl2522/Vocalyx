@@ -1,48 +1,44 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { FiBook, FiEdit, FiFilter, FiMoreVertical, FiPlus, FiSearch, FiTrash2, FiUsers } from 'react-icons/fi';
 import { MdArchive, MdOutlineSchool } from 'react-icons/md';
 import { useNavigate } from 'react-router-dom';
+import { courseService } from '../services/api';
+import { commonHeaderAnimations } from '../utils/animation.js';
 import DashboardLayout from "./layouts/DashboardLayout.jsx";
 import CourseModal from './modals/CourseModal';
-import { courseService } from '../services/api';
 
-// Animation styles component
-const AnimationStyles = () => {
-  return (
-    <style>{`
-      @keyframes float {
-        0% { transform: translateY(0px); }
-        50% { transform: translateY(-10px); }
-        100% { transform: translateY(0px); }
-      }
-      
-      .course-card {
-        transition: all 0.3s ease;
-        border: 1px solid #f1f1f1;
-      }
-      
-      .course-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-      }
-      
-      .floating {
-        animation: float 6s ease-in-out infinite;
-      }
-      
-      .course-header {
-        background-color: #f9fafb;
-      }
-    `}</style>
-  );
+// Animation styles component - optimized to prevent flickering
+const CoursesStyles = () => {
+  const styles = useMemo(() => `
+    ${commonHeaderAnimations}
+    
+    .course-card {
+      transition: all 0.3s ease;
+      border: 1px solid #f1f1f1;
+      will-change: transform, box-shadow;
+    }
+    
+    .course-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    }
+    
+    .course-header {
+      background-color: #f9fafb;
+    }
+  `, []);
+  
+  return <style>{styles}</style>;
 };
 
 const Courses = () => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState('all');
+  const [teamFilter, setTeamFilter] = useState('my-teams'); // 'my-teams' or 'all-teams'
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  const [showTeamFilterDropdown, setShowTeamFilterDropdown] = useState(false);
   const [isCourseModalOpen, setIsCourseModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [currentCourse, setCurrentCourse] = useState(null);
@@ -119,8 +115,6 @@ const Courses = () => {
       const courseToUpdate = courses.find(course => course.id === courseId);
       if (!courseToUpdate) return;
       
-      const updatedCourse = { ...courseToUpdate, status: newStatus };
-      
       await courseService.updateCourse(courseId, { status: newStatus });
       
       setCourses(courses.map(course => 
@@ -157,7 +151,7 @@ const Courses = () => {
     setActiveDropdown(activeDropdown === courseId ? null : courseId);
   };
 
-  // Filter courses based on search term and filter selection
+  // Filter courses based on search term, filter selection, and team filter
   const filteredCourses = courses.filter(course => {
     // Apply search filter
     const matchesSearch = course.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -165,8 +159,15 @@ const Courses = () => {
                           course.courseCode?.toLowerCase().includes(searchTerm.toLowerCase());
     
     // Apply status filter
-    if (filter === 'all') return matchesSearch;
-    return matchesSearch && course.status?.toLowerCase() === filter.toLowerCase();
+    const matchesStatus = filter === 'all' ? true : 
+                         (course.status?.toLowerCase() === filter.toLowerCase());
+    
+    // Apply team filter - this is a placeholder as we don't have actual team data
+    // In a real application, you would filter based on team membership
+    const matchesTeam = teamFilter === 'all-teams' ? true : 
+                        (course.is_member === undefined ? true : course.is_member);
+    
+    return matchesSearch && matchesStatus && matchesTeam;
   });
 
   // Function to determine if a course is active, completed, or archived
@@ -185,29 +186,36 @@ const Courses = () => {
 
   return (
     <DashboardLayout>
-      <AnimationStyles />
+      <CoursesStyles />
       <div className="pb-6">
-        {/* Header section remains the same... */}
-        <div className="course-header bg-white rounded-lg shadow-sm border border-gray-100 p-6 mb-6">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-            <div className="flex items-center gap-4">
-              <div className="h-12 w-12 rounded-lg bg-[#333D79] flex items-center justify-center flex-shrink-0">
+        {/* Header Section */}
+        <div className="hero-gradient rounded-xl mb-8 p-5 shadow-sm border border-gray-100 overflow-hidden relative">
+          {/* Background Elements */}
+          <div className="bg-blur-circle bg-blur-circle-top"></div>
+          <div className="bg-blur-circle bg-blur-circle-bottom"></div>
+          <div className="bg-floating-circle hidden md:block"></div>
+          
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center relative z-10">
+            <div className="flex items-center gap-4 fade-in-up" style={{animationDelay: '0s'}}>
+              <div className="h-12 w-12 rounded-xl bg-gradient-to-r from-[#333D79] to-[#4A5491] flex items-center justify-center flex-shrink-0 shadow-md float-animation">
                 <MdOutlineSchool className="h-6 w-6 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-800">Your Courses</h1>
-                <p className="text-gray-600 text-sm mt-1">Manage and organize your academic courses</p>
+                <h1 className="text-2xl font-bold text-gray-900">Your Courses</h1>
+                <p className="text-gray-600">Manage and organize your academic courses</p>
               </div>
             </div>
+            
             <button 
               onClick={() => {
                 setIsEditMode(false);
                 setCurrentCourse(null);
                 setIsCourseModalOpen(true);
               }}
-              className="bg-[#333D79] hover:bg-[#4A5491] text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+              className="px-5 py-2.5 bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white rounded-lg shadow-md hover:shadow-lg transition-all flex items-center gap-2 mt-4 md:mt-0 fade-in-up group"
+              style={{animationDelay: '0s'}}
             >
-              <FiPlus size={18} />
+              <FiPlus size={18} className="group-hover:rotate-90 transition-transform duration-300" />
               <span>Add Course</span>
             </button>
           </div>
@@ -227,7 +235,7 @@ const Courses = () => {
           currentCourse={currentCourse}
         />
 
-        {/* Filters and search - remains the same... */}
+        {/* Filters and search - updated with team filter */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-6">
           <div className="flex flex-col space-y-4 md:flex-row md:space-y-0 md:space-x-4 md:items-center">
             <div className="relative flex-1">
@@ -241,49 +249,90 @@ const Courses = () => {
               />
             </div>
             
-            <div className="relative">
-              <button
-                onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-                className="flex items-center space-x-2 px-5 py-3 border border-gray-200 rounded-xl hover:bg-[#F0F2F8] transition-all shadow-sm"
-              >
-                <FiFilter size={18} className="text-[#4A5491]" />
-                <span className="text-gray-700 font-medium">
-                  {filter === 'all' ? 'All Courses' : filter.charAt(0).toUpperCase() + filter.slice(1)}
-                </span>
-              </button>
+            <div className="flex gap-3">
+              {/* Status Filter */}
+              <div className="relative">
+                <button
+                  onClick={() => {
+                    setShowFilterDropdown(!showFilterDropdown);
+                    setShowTeamFilterDropdown(false);
+                  }}
+                  className="flex items-center space-x-2 px-5 py-3 border border-gray-200 rounded-xl hover:bg-[#F0F2F8] transition-all shadow-sm"
+                >
+                  <FiFilter size={18} className="text-[#4A5491]" />
+                  <span className="text-gray-700 font-medium">
+                    {filter === 'all' ? 'All Courses' : filter.charAt(0).toUpperCase() + filter.slice(1)}
+                  </span>
+                </button>
+                
+                {showFilterDropdown && (
+                  <div className="absolute right-0 mt-2 w-52 bg-white rounded-xl shadow-lg z-50 py-2 border border-gray-100 overflow-hidden">
+                    <button
+                      onClick={() => { setFilter('all'); setShowFilterDropdown(false); }}
+                      className="block w-full text-left px-5 py-2.5 text-sm text-gray-700 hover:bg-[#F0F2F8] flex items-center"
+                    >
+                      <span className="w-3 h-3 rounded-full bg-gray-400 mr-3"></span>
+                      All Courses
+                    </button>
+                    <button
+                      onClick={() => { setFilter('active'); setShowFilterDropdown(false); }}
+                      className="block w-full text-left px-5 py-2.5 text-sm text-gray-700 hover:bg-[#F0F2F8] flex items-center"
+                    >
+                      <span className="w-3 h-3 rounded-full bg-green-500 mr-3"></span>
+                      Active
+                    </button>
+                    <button
+                      onClick={() => { setFilter('completed'); setShowFilterDropdown(false); }}
+                      className="block w-full text-left px-5 py-2.5 text-sm text-gray-700 hover:bg-[#F0F2F8] flex items-center"
+                    >
+                      <span className="w-3 h-3 rounded-full bg-blue-500 mr-3"></span>
+                      Completed
+                    </button>
+                    <button
+                      onClick={() => { setFilter('archived'); setShowFilterDropdown(false); }}
+                      className="block w-full text-left px-5 py-2.5 text-sm text-gray-700 hover:bg-[#F0F2F8] flex items-center"
+                    >
+                      <span className="w-3 h-3 rounded-full bg-gray-600 mr-3"></span>
+                      Archived
+                    </button>
+                  </div>
+                )}
+              </div>
               
-              {showFilterDropdown && (
-                <div className="absolute right-0 mt-2 w-52 bg-white rounded-xl shadow-lg z-50 py-2 border border-gray-100 overflow-hidden">
-                  <button
-                    onClick={() => { setFilter('all'); setShowFilterDropdown(false); }}
-                    className="block w-full text-left px-5 py-2.5 text-sm text-gray-700 hover:bg-[#F0F2F8] flex items-center"
-                  >
-                    <span className="w-3 h-3 rounded-full bg-gray-400 mr-3"></span>
-                    All Courses
-                  </button>
-                  <button
-                    onClick={() => { setFilter('active'); setShowFilterDropdown(false); }}
-                    className="block w-full text-left px-5 py-2.5 text-sm text-gray-700 hover:bg-[#F0F2F8] flex items-center"
-                  >
-                    <span className="w-3 h-3 rounded-full bg-green-500 mr-3"></span>
-                    Active
-                  </button>
-                  <button
-                    onClick={() => { setFilter('completed'); setShowFilterDropdown(false); }}
-                    className="block w-full text-left px-5 py-2.5 text-sm text-gray-700 hover:bg-[#F0F2F8] flex items-center"
-                  >
-                    <span className="w-3 h-3 rounded-full bg-blue-500 mr-3"></span>
-                    Completed
-                  </button>
-                  <button
-                    onClick={() => { setFilter('archived'); setShowFilterDropdown(false); }}
-                    className="block w-full text-left px-5 py-2.5 text-sm text-gray-700 hover:bg-[#F0F2F8] flex items-center"
-                  >
-                    <span className="w-3 h-3 rounded-full bg-gray-600 mr-3"></span>
-                    Archived
-                  </button>
-                </div>
-              )}
+              {/* Team Filter */}
+              <div className="relative">
+                <button
+                  onClick={() => {
+                    setShowTeamFilterDropdown(!showTeamFilterDropdown);
+                    setShowFilterDropdown(false);
+                  }}
+                  className="flex items-center space-x-2 px-5 py-3 border border-gray-200 rounded-xl hover:bg-[#F0F2F8] transition-all shadow-sm"
+                >
+                  <FiUsers size={18} className="text-[#4A5491]" />
+                  <span className="text-gray-700 font-medium">
+                    {teamFilter === 'my-teams' ? 'My Teams' : 'All Teams'}
+                  </span>
+                </button>
+                
+                {showTeamFilterDropdown && (
+                  <div className="absolute right-0 mt-2 w-52 bg-white rounded-xl shadow-lg z-50 py-2 border border-gray-100 overflow-hidden">
+                    <button
+                      onClick={() => { setTeamFilter('my-teams'); setShowTeamFilterDropdown(false); }}
+                      className="block w-full text-left px-5 py-2.5 text-sm text-gray-700 hover:bg-[#F0F2F8] flex items-center"
+                    >
+                      <span className="w-3 h-3 rounded-full bg-[#4A5491] mr-3"></span>
+                      My Teams
+                    </button>
+                    <button
+                      onClick={() => { setTeamFilter('all-teams'); setShowTeamFilterDropdown(false); }}
+                      className="block w-full text-left px-5 py-2.5 text-sm text-gray-700 hover:bg-[#F0F2F8] flex items-center"
+                    >
+                      <span className="w-3 h-3 rounded-full bg-gray-400 mr-3"></span>
+                      All Teams
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

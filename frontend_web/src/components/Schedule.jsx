@@ -1,144 +1,139 @@
-import { useEffect, useState } from 'react';
-import { FiCalendar, FiChevronDown, FiChevronLeft, FiChevronRight, FiClock, FiGrid, FiList } from 'react-icons/fi';
+import { useEffect, useMemo, useState } from 'react';
+import { FiCalendar, FiChevronDown, FiChevronLeft, FiChevronRight, FiClock } from 'react-icons/fi';
 import { Link } from 'react-router-dom';
+import { courseService } from '../services/api';
+import { commonHeaderAnimations } from '../utils/animation.js';
 import DashboardLayout from "./layouts/DashboardLayout.jsx";
-import { courseService, classService } from '../services/api';
 
-const AnimationStyles = () => {
-  return (
-    <style>{`
-      @keyframes float {
-        0% { transform: translateY(0px); }
-        50% { transform: translateY(-10px); }
-        100% { transform: translateY(0px); }
-      }
-      
-      @keyframes pulse {
-        0% { transform: scale(1); }
-        50% { transform: scale(1.03); }
-        100% { transform: scale(1); }
-      }
-      
-      .floating {
-        animation: float 6s ease-in-out infinite;
-      }
-      
-      .pulse-on-hover:hover {
-        animation: pulse 1.5s ease-in-out infinite;
-      }
-      
-      .schedule-header {
-        background-image: linear-gradient(120deg, #f0f4ff 0%, #e6eeff 100%);
-        position: relative;
-        overflow: hidden;
-      }
-      
-      .schedule-header::before {
-        content: "";
-        position: absolute;
-        top: -100%;
-        left: -100%;
-        width: 300%;
-        height: 300%;
-        background: radial-gradient(circle, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0) 70%);
-        opacity: 0.4;
-        animation: shimmer 8s linear infinite;
-      }
-      
-      @keyframes shimmer {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-      }
-      
-      .time-cell {
-        background-color: #E6EAFF;
-        color: #666;
-        font-size: 0.85rem;
-        text-align: center;
-        position: relative;
-      }
-      
-      .time-cell-inner {
-        position: relative;
-        height: 100%;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-      }
-      
-      .time-value {
-        font-weight: 600;
-      }
-      
-      .time-sub {
-        font-size: 0.65rem;
-        opacity: 0.7;
-      }
-      
-      /* Fixed the class-cell styling to always apply the background color */
-      .class-cell {
-        background-color: #333D79 !important; /* Using !important to override any other styles */
-        color: white;
-        position: relative;
-      }
-      
-      .class-cell:hover {
-        background-color: #4A5491 !important;
-        box-shadow: inset 0 0 0 2px rgba(255,255,255,0.3);
-      }
-      
-      .class-cell-content {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        height: 100%;
-        padding: 4px;
-        text-align: center;
-        font-size: 0.75rem;
-        line-height: 1.2;
-        font-weight: 600;
-      }
-      
-      .table-cell {
-        border: 1px solid #ddd;
-        padding: 0;
-        height: 3rem;
-        position: relative;
-        background-color: white;
-      }
-      
-      .table-head {
-        text-align: center;
-        font-weight: 600;
-        color: #444;
-        background-color: #f8faff;
-        border: 1px solid #ddd;
-        padding: 0.75rem;
-      }
-      
-      .schedule-table {
-        table-layout: fixed;
-        width: 100%;
-        border-collapse: collapse;
-      }
-      
-      .schedule-table th:first-child {
-        width: 100px;
-      }
-      
-      .breadcrumb-item {
-        display: flex;
-        align-items: center;
-        font-size: 0.95rem;
-      }
-      
-      .breadcrumb-arrow {
-        margin: 0 0.5rem;
-        color: #999;
-      }
-    `}</style>
-  );
+// Optimize by creating the styles only once and preventing re-renders
+const ScheduleStyles = () => {
+  // Use useMemo to prevent regenerating the styles on each render
+  const stylesContent = useMemo(() => `
+    ${commonHeaderAnimations}
+    
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.03); }
+      100% { transform: scale(1); }
+    }
+    
+    .pulse-on-hover:hover {
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    
+    .schedule-header {
+      background-image: linear-gradient(120deg, #f0f4ff 0%, #e6eeff 100%);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .schedule-header::before {
+      content: "";
+      position: absolute;
+      top: -100%;
+      left: -100%;
+      width: 300%;
+      height: 300%;
+      background: radial-gradient(circle, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0) 70%);
+      opacity: 0.4;
+      animation: shimmer 8s linear infinite;
+    }
+    
+    @keyframes shimmer {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    .time-cell {
+      background-color: #E6EAFF;
+      color: #666;
+      font-size: 0.85rem;
+      text-align: center;
+      position: relative;
+    }
+    
+    .time-cell-inner {
+      position: relative;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+    
+    .time-value {
+      font-weight: 600;
+    }
+    
+    .time-sub {
+      font-size: 0.65rem;
+      opacity: 0.7;
+    }
+    
+    .class-cell {
+      background-color: #333D79 !important;
+      color: white;
+      position: relative;
+    }
+    
+    .class-cell:hover {
+      background-color: #4A5491 !important;
+      box-shadow: inset 0 0 0 2px rgba(255,255,255,0.3);
+    }
+    
+    .class-cell-content {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      padding: 4px;
+      text-align: center;
+      font-size: 0.75rem;
+      line-height: 1.2;
+      font-weight: 600;
+    }
+    
+    .table-cell {
+      border: 1px solid #ddd;
+      padding: 0;
+      height: 3rem;
+      position: relative;
+      background-color: white;
+      transition: background-color 0.2s ease;
+    }
+    
+    .table-head {
+      text-align: center;
+      font-weight: 600;
+      color: #444;
+      background-color: #f8faff;
+      border: 1px solid #ddd;
+      padding: 0.75rem;
+    }
+    
+    .schedule-table {
+      table-layout: fixed;
+      width: 100%;
+      border-collapse: collapse;
+    }
+    
+    .schedule-table th:first-child {
+      width: 100px;
+    }
+    
+    .breadcrumb-item {
+      display: flex;
+      align-items: center;
+      font-size: 0.95rem;
+    }
+    
+    .breadcrumb-arrow {
+      margin: 0 0.5rem;
+      color: #999;
+    }
+  `, []);
+
+  return <style>{stylesContent}</style>;
 };
 
 const Schedule = () => {
@@ -151,7 +146,8 @@ const Schedule = () => {
   const [selectedClass, setSelectedClass] = useState(null);
   const [showCourseDropdown, setShowCourseDropdown] = useState(false);
   const [showClassDropdown, setShowClassDropdown] = useState(false);
-  const [scheduledTimes, setScheduledTimes] = useState([]); // Format: [{day: 1, hour: 13, minute: 30}, ...]
+  const [scheduledTimes, setScheduledTimes] = useState([]);
+  const [headerLoaded, setHeaderLoaded] = useState(false);
   
   // Time slot data - these are 30-minute increments
   const timeSlots = [
@@ -189,9 +185,15 @@ const Schedule = () => {
   // Day names for column headers
   const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
+  // Set header as loaded after initial mount
   useEffect(() => {
+    // Only set this once on component mount
+    if (!headerLoaded) {
+      setHeaderLoaded(true);
+    }
+    
     fetchCourses();
-  }, []);
+  }, [headerLoaded]);
 
   useEffect(() => {
     if (selectedCourse) {
@@ -410,7 +412,7 @@ const Schedule = () => {
   if (isLoading) {
     return (
       <DashboardLayout>
-        <AnimationStyles />
+        <ScheduleStyles />
         <div className="flex justify-center items-center h-[calc(100vh-5rem)]">
           <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-[#333D79]"></div>
         </div>
@@ -426,49 +428,45 @@ const Schedule = () => {
 
   return (
     <DashboardLayout>
-      <AnimationStyles />
+      <ScheduleStyles />
       <div className="pb-6">
-        {/* Header */}
-        <div className="schedule-header bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6 relative overflow-hidden">
-          <div className="absolute -top-20 -right-20 w-64 h-64 bg-[#333D79] opacity-5 rounded-full blur-3xl"></div>
-          <div className="absolute -bottom-32 -left-32 w-64 h-64 bg-[#6B77B7] opacity-5 rounded-full blur-3xl"></div>
+        {/* Header - Fixed to prevent blinking */}
+        <div className="hero-gradient rounded-xl mb-8 p-5 shadow-sm border border-gray-100 overflow-hidden relative">
+          {/* Background Elements */}
+          <div className="bg-blur-circle bg-blur-circle-top"></div>
+          <div className="bg-blur-circle bg-blur-circle-bottom"></div>
+          <div className="bg-floating-circle hidden md:block"></div>
           
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4 relative z-10">
-            <div className="flex items-center gap-4">
-              <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-[#333D79] to-[#4A5491] flex items-center justify-center flex-shrink-0 shadow-lg floating">
-                <FiCalendar className="h-8 w-8 text-white" />
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center relative z-10">
+            <div className="flex items-center gap-4 fade-in-up" style={{animationDelay: '0s'}}>
+              <div className="h-12 w-12 rounded-xl bg-gradient-to-r from-[#333D79] to-[#4A5491] flex items-center justify-center flex-shrink-0 shadow-md float-animation">
+                <FiCalendar className="h-6 w-6 text-white" />
               </div>
               <div>
-                <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-[#333D79] to-[#4A5491]">
-                  Schedule
-                </h1>
-                <p className="text-gray-600">
-                  Manage your classes and events in a calendar view
-                </p>
+                <h1 className="text-2xl font-bold text-gray-900">Schedule</h1>
+                <p className="text-gray-600">Manage your classes and events in a calendar view</p>
               </div>
             </div>
-
-            <div className="flex flex-wrap gap-3">
-              <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-1 inline-flex">
-                <button 
-                  onClick={() => setViewType('day')} 
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium ${viewType === 'day' ? 'bg-[#333D79] text-white' : 'text-gray-600 hover:bg-gray-100'}`}
-                >
-                  Day
-                </button>
-                <button 
-                  onClick={() => setViewType('week')} 
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium ${viewType === 'week' ? 'bg-[#333D79] text-white' : 'text-gray-600 hover:bg-gray-100'}`}
-                >
-                  Week
-                </button>
-                <button 
-                  onClick={() => setViewType('month')} 
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium ${viewType === 'month' ? 'bg-[#333D79] text-white' : 'text-gray-600 hover:bg-gray-100'}`}
-                >
-                  Month
-                </button>
-              </div>
+            
+            <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-1 inline-flex mt-4 md:mt-0 fade-in-up" style={{animationDelay: '0s'}}>
+              <button 
+                onClick={() => setViewType('day')} 
+                className={`px-3 py-1.5 rounded-md text-sm font-medium ${viewType === 'day' ? 'bg-[#333D79] text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+              >
+                Day
+              </button>
+              <button 
+                onClick={() => setViewType('week')} 
+                className={`px-3 py-1.5 rounded-md text-sm font-medium ${viewType === 'week' ? 'bg-[#333D79] text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+              >
+                Week
+              </button>
+              <button 
+                onClick={() => setViewType('month')} 
+                className={`px-3 py-1.5 rounded-md text-sm font-medium ${viewType === 'month' ? 'bg-[#333D79] text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+              >
+                Month
+              </button>
             </div>
           </div>
         </div>
@@ -604,7 +602,7 @@ const Schedule = () => {
                 <thead>
                   <tr>
                     <th className="table-head"></th>
-                    {dayNames.map((day, index) => (
+                    {dayNames.map((day) => (
                       <th key={day} className="table-head">
                         {day}
                       </th>
@@ -612,7 +610,7 @@ const Schedule = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {timeSlots.map((slot, index) => (
+                  {timeSlots.map((slot) => (
                     <tr key={slot.value}>
                       <td className="time-cell">
                         <div className="time-cell-inner">

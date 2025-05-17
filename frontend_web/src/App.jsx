@@ -1,4 +1,5 @@
 import { GoogleOAuthProvider } from '@react-oauth/google'
+import { useEffect } from 'react'
 import { Toaster } from 'react-hot-toast'
 import { Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom'
 import { AuthProvider } from './auth/AuthContext'
@@ -13,10 +14,22 @@ import Profile from './components/Profile'
 import ProtectedRoute from './components/ProtectedRoute'
 import PublicRoute from './components/PublicRoute'
 import Recordings from './components/Recordings'
-import Signup from './components/Signup'
 import Schedule from './components/Schedule'
-import ToastDemo from './components/ToastDemo'
+import Signup from './components/Signup'
+import Team from './components/Team'
 import './index.css'
+import { enableHardwareAcceleration, preloadHeaderAssets } from './utils/preload.js'
+
+// Create a preload component to insert our preload elements
+const Preloader = () => {
+  useEffect(() => {
+    // Enable hardware acceleration as soon as the app loads
+    enableHardwareAcceleration();
+  }, []);
+  
+  // This injects the preload CSS and elements directly into the DOM
+  return <div dangerouslySetInnerHTML={{ __html: preloadHeaderAssets() }} />;
+};
 
 function App() {
   return (
@@ -24,102 +37,116 @@ function App() {
       clientId="841187713627-6u60gs5iq5h6qalooub6q27nrulifoug.apps.googleusercontent.com"
     >
       <AuthProvider>
+        {/* Add the preloader component */}
+        <Preloader />
+        
         <Router>
-          <Toaster 
+          <Toaster
             position="top-right"
             toastOptions={{
               duration: 4000,
               style: {
                 background: '#fff',
                 color: '#333',
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-                borderRadius: '8px',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                borderRadius: '0.5rem',
                 padding: '16px',
-                maxWidth: '420px'
+                maxWidth: '420px',
+                fontSize: '14px',
               },
               success: {
+                style: {
+                  background: 'linear-gradient(135deg, #eef0f8 0%, #dce0f2 100%)',
+                  border: '1px solid rgba(51, 61, 121, 0.1)',
+                },
                 iconTheme: {
-                  primary: '#10B981',
-                  secondary: '#FFFFFF'
-                }
+                  primary: '#333D79',
+                  secondary: '#fff',
+                },
               },
               error: {
+                style: {
+                  background: '#FFF3F3',
+                  border: '1px solid rgba(220, 38, 38, 0.1)',
+                },
                 iconTheme: {
-                  primary: '#EF4444',
-                  secondary: '#FFFFFF'
-                }
-              }
+                  primary: '#DC2626',
+                  secondary: '#fff',
+                },
+              },
             }}
           />
-          <Routes>
-            <Route path="/" element={
-              <PublicRoute>
-                <LandingPage />
-              </PublicRoute>
-            } />
-            <Route path="/login" element={
-              <PublicRoute>
-                <Login />
-              </PublicRoute>
-            } />
-            <Route path="/signup" element={
-              <PublicRoute>
-                <Signup />
-              </PublicRoute>
-            } />
+          <div className="transition-container">
+            <Routes>
+              <Route path="/" element={
+                <PublicRoute>
+                  <LandingPage />
+                </PublicRoute>
+              } />
+              <Route path="/login" element={
+                <PublicRoute>
+                  <Login />
+                </PublicRoute>
+              } />
+              <Route path="/signup" element={
+                <PublicRoute>
+                  <Signup />
+                </PublicRoute>
+              } />
 
-            <Route path="/dashboard" element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
-            } />
-            <Route path="/dashboard/courses" element={
-              <ProtectedRoute>
-                <Courses />
-              </ProtectedRoute>
-            } />
-            <Route path="/dashboard/course/:id" element={
-              <ProtectedRoute>
-                <CourseDetail />
-              </ProtectedRoute>
-            } />
-            <Route path="/dashboard/classes" element={
-              <ProtectedRoute>
-                <Classes />
-              </ProtectedRoute>
-            } />
-            <Route path="/dashboard/class/:id" element={
-              <ProtectedRoute>
-                <ClassDetails />
-              </ProtectedRoute>
-            } />
-            <Route path="/dashboard/recordings" element={
-              <ProtectedRoute>
-                <Recordings />
-              </ProtectedRoute>
-            } />
-            <Route path="/dashboard/profile" element={
-              <ProtectedRoute>
-                <Profile />
-              </ProtectedRoute>
-            } />
-            <Route path="/dashboard/toast-demo" element={
-              <ProtectedRoute>
-                <ToastDemo />
-              </ProtectedRoute>
-            } />
-            <Route path="/dashboard/schedule" element={
-              <ProtectedRoute>
-                <Schedule />
-              </ProtectedRoute>
-            } />
+              <Route path="/dashboard" element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              } />
+              <Route path="/dashboard/courses" element={
+                <ProtectedRoute>
+                  <Courses />
+                </ProtectedRoute>
+              } />
+              <Route path="/dashboard/course/:id" element={
+                <ProtectedRoute>
+                  <CourseDetail />
+                </ProtectedRoute>
+              } />
+              <Route path="/dashboard/classes" element={
+                <ProtectedRoute>
+                  <Classes />
+                </ProtectedRoute>
+              } />
+              <Route path="/dashboard/class/:id" element={
+                <ProtectedRoute>
+                  <ClassDetails />
+                </ProtectedRoute>
+              } />
+              <Route path="/dashboard/recordings" element={
+                <ProtectedRoute>
+                  <Recordings />
+                </ProtectedRoute>
+              } />
+              <Route path="/dashboard/profile" element={
+                <ProtectedRoute>
+                  <Profile />
+                </ProtectedRoute>
+              } />
+              <Route path="/dashboard/team" element={
+                <ProtectedRoute>
+                  <Team />
+                </ProtectedRoute>
+              } />
+              <Route path="/dashboard/schedule" element={
+                <ProtectedRoute>
+                  <Schedule />
+                </ProtectedRoute>
+              } />
 
-            <Route path="*" element={
-              <ProtectedRoute>
-                <Navigate to="/dashboard" replace />
-              </ProtectedRoute>
-            } />
-          </Routes>
+              <Route path="*" element={
+                <ProtectedRoute>
+                  <Navigate to="/dashboard" replace />
+                </ProtectedRoute>
+              } />
+            </Routes>
+          </div>
         </Router>
       </AuthProvider>
     </GoogleOAuthProvider>

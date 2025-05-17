@@ -1,16 +1,16 @@
 import PropTypes from 'prop-types';
 import { useEffect, useState } from 'react';
-import { FiBell, FiLogOut, FiCalendar } from 'react-icons/fi'; 
+import { FiCalendar, FiLogOut } from 'react-icons/fi';
 import { HiOutlineUserGroup } from 'react-icons/hi';
 import {
-    MdChevronLeft,
-    MdChevronRight,
-    MdOutlineDashboard,
-    MdOutlineSettings
+  MdChevronLeft,
+  MdChevronRight,
+  MdOutlineDashboard,
+  MdOutlineSettings
 } from 'react-icons/md';
 import {
-    RiBookOpenLine,
-    RiSoundModuleLine
+  RiBookOpenLine,
+  RiSoundModuleLine
 } from 'react-icons/ri';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
@@ -93,7 +93,6 @@ const Sidebar = ({ onCollapse }) => {
       path: '/dashboard/recordings' 
     },
     { name: 'Team', icon: <HiOutlineUserGroup size={22} />, path: '/dashboard/team' },
-    { name: 'Toast Demo', icon: <FiBell size={22} />, path: '/dashboard/toast-demo' },
     { name: 'Settings', icon: <MdOutlineSettings size={22} />, path: '/dashboard/settings' },
   ];
 
