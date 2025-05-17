@@ -184,6 +184,14 @@ const Courses = () => {
     }
   };
 
+  useEffect(() => {
+  console.log("Current courses with access levels:", courses.map(c => ({
+    id: c.id,
+    name: c.name,
+    accessLevel: c.accessLevel
+  })));
+}, [courses]);
+
   return (
     <DashboardLayout>
       <CoursesStyles />
@@ -403,69 +411,71 @@ const Courses = () => {
                             </div>
                           </div>
                         </div>
-                        <div className="relative" ref={dropdownRef}>
-                          <button 
-                            className="p-1.5 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleDropdown(course.id);
-                            }}
-                          >
-                            <FiMoreVertical size={16} />
-                          </button>
-                          
-                          {activeDropdown === course.id && (
-                            <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 py-1 border border-gray-100">
-                              <button 
-                                className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                                onClick={() => handleEditCourse(course)}
-                              >
-                                <FiEdit className="mr-2" size={14} />
-                                Edit Course
-                              </button>
-                              
-                              {course.status !== 'completed' && (
+                        {(!course.accessLevel || course.accessLevel !== 'view') && (
+                          <div className="relative" ref={dropdownRef}>
+                            <button 
+                              className="p-1.5 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleDropdown(course.id);
+                              }}
+                            >
+                              <FiMoreVertical size={16} />
+                            </button>
+                            
+                            {activeDropdown === course.id && (
+                              <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 py-1 border border-gray-100">
                                 <button 
                                   className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                                  onClick={() => handleUpdateStatus(course.id, 'completed')}
+                                  onClick={() => handleEditCourse(course)}
                                 >
-                                  <FiBook className="mr-2" size={14} />
-                                  Mark as Completed
+                                  <FiEdit className="mr-2" size={14} />
+                                  Edit Course
                                 </button>
-                              )}
-                              
-                              {course.status !== 'archived' && (
+                                
+                                {course.status !== 'completed' && (
+                                  <button 
+                                    className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                                    onClick={() => handleUpdateStatus(course.id, 'completed')}
+                                  >
+                                    <FiBook className="mr-2" size={14} />
+                                    Mark as Completed
+                                  </button>
+                                )}
+                                
+                                {course.status !== 'archived' && (
+                                  <button 
+                                    className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                                    onClick={() => handleUpdateStatus(course.id, 'archived')}
+                                  >
+                                    <MdArchive className="mr-2" size={14} />
+                                    Archive Course
+                                  </button>
+                                )}
+                                
+                                {course.status !== 'active' && (
+                                  <button 
+                                    className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                                    onClick={() => handleUpdateStatus(course.id, 'active')}
+                                  >
+                                    <FiBook className="mr-2" size={14} />
+                                    Set as Active
+                                  </button>
+                                )}
+                                
+                                <div className="border-t border-gray-100 my-1"></div>
+                                
                                 <button 
-                                  className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                                  onClick={() => handleUpdateStatus(course.id, 'archived')}
+                                  className="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left"
+                                  onClick={() => handleDeleteCourse(course.id)}
                                 >
-                                  <MdArchive className="mr-2" size={14} />
-                                  Archive Course
+                                  <FiTrash2 className="mr-2" size={14} />
+                                  Delete Course
                                 </button>
-                              )}
-                              
-                              {course.status !== 'active' && (
-                                <button 
-                                  className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                                  onClick={() => handleUpdateStatus(course.id, 'active')}
-                                >
-                                  <FiBook className="mr-2" size={14} />
-                                  Set as Active
-                                </button>
-                              )}
-                              
-                              <div className="border-t border-gray-100 my-1"></div>
-                              
-                              <button 
-                                className="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left"
-                                onClick={() => handleDeleteCourse(course.id)}
-                              >
-                                <FiTrash2 className="mr-2" size={14} />
-                                Delete Course
-                              </button>
-                            </div>
-                          )}
-                        </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                       
                       <div 

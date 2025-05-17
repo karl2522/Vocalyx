@@ -18,7 +18,6 @@ api.interceptors.request.use(
             config.headers.Authorization = `Bearer ${token}`;
         }
         
-        console.log('Request config:', config);
         return config;
     },
     (error) => {
@@ -221,6 +220,52 @@ export const userService = {
                 'Content-Type': 'multipart/form-data',
             },
         });
+    },
+};
+
+export const teamService = {
+    getMyTeams: () => api.get('/teams/my_teams/'),
+    checkClassAccess: (classId) => {
+        return api.get(`/teams/check-class-access/${classId}/`);
+    },
+    getMyTeam: () => api.get('/teams/my_team/').catch(error => {
+        if (error.response && error.response.status === 404) {
+            return { data: null };
+        }
+        throw error;
+    }),
+     createTeam: (teamData) => {
+    console.log("API call: creating team with data", teamData);
+    
+    const formattedData = {
+      name: teamData.name,
+      members: Array.isArray(teamData.members) ? teamData.members : [],
+      courses: Array.isArray(teamData.courses) ? teamData.courses.map(id => Number(id)) : []
+    };
+    
+    return api.post('/teams/', formattedData);
+  },
+    joinTeam: (code) => api.post('/teams/join/', { code }),
+    
+    addMember: (teamId, email, permissions = 'view') => 
+        api.post(`/teams/${teamId}/add_member/`, { email, permissions }),
+    removeMember: (teamId, memberId) => 
+        api.delete(`/teams/${teamId}/remove_member/`, { data: { member_id: memberId } }),
+    updateMemberPermissions: (teamId, memberId, permissions) => 
+        api.patch(`/teams/${teamId}/update_member_permissions/`, { member_id: memberId, permissions }),
+    addCourse: (teamId, courseId) => 
+        api.post(`/teams/${teamId}/add_course/`, { course_id: courseId }),
+    removeCourse: (teamId, courseId) => 
+        api.delete(`/teams/${teamId}/remove_course/`, { data: { course_id: courseId } }),
+        
+     searchUsers: (query) => {
+        console.log(`API call: searching users with query "${query}"`);
+        const timestamp = new Date().getTime();
+        return api.get(`/teams/search_users/?q=${encodeURIComponent(query)}&_=${timestamp}`);
+    },
+    getAvailableCourses: () => api.get('/teams/available_courses/'),
+    checkCourseAccess: (courseId) => {
+        return api.get(`/teams/check-course-access/${courseId}/`);
     },
 };
 

@@ -1,14 +1,13 @@
 import { useEffect, useState, useRef } from 'react';
-import { toast } from 'react-hot-toast';
 import { FiEdit, FiMoreVertical, FiPlus, FiSearch, FiTrash2 } from 'react-icons/fi';
 import {
     MdArchive, MdArrowForward, MdOutlineCalendarToday, MdOutlineClass,
     MdOutlinePersonOutline, MdOutlineSchool, MdOutlineWatchLater
 } from 'react-icons/md';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import DashboardLayout from "./layouts/DashboardLayout.jsx";
 import ClassModal from './modals/ClassModal';
-import { courseService, classService } from '../services/api';
+import { courseService, classService, teamService } from '../services/api';
 import { showToast } from '../utils/toast.jsx';
 
 // Add some animation style elements
@@ -129,9 +128,10 @@ const AnimationStyles = () => {
   );
 };
 
-const CourseDetail = () => {
+const CourseDetail = ({ accessInfo }) => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [courseData, setCourseData] = useState(null);
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -141,6 +141,7 @@ const CourseDetail = () => {
   const [isEditClassMode, setIsEditClassMode] = useState(false);
   const [currentClass, setCurrentClass] = useState(null);
   const dropdownRef = useRef(null);
+  const [teamAccess, setTeamAccess] = useState(null);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -155,12 +156,33 @@ const CourseDetail = () => {
     };
   }, []);
 
+  // Initialize teamAccess and fetch course data when component mounts or accessInfo changes
   useEffect(() => {
+    console.log("CourseDetail received accessInfo:", accessInfo);
+    
+    if (accessInfo) {
+      setTeamAccess({
+        teamId: accessInfo.teamId,
+        teamName: accessInfo.teamName,
+        accessLevel: accessInfo.accessLevel
+      });
+    } else {
+      // If no accessInfo is provided, this is likely a direct access
+      setTeamAccess({
+        accessLevel: 'full',
+        accessType: 'owner'
+      });
+    }
+    
     fetchCourseData();
-  }, [id]);
+  }, [id, accessInfo]);
 
   const toggleClassDropdown = (classId) => {
     setActiveClassDropdown(activeClassDropdown === classId ? null : classId);
+  };
+
+  const handleEditCourse = () => {
+    navigate(`/dashboard/courses/edit/${id}`);
   };
 
   const handleEditClass = (classItem) => {
@@ -179,7 +201,6 @@ const CourseDetail = () => {
       await classService.deleteClass(classId);
       setClasses(classes.filter(c => c.id !== classId));
       showToast.success('Class deleted successfully');
-
       fetchCourseData();
     } catch (error) {
       console.error('Error deleting class:', error);
@@ -193,7 +214,6 @@ const CourseDetail = () => {
     setClasses(classes.map(c => 
       c.id === updatedClass.id ? updatedClass : c
     ));
-
     fetchCourseData();
   };
 
@@ -220,26 +240,33 @@ const CourseDetail = () => {
   const fetchCourseData = async () => {
     try {
       setLoading(true);
+      console.log("Fetching course data for ID:", id);
       
       const response = await courseService.getCourse(id);
+      console.log("Course data response:", response.data);
+      
       setCourseData({
         ...response.data,
         academicYear: response.data.academic_year
       });
       
       const classesResponse = await courseService.getCourseClasses(id);
+      console.log("Classes data response:", classesResponse.data);
       setClasses(classesResponse.data);
       
     } catch (error) {
       console.error('Error fetching course data:', error);
       if (error.response?.status === 404) {
-        toast.error('Course not found');
+        showToast.error('Course not found');
+        navigate('/dashboard/courses', { replace: true });
+      } else if (error.response?.status === 403) {
+        showToast.error('You don\'t have permission to view this course');
         navigate('/dashboard/courses', { replace: true });
       } else if (error.response?.status === 401) {
-        toast.error('Session expired. Please login again.');
+        showToast.error('Session expired. Please login again.');
         navigate('/login', { replace: true });
       } else {
-        toast.error('Failed to load course data');
+        showToast.error('Failed to load course data');
       }
     } finally {
       setLoading(false);
@@ -247,13 +274,11 @@ const CourseDetail = () => {
   };
 
   const handleAddClass = (newClass) => {
-    // In a real implementation, the class would be linked to the course
     const classWithCourseId = {
       ...newClass,
       course_id: id
     };
     setClasses([classWithCourseId, ...classes]);
-
     fetchCourseData();
   };
 
@@ -302,6 +327,18 @@ const CourseDetail = () => {
                     {courseData?.courseCode}
                   </span>
                 </div>
+
+                {teamAccess && teamAccess.teamName && (
+                  <div className="inline-flex items-center px-3 py-1.5 bg-blue-50 rounded-lg border border-blue-100 mt-1 mb-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-600 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    <span className="text-sm text-blue-700">
+                      Team: {teamAccess.teamName} ({teamAccess.accessLevel === 'view' ? 'View Only' : 
+                            teamAccess.accessLevel === 'edit' ? 'Can Edit' : 'Full Access'})
+                    </span>
+                  </div>
+                )}
                 
                 <p className="text-gray-600 mb-3 max-w-2xl">{courseData?.description || "No description available for this course."}</p>
                 
@@ -335,10 +372,15 @@ const CourseDetail = () => {
             </div>
             
             <div>
-              <button className="px-4 py-2 text-white bg-gradient-to-r from-[#333D79] to-[#4A5491] rounded-lg flex items-center gap-2 shadow-md hover:shadow-lg transition-all">
-                <FiEdit size={16} />
-                <span>Edit Course</span>
-              </button>
+              {(!teamAccess || teamAccess.accessLevel !== 'view') && (
+                <button 
+                  onClick={handleEditCourse} 
+                  className="px-4 py-2 text-white bg-gradient-to-r from-[#333D79] to-[#4A5491] rounded-lg flex items-center gap-2 shadow-md hover:shadow-lg transition-all"
+                >
+                  <FiEdit size={16} />
+                  <span>Edit Course</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -352,17 +394,19 @@ const CourseDetail = () => {
                 {classes.length} total
               </div>
             </div>
-            <button 
-              onClick={() => {
-                setIsEditClassMode(false);
-                setCurrentClass(null);
-                setIsClassModalOpen(true);
-              }}
-              className="bg-gradient-to-r from-[#333D79] to-[#4A5491] hover:from-[#4A5491] hover:to-[#5d6ba9] text-white px-4 py-2.5 rounded-lg flex items-center gap-2 transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
-            >
-              <FiPlus size={18} />
-              <span>Add Class</span>
-            </button>
+            {(!teamAccess || teamAccess.accessLevel !== 'view') && (
+              <button 
+                onClick={() => {
+                  setIsEditClassMode(false);
+                  setCurrentClass(null);
+                  setIsClassModalOpen(true);
+                }}
+                className="bg-gradient-to-r from-[#333D79] to-[#4A5491] hover:from-[#4A5491] hover:to-[#5d6ba9] text-white px-4 py-2.5 rounded-lg flex items-center gap-2 transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
+              >
+                <FiPlus size={18} />
+                <span>Add Class</span>
+              </button>
+            )}
           </div>
           
           {/* Class Modal */}
@@ -420,86 +464,88 @@ const CourseDetail = () => {
                         </div>
                       </div>
                       
-                      {/* Three-dot menu button */}
-                      <div className="relative" ref={dropdownRef}>
-                        <button 
-                          className="p-1.5 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleClassDropdown(classItem.id);
-                          }}
-                        >
-                          <FiMoreVertical size={16} />
-                        </button>
-                        
-                        {/* Dropdown menu */}
-                        {activeClassDropdown === classItem.id && (
-                          <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 py-1 border border-gray-100">
-                            <button 
-                              className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleEditClass(classItem);
-                              }}
-                            >
-                              <FiEdit className="mr-2" size={14} />
-                              Edit Class
-                            </button>
-                            
-                            {classItem.status !== 'completed' && (
+                      {/* Three-dot menu button - only show for edit permissions */}
+                      {(!teamAccess || teamAccess.accessLevel !== 'view') && (
+                        <div className="relative" ref={dropdownRef}>
+                          <button 
+                            className="p-1.5 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleClassDropdown(classItem.id);
+                            }}
+                          >
+                            <FiMoreVertical size={16} />
+                          </button>
+                          
+                          {/* Dropdown menu */}
+                          {activeClassDropdown === classItem.id && (
+                            <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 py-1 border border-gray-100">
                               <button 
                                 className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleUpdateClassStatus(classItem.id, 'completed');
+                                  handleEditClass(classItem);
                                 }}
                               >
-                                <MdOutlineClass className="mr-2" size={14} />
-                                Mark as Completed
+                                <FiEdit className="mr-2" size={14} />
+                                Edit Class
                               </button>
-                            )}
-                            
-                            {classItem.status !== 'archived' && (
+                              
+                              {classItem.status !== 'completed' && (
+                                <button 
+                                  className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleUpdateClassStatus(classItem.id, 'completed');
+                                  }}
+                                >
+                                  <MdOutlineClass className="mr-2" size={14} />
+                                  Mark as Completed
+                                </button>
+                              )}
+                              
+                              {classItem.status !== 'archived' && (
+                                <button 
+                                  className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleUpdateClassStatus(classItem.id, 'archived');
+                                  }}
+                                >
+                                  <MdArchive className="mr-2" size={14} />
+                                  Archive Class
+                                </button>
+                              )}
+                              
+                              {classItem.status !== 'active' && (
+                                <button 
+                                  className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleUpdateClassStatus(classItem.id, 'active');
+                                  }}
+                                >
+                                  <MdOutlineClass className="mr-2" size={14} />
+                                  Set as Active
+                                </button>
+                              )}
+                              
+                              <div className="border-t border-gray-100 my-1"></div>
+                              
                               <button 
-                                className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                                className="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleUpdateClassStatus(classItem.id, 'archived');
+                                  handleDeleteClass(classItem.id);
                                 }}
                               >
-                                <MdArchive className="mr-2" size={14} />
-                                Archive Class
+                                <FiTrash2 className="mr-2" size={14} />
+                                Delete Class
                               </button>
-                            )}
-                            
-                            {classItem.status !== 'active' && (
-                              <button 
-                                className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleUpdateClassStatus(classItem.id, 'active');
-                                }}
-                              >
-                                <MdOutlineClass className="mr-2" size={14} />
-                                Set as Active
-                              </button>
-                            )}
-                            
-                            <div className="border-t border-gray-100 my-1"></div>
-                            
-                            <button 
-                              className="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteClass(classItem.id);
-                              }}
-                            >
-                              <FiTrash2 className="mr-2" size={14} />
-                              Delete Class
-                            </button>
-                          </div>
-                        )}
-                      </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                   
@@ -552,19 +598,21 @@ const CourseDetail = () => {
                   Create your first class to start managing your course content, schedule sessions, track attendance and monitor student progress.
                 </p>
                 
-                <div className="inline-flex space-x-3">
-                  <button 
-                    onClick={() => {
-                      setIsEditClassMode(false);
-                      setCurrentClass(null);
-                      setIsClassModalOpen(true);
-                    }}
-                    className="bg-gradient-to-r from-[#333D79] to-[#4A5491] hover:from-[#4A5491] hover:to-[#5d6ba9] text-white px-6 py-3.5 rounded-xl transition-all shadow-md hover:shadow-lg transform hover:scale-105 inline-flex items-center"
-                  >
-                    <FiPlus size={18} className="mr-2" />
-                    <span className="font-medium">Create First Class</span>
-                  </button>
-                </div>
+                {(!teamAccess || teamAccess.accessLevel !== 'view') && (
+                  <div className="inline-flex space-x-3">
+                    <button 
+                      onClick={() => {
+                        setIsEditClassMode(false);
+                        setCurrentClass(null);
+                        setIsClassModalOpen(true);
+                      }}
+                      className="bg-gradient-to-r from-[#333D79] to-[#4A5491] hover:from-[#4A5491] hover:to-[#5d6ba9] text-white px-6 py-3.5 rounded-xl transition-all shadow-md hover:shadow-lg transform hover:scale-105 inline-flex items-center"
+                    >
+                      <FiPlus size={18} className="mr-2" />
+                      <span className="font-medium">Create First Class</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}

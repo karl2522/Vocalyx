@@ -6,13 +6,14 @@ from .models import Class, Course
 class CourseSerializer(serializers.ModelSerializer):
     classes_count = serializers.SerializerMethodField()
     student_count = serializers.SerializerMethodField()
+    accessLevel = serializers.CharField(read_only=True, required=False)
 
     class Meta:
         model = Course
         fields = [
             'id', 'name', 'courseCode', 'description', 'semester',
             'academic_year', 'status', 'created_at', 'updated_at',
-            'classes_count', 'student_count'
+            'classes_count', 'student_count', 'accessLevel'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'classes_count', 'student_count']
 

@@ -3,7 +3,7 @@ import 'handsontable/dist/handsontable.full.css';
 import { registerAllModules } from 'handsontable/registry';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { BsFileEarmarkSpreadsheet, BsFiletypeCsv, BsFiletypeXlsx } from 'react-icons/bs';
-import { FiCheckCircle, FiDownload, FiFileText, FiFilter, FiInfo, FiMaximize, FiMinimize, FiUpload, FiX } from 'react-icons/fi';
+import { FiCheckCircle, FiDownload, FiFileText, FiFilter, FiInfo, FiMaximize, FiMinimize, FiUpload, FiX, FiEye } from 'react-icons/fi';
 import { HiSwitchHorizontal } from 'react-icons/hi';
 import { MdDragIndicator, MdOutlineClass } from 'react-icons/md';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -49,7 +49,7 @@ styleElement.innerHTML = `
 `;
 document.head.appendChild(styleElement);
 
-const ClassDetails = () => {
+const ClassDetails = ({ accessInfo }) => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [classData, setClassData] = useState(null);
@@ -86,6 +86,7 @@ const ClassDetails = () => {
   const [newColumnType, setNewColumnType] = useState('text');
   const [newColumnMaxScore, setNewColumnMaxScore] = useState('');
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [teamAccess, setTeamAccess] = useState(null);
   
   const visibleData = useMemo(() => {
     if (!excelData) return null;
@@ -97,25 +98,53 @@ const ClassDetails = () => {
     return excelData.data.slice(0, visibleRowCount);
   }, [excelData, visibleRowCount]);
 
+  useEffect(() => {
+    console.log("ClassDetails received accessInfo:", accessInfo);
+    
+    if (accessInfo) {
+      setTeamAccess({
+        teamId: accessInfo.teamId,
+        teamName: accessInfo.teamName,
+        courseId: accessInfo.courseId,
+        courseName: accessInfo.courseName,
+        accessLevel: accessInfo.accessLevel
+      });
+    } else {
+      setTeamAccess({
+        accessLevel: 'full',
+        accessType: 'owner'
+      });
+    }
+    
+  }, [id, accessInfo]);
+
   // No need for dropdown event handlers anymore
   useEffect(() => {
     // This effect can be used for other document-level event listeners if needed
   }, []);
 
-  useEffect(() => {
+useEffect(() => {
     const fetchData = async () => {
         try {
             setLoading(true);
+            console.log("Fetching class data for id:", id, "User has team access:", teamAccess);
+            
+            // Get class data and excel files in parallel
             const [classResponse, excelResponse] = await Promise.all([
                 classService.getClassById(id),
                 classService.getClassExcelFiles(id)
             ]);
             
+            console.log("Class data received:", classResponse.data);
             setClassData(classResponse.data);
             
-            // If there are excel files, load the most recent one
+            // Check if Excel files were retrieved, regardless of user access level
+            console.log("Excel response:", excelResponse.data);
+            
+            // If there are excel files, load the most recent one for ALL users (including view-only)
             if (excelResponse.data.length > 0) {
                 const latestFile = excelResponse.data[0]; // Assuming they're sorted by date
+                console.log("Loading latest Excel file:", latestFile.file_name);
                 
                 // Set the excel data
                 const headers = Object.keys(latestFile.sheet_data[0] || {});
@@ -129,6 +158,9 @@ const ClassDetails = () => {
                     fileId: latestFile.id
                 });
                 setSelectedFile({ name: latestFile.file_name });
+                console.log("Excel data set successfully with", data.length, "rows");
+            } else {
+                console.log("No Excel files found for this class");
             }
         } catch (error) {
             console.error('Error fetching data:', error);
@@ -141,8 +173,10 @@ const ClassDetails = () => {
         }
     };
 
-    fetchData();
-}, [id, navigate]);
+    if (teamAccess !== null) {
+        fetchData();
+    }
+}, [id, navigate, teamAccess]);
 
   useEffect(() => {
     if (!excelData || excelData.data.length <= MAX_VISIBLE_ROWS) return;
@@ -933,142 +967,241 @@ const ClassDetails = () => {
 
   // Render the full screen Excel view
   const renderExcelView = () => {
-    return (
-      <div className={`${isFullScreen ? 'fixed inset-0 z-50 bg-white excel-fullscreen-container' : ''}`}>
-        <div className={`${isFullScreen ? 'h-screen flex flex-col' : ''}`}>
-          {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b bg-white">
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={() => setIsFullScreen(false)}
-                className="text-gray-600 hover:text-gray-800"
-              >
-                <FiX size={24} />
-              </button>
-              <div className="flex items-center">
-                <div className="h-10 w-10 rounded-lg bg-[#EEF0F8] flex items-center justify-center mr-3">
-                  <BsFileEarmarkSpreadsheet className="h-5 w-5 text-[#333D79]" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-800">
-                    {selectedFile?.name || 'Excel Data'}
-                  </h2>
-                  <p className="text-sm text-gray-500">
-                    {fileStats ? 
-                      `${fileStats.totalRows.toLocaleString()} rows × ${fileStats.totalCols.toLocaleString()} columns` :
-                      `${excelData.data.length.toLocaleString()} rows × ${excelData.headers.length} columns`
-                    }
-                  </p>
-                </div>
+  // Don't try to render the Excel view if classData is not loaded
+  if (!classData) return null;
+  
+  return (
+    <div className={`${isFullScreen ? 'fixed inset-0 z-50 bg-white excel-fullscreen-container' : ''}`}>
+      <div className={`${isFullScreen ? 'h-screen flex flex-col' : ''}`}>
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b bg-white">
+          <div className="flex items-center space-x-4">
+            <button
+              onClick={() => setIsFullScreen(false)}
+              className="text-gray-600 hover:text-gray-800"
+            >
+              <FiX size={24} />
+            </button>
+            <div className="flex items-center">
+              <div className="h-12 w-12 rounded-lg bg-[#EEF0F8] flex items-center justify-center mr-4">
+                <MdOutlineClass className="h-6 w-6 text-[#333D79]" />
               </div>
-            </div>
-            
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={handleExport}
-                className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-gray-50 transition-colors"
-              >
-                <FiDownload size={18} />
-                <span>Export</span>
-              </button>
-              <button
-                onClick={toggleFullScreen}
-                className="bg-[#333D79] text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-[#4A5491] transition-colors"
-              >
-                {isFullScreen ? <FiMinimize size={18} /> : <FiMaximize size={18} />}
-                <span>{isFullScreen ? 'Exit Full Screen' : 'Full Screen'}</span>
-              </button>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-800">{classData.name}</h1>
+                {teamAccess && teamAccess.teamId && (
+                  <div className="inline-flex items-center px-3 py-1.5 bg-blue-50 rounded-lg border border-blue-100 mt-1 mb-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-600 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    <span className="text-sm text-blue-700">
+                      Team: {teamAccess.teamName} ({teamAccess.accessLevel === 'view' ? 'View Only' : 
+                            teamAccess.accessLevel === 'edit' ? 'Can Edit' : 'Full Access'})
+                    </span>
+                  </div>
+                )}
+                <p className="text-sm text-gray-500">
+                  {excelData 
+                    ? `Showing data from: ${selectedFile ? selectedFile.name : 'Imported file'}`
+                    : `Last updated: ${classData.lastUpdated || 'Unknown'}`
+                  }
+                </p>
+              </div>
+              <div className="h-10 w-10 rounded-lg bg-[#EEF0F8] flex items-center justify-center mr-3">
+                <BsFileEarmarkSpreadsheet className="h-5 w-5 text-[#333D79]" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-800">
+                  {selectedFile?.name || 'Excel Data'}
+                </h2>
+                <p className="text-sm text-gray-500">
+                  {fileStats ? 
+                    `${fileStats.totalRows.toLocaleString()} rows × ${fileStats.totalCols.toLocaleString()} columns` :
+                    `${excelData.data.length.toLocaleString()} rows × ${excelData.headers.length} columns`
+                  }
+                </p>
+              </div>
             </div>
           </div>
+          
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={handleExport}
+              className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-gray-50 transition-colors"
+            >
+              <FiDownload size={18} />
+              <span>Export</span>
+            </button>
+            <button
+              onClick={toggleFullScreen}
+              className="bg-[#333D79] text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-[#4A5491] transition-colors"
+            >
+              {isFullScreen ? <FiMinimize size={18} /> : <FiMaximize size={18} />}
+              <span>{isFullScreen ? 'Exit Full Screen' : 'Full Screen'}</span>
+            </button>
+          </div>
+        </div>
 
-          {/* Sheet tabs */}
-          {sheets.length > 1 && (
-            <div className="border-b bg-white">
-              <div className="flex overflow-x-auto">
-                {sheets.map((sheet, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => handleChangeSheet(idx)}
-                    className={`px-4 py-2 flex items-center whitespace-nowrap ${
-                      idx === activeSheet
-                        ? 'border-b-2 border-[#333D79] text-[#333D79] font-medium'
-                        : 'text-gray-600 hover:bg-gray-50'
-                    }`}
-                  >
-                    {idx === activeSheet && <HiSwitchHorizontal className="mr-1.5" size={14} />}
-                    {sheet}
-                  </button>
-                ))}
-              </div>
+        {/* Sheet tabs */}
+        {sheets.length > 1 && (
+          <div className="border-b bg-white">
+            <div className="flex overflow-x-auto">
+              {sheets.map((sheet, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => handleChangeSheet(idx)}
+                  className={`px-4 py-2 flex items-center whitespace-nowrap ${
+                    idx === activeSheet
+                      ? 'border-b-2 border-[#333D79] text-[#333D79] font-medium'
+                      : 'text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  {idx === activeSheet && <HiSwitchHorizontal className="mr-1.5" size={14} />}
+                  {sheet}
+                </button>
+              ))}
             </div>
-          )}
+          </div>
+        )}
 
-          {/* Excel Content */}
-          <div className={`flex-1 overflow-hidden ${isFullScreen ? 'h-full' : ''}`}>
-            <div className="h-full flex flex-col">
-              
-              <div className="flex-1 overflow-hidden excel-wrapper">
-                <HotTable
-                  ref={hotTableRef}
-                  data={visibleData || []}
-                  colHeaders={excelData.headers}
-                  rowHeaders={true}
-                  height="100%"
-                  width="100%"
-                  licenseKey="non-commercial-and-evaluation"
-                  className="htCustom"
-                  stretchH="none"
-                  autoColumnSize={false}
-                  colWidths={100}
-                  readOnly={false}
-                  manualColumnResize={true}
-                  manualRowResize={true}
-                  filters={true}
-                  dropdownMenu={true}
-                  contextMenu={true}
-                  columnSorting={true}
-                  sortIndicator={true}
-                  afterChange={handleDataChange}
-                  rowHeights={28}
-                  fixedRowsTop={1}
-                  fixedColumnsLeft={1}
-                  wordWrap={true}
-                  outsideClickDeselects={false}
-                  columnHeaderHeight={40}
-                  afterGetColHeader={(col, TH) => {
-                    TH.className = 'htCenter htMiddle font-medium text-gray-700';
-                  }}
-                  settings={{
-                    minRows: 10,
-                    minCols: excelData.headers.length,
-                    minSpareRows: 0,
-                    minSpareCols: 0,
-                    renderAllRows: false,
-                    viewportColumnRenderingOffset: 15,
-                    viewportRowRenderingOffset: 15,
-                    preventOverflow: false,
-                    fixedRowsTop: 1,
-                    fixedColumnsLeft: 1
-                  }}
-                  tableClassName="excel-table-container"
-                />
-              </div>
+        {/* Excel Content */}
+        <div className={`flex-1 overflow-hidden ${isFullScreen ? 'h-full' : ''}`}>
+          <div className="h-full flex flex-col">
+            
+            <div className="flex-1 overflow-hidden excel-wrapper">
+              <HotTable
+                ref={hotTableRef}
+                data={visibleData || []}
+                colHeaders={excelData.headers}
+                rowHeaders={true}
+                height="auto"
+                width="100%"
+                licenseKey="non-commercial-and-evaluation"
+                className="htCustom"
+                stretchH="none"
+                autoColumnSize={false}
+                colWidths={100}
+                readOnly={teamAccess && teamAccess.accessLevel === 'view'}
+                manualColumnResize={!teamAccess || teamAccess.accessLevel !== 'view'}
+                manualRowResize={!teamAccess || teamAccess.accessLevel !== 'view'}
+                filters={true}
+                dropdownMenu={!teamAccess || teamAccess.accessLevel !== 'view'}
+                contextMenu={!teamAccess || teamAccess.accessLevel !== 'view'}
+                columnSorting={true}
+                sortIndicator={true}
+                afterChange={teamAccess && teamAccess.accessLevel === 'view' ? undefined : handleDataChange}
+                rowHeights={28}
+                fixedRowsTop={1}
+                fixedColumnsLeft={1}
+                wordWrap={true}
+                outsideClickDeselects={false}
+                columnHeaderHeight={40}
+                afterGetColHeader={(col, TH) => {
+                  TH.className = 'htCenter htMiddle font-medium text-gray-700';
+                }}
+                settings={{
+                  minRows: 10,
+                  minCols: excelData.headers.length,
+                  minSpareRows: 0,
+                  minSpareCols: 0,
+                  renderAllRows: false,
+                  viewportColumnRenderingOffset: 15,
+                  viewportRowRenderingOffset: 15,
+                  preventOverflow: false,
+                  fixedRowsTop: 1,
+                  fixedColumnsLeft: 1
+                }}
+                tableClassName="excel-table-container"
+              />
             </div>
           </div>
         </div>
       </div>
-    );
-  };
+    </div>
+  );
+};
 
   if (loading) {
-    return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#333D79]"></div>
+  return (
+    <DashboardLayout>
+      <div className="flex items-center justify-center h-[calc(100vh-5rem)]">
+        <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-[#333D79]"></div>
+      </div>
+    </DashboardLayout>
+  );
+}
+
+  if (error && !classData) {
+  return (
+    <DashboardLayout>
+      <div className="flex flex-col items-center justify-center h-[calc(100vh-5rem)]">
+        <div className="bg-white rounded-lg shadow-lg p-8 max-w-lg w-full text-center">
+          <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+            <FiX className="h-8 w-8 text-red-500" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Class Not Found</h2>
+          <p className="text-gray-600 mb-6">
+            {error.includes("404") 
+              ? "The class you're looking for doesn't exist or you don't have permission to view it."
+              : error}
+          </p>
+          <div className="flex justify-center">
+            <button 
+              onClick={() => navigate("/dashboard/courses")}
+              className="px-4 py-2 bg-[#333D79] text-white rounded-lg hover:bg-[#4A5491] transition-colors"
+            >
+              Back to Courses
+            </button>
+          </div>
         </div>
-      </DashboardLayout>
-    );
-  }
+      </div>
+    </DashboardLayout>
+  );
+}
+
+if (!classData) {
+  return (
+    <DashboardLayout>
+      <div className="flex flex-col items-center justify-center h-[calc(100vh-5rem)]">
+        <div className="bg-white rounded-lg shadow-lg p-8 max-w-lg w-full text-center">
+          <div className="w-16 h-16 rounded-full bg-yellow-100 flex items-center justify-center mx-auto mb-4">
+            <FiInfo className="h-8 w-8 text-yellow-500" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Access Information</h2>
+          
+          {teamAccess && (
+            <div className="mb-4 p-4 bg-blue-50 rounded-lg">
+              <div className="flex items-center">
+                <div className="h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center mr-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-medium text-blue-800">Team Access</h3>
+                  <p className="text-blue-700">
+                    You have {teamAccess.accessLevel} access through {teamAccess.teamName}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <p className="text-gray-600 mb-6">
+            This class may not exist or you may not have permission to access it. If you believe this is an error, please contact your team administrator.
+          </p>
+          <div className="flex justify-center">
+            <button 
+              onClick={() => navigate("/dashboard/courses")}
+              className="px-4 py-2 bg-[#333D79] text-white rounded-lg hover:bg-[#4A5491] transition-colors"
+            >
+              Back to Courses
+            </button>
+          </div>
+        </div>
+      </div>
+    </DashboardLayout>
+  );
+}
 
   return (
     <DashboardLayout>
@@ -1115,19 +1248,21 @@ const ClassDetails = () => {
               <div className="flex space-x-3">
                 {excelData ? (
                     <>
-                        <label htmlFor="add-file" className="cursor-pointer">
+                        {(!teamAccess || teamAccess.accessLevel === 'edit' || teamAccess.accessLevel === 'full') && (
+                          <label htmlFor="add-file" className="cursor-pointer">
                             <div className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm hover:bg-gray-50">
-                                <FiUpload size={18} />
-                                <span>Add File</span>
+                              <FiUpload size={18} />
+                              <span>Add File</span>
                             </div>
                             <input 
-                                id="add-file" 
-                                type="file" 
-                                accept=".xlsx,.xls,.csv" 
-                                className="hidden"
-                                onChange={handleFileInput}
+                              id="add-file" 
+                              type="file" 
+                              accept=".xlsx,.xls,.csv" 
+                              className="hidden"
+                              onChange={handleFileInput}
                             />
-                        </label>
+                          </label>
+                        )}
                         <button
                             onClick={handleExport}
                             className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm hover:bg-gray-50"
@@ -1137,19 +1272,21 @@ const ClassDetails = () => {
                         </button>
                     </>
                 ) : (
+                  !teamAccess || teamAccess.accessLevel !== 'view' ? (
                     <label htmlFor="file-upload" className="cursor-pointer">
-                        <div className="bg-[#333D79] hover:bg-[#4A5491] text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm">
-                            <FiUpload size={18} />
-                            <span>Import Files</span>
-                        </div>
-                        <input 
-                            id="file-upload" 
-                            type="file" 
-                            accept=".xlsx,.xls,.csv" 
-                            className="hidden"
-                            onChange={handleFileInput}
-                        />
+                      <div className="bg-[#333D79] hover:bg-[#4A5491] text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm">
+                        <FiUpload size={18} />
+                        <span>Import Files</span>
+                      </div>
+                      <input 
+                        id="file-upload" 
+                        type="file" 
+                        accept=".xlsx,.xls,.csv" 
+                        className="hidden"
+                        onChange={handleFileInput}
+                      />
                     </label>
+                  ) : null
                 )}
             </div>
             </div>
@@ -1290,55 +1427,64 @@ const ClassDetails = () => {
                   </div>
                 </div>
               ) : !excelData ? (
-                <div 
-                  className={`border-2 border-dashed rounded-lg p-8 text-center relative z-10 ${
-                    isDragging ? 'border-[#333D79] bg-[#EEF0F8] bg-opacity-30' : 'border-gray-300 bg-gradient-to-b from-gray-50 to-white'
-                  } transition-all duration-300 backdrop-blur-sm`}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                >
-                  <div className="absolute top-5 right-10 w-2 h-2 bg-blue-400 rounded-full animate-ping"></div>
-                  <div className="absolute bottom-10 left-10 w-3 h-3 bg-purple-400 rounded-full animate-ping" style={{ animationDelay: '1s' }}></div>
-                  
-                  <div className="flex flex-col items-center">
-                    <div className={`mb-4 rounded-full bg-gradient-to-br from-[#333D79] to-[#4A5491] p-4 ${isDragging ? 'animate-pulse-custom transform scale-110' : ''} transition-all duration-300 shadow-md`}>
-                      <MdDragIndicator className="h-12 w-12 text-white" />
-                    </div>
-                    <h3 className="text-lg font-medium text-gray-700 mb-2 relative">
-                      Import Students
-                      <div className="absolute -top-1 -right-4 w-1.5 h-1.5 bg-purple-500 rounded-full"></div>
-                    </h3>
-                    <p className="text-sm text-gray-500 mb-4 max-w-md">
-                      Upload a spreadsheet with your student data to get started
-                    </p>
-                    <div className="flex flex-col sm:flex-row gap-3 mb-4">
-                      <label htmlFor="file-upload-placeholder" className="cursor-pointer">
-                        <div className="bg-gradient-to-r from-[#333D79] to-[#4A5491] hover:from-[#4A5491] hover:to-[#333D79] text-white px-5 py-2.5 rounded-lg flex items-center gap-2 transition-all duration-300 shadow-sm hover:shadow transform hover:-translate-y-0.5">
-                          <FiUpload size={18} className="transform group-hover:rotate-12 transition-transform" />
-                          <span>Upload Students</span>
-                        </div>
-                        <input 
-                          id="file-upload-placeholder" 
-                          type="file" 
-                          accept=".xlsx,.xls,.csv" 
-                          className="hidden"
-                          onChange={handleFileInput}
-                        />
-                      </label>
-                    </div>
-                    <div className="text-xs flex items-center gap-1 mt-2 px-3 py-1.5 bg-white bg-opacity-70 rounded-full shadow-sm backdrop-blur-sm">
-                      <FiInfo className="text-[#333D79]" size={12} />
-                      <span className="text-gray-500">Supported formats: </span>
-                      <span className="font-medium text-[#333D79]">.xlsx</span>
-                      <span className="text-gray-400">|</span>
-                      <span className="font-medium text-[#333D79]">.xls</span>
-                      <span className="text-gray-400">|</span>
-                      <span className="font-medium text-[#333D79]">.csv</span>
+                  <div 
+                    className={`border-2 border-dashed rounded-lg p-8 text-center relative z-10 ${
+                      isDragging ? 'border-[#333D79] bg-[#EEF0F8] bg-opacity-30' : 'border-gray-300 bg-gradient-to-b from-gray-50 to-white'
+                    } transition-all duration-300 backdrop-blur-sm`}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                  >
+                    <div className="absolute top-5 right-10 w-2 h-2 bg-blue-400 rounded-full animate-ping"></div>
+                    <div className="absolute bottom-10 left-10 w-3 h-3 bg-purple-400 rounded-full animate-ping" style={{ animationDelay: '1s' }}></div>
+                    
+                    <div className="flex flex-col items-center">
+                      <div className={`mb-4 rounded-full bg-gradient-to-br from-[#333D79] to-[#4A5491] p-4 ${isDragging ? 'animate-pulse-custom transform scale-110' : ''} transition-all duration-300 shadow-md`}>
+                        <MdDragIndicator className="h-12 w-12 text-white" />
                       </div>
+                      <h3 className="text-lg font-medium text-gray-700 mb-2 relative">
+                        Import Students
+                        <div className="absolute -top-1 -right-4 w-1.5 h-1.5 bg-purple-500 rounded-full"></div>
+                      </h3>
+                      <p className="text-sm text-gray-500 mb-4 max-w-md">
+                        Upload a spreadsheet with your student data to get started
+                      </p>
+                      <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                        {(!teamAccess || teamAccess.accessLevel !== 'view') ? (
+                          <label htmlFor="file-upload" className="...">
+                            <div className="bg-[#333D79] hover:bg-[#4A5491] text-white px-5 py-2.5 rounded-lg flex items-center gap-2">
+                              <FiUpload size={18} />
+                              <span>Upload Students</span>
+                            </div>
+                            <input 
+                              id="file-upload" 
+                              type="file" 
+                              accept=".xlsx,.xls,.csv" 
+                              className="hidden"
+                              onChange={handleFileInput}
+                            />
+                          </label>
+                        ) : (
+                          <div className="flex items-center justify-center p-4 bg-blue-50 rounded-lg border border-blue-100 mb-4">
+                            <div className="flex items-center">
+                              <FiInfo className="h-5 w-5 mr-2 text-blue-500" />
+                              <span className="text-sm text-blue-700">You have view-only access to this class through team {teamAccess.teamName}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-xs flex items-center gap-1 mt-2 px-3 py-1.5 bg-white bg-opacity-70 rounded-full shadow-sm backdrop-blur-sm">
+                        <FiInfo className="text-[#333D79]" size={12} />
+                        <span className="text-gray-500">Supported formats: </span>
+                        <span className="font-medium text-[#333D79]">.xlsx</span>
+                        <span className="text-gray-400">|</span>
+                        <span className="font-medium text-[#333D79]">.xls</span>
+                        <span className="text-gray-400">|</span>
+                        <span className="font-medium text-[#333D79]">.csv</span>
+                        </div>
+                    </div>
                   </div>
-                </div>
-              ) : (
+                ) : (
                 <div className="excel-data-container">
                   {/* Sheet tabs */}
                   {sheets.length > 1 && (
@@ -1365,7 +1511,7 @@ const ClassDetails = () => {
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center text-sm text-gray-500">
                       <FiFilter className="mr-2" />
-                                              <span>Use filters and context menu for advanced operations</span>
+                        <span>Use filters and context menu for advanced operations</span>
                       </div>
                       <div className="bg-[#F5F7FB] px-3 py-1.5 rounded-md text-sm text-gray-600 font-medium">
                         {fileStats ? 
@@ -1417,15 +1563,15 @@ const ClassDetails = () => {
                           stretchH="none"
                           autoColumnSize={false}
                           colWidths={100}
-                          readOnly={false}
-                          manualColumnResize={true}
-                          manualRowResize={true}
+                          readOnly={teamAccess && teamAccess.accessLevel === 'view'}
+                          manualColumnResize={!teamAccess || teamAccess.accessLevel !== 'view'}
+                          manualRowResize={!teamAccess || teamAccess.accessLevel !== 'view'}
                           filters={true}
-                          dropdownMenu={true}
-                          contextMenu={true}
+                          dropdownMenu={!teamAccess || teamAccess.accessLevel !== 'view'}
+                          contextMenu={!teamAccess || teamAccess.accessLevel !== 'view'}
                           columnSorting={true}
                           sortIndicator={true}
-                          afterChange={handleDataChange}
+                          afterChange={teamAccess && teamAccess.accessLevel === 'view' ? undefined : handleDataChange}
                           rowHeights={28}
                           fixedRowsTop={1}
                           fixedColumnsLeft={1}
@@ -1816,19 +1962,27 @@ const ClassDetails = () => {
                           Upload a spreadsheet with your student data to get started
                         </p>
                         <div className="flex flex-col sm:flex-row gap-3 mb-4">
-                          <label htmlFor="file-upload-placeholder" className="cursor-pointer">
-                            <div className="bg-[#333D79] hover:bg-[#4A5491] text-white px-5 py-2.5 rounded-lg flex items-center gap-2 transition-colors">
-                              <FiUpload size={18} />
-                              <span>Upload Students</span>
-                        </div>
-                            <input 
-                              id="file-upload-placeholder" 
-                              type="file" 
-                              accept=".xlsx,.xls,.csv" 
-                              className="hidden"
-                              onChange={handleFileInput}
-                            />
-                          </label>
+                          {(!teamAccess || teamAccess.accessLevel !== 'view') ? (
+                            <label htmlFor="file-upload" className="...">
+                              <div className="bg-[#333D79] hover:bg-[#4A5491] text-white px-5 py-2.5 rounded-lg flex items-center gap-2">
+                                <FiUpload size={18} />
+                                <span>Upload Students</span>
+                              </div>
+                              <input 
+                                id="file-upload" 
+                                type="file" 
+                                accept=".xlsx,.xls,.csv" 
+                                className="hidden"
+                                onChange={handleFileInput}
+                              />
+                            </label>
+                          ) : (
+                            // For view-only users, show data viewer without upload/edit
+                            <div className="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-lg flex items-center gap-2">
+                              <FiEye size={18} />
+                              <span>View Student Data</span>
+                            </div>
+                          )}
                         </div>
                         <div className="text-xs text-gray-500 flex items-center mt-2">
                           <FiInfo className="mr-1 text-[#333D79]" size={12} />
@@ -2431,7 +2585,15 @@ const ClassDetails = () => {
           </div>
         </div>
       )}
-        
+    
+    {teamAccess && teamAccess.accessLevel === 'view' && (
+      <div className="p-3 bg-blue-50 text-blue-700 rounded-lg mt-4 flex items-center gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <span>You have view-only access to this data through team {teamAccess.teamName}</span>
+      </div>
+    )}
     </DashboardLayout>
   );
 };

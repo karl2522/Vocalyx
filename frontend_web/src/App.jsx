@@ -17,6 +17,8 @@ import Recordings from './components/Recordings'
 import Schedule from './components/Schedule'
 import Signup from './components/Signup'
 import Team from './components/Team'
+import ClassAccessGuard from './components/ClassAccessGuard'
+import CourseAccessGuard from './components/CourseAccessGuard'
 import './index.css'
 import { enableHardwareAcceleration, preloadHeaderAssets } from './utils/preload.js'
 
@@ -104,9 +106,11 @@ function App() {
                   <Courses />
                 </ProtectedRoute>
               } />
-              <Route path="/dashboard/course/:id" element={
+             <Route path="/dashboard/course/:id" element={
                 <ProtectedRoute>
-                  <CourseDetail />
+                  <CourseAccessGuard>
+                    <CourseDetail />
+                  </CourseAccessGuard>
                 </ProtectedRoute>
               } />
               <Route path="/dashboard/classes" element={
@@ -114,9 +118,11 @@ function App() {
                   <Classes />
                 </ProtectedRoute>
               } />
-              <Route path="/dashboard/class/:id" element={
+             <Route path="/dashboard/class/:id" element={
                 <ProtectedRoute>
-                  <ClassDetails />
+                  <ClassAccessGuard>
+                    <ClassDetails />
+                  </ClassAccessGuard>
                 </ProtectedRoute>
               } />
               <Route path="/dashboard/recordings" element={
@@ -139,7 +145,6 @@ function App() {
                   <Schedule />
                 </ProtectedRoute>
               } />
-
               <Route path="*" element={
                 <ProtectedRoute>
                   <Navigate to="/dashboard" replace />

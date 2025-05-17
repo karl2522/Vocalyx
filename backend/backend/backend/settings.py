@@ -62,6 +62,7 @@ INSTALLED_APPS = [
     'drf_spectacular',
     'excel',
     'classes',
+    'teams',
     'token_management.apps.TokenManagementConfig',
 ]
 
