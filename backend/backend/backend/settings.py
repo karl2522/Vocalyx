@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     'excel',
     'classes',
     'teams',
+    'notifications',
     'token_management.apps.TokenManagementConfig',
 ]
 

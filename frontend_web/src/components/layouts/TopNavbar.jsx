@@ -7,6 +7,7 @@ import { RiBookOpenLine, RiSoundModuleLine } from 'react-icons/ri';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import LogoutModal from '../modals/LogoutModal';
+import { notificationService } from '../../services/api';
 
 // Custom animation styles for notifications
 const notificationStyles = `
@@ -58,67 +59,26 @@ const TopNavbar = ({ sidebarCollapsed }) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const dropdownRef = useRef(null);
   const notificationsRef = useRef(null);
-  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(3);
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
   const [activeNotificationTab, setActiveNotificationTab] = useState('all');
   const [notifications, setNotifications] = useState([]);
   const [notificationsLoading, setNotificationsLoading] = useState(true);
-
-  // Mock notification data - in a real app, this would come from an API
-  useEffect(() => {
-    if (showNotifications && notificationsLoading) {
-      // Simulate API call to load notifications
-      setTimeout(() => {
-        setNotifications([
-          {
-            id: 1,
-            type: 'course',
-            title: 'New course assignment',
-            message: 'You have been assigned to teach "Introduction to Programming"',
-            isRead: false,
-            timestamp: new Date(Date.now() - 1 * 60 * 60 * 1000), // 1 hour ago
-            icon: <RiBookOpenLine />
-          },
-          {
-            id: 2,
-            type: 'recording',
-            title: 'Recording processed',
-            message: 'Your recording "Lecture 3: Data Structures" has been processed',
-            isRead: false,
-            timestamp: new Date(Date.now() - 3 * 60 * 60 * 1000), // 3 hours ago
-            icon: <RiSoundModuleLine />
-          },
-          {
-            id: 3,
-            type: 'class',
-            title: 'Class canceled',
-            message: 'The class "Advanced Algorithms" on Friday has been canceled',
-            isRead: true,
-            timestamp: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000), // 1 day ago
-            icon: <MdOutlineClass />
-          },
-          {
-            id: 4,
-            type: 'system',
-            title: 'System maintenance',
-            message: 'The system will be under maintenance on Sunday, 2 AM - 4 AM',
-            isRead: true,
-            timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), // 2 days ago
-            icon: <FiInfo />
-          },
-          {
-            id: 5,
-            type: 'message',
-            title: 'New message from John Doe',
-            message: 'I have a question about the upcoming lecture...',
-            isRead: true,
-            timestamp: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000), // 3 days ago
-            icon: <FiMessageSquare />
-          }
-        ]);
-        setNotificationsLoading(false);
-      }, 600);
+  
+  const fetchNotifications = async () => {
+    setNotificationsLoading(true);
+    try {
+      const response = await notificationService.getNotifications();
+      setNotifications(response.data);
+      
+      // Also update the unread count
+      const countResponse = await notificationService.getNotificationCount();
+      setUnreadNotificationsCount(countResponse.data.unread_count);
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+    } finally {
+      setNotificationsLoading(false);
     }
-  }, [showNotifications, notificationsLoading]);
+  };
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -160,43 +120,92 @@ const TopNavbar = ({ sidebarCollapsed }) => {
     if (activeNotificationTab === 'all') {
       return notifications;
     } else if (activeNotificationTab === 'unread') {
-      return notifications.filter(notification => !notification.isRead);
+      return notifications.filter(notification => !notification.is_read);
     }
     return notifications;
   };
 
-  const markAsRead = (id) => {
-    setNotifications(prevNotifications => 
-      prevNotifications.map(notification => 
-        notification.id === id ? { ...notification, isRead: true } : notification
-      )
-    );
-    // Update unread count
-    const updatedNotifications = notifications.map(notification => 
-      notification.id === id ? { ...notification, isRead: true } : notification
-    );
-    setUnreadNotificationsCount(updatedNotifications.filter(n => !n.isRead).length);
+  const markAsRead = async (id) => {
+    try {
+      await notificationService.markAsRead(id);
+      setNotifications(prevNotifications => 
+        prevNotifications.map(notification => 
+          notification.id === id ? { ...notification, is_read: true } : notification
+        )
+      );
+      setUnreadNotificationsCount(prev => Math.max(prev - 1, 0));
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
   };
 
-  const markAllAsRead = () => {
-    setNotifications(prevNotifications => 
-      prevNotifications.map(notification => ({ ...notification, isRead: true }))
-    );
-    setUnreadNotificationsCount(0);
+  const markAllAsRead = async () => {
+    try {
+      await notificationService.markAllAsRead();
+      setNotifications(prevNotifications => 
+        prevNotifications.map(notification => ({ ...notification, is_read: true }))
+      );
+      setUnreadNotificationsCount(0);
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error);
+    }
   };
+
+  useEffect(() => {
+    if (showNotifications && notificationsLoading) {
+      fetchNotifications();
+    }
+  }, [showNotifications, notificationsLoading]);
+
+  useEffect(() => {
+    const checkNotifications = async () => {
+      try {
+        const response = await notificationService.getNotificationCount();
+        setUnreadNotificationsCount(response.data.unread_count);
+      } catch (error) {
+        console.error('Error checking notification count:', error);
+      }
+    };
+
+    checkNotifications();
+    
+    const intervalId = setInterval(checkNotifications, 60000); 
+    return () => clearInterval(intervalId);
+  }, []);
 
   const getTimeString = (timestamp) => {
+    if (!timestamp) return 'Just now';
+    
     const now = new Date();
-    const diffInHours = Math.floor((now - timestamp) / (1000 * 60 * 60));
+    const notificationDate = new Date(timestamp);
+    const diffInHours = Math.floor((now - notificationDate) / (1000 * 60 * 60));
     
     if (diffInHours < 1) {
-      const diffInMinutes = Math.floor((now - timestamp) / (1000 * 60));
-      return `${diffInMinutes} min${diffInMinutes !== 1 ? 's' : ''} ago`;
+      const diffInMinutes = Math.floor((now - notificationDate) / (1000 * 60));
+      return `${diffInMinutes > 0 ? diffInMinutes : 1} min${diffInMinutes !== 1 ? 's' : ''} ago`;
     } else if (diffInHours < 24) {
       return `${diffInHours} hr${diffInHours !== 1 ? 's' : ''} ago`;
     } else {
       const diffInDays = Math.floor(diffInHours / 24);
       return `${diffInDays} day${diffInDays !== 1 ? 's' : ''} ago`;
+    }
+  };
+
+  const getIconByType = (type) => {
+    switch (type) {
+      case 'course':
+        return <RiBookOpenLine />;
+      case 'recording':
+        return <RiSoundModuleLine />;
+      case 'class':
+        return <MdOutlineClass />;
+      case 'team':
+        return <HiOutlineUserCircle />;
+      case 'message':
+        return <FiMessageSquare />;
+      case 'system':
+      default:
+        return <FiInfo />;
     }
   };
 
@@ -208,6 +217,8 @@ const TopNavbar = ({ sidebarCollapsed }) => {
         return 'from-purple-500 to-purple-600';
       case 'class':
         return 'from-green-500 to-green-600';
+      case 'team':
+        return 'from-teal-500 to-teal-600';
       case 'message':
         return 'from-yellow-500 to-yellow-600';
       case 'system':
@@ -313,32 +324,38 @@ const TopNavbar = ({ sidebarCollapsed }) => {
                           <div 
                             key={notification.id} 
                             className={`px-4 py-3 cursor-pointer notification-item relative ${
-                              notification.isRead ? 'bg-white' : 'bg-[#EEF0F8]'
+                              notification.is_read ? 'bg-white' : 'bg-[#EEF0F8]'
                             }`}
                             onClick={() => markAsRead(notification.id)}
                           >
                             <div className="flex">
                               <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${getIconColor(notification.type)} flex items-center justify-center text-white shadow-sm mr-3 flex-shrink-0`}>
-                                {notification.icon}
+                                {getIconByType(notification.type)}
                               </div>
                               
                               <div className="flex-1 min-w-0">
                                 <div className="flex justify-between items-start">
-                                  <h4 className={`text-sm font-medium ${notification.isRead ? 'text-gray-700' : 'text-[#333D79]'}`}>
+                                  <h4 className={`text-sm font-medium ${notification.is_read ? 'text-gray-700' : 'text-[#333D79]'}`}>
                                     {notification.title}
                                   </h4>
                                   <span className="text-xs text-gray-500 whitespace-nowrap ml-2 flex-shrink-0">
-                                    {getTimeString(notification.timestamp)}
+                                    {getTimeString(notification.created_at)}
                                   </span>
                                 </div>
                                 
                                 <p className="text-xs text-gray-600 mt-0.5 line-clamp-2">
                                   {notification.message}
                                 </p>
+                                
+                                {notification.sender_details && (
+                                  <p className="text-xs text-blue-600 mt-1">
+                                    From: {notification.sender_details.first_name} {notification.sender_details.last_name}
+                                  </p>
+                                )}
                               </div>
                             </div>
                             
-                            {!notification.isRead && (
+                            {!notification.is_read && (
                               <span className="absolute top-3 right-3 w-2 h-2 rounded-full bg-[#333D79] notification-dot"></span>
                             )}
                           </div>
@@ -440,4 +457,4 @@ TopNavbar.defaultProps = {
   sidebarCollapsed: false
 };
 
-export default TopNavbar; 
+export default TopNavbar;

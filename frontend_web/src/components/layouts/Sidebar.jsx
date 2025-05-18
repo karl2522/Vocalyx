@@ -68,6 +68,17 @@ const Sidebar = ({ onCollapse }) => {
     }
   }, [collapsed, onCollapse]);
 
+  useEffect(() => {
+    navItems.forEach(item => {
+      if (item.hasSubmenu && item.submenu?.some(subItem => 
+        location.pathname === subItem.path || location.pathname.startsWith(subItem.path)
+      )) {
+        setOpenSubmenu(item.name);
+      }
+    });
+  }, [location.pathname]);
+
+
   const handleLogoutClick = (e) => {
     e.preventDefault();
     setShowLogoutModal(true);
@@ -249,6 +260,9 @@ const Sidebar = ({ onCollapse }) => {
                                   ? 'bg-white bg-opacity-15 text-white font-medium' 
                                   : 'text-gray-200 hover:bg-white hover:bg-opacity-5'
                               }`}
+                              onClick={(e) => {
+                                e.stopPropagation(); 
+                              }}
                             >
                               <span className="h-1.5 w-1.5 bg-blue-300 rounded-full mr-2.5 opacity-70"></span>
                               {subItem.name}
@@ -259,36 +273,37 @@ const Sidebar = ({ onCollapse }) => {
                     </ul>
                   )}
 
-                  {/* Submenu for collapsed state */}
-                  {collapsed && item.hasSubmenu && (
-                    <div className="relative group">
-                      <button
-                        onClick={() => toggleSubmenu(item.name)}
-                        className={`flex justify-center py-3.5 px-4 w-full relative rounded-xl ${
-                          isSubmenuActive
-                            ? 'active-item-gradient text-white font-medium shadow-md'
-                            : 'text-gray-100 hover:bg-white hover:bg-opacity-10'
-                        } transition-all duration-200`}
-                      >
-                        <span className={`${isSubmenuActive ? 'text-white' : 'text-blue-100'}`}>{item.icon}</span>
-                      </button>
-                      <div className="absolute left-14 top-0 bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white rounded-md text-sm whitespace-nowrap opacity-0 -translate-x-3 pointer-events-none group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 z-50 shadow-lg px-1 py-2 min-w-[150px]">
-                        <p className="px-3 py-1 font-medium border-b border-white/10">{item.name}</p>
-                        {item.submenu.map((subItem) => {
-                          const isSubItemActive = location.pathname.startsWith(subItem.path);
-                          return (
-                            <Link 
-                              key={subItem.name}
-                              to={subItem.path}
-                              className={`block px-3 py-2 hover:bg-white hover:bg-opacity-10 rounded-md ${isSubItemActive ? 'bg-white bg-opacity-15' : ''}`}
-                            >
-                              {subItem.name}
-                            </Link>
-                          );
-                        })}
-                      </div>
+                 {collapsed && item.hasSubmenu && (
+                  <div className="relative group">
+                    <button
+                      onClick={() => toggleSubmenu(item.name)}
+                      className={`flex justify-center py-3.5 px-4 w-full relative rounded-xl ${
+                        isSubmenuActive
+                          ? 'active-item-gradient text-white font-medium shadow-md'
+                          : 'text-gray-100 hover:bg-white hover:bg-opacity-10'
+                      } transition-all duration-200`}
+                    >
+                      <span className={`${isSubmenuActive ? 'text-white' : 'text-blue-100'}`}>{item.icon}</span>
+                    </button>
+                    <div className="absolute left-14 top-0 bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white rounded-md text-sm whitespace-nowrap opacity-0 -translate-x-3 pointer-events-none group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 z-50 shadow-lg px-1 py-2 min-w-[150px]">
+                      <p className="px-3 py-1 font-medium border-b border-white/10">{item.name}</p>
+                      {item.submenu.map((subItem) => {
+                        const isSubItemActive = location.pathname.startsWith(subItem.path);
+                        return (
+                          <Link 
+                            key={subItem.name}
+                            to={subItem.path}
+                            className={`block px-3 py-2 hover:bg-white hover:bg-opacity-10 rounded-md ${isSubItemActive ? 'bg-white bg-opacity-15' : ''}`}
+                            // Don't close the hover menu in collapsed state when clicking submenu items
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {subItem.name}
+                          </Link>
+                        );
+                      })}
                     </div>
-                  )}
+                  </div>
+                )}
                 </li>
               );
             })}

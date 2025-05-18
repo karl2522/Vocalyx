@@ -15,22 +15,27 @@ const AddCoursesModal = ({
   const [coursesSearchTerm, setCoursesSearchTerm] = useState('');
   
   const filteredCourses = () => {
-    if (!allCourses.length) return { userCourses: [], teamCourses: [] };
-    
-    let filtered = allCourses;
-    
-    if (coursesSearchTerm.trim()) {
-      filtered = filtered.filter(course => 
-        course.name.toLowerCase().includes(coursesSearchTerm.toLowerCase()) ||
-        course.subject?.toLowerCase().includes(coursesSearchTerm.toLowerCase())
-      );
-    }
-    
-    const userCourses = filtered.filter(course => course.isOwner);
-    const teamCourses = filtered.filter(course => !course.isOwner);
-    
-    return { userCourses, teamCourses };
-  };
+  if (!allCourses.length) return { userCourses: [], teamCourses: [] };
+  
+  let filtered = allCourses;
+  
+  if (coursesSearchTerm.trim()) {
+    filtered = filtered.filter(course => 
+      course.name.toLowerCase().includes(coursesSearchTerm.toLowerCase()) ||
+      (course.subject && course.subject.toLowerCase().includes(coursesSearchTerm.toLowerCase())) ||
+      (course.courseCode && course.courseCode.toLowerCase().includes(coursesSearchTerm.toLowerCase()))
+    );
+  }
+  
+  const userCourses = filtered.filter(course => course.isOwner || course.accessLevel === 'full');
+  const teamCourses = filtered.filter(course => !course.isOwner && course.accessLevel !== 'full');
+  
+  // For debugging
+  console.log("User courses:", userCourses);
+  console.log("Team courses:", teamCourses);
+  
+  return { userCourses, teamCourses };
+};
 
   if (!isOpen) return null;
 

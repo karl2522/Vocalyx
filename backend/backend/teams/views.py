@@ -14,6 +14,8 @@ from .serializers import (
     TeamInvitationSerializer, UserSerializer, CourseSerializer
 )
 
+from notifications.utils import create_notification
+
 
 class IsTeamMemberOrReadOnly(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
@@ -209,6 +211,16 @@ class TeamViewSet(viewsets.ModelViewSet):
                 role='member',
                 permissions=request.data.get('permissions', 'view')
             )
+
+            create_notification(
+                recipient=user,
+                notification_type='team',
+                title='Team Invitation',
+                message=f"{request.user.first_name} {request.user.last_name} added you to the team: {team.name}",
+                sender=request.user,
+                related_object=team
+            )
+
             serializer = TeamMemberSerializer(member)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
@@ -227,6 +239,9 @@ class TeamViewSet(viewsets.ModelViewSet):
                     inviter=request.user
                 )
 
+                # Note: For invited users who don't have accounts yet,
+                # we'll create a notification when they register and accept the invitation
+                # This would be handled in the invitation acceptance logic
 
             serializer = TeamMemberSerializer(member)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -247,6 +262,18 @@ class TeamViewSet(viewsets.ModelViewSet):
 
             if member.role == 'owner':
                 return Response({"detail": "Cannot remove the team owner"}, status=status.HTTP_400_BAD_REQUEST)
+
+            # If the member has a user account (not just an email invitation)
+            if member.user:
+                # Create notification for the removed user
+                create_notification(
+                    recipient=member.user,
+                    notification_type='team',
+                    title='Team Membership Ended',
+                    message=f"You have been removed from the team: {team.name}",
+                    sender=request.user,
+                    related_object=team
+                )
 
             member.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
@@ -273,14 +300,72 @@ class TeamViewSet(viewsets.ModelViewSet):
             if member.role == 'owner' and request.user != member.user:
                 return Response({"detail": "Cannot change the owner's permissions"}, status=status.HTTP_400_BAD_REQUEST)
 
+            old_permissions = member.permissions
+
             member.permissions = permissions
             member.save()
+
+            if member.user:
+                permission_description = {
+                    'view': 'view-only access',
+                    'edit': 'edit access',
+                    'full': 'full access'
+                }.get(permissions, 'updated access')
+
+                create_notification(
+                    recipient=member.user,
+                    notification_type='team',
+                    title='Team Permission Updated',
+                    message=f"Your access level for team \"{team.name}\" has been changed to {permission_description}",
+                    sender=request.user,
+                    related_object=team
+                )
 
             serializer = TeamMemberSerializer(member)
             return Response(serializer.data)
 
         except TeamMember.DoesNotExist:
             return Response({"detail": "Member not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=True, methods=['post'])
+    def accept(self, request, pk=None):
+        invitation = self.get_object()
+
+        if invitation.email != request.user.email:
+            return Response({"detail": "This invitation is not for you"}, status=status.HTTP_403_FORBIDDEN)
+
+        if invitation.accepted:
+            return Response({"detail": "Invitation already accepted"}, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            invitation.accepted = True
+            invitation.accepted_at = timezone.now()
+            invitation.save()
+
+            team_member, created = TeamMember.objects.get_or_create(
+                team=invitation.team,
+                user=request.user,
+                defaults={
+                    'role': 'member',
+                    'permissions': 'view'
+                }
+            )
+
+            if not created:
+                team_member.is_active = True
+                team_member.save()
+
+            create_notification(
+                recipient=invitation.team.owner,
+                notification_type='team',
+                title='Team Invitation Accepted',
+                message=f"{request.user.first_name} {request.user.last_name} accepted your invitation to join {invitation.team.name}",
+                sender=request.user,
+                related_object=invitation.team
+            )
+
+        serializer = TeamSerializer(invitation.team)
+        return Response(serializer.data)
 
     @action(detail=True, methods=['post'])
     def add_course(self, request, pk=None):

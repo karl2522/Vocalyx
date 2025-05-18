@@ -236,17 +236,17 @@ export const teamService = {
         }
         throw error;
     }),
-     createTeam: (teamData) => {
-    console.log("API call: creating team with data", teamData);
-    
-    const formattedData = {
-      name: teamData.name,
-      members: Array.isArray(teamData.members) ? teamData.members : [],
-      courses: Array.isArray(teamData.courses) ? teamData.courses.map(id => Number(id)) : []
-    };
-    
-    return api.post('/teams/', formattedData);
-  },
+    createTeam: (teamData) => {
+        console.log("API call: creating team with data", teamData);
+        
+        const formattedData = {
+          name: teamData.name,
+          members: Array.isArray(teamData.members) ? teamData.members : [],
+          courses: Array.isArray(teamData.courses) ? teamData.courses.map(id => Number(id)) : []
+        };
+        
+        return api.post('/teams/', formattedData);
+    },
     joinTeam: (code) => api.post('/teams/join/', { code }),
     
     addMember: (teamId, email, permissions = 'view') => 
@@ -260,7 +260,7 @@ export const teamService = {
     removeCourse: (teamId, courseId) => 
         api.delete(`/teams/${teamId}/remove_course/`, { data: { course_id: courseId } }),
         
-     searchUsers: (query) => {
+    searchUsers: (query) => {
         console.log(`API call: searching users with query "${query}"`);
         const timestamp = new Date().getTime();
         return api.get(`/teams/search_users/?q=${encodeURIComponent(query)}&_=${timestamp}`);
@@ -271,6 +271,16 @@ export const teamService = {
     },
     getAllTeams: async () => api.get('/teams/all_teams/'),
     getTeamById: (teamId) => api.get(`/teams/${teamId}/`),
+    
+    acceptInvitation: (invitationId) => api.post(`/teams/${invitationId}/accept/`)
+};
+
+export const notificationService = {
+  getNotifications: () => api.get('/notifications/'),
+  getUnreadNotifications: () => api.get('/notifications/unread/'),
+  getNotificationCount: () => api.get('/notifications/count/'),
+  markAsRead: (notificationId) => api.patch(`/notifications/${notificationId}/mark_as_read/`),
+  markAllAsRead: () => api.post('/notifications/mark_all_as_read/')
 };
 
 export default api;

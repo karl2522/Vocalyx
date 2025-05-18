@@ -5,9 +5,7 @@ import { courseService } from '../services/api';
 import { commonHeaderAnimations } from '../utils/animation.js';
 import DashboardLayout from "./layouts/DashboardLayout.jsx";
 
-// Optimize by creating the styles only once and preventing re-renders
 const ScheduleStyles = () => {
-  // Use useMemo to prevent regenerating the styles on each render
   const stylesContent = useMemo(() => `
     ${commonHeaderAnimations}
     
@@ -148,6 +146,7 @@ const Schedule = () => {
   const [showClassDropdown, setShowClassDropdown] = useState(false);
   const [scheduledTimes, setScheduledTimes] = useState([]);
   const [headerLoaded, setHeaderLoaded] = useState(false);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
   
   // Time slot data - these are 30-minute increments
   const timeSlots = [
@@ -185,24 +184,97 @@ const Schedule = () => {
   // Day names for column headers
   const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-  // Set header as loaded after initial mount
+  // Save selected course and class to localStorage when they change
   useEffect(() => {
-    // Only set this once on component mount
+    if (selectedCourse && initialLoadDone) {
+      localStorage.setItem('schedule_selectedCourse', JSON.stringify({
+        id: selectedCourse.id,
+        name: selectedCourse.name
+      }));
+    }
+  }, [selectedCourse, initialLoadDone]);
+
+  useEffect(() => {
+    if (selectedClass && initialLoadDone) {
+      localStorage.setItem('schedule_selectedClass', JSON.stringify({
+        id: selectedClass.id,
+        name: selectedClass.name,
+        section: selectedClass.section,
+        schedule: selectedClass.schedule,
+        student_count: selectedClass.student_count
+      }));
+    }
+  }, [selectedClass, initialLoadDone]);
+
+  // On initial load, fetch courses and saved selections
+  useEffect(() => {
+    // Set header as loaded after initial mount
     if (!headerLoaded) {
       setHeaderLoaded(true);
     }
     
-    fetchCourses();
+    const fetchInitialData = async () => {
+      await fetchCourses();
+      
+      // Try to restore saved state
+      const savedViewType = localStorage.getItem('schedule_viewType');
+      if (savedViewType) {
+        setViewType(savedViewType);
+      }
+      
+      const savedSelectedCourse = localStorage.getItem('schedule_selectedCourse');
+      const savedSelectedClass = localStorage.getItem('schedule_selectedClass');
+      
+      if (savedSelectedCourse) {
+        const parsedCourse = JSON.parse(savedSelectedCourse);
+        // We need to fetch the full course details with the ID
+        try {
+          const response = await courseService.getCourse(parsedCourse.id);
+          if (response && response.data) {
+            setSelectedCourse(response.data);
+            
+            // Fetch classes for this course
+            const classesResponse = await courseService.getCourseClasses(response.data.id);
+            if (classesResponse && classesResponse.data) {
+              setClasses(classesResponse.data);
+              
+              // If there was also a saved class, try to find it in the fetched classes
+              if (savedSelectedClass) {
+                const parsedClass = JSON.parse(savedSelectedClass);
+                const matchingClass = classesResponse.data.find(c => c.id === parsedClass.id);
+                if (matchingClass) {
+                  setSelectedClass(matchingClass);
+                  parseSchedule(matchingClass.schedule);
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.error("Error restoring saved course:", error);
+        }
+      }
+      
+      setInitialLoadDone(true);
+    };
+    
+    fetchInitialData();
   }, [headerLoaded]);
 
+  // Save view type when it changes
   useEffect(() => {
-    if (selectedCourse) {
+    if (initialLoadDone) {
+      localStorage.setItem('schedule_viewType', viewType);
+    }
+  }, [viewType, initialLoadDone]);
+
+  useEffect(() => {
+    if (selectedCourse && initialLoadDone) {
       fetchClasses(selectedCourse.id);
-    } else {
+    } else if (initialLoadDone) {
       setClasses([]);
       setSelectedClass(null);
     }
-  }, [selectedCourse]);
+  }, [selectedCourse, initialLoadDone]);
 
   useEffect(() => {
     if (selectedClass) {
@@ -224,8 +296,10 @@ const Schedule = () => {
     try {
       const response = await courseService.getCourses();
       setCourses(response.data);
+      return response.data;
     } catch (error) {
       console.error("Error fetching courses:", error);
+      return [];
     } finally {
       setIsLoading(false);
     }
@@ -409,6 +483,29 @@ const Schedule = () => {
     }
   };
 
+  // Handle course selection change
+  const handleCourseSelect = (course) => {
+    setSelectedCourse(course);
+    // Clear the selected class since we're changing courses
+    setSelectedClass(null);
+    localStorage.removeItem('schedule_selectedClass');
+    setShowCourseDropdown(false);
+  };
+
+  // Handle class selection change
+  const handleClassSelect = (classItem) => {
+    setSelectedClass(classItem);
+    setShowClassDropdown(false);
+  };
+
+  // Clear selections (for UI clarity)
+  const clearSelections = () => {
+    setSelectedCourse(null);
+    setSelectedClass(null);
+    localStorage.removeItem('schedule_selectedCourse');
+    localStorage.removeItem('schedule_selectedClass');
+  };
+
   if (isLoading) {
     return (
       <DashboardLayout>
@@ -499,10 +596,7 @@ const Schedule = () => {
                         <button 
                           key={course.id}
                           className="block w-full text-left px-4 py-2 hover:bg-gray-100 text-sm"
-                          onClick={() => {
-                            setSelectedCourse(course);
-                            setShowCourseDropdown(false);
-                          }}
+                          onClick={() => handleCourseSelect(course)}
                         >
                           {course.name}
                         </button>
@@ -535,10 +629,7 @@ const Schedule = () => {
                             <button 
                               key={classItem.id}
                               className="block w-full text-left px-4 py-2 hover:bg-gray-100 text-sm"
-                              onClick={() => {
-                                setSelectedClass(classItem);
-                                setShowClassDropdown(false);
-                              }}
+                              onClick={() => handleClassSelect(classItem)}
                             >
                               {classItem.name} - Section {classItem.section || 'A'}
                             </button>
@@ -557,6 +648,17 @@ const Schedule = () => {
                   <span className="breadcrumb-arrow">&gt;</span>
                   <span className="text-gray-600">Schedule</span>
                 </>
+              )}
+              
+              {/* Clear button */}
+              {(selectedCourse || selectedClass) && (
+                <button 
+                  onClick={clearSelections}
+                  className="ml-2 px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded-md"
+                  title="Clear selections"
+                >
+                  Clear
+                </button>
               )}
             </div>
             

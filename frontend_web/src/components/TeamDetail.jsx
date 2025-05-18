@@ -5,6 +5,7 @@ import { teamService } from '../services/api';
 import { showToast } from '../utils/toast';
 import AddCoursesModal from './modals/AddCourseModal';
 import { Link } from 'react-router-dom';
+import { courseService } from '../services/api';
 
 const TeamDetail = ({ userIsOwner }) => {
   const { id } = useParams();
@@ -111,17 +112,66 @@ const TeamDetail = ({ userIsOwner }) => {
 }, [teamMembers]);
 
   const fetchAvailableCourses = async () => {
-    try {
-      setIsLoadingCourses(true);
-      const response = await teamService.getAvailableCourses();
-      setAllCourses(response.data || []);
-    } catch (error) {
-      console.error('Error fetching available courses:', error);
-      showToast.error('Failed to load courses');
-    } finally {
-      setIsLoadingCourses(false);
-    }
-  };
+  try {
+    setIsLoadingCourses(true);
+    
+    const ownCoursesResponse = await courseService.getCourses();
+    
+    const response = await teamService.getTeamById(id);
+    const teamCourseIds = response.data.courses.map(c => c.id) || [];
+    
+    // Format courses for the modal
+    const formattedCourses = (ownCoursesResponse.data || [])
+      .filter(course => !teamCourseIds.includes(course.id))
+      .map(course => ({
+        id: course.id,
+        name: course.name,
+        subject: course.courseCode || 'No Code',
+        isOwner: true,
+        thumbnail: 'https://via.placeholder.com/400x200?text=Course'
+      }));
+    
+    console.log("Available courses for modal:", formattedCourses);
+    setAllCourses(formattedCourses);
+    
+  } catch (error) {
+    console.error('Error fetching available courses:', error);
+    showToast.error('Failed to load courses');
+  } finally {
+    setIsLoadingCourses(false);
+  }
+};
+
+  const removeMember = async (memberId) => {
+  try {
+    await teamService.removeMember(team.id, memberId);
+    setTeamMembers(teamMembers.filter(m => m.id !== memberId));
+    showToast.success('Member removed from team');
+  } catch (error) {
+    console.error('Error removing member:', error);
+    showToast.error('Failed to remove member');
+  }
+};
+
+    const updateMemberPermission = async (memberId, newPermission) => {
+  try {
+    await teamService.updateMemberPermissions(team.id, memberId, newPermission);
+    
+    // Update local state to reflect the change
+    setTeamMembers(teamMembers.map(member => 
+      member.id === memberId ? { ...member, permissions: newPermission } : member
+    ));
+    
+    showToast.success(`Member permissions updated to ${
+      newPermission === 'full' ? 'Full Access' : 
+      newPermission === 'edit' ? 'Can Edit' : 
+      'View Only'
+    }`);
+  } catch (error) {
+    console.error('Error updating member permissions:', error);
+    showToast.error('Failed to update member permissions');
+  }
+};
 
   const handleOpenAddCoursesModal = () => {
     setSelectedCoursesToAdd([]);
@@ -314,57 +364,87 @@ const TeamDetail = ({ userIsOwner }) => {
                   
                   {teamMembers.length > 0 ? (
                     <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
-                      {teamMembers.map((member) => (
+                        {teamMembers.map((member) => (
                         <div key={member.id} className="flex items-center justify-between p-3 border border-gray-100 rounded-lg">
-                          <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center flex-shrink-0 font-medium">
-                              {(member.name || member.user_email || "?").charAt(0).toUpperCase()}
+                                {(member.name || member.user_email || "?").charAt(0).toUpperCase()}
                             </div>
                             <div>
-                              <h4 className="text-sm font-medium text-gray-900">{member.name || member.user_email}</h4>
-                              <div className="flex items-center gap-2 mt-1">
+                                <h4 className="text-sm font-medium text-gray-900">{member.name || member.user_email}</h4>
+                                <div className="flex items-center gap-2 mt-1">
                                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                                  member.role === 'owner' 
+                                    member.role === 'owner' 
                                     ? 'bg-blue-100 text-blue-800' 
                                     : member.role === 'invited'
-                                      ? 'bg-yellow-100 text-yellow-800'
-                                      : 'bg-green-100 text-green-800'
+                                        ? 'bg-yellow-100 text-yellow-800'
+                                        : 'bg-green-100 text-green-800'
                                 }`}>
-                                  {member.role === 'owner' 
+                                    {member.role === 'owner' 
                                     ? 'Owner' 
                                     : member.role === 'invited'
-                                      ? 'Invited'
-                                      : 'Member'}
+                                        ? 'Invited'
+                                        : 'Member'}
                                 </span>
-                              </div>
+                                {member.role !== 'owner' && (
+                                    <span className={`px-2 py-0.5 rounded-full text-xs ${
+                                    member.permissions === 'full' 
+                                        ? 'bg-green-50 text-green-800 border border-green-200' 
+                                        : member.permissions === 'edit'
+                                        ? 'bg-blue-50 text-blue-800 border border-blue-200'
+                                        : 'bg-gray-50 text-gray-700 border border-gray-200'
+                                    }`}>
+                                    {member.permissions === 'full' 
+                                        ? 'Full Access' 
+                                        : member.permissions === 'edit'
+                                        ? 'Can Edit'
+                                        : 'View Only'}
+                                    </span>
+                                )}
+                                </div>
                             </div>
-                          </div>
-                          
-                          {userIsOwner && member.role !== 'owner' && (
-                            <button 
-                              className="text-sm text-red-500 hover:text-red-700"
-                              onClick={async () => {
-                                try {
-                                  await teamService.removeMember(team.id, member.id);
-                                  setTeamMembers(teamMembers.filter(m => m.id !== member.id));
-                                  showToast.success('Member removed from team');
-                                } catch (error) {
-                                  console.error('Error removing member:', error);
-                                  showToast.error('Failed to remove member');
-                                }
-                              }}
-                            >
-                              Remove
-                            </button>
-                          )}
+                            </div>
+                            
+                            {userIsOwner && member.role !== 'owner' && (
+                            <div className="flex items-center gap-2">
+                                <div className="relative group">
+                                <button 
+                                    className="px-2.5 py-1 text-xs bg-blue-50 text-blue-700 rounded border border-blue-200 hover:bg-blue-100 transition-colors"
+                                    onClick={() => {
+                                    // Show a dropdown or modal to change permissions
+                                    const newPermission = member.permissions === 'view' ? 'edit' 
+                                                        : member.permissions === 'edit' ? 'full' 
+                                                        : 'view';
+                                    // This will cycle through the permissions
+                                    updateMemberPermission(member.id, newPermission);
+                                    }}
+                                >
+                                    Change Access
+                                </button>
+                                <div className="absolute z-20 hidden group-hover:block mt-1 px-2 py-1 text-xs bg-gray-700 text-white rounded whitespace-nowrap">
+                                    Click to cycle: View → Edit → Full → View
+                                </div>
+                                </div>
+                                <button 
+                                className="px-2.5 py-1 text-xs bg-red-50 text-red-700 rounded border border-red-200 hover:bg-red-100 transition-colors"
+                                onClick={() => {
+                                    if (window.confirm(`Are you sure you want to remove ${member.name || member.user_email} from this team?`)) {
+                                    removeMember(member.id);
+                                    }
+                                }}
+                                >
+                                Remove
+                                </button>
+                            </div>
+                            )}
                         </div>
-                      ))}
+                        ))}
                     </div>
-                  ) : (
+                    ) : (
                     <div className="text-center py-8 bg-gray-50 rounded-lg">
-                      <p className="text-gray-500">No team members found</p>
+                        <p className="text-gray-500">No team members found</p>
                     </div>
-                  )}
+                    )}
                   
                   {userIsOwner && (
                     <div className="mt-4 pt-4 border-t border-gray-100">
@@ -462,21 +542,6 @@ const TeamDetail = ({ userIsOwner }) => {
                                 ) : (
                                     <div className="px-4 py-3 text-center text-sm text-gray-500">
                                     Type to search for users...
-                                    </div>
-                                )}
-                                
-                                {/* Debug info for development - you can remove this in production */}
-                                {process.env.NODE_ENV === 'development' && (
-                                    <div className="px-4 py-2 text-xs text-gray-500 border-t border-gray-200">
-                                    <details>
-                                        <summary>Debug Info</summary>
-                                        <div className="mt-2 space-y-1">
-                                        <p>Query: {debugInfo.lastQuery}</p>
-                                        <p>Got Response: {debugInfo.receivedResponse ? 'Yes' : 'No'}</p>
-                                        <p>Results Count: {debugInfo.resultsCount}</p>
-                                        {debugInfo.error && <p>Error: {debugInfo.error}</p>}
-                                        </div>
-                                    </details>
                                     </div>
                                 )}
                                 </div>
