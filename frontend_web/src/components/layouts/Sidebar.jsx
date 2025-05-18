@@ -3,8 +3,10 @@ import { useEffect, useState } from 'react';
 import { FiCalendar, FiLogOut } from 'react-icons/fi';
 import { HiOutlineUserGroup } from 'react-icons/hi';
 import {
-  MdChevronLeft,
-  MdChevronRight,
+  MdKeyboardArrowDown,
+  MdKeyboardArrowLeft,
+  MdKeyboardArrowRight,
+  MdKeyboardArrowUp,
   MdOutlineDashboard,
   MdOutlineSettings
 } from 'react-icons/md';
@@ -57,6 +59,7 @@ const Sidebar = ({ onCollapse }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { logout } = useAuth();
+  const [openSubmenu, setOpenSubmenu] = useState(null);
 
   // Notify parent component when collapsed state changes
   useEffect(() => {
@@ -75,6 +78,14 @@ const Sidebar = ({ onCollapse }) => {
     navigate('/login');
   };
 
+  const toggleSubmenu = (name) => {
+    if (openSubmenu === name) {
+      setOpenSubmenu(null);
+    } else {
+      setOpenSubmenu(name);
+    }
+  };
+
   const navItems = [
     { name: 'Dashboard', icon: <MdOutlineDashboard size={22} />, path: '/dashboard' },
     { 
@@ -90,9 +101,18 @@ const Sidebar = ({ onCollapse }) => {
     { 
       name: 'Recordings', 
       icon: <RiSoundModuleLine size={22} />, 
-      path: '/dashboard/recordings' 
+      path: '/dashboard/recordings'   
     },
-    { name: 'Team', icon: <HiOutlineUserGroup size={22} />, path: '/dashboard/team' },
+    { 
+      name: 'Team', 
+      icon: <HiOutlineUserGroup size={22} />, 
+      path: '/dashboard/team',
+      hasSubmenu: true,
+      submenu: [
+        { name: 'Your Teams', path: '/dashboard/team/your-teams' },
+        { name: 'Joined Teams', path: '/dashboard/team/joined-teams' }
+      ]
+    },
     { name: 'Settings', icon: <MdOutlineSettings size={22} />, path: '/dashboard/settings' },
   ];
 
@@ -138,7 +158,7 @@ const Sidebar = ({ onCollapse }) => {
             onClick={() => setCollapsed(!collapsed)}
             className="p-1.5 rounded-full bg-white bg-opacity-10 hover:bg-opacity-20 transition-all duration-200 backdrop-blur-sm"
           >
-            {collapsed ? <MdChevronRight size={20} /> : <MdChevronLeft size={20} />}
+            {collapsed ? <MdKeyboardArrowRight size={20} /> : <MdKeyboardArrowLeft size={20} />}
           </button>
         </div>
 
@@ -146,26 +166,130 @@ const Sidebar = ({ onCollapse }) => {
           <ul className="space-y-2.5">
             {navItems.map((item) => {
               const isActive = location.pathname === item.path || 
-                             (item.path !== '/dashboard' && location.pathname.startsWith(item.path));
+                              (item.path !== '/dashboard' && location.pathname.startsWith(item.path));
+              
+              // Check if any submenu item is active
+              const isSubmenuActive = item.submenu?.some(subItem => 
+                location.pathname === subItem.path || location.pathname.startsWith(subItem.path)
+              );
+              
               return (
-              <li key={item.name}>
-                <Link
-                  to={item.path}
-                  className={`flex items-center py-3.5 px-4 relative rounded-xl menu-item-hover ${
-                    isActive
-                      ? 'active-item-gradient text-white font-medium shadow-md before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-3/4 before:w-1.5 before:bg-white before:rounded-full before:shadow-md'
-                      : 'text-gray-100 hover:bg-white hover:bg-opacity-10'
-                  } ${collapsed ? 'justify-center' : 'space-x-3'} transition-all duration-200 group`}
-                >
-                  <span className={`${isActive ? 'text-white' : 'text-blue-100'} transition-colors group-hover:scale-110 duration-200 icon-float`}>{item.icon}</span>
-                  {!collapsed && <span className="tracking-wide">{item.name}</span>}
-                  {collapsed && (
-                    <div className={`absolute left-14 bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white px-3 py-1.5 rounded-md text-sm whitespace-nowrap opacity-0 -translate-x-3 pointer-events-none group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 z-50 ${isActive ? 'font-medium' : ''} shadow-lg`}>
-                      {item.name}
+                <li key={item.name}>
+                  {/* Main menu item */}
+                  <div className="relative">
+                    {item.hasSubmenu ? (
+                      <div className={`flex items-center w-full py-3.5 px-4 relative rounded-xl menu-item-hover ${
+                        isActive || isSubmenuActive
+                          ? 'active-item-gradient text-white font-medium shadow-md before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-3/4 before:w-1.5 before:bg-white before:rounded-full before:shadow-md'
+                          : 'text-gray-100 hover:bg-white hover:bg-opacity-10'
+                        } ${collapsed ? 'justify-center' : 'justify-between'} transition-all duration-200 group`}
+                      >
+                        {/* Left side with icon/text that links to the main path */}
+                        <Link
+                          to={item.path}
+                          className={`flex items-center ${collapsed ? '' : 'space-x-3'}`}
+                        >
+                          <span className={`${isActive || isSubmenuActive ? 'text-white' : 'text-blue-100'} transition-colors group-hover:scale-110 duration-200 icon-float`}>{item.icon}</span>
+                          {!collapsed && <span className="tracking-wide">{item.name}</span>}
+                        </Link>
+                        
+                        {/* Right side with arrow that toggles submenu */}
+                        {!collapsed && (
+                          <button 
+                            onClick={(e) => { 
+                              e.preventDefault();
+                              toggleSubmenu(item.name);
+                            }} 
+                            className="flex items-center justify-center text-gray-300 p-1"
+                          >
+                            {openSubmenu === item.name ? 
+                              <MdKeyboardArrowUp size={18} className="text-white" /> : 
+                              <MdKeyboardArrowDown size={18} />
+                            }
+                          </button>
+                        )}
+                        
+                        {collapsed && (
+                          <div className={`absolute left-14 bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white px-3 py-1.5 rounded-md text-sm whitespace-nowrap opacity-0 -translate-x-3 pointer-events-none group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 z-50 ${isActive ? 'font-medium' : ''} shadow-lg`}>
+                            {item.name}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <Link
+                        to={item.path}
+                        className={`flex items-center py-3.5 px-4 relative rounded-xl menu-item-hover ${
+                          isActive
+                            ? 'active-item-gradient text-white font-medium shadow-md before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-3/4 before:w-1.5 before:bg-white before:rounded-full before:shadow-md'
+                            : 'text-gray-100 hover:bg-white hover:bg-opacity-10'
+                        } ${collapsed ? 'justify-center' : 'space-x-3'} transition-all duration-200 group`}
+                      >
+                        <span className={`${isActive ? 'text-white' : 'text-blue-100'} transition-colors group-hover:scale-110 duration-200 icon-float`}>{item.icon}</span>
+                        {!collapsed && <span className="tracking-wide">{item.name}</span>}
+                        {collapsed && (
+                          <div className={`absolute left-14 bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white px-3 py-1.5 rounded-md text-sm whitespace-nowrap opacity-0 -translate-x-3 pointer-events-none group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 z-50 ${isActive ? 'font-medium' : ''} shadow-lg`}>
+                            {item.name}
+                          </div>
+                        )}
+                      </Link>
+                    )}
+                  </div>
+
+                  {/* Submenu */}
+                  {!collapsed && item.hasSubmenu && openSubmenu === item.name && (
+                    <ul className="mt-1 pl-10 space-y-1.5 overflow-hidden transition-all duration-300">
+                      {item.submenu.map((subItem) => {
+                        const isSubItemActive = location.pathname.startsWith(subItem.path);
+                        return (
+                          <li key={subItem.name}>
+                            <Link 
+                              to={subItem.path} 
+                              className={`flex items-center py-2.5 px-3 rounded-lg text-sm ${
+                                isSubItemActive 
+                                  ? 'bg-white bg-opacity-15 text-white font-medium' 
+                                  : 'text-gray-200 hover:bg-white hover:bg-opacity-5'
+                              }`}
+                            >
+                              <span className="h-1.5 w-1.5 bg-blue-300 rounded-full mr-2.5 opacity-70"></span>
+                              {subItem.name}
+                            </Link>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+
+                  {/* Submenu for collapsed state */}
+                  {collapsed && item.hasSubmenu && (
+                    <div className="relative group">
+                      <button
+                        onClick={() => toggleSubmenu(item.name)}
+                        className={`flex justify-center py-3.5 px-4 w-full relative rounded-xl ${
+                          isSubmenuActive
+                            ? 'active-item-gradient text-white font-medium shadow-md'
+                            : 'text-gray-100 hover:bg-white hover:bg-opacity-10'
+                        } transition-all duration-200`}
+                      >
+                        <span className={`${isSubmenuActive ? 'text-white' : 'text-blue-100'}`}>{item.icon}</span>
+                      </button>
+                      <div className="absolute left-14 top-0 bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white rounded-md text-sm whitespace-nowrap opacity-0 -translate-x-3 pointer-events-none group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 z-50 shadow-lg px-1 py-2 min-w-[150px]">
+                        <p className="px-3 py-1 font-medium border-b border-white/10">{item.name}</p>
+                        {item.submenu.map((subItem) => {
+                          const isSubItemActive = location.pathname.startsWith(subItem.path);
+                          return (
+                            <Link 
+                              key={subItem.name}
+                              to={subItem.path}
+                              className={`block px-3 py-2 hover:bg-white hover:bg-opacity-10 rounded-md ${isSubItemActive ? 'bg-white bg-opacity-15' : ''}`}
+                            >
+                              {subItem.name}
+                            </Link>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
-                </Link>
-              </li>
+                </li>
               );
             })}
           </ul>

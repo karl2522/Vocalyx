@@ -18,18 +18,18 @@ import Schedule from './components/Schedule'
 import Signup from './components/Signup'
 import Team from './components/Team'
 import ClassAccessGuard from './components/ClassAccessGuard'
+import JoinedTeams from './components/JoinedTeams.jsx'
 import CourseAccessGuard from './components/CourseAccessGuard'
+import TeamDetail from './components/TeamDetail.jsx'
+import YourTeams from './components/YourTeams.jsx'
 import './index.css'
 import { enableHardwareAcceleration, preloadHeaderAssets } from './utils/preload.js'
 
-// Create a preload component to insert our preload elements
 const Preloader = () => {
   useEffect(() => {
-    // Enable hardware acceleration as soon as the app loads
     enableHardwareAcceleration();
   }, []);
   
-  // This injects the preload CSS and elements directly into the DOM
   return <div dangerouslySetInnerHTML={{ __html: preloadHeaderAssets() }} />;
 };
 
@@ -138,6 +138,26 @@ function App() {
               <Route path="/dashboard/team" element={
                 <ProtectedRoute>
                   <Team />
+                </ProtectedRoute>
+              } />
+              <Route path="/dashboard/team/your-teams" element={
+                <ProtectedRoute>
+                  <YourTeams />
+                </ProtectedRoute>
+              } />
+              <Route path="/dashboard/team/joined-teams" element={
+                <ProtectedRoute>
+                  <JoinedTeams />
+                </ProtectedRoute>
+              } />
+              <Route path="/dashboard/team/your-teams/:id" element={
+                <ProtectedRoute>
+                  <TeamDetail userIsOwner={true} />
+                </ProtectedRoute>
+              } />
+              <Route path="/dashboard/team/joined-teams/:id" element={
+                <ProtectedRoute>
+                  <TeamDetail userIsOwner={false} />
                 </ProtectedRoute>
               } />
               <Route path="/dashboard/schedule" element={

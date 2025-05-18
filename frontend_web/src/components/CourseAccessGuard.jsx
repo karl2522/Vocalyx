@@ -1,5 +1,5 @@
 import { useState, useEffect, cloneElement } from 'react';
-import { Navigate, useParams } from 'react-router-dom';
+import { Navigate, useParams, useLocation } from 'react-router-dom';
 import { teamService, courseService } from '../services/api.js';
 import { showToast } from '../utils/toast.jsx';
 import DashboardLayout from './layouts/DashboardLayout';
@@ -7,6 +7,7 @@ import { MdOutlineSchool } from 'react-icons/md';
 
 const CourseAccessGuard = ({ children }) => {
   const { id } = useParams();
+  const location = useLocation();
   const [hasAccess, setHasAccess] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [accessInfo, setAccessInfo] = useState(null);
@@ -15,6 +16,21 @@ const CourseAccessGuard = ({ children }) => {
     const checkAccess = async () => {
       try {
         setIsLoading(true);
+        
+        const teamAccessFromState = location.state?.teamAccess;
+        console.log("Team access from state:", teamAccessFromState);
+        
+        if (teamAccessFromState) {
+          console.log("Using team access info from state");
+          setHasAccess(true);
+          setAccessInfo({
+            teamId: teamAccessFromState.teamId,
+            teamName: teamAccessFromState.teamName,
+            accessLevel: teamAccessFromState.accessLevel
+          });
+          setIsLoading(false);
+          return;
+        }
         
         try {
           const courseResponse = await courseService.getCourse(id);
@@ -82,7 +98,7 @@ const CourseAccessGuard = ({ children }) => {
     };
     
     checkAccess();
-  }, [id]);
+  }, [id, location]);
 
   if (isLoading) {
     return (

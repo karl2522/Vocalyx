@@ -57,29 +57,39 @@ class CourseViewSet(viewsets.ModelViewSet):
         serializer.save(user=self.request.user)
 
     def retrieve(self, request, *args, **kwargs):
-        try:
-            instance = self.get_object()
-            serializer = self.get_serializer(instance)
-            return Response(serializer.data)
-        except permissions.exceptions.PermissionDenied:
-            course_id = kwargs.get('pk')
+        course_id = kwargs.get('pk')
 
+        try:
+            course = Course.objects.get(id=course_id, user=request.user)
+            course.accessLevel = 'full'
+            serializer = self.get_serializer(course)
+            return Response(serializer.data)
+        except Course.DoesNotExist:
             try:
                 team_course = TeamCourse.objects.filter(
                     course_id=course_id,
                     team__members__user=request.user,
                     team__members__is_active=True
-                ).first()
+                ).select_related('team').first()
 
                 if team_course:
+                    from teams.models import TeamMember
+                    member = TeamMember.objects.get(
+                        team=team_course.team,
+                        user=request.user,
+                        is_active=True
+                    )
+
                     course = Course.objects.get(id=course_id)
+                    course.accessLevel = member.permissions
                     serializer = self.get_serializer(course)
                     return Response(serializer.data)
+                else:
+                    return Response({"detail": "You do not have permission to view this course."},
+                                    status=status.HTTP_403_FORBIDDEN)
             except Course.DoesNotExist:
-                pass
-
-            return Response({"detail": "You do not have permission to view this course."},
-                            status=status.HTTP_403_FORBIDDEN)
+                return Response({"detail": "Course not found."},
+                                status=status.HTTP_404_NOT_FOUND)
 
 
 class ClassViewSet(viewsets.ModelViewSet):

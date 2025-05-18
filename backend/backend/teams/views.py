@@ -93,6 +93,22 @@ class TeamViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     @action(detail=False, methods=['get'])
+    def owned_teams(self, request):
+        teams = Team.objects.filter(owner=request.user)
+
+        teams_data = []
+        for team in teams:
+            team_data = self.get_serializer(team).data
+            team_data['is_owner'] = True
+            team_data['members_count'] = team.members.count()
+            team_data['courses_count'] = team.courses.count() if hasattr(team,
+                                                                         'courses') else TeamCourse.objects.filter(
+                team=team).count()
+            teams_data.append(team_data)
+
+        return Response(teams_data)
+
+    @action(detail=False, methods=['get'])
     def my_team(self, request):
         try:
             teams = self.get_queryset()
@@ -105,6 +121,70 @@ class TeamViewSet(viewsets.ModelViewSet):
         except Exception as e:
             print(f"Error in my_team: {str(e)}")
             return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['get'])
+    def all_teams(self, request):
+        user = request.user
+
+        member_teams = self.get_queryset()
+
+        teams_data = []
+        for team in member_teams:
+            is_owner = team.owner == user
+
+            team_data = self.get_serializer(team).data
+            team_data['is_owner'] = is_owner
+
+            team_data['members_count'] = team.members.count()
+
+            team_data['courses_count'] = team.courses.count() if hasattr(team, 'courses') else 0
+
+            if not is_owner and team.owner:
+                team_data['owner_name'] = f"{team.owner.first_name} {team.owner.last_name}".strip() or team.owner.email
+
+            teams_data.append(team_data)
+
+        return Response(teams_data)
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        data = serializer.data
+
+        data['current_user_id'] = request.user.id
+        data['is_owner'] = instance.owner == request.user
+
+        data['members_count'] = instance.members.count()
+
+        team_courses_count = TeamCourse.objects.filter(team=instance).count()
+        data['courses_count'] = team_courses_count
+
+        if not data['is_owner'] and instance.owner:
+            data[
+                'owner_name'] = f"{instance.owner.first_name} {instance.owner.last_name}".strip() or instance.owner.email
+
+        members = []
+        for member in TeamMember.objects.filter(team=instance):
+            member_data = TeamMemberSerializer(member).data
+            if member.user:
+                member_data['name'] = f"{member.user.first_name} {member.user.last_name}".strip() or member.user.email
+                member_data['user_email'] = member.user.email
+            elif member.invitation_email:
+                member_data['name'] = member.invitation_email
+                member_data['user_email'] = member.invitation_email
+            members.append(member_data)
+
+        data['members'] = members
+
+        courses = []
+        for team_course in TeamCourse.objects.filter(team=instance):
+            course = team_course.course
+            course_data = CourseSerializer(course).data
+            courses.append(course_data)
+
+        data['courses'] = courses
+
+        return Response(data)
 
     @action(detail=True, methods=['post'])
     def add_member(self, request, pk=None):
@@ -300,6 +380,33 @@ class TeamViewSet(viewsets.ModelViewSet):
         serializer = CourseSerializer(all_courses, many=True, context={'request': request})
         return Response(serializer.data)
 
+    @action(detail=False, methods=['get'])
+    def joined_teams(self, request):
+        user = request.user
+
+        teams = Team.objects.filter(
+            members__user=user,
+            members__is_active=True
+        ).exclude(owner=user)
+
+        teams_data = []
+        for team in teams:
+            team_data = self.get_serializer(team).data
+            team_data['is_owner'] = False
+
+            member = TeamMember.objects.get(team=team, user=user, is_active=True)
+            team_data['permissions'] = member.permissions
+
+            team_data['members_count'] = team.members.count()
+            team_data['courses_count'] = team.courses.count() if hasattr(team, 'courses') else 0
+
+            if team.owner:
+                team_data['owner_name'] = f"{team.owner.first_name} {team.owner.last_name}".strip() or team.owner.email
+
+            teams_data.append(team_data)
+
+        return Response(teams_data)
+
     @action(detail=False, methods=['post'])
     def join(self, request):
         code = request.data.get('code')
@@ -308,6 +415,12 @@ class TeamViewSet(viewsets.ModelViewSet):
 
         try:
             team = Team.objects.get(code=code)
+
+            if team.owner == request.user:
+                return Response(
+                    {"detail": "You are the owner of this team. Access it from 'Your Teams' section."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
             if TeamMember.objects.filter(team=team, user=request.user).exists():
                 member = TeamMember.objects.get(team=team, user=request.user)
@@ -383,7 +496,6 @@ def check_course_access(request, course_id):
     try:
         course = Course.objects.get(id=course_id)
 
-        # Direct access - user is the owner
         if course.user == request.user:
             return Response({
                 'hasAccess': True,

@@ -228,6 +228,8 @@ export const teamService = {
     checkClassAccess: (classId) => {
         return api.get(`/teams/check-class-access/${classId}/`);
     },
+    getOwnedTeams: () => api.get('/teams/owned_teams/'),
+    getJoinedTeams: () => api.get('/teams/joined_teams/'),
     getMyTeam: () => api.get('/teams/my_team/').catch(error => {
         if (error.response && error.response.status === 404) {
             return { data: null };
@@ -267,6 +269,8 @@ export const teamService = {
     checkCourseAccess: (courseId) => {
         return api.get(`/teams/check-course-access/${courseId}/`);
     },
+    getAllTeams: async () => api.get('/teams/all_teams/'),
+    getTeamById: (teamId) => api.get(`/teams/${teamId}/`),
 };
 
 export default api;
