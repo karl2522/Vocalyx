@@ -60,6 +60,10 @@
             android:exported="true"
             android:theme="@style/Theme.VOCALYXAPK" />
         <activity
+            android:name=".MyClassesActivity"
+            android:exported="false"
+            android:theme="@style/Theme.VOCALYXAPK" />
+        <activity
             android:name=".FileViewerActivity"
             android:exported="false"
             android:theme="@style/Theme.VOCALYXAPK" />

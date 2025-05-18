@@ -1,5 +1,6 @@
 package com.example.vocalyxapk
 
+import android.app.Application
 import android.content.Intent
 import android.os.Bundle
 import android.speech.RecognizerIntent
@@ -37,6 +38,16 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.ActivityResultLauncher
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.vocalyxapk.composables.BackendClassCard
+import com.example.vocalyxapk.composables.CourseCard
+import com.example.vocalyxapk.data.ClassRepository
+import com.example.vocalyxapk.data.ImportedClass
+import com.example.vocalyxapk.viewmodel.ClassUIState
+import com.example.vocalyxapk.viewmodel.CourseUIState
+import com.example.vocalyxapk.viewmodel.ClassViewModel
+import com.example.vocalyxapk.viewmodel.CourseCreationState
+import com.example.vocalyxapk.viewmodel.ViewModelFactory
 import kotlinx.parcelize.Parcelize
 
 class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
@@ -383,7 +394,7 @@ fun HomeScreen(
         Triple("Home", Icons.Rounded.Home, "Home"),
         Triple("Voice", Icons.Rounded.Mic, "Voice"),
         Triple("Manual", Icons.Rounded.Edit, "Manual"),
-        Triple("Classes", Icons.Rounded.List, "Classes")
+        Triple("Courses", Icons.Rounded.List, "Courses")
     )
     
     Scaffold(
@@ -487,7 +498,28 @@ fun ManualInputTab(modifier: Modifier = Modifier) {
 fun ClassesTab(modifier: Modifier = Modifier) {
     var searchQuery by remember { mutableStateOf("") }
     val context = LocalContext.current
-
+    val application = context.applicationContext as Application
+    val classViewModel: ClassViewModel = viewModel(factory = ViewModelFactory(application))
+    val scope = rememberCoroutineScope()
+    
+    // Dialog state for adding a new course
+    var showAddCourseDialog by remember { mutableStateOf(false) }
+    var courseName by remember { mutableStateOf("") }
+    var courseCode by remember { mutableStateOf("") }
+    var courseSemester by remember { mutableStateOf("") }
+    var courseDescription by remember { mutableStateOf("") }
+    var courseAcademicYear by remember { mutableStateOf("") }
+    
+    // Course creation state
+    val courseCreationState by classViewModel.courseCreationState.collectAsState()
+    
+    // Observe backend data
+    val classUIState by classViewModel.classUIState.collectAsState()
+    val courseUIState by classViewModel.courseUIState.collectAsState()
+    
+    // Local data (for imported files)
+    val importedClasses = com.example.vocalyxapk.data.ClassRepository.getClasses()
+    
     // File picker launcher
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -500,19 +532,245 @@ fun ClassesTab(modifier: Modifier = Modifier) {
             context.startActivity(intent)
         }
     }
-
-    // Observe imported classes
-    val importedClasses = ClassRepository.classes
-    val filteredClasses = importedClasses.filter {
+    
+    // Fetch courses when the tab is displayed
+    LaunchedEffect(Unit) {
+        try {
+            android.util.Log.d("ClassesTab", "Attempting to fetch courses")
+            classViewModel.fetchCourses()
+        } catch (e: Exception) {
+            android.util.Log.e("ClassesTab", "Error fetching courses", e)
+            // Show an error toast instead of crashing
+            android.widget.Toast.makeText(
+                context,
+                "Error loading courses: ${e.message}",
+                android.widget.Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+    
+    // Filter courses based on search query and combine backend + local data
+    val courses = when (courseUIState) {
+        is CourseUIState.Success -> (courseUIState as CourseUIState.Success).courses
+        else -> emptyList()
+    }
+    
+    val filteredCourses = courses.filter {
+        it.name.contains(searchQuery, ignoreCase = true) ||
+        it.courseCode.contains(searchQuery, ignoreCase = true)
+    }
+    
+    val filteredImportedClasses = importedClasses.filter {
         it.name.contains(searchQuery, ignoreCase = true) ||
         it.section.contains(searchQuery, ignoreCase = true)
     }
+    
+    // Determine if we have courses to show (either backend or imported)
+    val hasCourses = filteredCourses.isNotEmpty() || filteredImportedClasses.isNotEmpty()
 
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(Color.White)
     ) {
+        // Add Course Dialog
+        if (showAddCourseDialog) {
+            AlertDialog(
+                onDismissRequest = { showAddCourseDialog = false },
+                title = { Text("Create New Course") },
+                text = {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp)
+                    ) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedTextField(
+                                value = courseName,
+                                onValueChange = { courseName = it },
+                                label = { Text("Course Name") },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp),
+                                singleLine = true,
+                                isError = courseName.isBlank() && courseCreationState !is CourseCreationState.Idle
+                            )
+                            
+                            OutlinedTextField(
+                                value = courseCode,
+                                onValueChange = { courseCode = it },
+                                label = { Text("Course Code") },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp),
+                                singleLine = true,
+                                isError = courseCode.isBlank() && courseCreationState !is CourseCreationState.Idle
+                            )
+                            
+                            // Semester Dropdown
+                            var semesterDropdownExpanded by remember { mutableStateOf(false) }
+                            val semesterOptions = listOf("Fall", "Spring", "Summer", "Winter")
+                            
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    text = "Semester",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (courseSemester.isBlank() && courseCreationState !is CourseCreationState.Idle) {
+                                        Color.Red
+                                    } else {
+                                        Color.Gray
+                                    },
+                                    modifier = Modifier.padding(bottom = 4.dp)
+                                )
+                                
+                                OutlinedTextField(
+                                    value = courseSemester,
+                                    onValueChange = { },
+                                    readOnly = true,
+                                    trailingIcon = {
+                                        IconButton(onClick = { semesterDropdownExpanded = true }) {
+                                            Icon(Icons.Rounded.ArrowDropDown, "Expand dropdown")
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { semesterDropdownExpanded = true },
+                                    singleLine = true,
+                                    colors = TextFieldDefaults.outlinedTextFieldColors(
+                                        focusedBorderColor = if (courseSemester.isBlank() && courseCreationState !is CourseCreationState.Idle) {
+                                            Color.Red
+                                        } else {
+                                            MaterialTheme.colorScheme.primary
+                                        },
+                                        unfocusedBorderColor = if (courseSemester.isBlank() && courseCreationState !is CourseCreationState.Idle) {
+                                            Color.Red
+                                        } else {
+                                            Color.Gray
+                                        }
+                                    ),
+                                    placeholder = { Text("Select a semester") }
+                                )
+                                
+                                DropdownMenu(
+                                    expanded = semesterDropdownExpanded,
+                                    onDismissRequest = { semesterDropdownExpanded = false },
+                                    modifier = Modifier.fillMaxWidth(0.9f) // Slightly smaller than parent
+                                ) {
+                                    semesterOptions.forEach { semester ->
+                                        DropdownMenuItem(
+                                            text = { Text(semester) },
+                                            onClick = {
+                                                courseSemester = semester
+                                                semesterDropdownExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                            
+                            OutlinedTextField(
+                                value = courseDescription,
+                                onValueChange = { courseDescription = it },
+                                label = { Text("Description (Optional)") },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp)
+                            )
+                            
+                            OutlinedTextField(
+                                value = courseAcademicYear,
+                                onValueChange = { courseAcademicYear = it },
+                                label = { Text("Academic Year (Optional)") },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp),
+                                singleLine = true
+                            )
+                            
+                            // Show error message if there was an error in course creation
+                            if (courseCreationState is CourseCreationState.Error) {
+                                Text(
+                                    text = (courseCreationState as CourseCreationState.Error).message,
+                                    color = Color.Red,
+                                    modifier = Modifier.padding(vertical = 8.dp)
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (courseName.isBlank() || courseCode.isBlank() || courseSemester.isBlank()) {
+                                // Show error toast for missing fields
+                                Toast.makeText(context, "Please fill in all required fields", Toast.LENGTH_SHORT).show()
+                            } else {
+                                // Create course
+                                classViewModel.createCourse(
+                                    name = courseName,
+                                    courseCode = courseCode,
+                                    semester = courseSemester,
+                                    description = courseDescription.ifBlank { null },
+                                    academicYear = courseAcademicYear.ifBlank { null }
+                                )
+                                // Reset fields
+                                courseName = ""
+                                courseCode = ""
+                                courseSemester = ""
+                                courseDescription = ""
+                                courseAcademicYear = ""
+                                showAddCourseDialog = false
+                            }
+                        },
+                        enabled = courseCreationState !is CourseCreationState.Loading
+                    ) {
+                        if (courseCreationState is CourseCreationState.Loading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text("Create")
+                        }
+                    }
+                },
+                dismissButton = {
+                    Button(
+                        onClick = { showAddCourseDialog = false },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Gray)
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+        
+        // Success message when course is created
+        LaunchedEffect(courseCreationState) {
+            if (courseCreationState is CourseCreationState.Success) {
+                Toast.makeText(
+                    context,
+                    "Course '${(courseCreationState as CourseCreationState.Success).course.name}' created successfully",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+        // Add FloatingActionButton (on left side)
+        FloatingActionButton(
+            onClick = { showAddCourseDialog = true },
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(16.dp),
+            containerColor = Color(0xFF333D79)
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Add,
+                contentDescription = "Add Course",
+                tint = Color.White
+            )
+        }
+        
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -520,7 +778,7 @@ fun ClassesTab(modifier: Modifier = Modifier) {
         ) {
             // Header
             Text(
-                "My Classes",
+                "My Courses",
                 style = MaterialTheme.typography.headlineMedium.copy(
                     color = Color(0xFF333D79)
                 ),
@@ -535,7 +793,7 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                     .fillMaxWidth()
                     .padding(bottom = 20.dp)
                     .height(52.dp),
-                placeholder = { Text("Search classes...", color = Color(0xFF666666)) },
+                placeholder = { Text("Search courses...", color = Color(0xFF666666)) },
                 leadingIcon = {
                     Icon(
                         Icons.Rounded.Search,
@@ -552,9 +810,50 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                     containerColor = Color.White
                 )
             )
-
-            // Class Cards Grid
-            if (filteredClasses.isEmpty()) {
+            
+            // Loading indicator
+            if (courseUIState is CourseUIState.Loading) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = Color(0xFF333D79))
+                }
+            }
+            // Error message
+            else if (courseUIState is CourseUIState.Error) {
+                val errorMessage = (courseUIState as CourseUIState.Error).message
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Rounded.Error,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(64.dp)
+                                .padding(bottom = 16.dp),
+                            tint = Color.Red
+                        )
+                        Text(
+                            "Error loading courses",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.Red,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        Text(
+                            errorMessage,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFF666666),
+                            textAlign = TextAlign.Center
+                        )
+                        Button(
+                            onClick = { classViewModel.fetchCourses() },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF333D79)),
+                            modifier = Modifier.padding(top = 16.dp)
+                        ) {
+                            Text("Retry")
+                        }
+                    }
+                }
+            }
+            // Empty state
+            else if (!hasCourses) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -566,7 +865,7 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                         verticalArrangement = Arrangement.Center
                     ) {
                         Icon(
-                            Icons.Rounded.Upload,
+                            Icons.Rounded.School,
                             contentDescription = null,
                             modifier = Modifier
                                 .size(64.dp)
@@ -574,20 +873,22 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                             tint = Color(0xFF666666)
                         )
                         Text(
-                            "No classes found",
+                            "No courses found",
                             style = MaterialTheme.typography.titleMedium,
                             color = Color(0xFF666666),
                             modifier = Modifier.padding(bottom = 8.dp)
                         )
                         Text(
-                            "Import an Excel or CSV file to create your first class",
+                            "You don't have any courses yet. Create a course to get started with classes and import data.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color(0xFF666666),
                             textAlign = TextAlign.Center
                         )
                     }
                 }
-            } else {
+            }
+            // Display courses
+            else {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -595,13 +896,33 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                     contentPadding = PaddingValues(bottom = 80.dp), // Add padding for FAB
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    items(filteredClasses) { classData ->
-                        ImportedClassCard(classData = classData)
+                    // Backend courses
+                    if (filteredCourses.isNotEmpty()) {
+                        items(filteredCourses) { courseData ->
+                            CourseCard(
+                                courseData = courseData,
+                                onClick = {
+                                    // Navigate to MyClassesActivity with course data
+                                    val intent = android.content.Intent(context, MyClassesActivity::class.java).apply {
+                                        putExtra("COURSE_ID", courseData.id)
+                                        putExtra("COURSE_NAME", courseData.name)
+                                    }
+                                    context.startActivity(intent)
+                                }
+                            )
+                        }
+                    }
+                    
+                    // Still showing imported classes (keeping this functionality as specified)
+                    if (filteredImportedClasses.isNotEmpty()) {
+                        items(filteredImportedClasses) { classData ->
+                            ImportedClassCard(classData = classData)
+                        }
                     }
                 }
             }
         }
-
+        
         // Floating Action Button for Import
         FloatingActionButton(
             onClick = { filePickerLauncher.launch("*/*") },
