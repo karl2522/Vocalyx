@@ -13,45 +13,45 @@ class CourseViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         from teams.models import TeamCourse, TeamMember
-        from django.db.models import Q
+        from django.db.models import Q, OuterRef, Subquery, Value, CharField
 
-        # Create a basic queryset
-        queryset = Course.objects.all()
-
-        # Add annotations to track access level
-        results = []
-
-        # Add user's own courses with full access
-        own_courses = list(queryset.filter(user=self.request.user))
-        for course in own_courses:
-            course.accessLevel = 'full'
-            results.append(course)
-
-        # Get team memberships and their courses
         team_memberships = TeamMember.objects.filter(
             user=self.request.user,
             is_active=True
         )
 
-        for membership in team_memberships:
-            team_course_ids = TeamCourse.objects.filter(
-                team=membership.team
-            ).values_list('course_id', flat=True)
+        team_ids = list(team_memberships.values_list('team_id', flat=True))
 
-            # Get team courses excluding own courses
-            team_courses = list(queryset.filter(
-                id__in=team_course_ids
-            ).exclude(user=self.request.user))
+        permissions_map = {
+            membership.team_id: membership.permissions
+            for membership in team_memberships
+        }
 
-            # Apply the correct permissions
-            for course in team_courses:
-                course.accessLevel = membership.permissions
+        own_courses = Course.objects.filter(user=self.request.user)
 
-                # Only add if not already in results
-                if not any(r.id == course.id for r in results):
-                    results.append(course)
+        team_course_ids = TeamCourse.objects.filter(
+            team_id__in=team_ids
+        ).values_list('course_id', flat=True)
 
-        return results
+        team_courses = Course.objects.filter(
+            id__in=team_course_ids
+        ).exclude(user=self.request.user)
+
+        queryset = own_courses.union(team_courses)
+
+        result = []
+        for course in queryset:
+            if course.user_id == self.request.user.id:
+                course.accessLevel = 'full'
+            else:
+                # Find which team gives access to this course
+                for tc in TeamCourse.objects.filter(course=course, team_id__in=team_ids):
+                    course.accessLevel = permissions_map.get(tc.team_id, 'view')
+                    break
+
+            result.append(course)
+
+        return result
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
