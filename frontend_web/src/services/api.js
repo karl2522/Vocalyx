@@ -179,22 +179,47 @@ export const classService = {
     deleteClass: (id) => api.delete(`/classes/${id}/`),
     getClassById: (id) => api.get(`/classes/${id}/`),
     getClassExcelFiles: (classId) => api.get(`/excel/?class_id=${classId}`),
-    updateExcelData: (fileId, data) => api.patch(
+    updateExcelData: (fileId, data, sheetName) => api.patch(
         `/excel/${fileId}/update_data/`, 
-        { sheet_data: data },
+        { 
+            sheet_data: data,
+            sheet_name: sheetName 
+        },
         {
             headers: {
                 'Content-Type': 'application/json',
             }
         }
     ),
-    uploadExcel: (file, classId) => {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('class_id', classId);
+    setActiveSheet: (fileId, sheetName) => api.patch(
+        `/excel/${fileId}/set_active_sheet/`,
+        { sheet_name: sheetName },
+        {
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        }
+    ),
+        uploadExcelWithColumns: (formData) => {
         return api.post('/excel/upload/', formData, {
             headers: {
                 'Content-Type': 'multipart/form-data',
+            },
+        });
+    },
+    uploadExcel: (file, classId, customColumns = null) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('class_id', classId);
+        
+        // Include custom columns if provided
+        if (customColumns && customColumns.length > 0) {
+            formData.append('custom_columns', JSON.stringify(customColumns));
+        }
+        
+        return api.post('/excel/upload/', formData, {
+            headers: {
+            'Content-Type': 'multipart/form-data',
             },
         });
     },

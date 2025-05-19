@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, createPortal } from 'react';
 import { toast } from 'react-hot-toast';
 import { FiBook, FiEdit, FiFilter, FiMoreVertical, FiPlus, FiSearch, FiTrash2, FiUsers } from 'react-icons/fi';
 import { MdArchive, MdOutlineSchool } from 'react-icons/md';
@@ -7,6 +7,33 @@ import { courseService } from '../services/api';
 import { commonHeaderAnimations } from '../utils/animation.js';
 import DashboardLayout from "./layouts/DashboardLayout.jsx";
 import CourseModal from './modals/CourseModal';
+import ReactDOM from 'react-dom';
+
+
+const DropdownPortal = ({ isOpen, position, onClose, children }) => {
+  if (!isOpen || !position) return null;
+
+  return ReactDOM.createPortal(
+    <div 
+      className="fixed inset-0 z-[1000]" 
+      onClick={onClose} 
+      style={{ pointerEvents: 'none' }}
+    >
+      <div 
+        className="absolute bg-white rounded-md shadow-lg py-1 border border-gray-100 w-48"
+        style={{ 
+          top: position.y + 10, 
+          left: position.x - 140, 
+          pointerEvents: 'auto' 
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {children}
+      </div>
+    </div>,
+    document.body
+  );
+};
 
 // Animation styles component - optimized to prevent flickering
 const CoursesStyles = () => {
@@ -36,7 +63,7 @@ const Courses = () => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState('all');
-  const [teamFilter, setTeamFilter] = useState('my-teams'); // 'my-teams' or 'all-teams'
+  const [teamFilter, setTeamFilter] = useState('my-teams');
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [showTeamFilterDropdown, setShowTeamFilterDropdown] = useState(false);
   const [isCourseModalOpen, setIsCourseModalOpen] = useState(false);
@@ -46,22 +73,21 @@ const Courses = () => {
   const [loading, setLoading] = useState(true);
   const [activeDropdown, setActiveDropdown] = useState(null);
   const dropdownRef = useRef(null);
+  const [dropdownPosition, setDropdownPosition] = useState(null);
+  const [dropdownCourse, setDropdownCourse] = useState(null);
 
   useEffect(() => {
-    fetchCourses();
-    
-    // Close dropdown when clicking outside
     const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+      if (activeDropdown && !event.target.closest('.dropdown-trigger')) {
         setActiveDropdown(null);
+        setDropdownPosition(null);
+        setDropdownCourse(null);
       }
     };
     
     document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [activeDropdown]);
 
     useEffect(() => {
     const refreshCoursesOnFocus = () => {
@@ -92,6 +118,19 @@ const Courses = () => {
       setLoading(false);
     }
   };
+
+   useEffect(() => {
+    const handleScroll = () => {
+      if (activeDropdown) {
+        setActiveDropdown(null);
+        setDropdownPosition(null);
+        setDropdownCourse(null);
+      }
+    };
+    
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [activeDropdown]);
 
   const handleAddCourse = (newCourse) => {
     setCourses([newCourse, ...courses]);
@@ -147,8 +186,19 @@ const Courses = () => {
     }
   };
 
-  const toggleDropdown = (courseId) => {
-    setActiveDropdown(activeDropdown === courseId ? null : courseId);
+   const toggleDropdown = (courseId, event) => {
+    if (activeDropdown === courseId) {
+      setActiveDropdown(null);
+      setDropdownPosition(null);
+      setDropdownCourse(null);
+      return;
+    }
+    
+    // Get the position of the click
+    const rect = event.currentTarget.getBoundingClientRect();
+    setDropdownPosition({ x: rect.left + rect.width, y: rect.top });
+    setDropdownCourse(courses.find(course => course.id === courseId));
+    setActiveDropdown(courseId);
   };
 
   // Filter courses based on search term, filter selection, and team filter
@@ -412,70 +462,94 @@ const Courses = () => {
                           </div>
                         </div>
                         {(!course.accessLevel || course.accessLevel !== 'view') && (
-                          <div className="relative" ref={dropdownRef}>
-                            <button 
-                              className="p-1.5 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
-                              onClick={(e) => {
+                            <div className="relative">
+                              <button 
+                                className="p-1.5 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+                                onClick={(e) => {
                                 e.stopPropagation();
-                                toggleDropdown(course.id);
+                                toggleDropdown(course.id, e);
                               }}
-                            >
-                              <FiMoreVertical size={16} />
-                            </button>
-                            
-                            {activeDropdown === course.id && (
-                              <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 py-1 border border-gray-100">
-                                <button 
-                                  className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                                  onClick={() => handleEditCourse(course)}
+                              >
+                                <FiMoreVertical size={16} />
+                              </button>
+                              
+                              {activeDropdown === course.id && (
+                                <div 
+                                  className="fixed right-auto top-auto z-[1000] bg-white rounded-md shadow-lg py-1 border border-gray-100 w-48"
+                                  style={{
+                                    position: 'absolute',
+                                    top: '100%',
+                                    right: '0',
+                                    marginTop: '8px'
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
                                 >
-                                  <FiEdit className="mr-2" size={14} />
-                                  Edit Course
-                                </button>
-                                
-                                {course.status !== 'completed' && (
                                   <button 
                                     className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                                    onClick={() => handleUpdateStatus(course.id, 'completed')}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleEditCourse(course);
+                                    }}
                                   >
-                                    <FiBook className="mr-2" size={14} />
-                                    Mark as Completed
+                                    <FiEdit className="mr-2" size={14} />
+                                    Edit Course
                                   </button>
-                                )}
-                                
-                                {course.status !== 'archived' && (
+                                  
+                                  {course.status !== 'completed' && (
+                                    <button 
+                                      className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleUpdateStatus(course.id, 'completed');
+                                      }}
+                                    >
+                                      <FiBook className="mr-2" size={14} />
+                                      Mark as Completed
+                                    </button>
+                                  )}
+                                  
+                                  {course.status !== 'archived' && (
+                                    <button 
+                                      className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleUpdateStatus(course.id, 'archived');
+                                      }}
+                                    >
+                                      <MdArchive className="mr-2" size={14} />
+                                      Archive Course
+                                    </button>
+                                  )}
+                                  
+                                  {course.status !== 'active' && (
+                                    <button 
+                                      className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleUpdateStatus(course.id, 'active');
+                                      }}
+                                    >
+                                      <FiBook className="mr-2" size={14} />
+                                      Set as Active
+                                    </button>
+                                  )}
+                                  
+                                  <div className="border-t border-gray-100 my-1"></div>
+                                  
                                   <button 
-                                    className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                                    onClick={() => handleUpdateStatus(course.id, 'archived')}
+                                    className="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteCourse(course.id);
+                                    }}
                                   >
-                                    <MdArchive className="mr-2" size={14} />
-                                    Archive Course
+                                    <FiTrash2 className="mr-2" size={14} />
+                                    Delete Course
                                   </button>
-                                )}
-                                
-                                {course.status !== 'active' && (
-                                  <button 
-                                    className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                                    onClick={() => handleUpdateStatus(course.id, 'active')}
-                                  >
-                                    <FiBook className="mr-2" size={14} />
-                                    Set as Active
-                                  </button>
-                                )}
-                                
-                                <div className="border-t border-gray-100 my-1"></div>
-                                
-                                <button 
-                                  className="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left"
-                                  onClick={() => handleDeleteCourse(course.id)}
-                                >
-                                  <FiTrash2 className="mr-2" size={14} />
-                                  Delete Course
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        )}
+                                </div>
+                              )}
+                            </div>
+                          )}
                       </div>
                       
                       <div 
@@ -541,6 +615,68 @@ const Courses = () => {
           </>
         )}
       </div>
+
+       <DropdownPortal
+          isOpen={activeDropdown !== null}
+          position={dropdownPosition}
+          onClose={() => {
+            setActiveDropdown(null);
+            setDropdownPosition(null);
+            setDropdownCourse(null);
+          }}
+        >
+          {dropdownCourse && (
+            <>
+              <button 
+                className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                onClick={() => handleEditCourse(dropdownCourse)}
+              >
+                <FiEdit className="mr-2" size={14} />
+                Edit Course
+              </button>
+              
+              {dropdownCourse.status !== 'completed' && (
+                <button 
+                  className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                  onClick={() => handleUpdateStatus(dropdownCourse.id, 'completed')}
+                >
+                  <FiBook className="mr-2" size={14} />
+                  Mark as Completed
+                </button>
+              )}
+              
+              {dropdownCourse.status !== 'archived' && (
+                <button 
+                  className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                  onClick={() => handleUpdateStatus(dropdownCourse.id, 'archived')}
+                >
+                  <MdArchive className="mr-2" size={14} />
+                  Archive Course
+                </button>
+              )}
+              
+              {dropdownCourse.status !== 'active' && (
+                <button 
+                  className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                  onClick={() => handleUpdateStatus(dropdownCourse.id, 'active')}
+                >
+                  <FiBook className="mr-2" size={14} />
+                  Set as Active
+                </button>
+              )}
+              
+              <div className="border-t border-gray-100 my-1"></div>
+              
+              <button 
+                className="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left"
+                onClick={() => handleDeleteCourse(dropdownCourse.id)}
+              >
+                <FiTrash2 className="mr-2" size={14} />
+                Delete Course
+              </button>
+            </>
+          )}
+        </DropdownPortal>
     </DashboardLayout>
   );
 };
