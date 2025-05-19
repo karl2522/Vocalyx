@@ -7,7 +7,8 @@ class ExcelFile(models.Model):
                                   blank=True)
     file_name = models.CharField(max_length=255)
     uploaded_at = models.DateTimeField(auto_now_add=True)
-    sheet_data = models.JSONField(default=list)
+    all_sheets = models.JSONField(default=dict)
+    active_sheet = models.CharField(max_length=255, default='Sheet1')
 
     class Meta:
         db_table = 'excel_files'
