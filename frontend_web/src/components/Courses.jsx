@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, createPortal } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { FiBook, FiEdit, FiFilter, FiMoreVertical, FiPlus, FiSearch, FiTrash2, FiUsers } from 'react-icons/fi';
 import { MdArchive, MdOutlineSchool } from 'react-icons/md';
@@ -7,33 +7,7 @@ import { courseService } from '../services/api';
 import { commonHeaderAnimations } from '../utils/animation.js';
 import DashboardLayout from "./layouts/DashboardLayout.jsx";
 import CourseModal from './modals/CourseModal';
-import ReactDOM from 'react-dom';
-
-
-const DropdownPortal = ({ isOpen, position, onClose, children }) => {
-  if (!isOpen || !position) return null;
-
-  return ReactDOM.createPortal(
-    <div 
-      className="fixed inset-0 z-[1000]" 
-      onClick={onClose} 
-      style={{ pointerEvents: 'none' }}
-    >
-      <div 
-        className="absolute bg-white rounded-md shadow-lg py-1 border border-gray-100 w-48"
-        style={{ 
-          top: position.y + 10, 
-          left: position.x - 140, 
-          pointerEvents: 'auto' 
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {children}
-      </div>
-    </div>,
-    document.body
-  );
-};
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 // Animation styles component - optimized to prevent flickering
 const CoursesStyles = () => {
@@ -61,6 +35,7 @@ const CoursesStyles = () => {
 
 const Courses = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState('all');
   const [teamFilter, setTeamFilter] = useState('my-teams');
@@ -69,12 +44,69 @@ const Courses = () => {
   const [isCourseModalOpen, setIsCourseModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [currentCourse, setCurrentCourse] = useState(null);
-  const [courses, setCourses] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [activeDropdown, setActiveDropdown] = useState(null);
-  const dropdownRef = useRef(null);
   const [dropdownPosition, setDropdownPosition] = useState(null);
   const [dropdownCourse, setDropdownCourse] = useState(null);
+  
+  // Replace useState and useEffect with useQuery
+  const { 
+    data: courses = [], 
+    isLoading, 
+    error 
+  } = useQuery({
+    queryKey: ['courses'],
+    queryFn: async () => {
+      const response = await courseService.getCourses();
+      return response.data;
+    },
+    staleTime: 5 * 60 * 1000, // Data considered fresh for 5 minutes
+    onError: (error) => {
+      console.error('Error fetching courses:', error);
+      if (error.response?.status === 401) {
+        toast.error('Session expired. Please login again.');
+        navigate('/login');
+      } else {
+        toast.error('Failed to load courses');
+      }
+    }
+  });
+  
+  // Setup mutations for adding, updating, and deleting courses
+  const addCourseMutation = useMutation({
+    mutationFn: (courseData) => courseService.createCourse(courseData),
+    onSuccess: (response) => {
+      queryClient.invalidateQueries(['courses']);
+      toast.success('Course added successfully');
+    },
+    onError: (error) => {
+      console.error('Error adding course:', error);
+      toast.error('Failed to add course');
+    }
+  });
+  
+  const updateCourseMutation = useMutation({
+    mutationFn: ({ id, courseData }) => courseService.updateCourse(id, courseData),
+    onSuccess: (response) => {
+      queryClient.invalidateQueries(['courses']);
+      toast.success('Course updated successfully');
+    },
+    onError: (error) => {
+      console.error('Error updating course:', error);
+      toast.error('Failed to update course');
+    }
+  });
+  
+  const deleteCourseMutation = useMutation({
+    mutationFn: (id) => courseService.deleteCourse(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['courses']);
+      toast.success('Course deleted successfully');
+    },
+    onError: (error) => {
+      console.error('Error deleting course:', error);
+      toast.error('Failed to delete course');
+    }
+  });
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -89,37 +121,7 @@ const Courses = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [activeDropdown]);
 
-    useEffect(() => {
-    const refreshCoursesOnFocus = () => {
-      fetchCourses();
-    };
-    
-    window.addEventListener('focus', refreshCoursesOnFocus);
-    return () => {
-      window.removeEventListener('focus', refreshCoursesOnFocus);
-    };
-  }, []);
-
-
-  const fetchCourses = async () => {
-    try {
-      setLoading(true);
-      const response = await courseService.getCourses();
-      setCourses(response.data);
-    } catch (error) {
-      console.error('Error fetching courses:', error);
-      if (error.response?.status === 401) {
-        toast.error('Session expired. Please login again.');
-        navigate('/login');
-      } else {
-        toast.error('Failed to load courses');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-   useEffect(() => {
+  useEffect(() => {
     const handleScroll = () => {
       if (activeDropdown) {
         setActiveDropdown(null);
@@ -133,7 +135,7 @@ const Courses = () => {
   }, [activeDropdown]);
 
   const handleAddCourse = (newCourse) => {
-    setCourses([newCourse, ...courses]);
+    addCourseMutation.mutate(newCourse);
   };
 
   const handleEditCourse = (course) => {
@@ -144,28 +146,21 @@ const Courses = () => {
   };
 
   const handleUpdateCourse = (updatedCourse) => {
-    setCourses(courses.map(course => 
-      course.id === updatedCourse.id ? updatedCourse : course
-    ));
+    updateCourseMutation.mutate({
+      id: updatedCourse.id, 
+      courseData: updatedCourse
+    });
   };
 
   const handleUpdateStatus = async (courseId, newStatus) => {
     try {
-      const courseToUpdate = courses.find(course => course.id === courseId);
-      if (!courseToUpdate) return;
-      
-      await courseService.updateCourse(courseId, { status: newStatus });
-      
-      setCourses(courses.map(course => 
-        course.id === courseId ? { ...course, status: newStatus } : course
-      ));
-      
-      toast.success(`Course marked as ${newStatus}`);
+      updateCourseMutation.mutate({
+        id: courseId, 
+        courseData: { status: newStatus }
+      });
+      setActiveDropdown(null);
     } catch (error) {
       console.error(`Error updating course status:`, error);
-      toast.error('Failed to update course status');
-    } finally {
-      setActiveDropdown(null);
     }
   };
   
@@ -174,19 +169,11 @@ const Courses = () => {
       return;
     }
     
-    try {
-      await courseService.deleteCourse(courseId);
-      setCourses(courses.filter(course => course.id !== courseId));
-      toast.success('Course deleted successfully');
-    } catch (error) {
-      console.error('Error deleting course:', error);
-      toast.error('Failed to delete course');
-    } finally {
-      setActiveDropdown(null);
-    }
+    deleteCourseMutation.mutate(courseId);
+    setActiveDropdown(null);
   };
 
-   const toggleDropdown = (courseId, event) => {
+  const toggleDropdown = (courseId, event) => {
     if (activeDropdown === courseId) {
       setActiveDropdown(null);
       setDropdownPosition(null);
@@ -235,12 +222,12 @@ const Courses = () => {
   };
 
   useEffect(() => {
-  console.log("Current courses with access levels:", courses.map(c => ({
-    id: c.id,
-    name: c.name,
-    accessLevel: c.accessLevel
-  })));
-}, [courses]);
+    console.log("Current courses with access levels:", courses.map(c => ({
+      id: c.id,
+      name: c.name,
+      accessLevel: c.accessLevel
+    })));
+  }, [courses]);
 
   return (
     <DashboardLayout>
@@ -395,7 +382,7 @@ const Courses = () => {
           </div>
         </div>
 
-        {/* Stats Section - remains the same... */}
+        {/* Stats Section */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex items-center">
             <div className="w-12 h-12 rounded-lg bg-[#EEF0F8] flex items-center justify-center mr-4">
@@ -432,8 +419,8 @@ const Courses = () => {
           </div>
         </div>
 
-        {/* Courses Grid - updated with dropdown menu */}
-        {loading ? (
+        {/* Courses Grid */}
+        {isLoading ? (
           <div className="flex justify-center items-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#333D79]"></div>
           </div>
@@ -462,7 +449,7 @@ const Courses = () => {
                           </div>
                         </div>
                         {(!course.accessLevel || course.accessLevel !== 'view') && (
-                            <div className="relative">
+                            <div className="relative dropdown-trigger">
                               <button 
                                 className="p-1.5 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
                                 onClick={(e) => {
@@ -615,68 +602,6 @@ const Courses = () => {
           </>
         )}
       </div>
-
-       <DropdownPortal
-          isOpen={activeDropdown !== null}
-          position={dropdownPosition}
-          onClose={() => {
-            setActiveDropdown(null);
-            setDropdownPosition(null);
-            setDropdownCourse(null);
-          }}
-        >
-          {dropdownCourse && (
-            <>
-              <button 
-                className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                onClick={() => handleEditCourse(dropdownCourse)}
-              >
-                <FiEdit className="mr-2" size={14} />
-                Edit Course
-              </button>
-              
-              {dropdownCourse.status !== 'completed' && (
-                <button 
-                  className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                  onClick={() => handleUpdateStatus(dropdownCourse.id, 'completed')}
-                >
-                  <FiBook className="mr-2" size={14} />
-                  Mark as Completed
-                </button>
-              )}
-              
-              {dropdownCourse.status !== 'archived' && (
-                <button 
-                  className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                  onClick={() => handleUpdateStatus(dropdownCourse.id, 'archived')}
-                >
-                  <MdArchive className="mr-2" size={14} />
-                  Archive Course
-                </button>
-              )}
-              
-              {dropdownCourse.status !== 'active' && (
-                <button 
-                  className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                  onClick={() => handleUpdateStatus(dropdownCourse.id, 'active')}
-                >
-                  <FiBook className="mr-2" size={14} />
-                  Set as Active
-                </button>
-              )}
-              
-              <div className="border-t border-gray-100 my-1"></div>
-              
-              <button 
-                className="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left"
-                onClick={() => handleDeleteCourse(dropdownCourse.id)}
-              >
-                <FiTrash2 className="mr-2" size={14} />
-                Delete Course
-              </button>
-            </>
-          )}
-        </DropdownPortal>
     </DashboardLayout>
   );
 };
