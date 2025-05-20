@@ -28,13 +28,13 @@ fun BackendClassCard(classData: ClassItem) {
             .fillMaxWidth()
             .height(120.dp)
             .clickable {
-                // TODO: Implement class detail view
-                // For now, show a basic message
-                android.widget.Toast.makeText(
-                    context,
-                    "Opening class: ${classData.name}",
-                    android.widget.Toast.LENGTH_SHORT
-                ).show()
+                // Launch MyStudentsActivity with class data
+                val intent = android.content.Intent(context, com.example.vocalyxapk.MyStudentsActivity::class.java).apply {
+                    putExtra("CLASS_ID", classData.id)
+                    putExtra("CLASS_NAME", classData.name)
+                    putExtra("CLASS_SECTION", classData.section)
+                }
+                context.startActivity(intent)
             },
         colors = CardDefaults.cardColors(
             containerColor = Color(0xFFF8F9FA)

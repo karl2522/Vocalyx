@@ -12,11 +12,20 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.ArrowDropDown
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.School
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
@@ -109,122 +118,131 @@ fun MyClassesScreen(courseId: Int, courseName: String) {
             if (showAddClassDialog) {
                 AlertDialog(
                     onDismissRequest = { showAddClassDialog = false },
-                    title = { Text("Create New Class") },
+                    title = { Text("Add Class to $courseName", style = MaterialTheme.typography.titleLarge) },
                     text = {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp)
-                        ) {
-                            Column(modifier = Modifier.fillMaxWidth()) {
-                                // Class Name (Required)
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            // Class Name with title above field
+                            Text(
+                                text = "Class Name *",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(bottom = 4.dp)
+                            )
+                            OutlinedTextField(
+                                value = className,
+                                onValueChange = { className = it },
+                                placeholder = { Text("Enter class name") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                isError = className.isBlank() && classCreationState !is ClassCreationState.Idle
+                            )
+                            
+                            Spacer(modifier = Modifier.height(16.dp))
+                            
+                            // Section with title above field
+                            Text(
+                                text = "Section *",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(bottom = 4.dp)
+                            )
+                            OutlinedTextField(
+                                value = classSection,
+                                onValueChange = { classSection = it },
+                                placeholder = { Text("e.g. A, B, C") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+                            
+                            Spacer(modifier = Modifier.height(16.dp))
+                            
+                            // Schedule field
+                            Text(
+                                text = "Schedule *",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(bottom = 4.dp)
+                            )
+                            OutlinedTextField(
+                                value = classSchedule,
+                                onValueChange = { classSchedule = it },
+                                placeholder = { Text("e.g. MWF 1:30 - 3:00PM") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                leadingIcon = { Icon(Icons.Filled.Schedule, contentDescription = "Schedule") },
+                                supportingText = { Text("Format: Days, Time Range", style = MaterialTheme.typography.bodySmall) }
+                            )
+                            
+                            Spacer(modifier = Modifier.height(16.dp))
+                            
+                            // Semester Dropdown (Optional)
+                            var semesterDropdownExpanded by remember { mutableStateOf(false) }
+                            val semesterOptions = listOf("Fall", "Spring", "Summer", "Winter")
+                            
+                            Text(
+                                text = "Semester (Optional)",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(bottom = 4.dp)
+                            )
+                            
+                            Box(modifier = Modifier.fillMaxWidth()) {
                                 OutlinedTextField(
-                                    value = className,
-                                    onValueChange = { className = it },
-                                    label = { Text("Class Name") },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 8.dp),
+                                    value = classSemester,
+                                    onValueChange = { /* Read-only, handled by dropdown */ },
+                                    readOnly = true,
+                                    trailingIcon = {
+                                        Icon(Icons.Rounded.ArrowDropDown, contentDescription = "Expand dropdown")
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
                                     singleLine = true,
-                                    isError = className.isBlank() && classCreationState !is ClassCreationState.Idle
+                                    placeholder = { Text("Select a semester") }
                                 )
                                 
-                                // Section (Optional)
-                                OutlinedTextField(
-                                    value = classSection,
-                                    onValueChange = { classSection = it },
-                                    label = { Text("Section (Optional)") },
+                                // Overlay a transparent clickable box to handle the dropdown click
+                                Box(
                                     modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 8.dp),
-                                    singleLine = true
+                                        .matchParentSize()
+                                        .background(Color.Transparent)
+                                        .clickable(onClick = { semesterDropdownExpanded = true })
                                 )
                                 
-                                // Semester Dropdown (Optional)
-                                var semesterDropdownExpanded by remember { mutableStateOf(false) }
-                                val semesterOptions = listOf("Fall", "Spring", "Summer", "Winter")
-                                
-                                Column(modifier = Modifier.fillMaxWidth()) {
-                                    Text(
-                                        text = "Semester (Optional)",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = Color.Gray,
-                                        modifier = Modifier.padding(bottom = 4.dp)
-                                    )
-                                    
-                                    Box(modifier = Modifier.fillMaxWidth()) {
-                                        OutlinedTextField(
-                                            value = classSemester,
-                                            onValueChange = { /* Read-only, handled by dropdown */ },
-                                            readOnly = true,
-                                            trailingIcon = {
-                                                Icon(Icons.Rounded.ArrowDropDown, "Expand dropdown")
-                                            },
-                                            modifier = Modifier.fillMaxWidth(),
-                                            singleLine = true,
-                                            colors = TextFieldDefaults.outlinedTextFieldColors(
-                                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                                unfocusedBorderColor = Color.Gray
-                                            ),
-                                            placeholder = { Text("Select a semester") }
-                                        )
-                                        
-                                        // Overlay a transparent clickable box to handle the dropdown click
-                                        Box(
-                                            modifier = Modifier
-                                                .matchParentSize()
-                                                .background(Color.Transparent)
-                                                .clickable(onClick = { semesterDropdownExpanded = true })
+                                DropdownMenu(
+                                    expanded = semesterDropdownExpanded,
+                                    onDismissRequest = { semesterDropdownExpanded = false },
+                                    modifier = Modifier.fillMaxWidth(0.9f) // Slightly smaller than parent
+                                ) {
+                                    semesterOptions.forEach { semester ->
+                                        DropdownMenuItem(
+                                            text = { Text(semester) },
+                                            onClick = {
+                                                classSemester = semester
+                                                semesterDropdownExpanded = false
+                                            }
                                         )
                                     }
-                                    
-                                    DropdownMenu(
-                                        expanded = semesterDropdownExpanded,
-                                        onDismissRequest = { semesterDropdownExpanded = false },
-                                        modifier = Modifier.fillMaxWidth(0.9f) // Slightly smaller than parent
-                                    ) {
-                                        semesterOptions.forEach { semester ->
-                                            DropdownMenuItem(
-                                                text = { Text(semester) },
-                                                onClick = {
-                                                    classSemester = semester
-                                                    semesterDropdownExpanded = false
-                                                }
-                                            )
-                                        }
-                                    }
                                 }
-                                
-                                // Schedule (Optional)
-                                OutlinedTextField(
-                                    value = classSchedule,
-                                    onValueChange = { classSchedule = it },
-                                    label = { Text("Schedule (Optional)") },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 8.dp),
-                                    singleLine = true
+                            }
+                            
+                            Spacer(modifier = Modifier.height(16.dp))
+                            
+                            // Description (Optional)
+                            Text(
+                                text = "Description (Optional)",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(bottom = 4.dp)
+                            )
+                            OutlinedTextField(
+                                value = classDescription,
+                                onValueChange = { classDescription = it },
+                                placeholder = { Text("Enter class description") },
+                                modifier = Modifier.fillMaxWidth(),
+                                minLines = 2
+                            )
+                            
+                            // Show error message if there was an error in class creation
+                            if (classCreationState is ClassCreationState.Error) {
+                                Text(
+                                    text = (classCreationState as ClassCreationState.Error).message,
+                                    color = Color.Red,
+                                    modifier = Modifier.padding(vertical = 8.dp)
                                 )
-                                
-                                // Description (Optional)
-                                OutlinedTextField(
-                                    value = classDescription,
-                                    onValueChange = { classDescription = it },
-                                    label = { Text("Description (Optional)") },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 8.dp),
-                                    minLines = 2
-                                )
-                                
-                                // Show error message if there was an error in class creation
-                                if (classCreationState is ClassCreationState.Error) {
-                                    Text(
-                                        text = (classCreationState as ClassCreationState.Error).message,
-                                        color = Color.Red,
-                                        modifier = Modifier.padding(vertical = 8.dp)
-                                    )
-                                }
                             }
                         }
                     },
@@ -300,7 +318,7 @@ fun MyClassesScreen(courseId: Int, courseName: String) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(
-                            Icons.Rounded.Error,
+                            Icons.Filled.Error,
                             contentDescription = null,
                             modifier = Modifier
                                 .size(64.dp)

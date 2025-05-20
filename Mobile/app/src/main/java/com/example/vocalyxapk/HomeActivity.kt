@@ -577,7 +577,7 @@ fun ClassesTab(modifier: Modifier = Modifier) {
         if (showAddCourseDialog) {
             AlertDialog(
                 onDismissRequest = { showAddCourseDialog = false },
-                title = { Text("Create New Course") },
+                title = { Text("Add New Course", style = MaterialTheme.typography.titleLarge) },
                 text = {
                     Box(
                         modifier = Modifier
@@ -585,70 +585,91 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                             .padding(vertical = 8.dp)
                     ) {
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            OutlinedTextField(
-                                value = courseName,
-                                onValueChange = { courseName = it },
-                                label = { Text("Course Name") },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp),
-                                singleLine = true,
-                                isError = courseName.isBlank() && courseCreationState !is CourseCreationState.Idle
+                            // Course Code with title above field
+                            Text(
+                                text = "Course Code *",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(bottom = 4.dp)
                             )
-                            
                             OutlinedTextField(
                                 value = courseCode,
                                 onValueChange = { courseCode = it },
-                                label = { Text("Course Code") },
+                                placeholder = { Text("e.g. CS101") },
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp),
+                                    .fillMaxWidth(),
                                 singleLine = true,
                                 isError = courseCode.isBlank() && courseCreationState !is CourseCreationState.Idle
                             )
                             
+                            Spacer(modifier = Modifier.height(16.dp))
+                            
+                            // Course Name with title above field
+                            Text(
+                                text = "Course Name *",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(bottom = 4.dp)
+                            )
+                            OutlinedTextField(
+                                value = courseName,
+                                onValueChange = { courseName = it },
+                                placeholder = { Text("e.g. Introduction to Computer Science") },
+                                modifier = Modifier
+                                    .fillMaxWidth(),
+                                singleLine = true,
+                                isError = courseName.isBlank() && courseCreationState !is CourseCreationState.Idle
+                            )
+                            
+                            Spacer(modifier = Modifier.height(16.dp))
+                            
+                            // Description field with title above
+                            Text(
+                                text = "Description",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(bottom = 4.dp)
+                            )
+                            OutlinedTextField(
+                                value = courseDescription,
+                                onValueChange = { courseDescription = it },
+                                placeholder = { Text("Describe the course content and objectives") },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(100.dp), // Match the height in the screenshot
+                                minLines = 2
+                            )
+                            
+                            Spacer(modifier = Modifier.height(16.dp))
+                            
                             // Semester Dropdown
+                            Text(
+                                text = "Semester *",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(bottom = 4.dp)
+                            )
+                            
+                            // Semester dropdown implementation
                             var semesterDropdownExpanded by remember { mutableStateOf(false) }
                             val semesterOptions = listOf("Fall", "Spring", "Summer", "Winter")
                             
-                            Column(modifier = Modifier.fillMaxWidth()) {
-                                Text(
-                                    text = "Semester",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = if (courseSemester.isBlank() && courseCreationState !is CourseCreationState.Idle) {
-                                        Color.Red
-                                    } else {
-                                        Color.Gray
-                                    },
-                                    modifier = Modifier.padding(bottom = 4.dp)
-                                )
-                                
+                            Box(modifier = Modifier.fillMaxWidth()) {
                                 OutlinedTextField(
                                     value = courseSemester,
                                     onValueChange = { },
                                     readOnly = true,
                                     trailingIcon = {
-                                        IconButton(onClick = { semesterDropdownExpanded = true }) {
-                                            Icon(Icons.Rounded.ArrowDropDown, "Expand dropdown")
-                                        }
+                                        Icon(Icons.Rounded.ArrowDropDown, "Expand dropdown")
                                     },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { semesterDropdownExpanded = true },
+                                    modifier = Modifier.fillMaxWidth(),
                                     singleLine = true,
-                                    colors = TextFieldDefaults.outlinedTextFieldColors(
-                                        focusedBorderColor = if (courseSemester.isBlank() && courseCreationState !is CourseCreationState.Idle) {
-                                            Color.Red
-                                        } else {
-                                            MaterialTheme.colorScheme.primary
-                                        },
-                                        unfocusedBorderColor = if (courseSemester.isBlank() && courseCreationState !is CourseCreationState.Idle) {
-                                            Color.Red
-                                        } else {
-                                            Color.Gray
-                                        }
-                                    ),
-                                    placeholder = { Text("Select a semester") }
+                                    placeholder = { Text("Select a semester") },
+                                    isError = courseSemester.isBlank() && courseCreationState !is CourseCreationState.Idle
+                                )
+                                
+                                // Overlay a transparent clickable box
+                                Box(
+                                    modifier = Modifier
+                                        .matchParentSize()
+                                        .background(Color.Transparent)
+                                        .clickable(onClick = { semesterDropdownExpanded = true })
                                 )
                                 
                                 DropdownMenu(
@@ -668,23 +689,23 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                                 }
                             }
                             
-                            OutlinedTextField(
-                                value = courseDescription,
-                                onValueChange = { courseDescription = it },
-                                label = { Text("Description (Optional)") },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp)
+                            Spacer(modifier = Modifier.height(16.dp))
+                            
+                            // Academic Year field
+                            Text(
+                                text = "Academic Year *",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(bottom = 4.dp)
                             )
                             
                             OutlinedTextField(
                                 value = courseAcademicYear,
                                 onValueChange = { courseAcademicYear = it },
-                                label = { Text("Academic Year (Optional)") },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp),
-                                singleLine = true
+                                placeholder = { Text("e.g. 2023-2024") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                isError = courseAcademicYear.isBlank() && courseCreationState !is CourseCreationState.Idle,
+                                supportingText = { Text("Format: YYYY-YYYY", style = MaterialTheme.typography.bodySmall) }
                             )
                             
                             // Show error message if there was an error in course creation
