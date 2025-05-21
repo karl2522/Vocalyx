@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.vocalyxapk.composables.CourseCard
+import com.example.vocalyxapk.composables.ScheduleTab
 import com.example.vocalyxapk.data.ImportedClass
 import com.example.vocalyxapk.models.CourseItem
 import com.example.vocalyxapk.repository.AuthRepository
@@ -55,69 +56,14 @@ import com.example.vocalyxapk.viewmodel.CourseDeleteState
 import com.example.vocalyxapk.viewmodel.CourseUpdateState
 import com.example.vocalyxapk.viewmodel.ViewModelFactory
 
-class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
+class HomeActivity : ComponentActivity(){
 
-    private lateinit var textToSpeech: TextToSpeech
-    private lateinit var speechRecognizer: SpeechRecognizer
     private val REQUEST_CODE_SPEECH_INPUT = 100
 
-    // Add state holders
-    private var currentText by mutableStateOf("")
-    private var isVoiceRecognitionActive by mutableStateOf(false)
-
-    private val speechRecognizerListener = object : android.speech.RecognitionListener {
-        override fun onReadyForSpeech(params: Bundle?) {
-            isVoiceRecognitionActive = true
-        }
-
-        override fun onResults(results: Bundle?) {
-            val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-            if (!matches.isNullOrEmpty()) {
-                currentText = matches[0]
-                isVoiceRecognitionActive = false
-            }
-        }
-
-        override fun onError(error: Int) {
-            isVoiceRecognitionActive = false
-            val message = when (error) {
-                SpeechRecognizer.ERROR_NO_MATCH -> "No speech was recognized. Please try again."
-                SpeechRecognizer.ERROR_NETWORK -> "Network error. Please check your internet connection."
-                SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Network timeout. Please try again."
-                SpeechRecognizer.ERROR_AUDIO -> "Audio recording error. Please try again."
-                SpeechRecognizer.ERROR_SERVER -> "Server error. Please try again later."
-                SpeechRecognizer.ERROR_CLIENT -> "Client side error. Please try again."
-                SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech input detected. Please try again."
-                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Please grant microphone permission."
-                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Speech recognizer is busy. Please try again."
-                else -> "Error occurred during recognition. Error code: $error"
-            }
-            Toast.makeText(this@HomeActivity, message, Toast.LENGTH_SHORT).show()
-        }
-
-        // Required overrides with empty implementations
-        override fun onBeginningOfSpeech() {}
-        override fun onRmsChanged(rmsdB: Float) {}
-        override fun onBufferReceived(buffer: ByteArray?) {}
-        override fun onEndOfSpeech() {}
-        override fun onPartialResults(partialResults: Bundle?) {}
-        override fun onEvent(eventType: Int, params: Bundle?) {}
-    }
 
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        // Initialize TextToSpeech
-        textToSpeech = TextToSpeech(this, this)
-
-        // Initialize SpeechRecognizer
-        if (SpeechRecognizer.isRecognitionAvailable(this)) {
-            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
-            speechRecognizer.setRecognitionListener(speechRecognizerListener)
-        } else {
-            Toast.makeText(this, "Speech recognition is not supported on this device.", Toast.LENGTH_SHORT).show()
-        }
 
 
         setContent {
@@ -133,7 +79,7 @@ class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                     
                     val navigationItems = listOf(
                         Triple("Home", Icons.Rounded.Home, "Home"),
-                        Triple("Voice", Icons.Rounded.Mic, "Voice"),
+                        Triple("Schedule", Icons.Rounded.CalendarToday, "Schedule"),
                         Triple("Manual", Icons.Rounded.Edit, "Manual"),
                         Triple("Classes", Icons.Rounded.List, "Classes")
                     )
@@ -321,17 +267,7 @@ class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                         ) { paddingValues ->
                             when (selectedTab) {
                                 0 -> HomeTab()
-                                1 -> VoiceInputTab(
-                                    text = currentText,
-                                    onTextChange = { newText -> currentText = newText },
-                                    onStartVoiceRecognition = {
-                                        isVoiceRecognitionActive = true
-                                        startVoiceRecognition()
-                                    },
-                                    onSpeakOut = { speakOut(currentText) },
-                                    isVoiceRecognitionActive = isVoiceRecognitionActive,
-                                    modifier = Modifier.padding(paddingValues)
-                                )
+                                1 -> ScheduleTab()
                                 2 -> ManualInputTab(modifier = Modifier.padding(paddingValues))
                                 3 -> ClassesTab(modifier = Modifier.padding(paddingValues))
                             }
@@ -341,88 +277,16 @@ class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             }
         }
     }
-
-    override fun onInit(status: Int) {
-        if (status == TextToSpeech.SUCCESS) {
-            val result = textToSpeech.setLanguage(Locale.getDefault())
-            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                Toast.makeText(this, "Language not supported", Toast.LENGTH_SHORT).show()
-            }
-        } else {
-            Toast.makeText(this, "Initialization failed", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        if (::textToSpeech.isInitialized) {
-            textToSpeech.stop()
-            textToSpeech.shutdown()
-        }
-        if (::speechRecognizer.isInitialized) {
-            speechRecognizer.destroy()
-        }
-    }
-
-    private fun startVoiceRecognition() {
-        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 1)
-            return
-        }
-
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak now...")
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 1000L)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 3000L)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L)
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-        }
-
-        try {
-            // Stop any existing recognition
-            if (::speechRecognizer.isInitialized) {
-                speechRecognizer.cancel()
-            }
-
-            // Start listening
-            speechRecognizer.startListening(intent)
-            Toast.makeText(this, "Listening... Please speak", Toast.LENGTH_SHORT).show()
-        } catch (e: Exception) {
-            isVoiceRecognitionActive = false
-            Toast.makeText(this, "Speech recognition failed to start: ${e.message}", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun speakOut(text: String) {
-        textToSpeech.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
-    }
-
-    // Add permission result handling
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 1 && grantResults.isNotEmpty() && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            startVoiceRecognition()
-        } else {
-            Toast.makeText(this, "Microphone permission is required for voice recognition", Toast.LENGTH_SHORT).show()
-        }
-    }
 }
 
 @Composable
 fun HomeScreen(
-    text: String,
-    onTextChange: (String) -> Unit,
-    onStartVoiceRecognition: () -> Unit,
-    onSpeakOut: (String) -> Unit,
-    isVoiceRecognitionActive: Boolean
 ) {
     var selectedTab by remember { mutableStateOf(0) }
     
     val navigationItems = listOf(
         Triple("Home", Icons.Rounded.Home, "Home"),
-        Triple("Voice", Icons.Rounded.Mic, "Voice"),
+        Triple("Schedule", Icons.Rounded.CalendarToday, "Schedule"),
         Triple("Manual", Icons.Rounded.Edit, "Manual"),
         Triple("Courses", Icons.Rounded.List, "Courses")
     )
@@ -443,14 +307,7 @@ fun HomeScreen(
     ) { paddingValues ->
         when (selectedTab) {
             0 -> HomeTab()
-            1 -> VoiceInputTab(
-                text = text,
-                onTextChange = onTextChange,
-                onStartVoiceRecognition = onStartVoiceRecognition,
-                onSpeakOut = onSpeakOut,
-                isVoiceRecognitionActive = isVoiceRecognitionActive,
-                modifier = Modifier.padding(paddingValues)
-            )
+            1 -> ScheduleTab(modifier = Modifier.padding(paddingValues))
             2 -> ManualInputTab(modifier = Modifier.padding(paddingValues))
             3 -> ClassesTab(modifier = Modifier.padding(paddingValues))
         }
@@ -471,43 +328,6 @@ fun HomeTab() {
             modifier = Modifier.padding(bottom = 16.dp)
         )
         Text("Select an option from the bottom navigation to get started.")
-    }
-}
-
-@Composable
-fun VoiceInputTab(
-    text: String,
-    onTextChange: (String) -> Unit,
-    onStartVoiceRecognition: () -> Unit,
-    onSpeakOut: (String) -> Unit,
-    isVoiceRecognitionActive: Boolean,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        OutlinedTextField(
-            value = text,
-            onValueChange = onTextChange,
-            label = { Text("Enter text here") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(
-            onClick = onStartVoiceRecognition,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(if (isVoiceRecognitionActive) "Listening..." else "Start Voice Recognition")
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(
-            onClick = { onSpeakOut(text) },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Speak Text")
-        }
     }
 }
 
@@ -1390,12 +1210,6 @@ fun ImportedClassCard(classData: ImportedClass) {
 @Composable
 fun HomeScreenPreview() {
     VOCALYXAPKTheme {
-        HomeScreen(
-            text = "",
-            onTextChange = {},
-            onStartVoiceRecognition = {},
-            onSpeakOut = {},
-            isVoiceRecognitionActive = false
-        )
+        HomeScreen()
     }
-} 
+}

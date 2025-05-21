@@ -427,4 +427,23 @@ class ClassViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
+
+    fun fetchClassesForCourse(courseId: Int) {
+        viewModelScope.launch {
+            _classUIState.value = ClassUIState.Loading
+            try {
+                val result = classRepository.getClasses(courseId)
+                result.fold(
+                    onSuccess = { classes ->
+                        _classUIState.value = ClassUIState.Success(classes)
+                    },
+                    onFailure = { exception ->
+                        _classUIState.value = ClassUIState.Error(exception.message ?: "Unknown error")
+                    }
+                )
+            } catch (e: Exception) {
+                _classUIState.value = ClassUIState.Error(e.message ?: "Unknown error")
+            }
+        }
+    }
 }
