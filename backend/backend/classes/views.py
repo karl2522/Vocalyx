@@ -44,7 +44,6 @@ class CourseViewSet(viewsets.ModelViewSet):
             if course.user_id == self.request.user.id:
                 course.accessLevel = 'full'
             else:
-                # Find which team gives access to this course
                 for tc in TeamCourse.objects.filter(course=course, team_id__in=team_ids):
                     course.accessLevel = permissions_map.get(tc.team_id, 'view')
                     break
@@ -52,6 +51,61 @@ class CourseViewSet(viewsets.ModelViewSet):
             result.append(course)
 
         return result
+
+    def destroy(self, request, *args, **kwargs):
+        course_id = kwargs.get('pk')
+
+        try:
+            course = Course.objects.get(id=course_id, user=request.user)
+            self.perform_destroy(course)
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except Course.DoesNotExist:
+            team_course = TeamCourse.objects.filter(
+                course_id=course_id,
+                team__members__user=request.user,
+                team__members__is_active=True,
+                team__members__permissions='full'
+            ).first()
+
+            if team_course:
+                course = Course.objects.get(id=course_id)
+                self.perform_destroy(course)
+                return Response(status=status.HTTP_204_NO_CONTENT)
+            else:
+                return Response({"detail": "Course not found or you don't have permission to delete it."},
+                                status=status.HTTP_404_NOT_FOUND)
+
+    def update(self, request, *args, **kwargs):
+        course_id = kwargs.get('pk')
+        partial = kwargs.pop('partial', False)
+
+        try:
+            # Try to get the course that the user owns
+            course = Course.objects.get(id=course_id, user=request.user)
+            serializer = self.get_serializer(course, data=request.data, partial=partial)
+            serializer.is_valid(raise_exception=True)
+            self.perform_update(serializer)
+            return Response(serializer.data)
+
+        except Course.DoesNotExist:
+            team_course = TeamCourse.objects.filter(
+                course_id=course_id,
+                team__members__user=request.user,
+                team__members__is_active=True,
+                team__members__permissions='full'
+            ).first()
+
+            if team_course:
+                course = Course.objects.get(id=course_id)
+                serializer = self.get_serializer(course, data=request.data, partial=partial)
+                serializer.is_valid(raise_exception=True)
+                self.perform_update(serializer)
+                return Response(serializer.data)
+            else:
+                return Response(
+                    {"detail": "Course not found or you don't have permission to update it."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)

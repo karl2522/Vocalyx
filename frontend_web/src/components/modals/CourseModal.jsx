@@ -66,47 +66,46 @@ const CourseModal = ({ isOpen, onClose, onAddCourse, onUpdateCourse, isEditMode,
     };
 
     const handleSubmit = async (e) => {
-        e.preventDefault();
-        
-        if (!validateForm()) return;
-        
-        setLoading(true);
+    e.preventDefault();
+    
+    if (!validateForm()) return;
+    
+    setLoading(true);
 
-        const courseData = {
-            name: courseName,
-            courseCode,
-            description,
-            semester,
-            academic_year: academicYear,
-            status
-        };
-
-        try {
-            if (isEditMode) {
-                // Update existing course
-                const response = await courseService.updateCourse(currentCourse.id, courseData);
-                if (onUpdateCourse) {
-                    onUpdateCourse(response.data);
-                }
-                showToast.success('Course updated successfully!');
-            } else {
-                // Create new course
-                const response = await courseService.createCourse(courseData);
-                if (onAddCourse) {
-                    onAddCourse(response.data);
-                }
-                showToast.success('Course created successfully!');
-            }
-
-            resetForm();
-            onClose();
-        } catch (error) {
-            console.error('Error saving course:', error);
-            showToast.error(error.response?.data?.message || `Failed to ${isEditMode ? 'update' : 'create'} course`);
-        } finally {
-            setLoading(false);
-        }
+    const courseData = {
+        name: courseName,
+        courseCode,
+        description,
+        semester,
+        academic_year: academicYear,
+        status
     };
+
+    try {
+        if (isEditMode) {
+            if (onUpdateCourse) {
+                onUpdateCourse({
+                    id: currentCourse.id,
+                    ...courseData
+                });
+            }
+            showToast.success('Course updated successfully!');
+        } else {
+            if (onAddCourse) {
+                onAddCourse(courseData);
+            }
+            showToast.success('Course created successfully!');
+        }
+
+        resetForm();
+        onClose();
+    } catch (error) {
+        console.error('Error saving course:', error);
+        showToast.error(`Failed to ${isEditMode ? 'update' : 'create'} course`);
+    } finally {
+        setLoading(false);
+    }
+};
 
     return (
         <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">

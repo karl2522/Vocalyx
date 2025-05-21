@@ -95,6 +95,7 @@ const ClassDetails = ({ accessInfo }) => {
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [teamAccess, setTeamAccess] = useState(null);
   const initialDataLoadRef = useRef(false);
+  const [availableFiles, setAvailableFiles] = useState([]);
   
   const visibleData = useMemo(() => {
     if (!excelData) return null;
@@ -126,74 +127,37 @@ const ClassDetails = ({ accessInfo }) => {
     
   }, [id, accessInfo]);
 
-  useEffect(() => {
-    const fetchData = async () => {
-    try {
-        setLoading(true);
-        console.log("Fetching class data for id:", id, "User has team access:", teamAccess);
-        
-        // Get class data and excel files in parallel
-        const [classResponse, excelResponse] = await Promise.all([
+    useEffect(() => {
+      const fetchData = async () => {
+        try {
+          setLoading(true);
+          console.log("Fetching class data for id:", id, "User has team access:", teamAccess);
+          
+          const [classResponse, excelResponse] = await Promise.all([
             classService.getClassById(id),
             classService.getClassExcelFiles(id)
-        ]);
-        
-        console.log("Class data received:", classResponse.data);
-        setClassData(classResponse.data);
-        
-        // Check if Excel files were retrieved, regardless of user access level
-        console.log("Excel response:", excelResponse.data);
-        
-        // If there are excel files, load the most recent one for ALL users (including view-only)
-        if (excelResponse.data.length > 0) {
-            const latestFile = excelResponse.data[0]; // Assuming they're sorted by date
-            console.log("Loading latest Excel file:", latestFile.file_name);
+          ]);
+          
+          console.log("Class data received:", classResponse.data);
+          setClassData(classResponse.data);
+          
+          if (excelResponse.data.length > 0) {
+            setAvailableFiles(excelResponse.data);
             
-            // Get active sheet name and available sheets
-            const activeSheet = latestFile.active_sheet;
-            const sheetNames = latestFile.sheet_names || [];
-            const sheetData = latestFile.all_sheets[activeSheet];
-            
-            if (sheetData && sheetData.data && sheetData.data.length > 0) {
-                // Set the excel data using the active sheet's data
-                const headers = sheetData.headers || Object.keys(sheetData.data[0] || {});
-                const data = sheetData.data.map(row => 
-                    headers.map(header => row[header])
-                );
-                
-                setExcelData({
-                    headers,
-                    data,
-                    fileId: latestFile.id,
-                    activeSheet: activeSheet,
-                    availableSheets: sheetNames
-                });
-                setSelectedFile({ 
-                    name: latestFile.file_name,
-                    id: latestFile.id
-                });
-                console.log("Excel data set successfully with", data.length, "rows");
-            } else {
-                console.log("No data in the active sheet:", activeSheet);
-            }
-        } else {
-            console.log("No Excel files found for this class");
+            const latestFile = excelResponse.data[0]; 
+            loadFileData(latestFile);
+          }
+        } catch (error) {
+          console.error('Error fetching data:', error);
+        } finally {
+          setLoading(false);
         }
-    } catch (error) {
-        console.error('Error fetching data:', error);
-        if (error.response?.status === 404) {
-            navigate('/dashboard/courses', { replace: true });
-        }
-        setError(error.response?.data?.error || 'Failed to fetch data');
-    } finally {
-        setLoading(false);
-    }
-};
+      };
 
-    if (teamAccess !== null) {
-        fetchData();
-    }
-}, [id, navigate, teamAccess]);
+      if (teamAccess !== null) {
+          fetchData();
+      }
+  }, [id, navigate, teamAccess]);
 
   useEffect(() => {
     if (!excelData || excelData.data.length <= MAX_VISIBLE_ROWS) return;
@@ -228,6 +192,59 @@ const ClassDetails = ({ accessInfo }) => {
 
   const handleDragLeave = () => {
     setIsDragging(false);
+  };
+
+  const loadFileData = (fileObj) => {
+    console.log("Loading Excel file:", fileObj.file_name);
+    
+    const activeSheet = fileObj.active_sheet;
+    const sheetNames = fileObj.sheet_names || [];
+    const sheetData = fileObj.all_sheets[activeSheet];
+    
+    if (sheetData && sheetData.data && sheetData.data.length > 0) {
+      const headers = sheetData.headers || Object.keys(sheetData.data[0] || {});
+      const data = sheetData.data.map(row => 
+        headers.map(header => row[header])
+      );
+      
+      setExcelData({
+        headers,
+        data,
+        fileId: fileObj.id,
+        activeSheet: activeSheet,
+        availableSheets: sheetNames
+      });
+      setSelectedFile({ 
+        name: fileObj.file_name,
+        id: fileObj.id
+      });
+      console.log("Excel data set successfully with", data.length, "rows");
+    } else {
+      console.log("No data in the active sheet:", activeSheet);
+    }
+  };
+
+  const handleSwitchFile = async (fileId) => {
+    setFileLoading(true);
+    try {
+      // Find the selected file in the available files
+      const selectedFileObj = availableFiles.find(file => file.id === fileId);
+      
+      if (selectedFileObj) {
+        loadFileData(selectedFileObj);
+      } else {
+        // If the file isn't in our cache, fetch it from the server
+        const response = await classService.getExcelFile(fileId);
+        if (response.data) {
+          loadFileData(response.data);
+        }
+      }
+    } catch (error) {
+      console.error('Error switching file:', error);
+      setError('Failed to switch file');
+    } finally {
+      setFileLoading(false);
+    }
   };
 
   const handleDrop = (e) => {
@@ -670,6 +687,7 @@ const ClassDetails = ({ accessInfo }) => {
     
     if (responseData) {
       const fileId = responseData.id;
+      setAvailableFiles(prevFiles => [responseData, ...prevFiles]);
       
       // Get sheet data from the response
       const activeSheet = responseData.active_sheet || '';
@@ -1124,6 +1142,103 @@ const ClassDetails = ({ accessInfo }) => {
               </div>
             </div>
 
+             {/* Enhanced File Selection Dropdown */}
+              {availableFiles.length > 1 && (
+                <div className="mb-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center mb-2 sm:mb-0">
+                      <div className="w-8 h-8 rounded-md bg-[#EEF0F8] flex items-center justify-center mr-2 shadow-sm">
+                        <BsFileEarmarkSpreadsheet className="text-[#333D79]" size={16} />
+                      </div>
+                      <span className="text-sm font-medium text-gray-700">Current Spreadsheet</span>
+                    </div>
+                    
+                    <div className="relative group">
+                      <div className="relative">
+                        <select
+                          className="appearance-none w-full sm:w-72 border border-gray-300 rounded-lg text-gray-700 pl-4 pr-10 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-[#333D79] focus:border-[#333D79] transition-all hover:border-gray-400"
+                          value={selectedFile?.id}
+                          onChange={(e) => handleSwitchFile(e.target.value)}
+                        >
+                          {availableFiles.map(file => {
+                            // Get file extension to show appropriate icon
+                            const fileExt = file.file_name?.split('.').pop()?.toLowerCase() || '';
+                            
+                            // Format the date properly using uploaded_at instead of created_at
+                            const formattedDate = file.uploaded_at ? 
+                              new Date(file.uploaded_at).toLocaleDateString() : 
+                              'Unknown date';
+                            
+                            return (
+                              <option key={file.id} value={file.id}>
+                                {file.file_name} ({formattedDate})
+                              </option>
+                            );
+                          })}
+                        </select>
+                        
+                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[#333D79]">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                          </svg>
+                        </div>
+                      </div>
+                      
+                      {/* File details indicator for selected file */}
+                      {selectedFile && (
+                        <div className="hidden group-hover:block absolute top-full left-0 mt-1 w-full bg-white rounded-lg shadow-lg border border-gray-200 z-10 p-3 animate-fadeIn">
+                          <div className="flex items-start">
+                            {/* Get the full file object from availableFiles using selectedFile.id */}
+                            {(() => {
+                              const currentFile = availableFiles.find(f => f.id === selectedFile.id);
+                              const fileName = currentFile?.file_name || selectedFile.name;
+                              
+                              // Determine icon based on file extension
+                              const isXlsx = fileName?.toLowerCase().endsWith('.xlsx');
+                              const isCsv = fileName?.toLowerCase().endsWith('.csv');
+                              
+                              return (
+                                <>
+                                  <div className={`flex-shrink-0 w-10 h-10 rounded-lg ${
+                                    isXlsx ? 'bg-green-100' :
+                                    isCsv ? 'bg-blue-100' : 'bg-purple-100'
+                                  } flex items-center justify-center mr-3`}>
+                                    {isXlsx ? (
+                                      <BsFiletypeXlsx size={20} className="text-green-700" />
+                                    ) : isCsv ? (
+                                      <BsFiletypeCsv size={20} className="text-blue-700" />
+                                    ) : (
+                                      <BsFileEarmarkSpreadsheet size={20} className="text-purple-700" />
+                                    )}
+                                  </div>
+                                  <div>
+                                    <p className="font-medium text-gray-800 text-sm mb-1">{fileName}</p>
+                                    <div className="flex items-center text-xs text-gray-500">
+                                      <span className="mr-2">
+                                        Uploaded: {currentFile?.uploaded_at ? 
+                                          new Date(currentFile.uploaded_at).toLocaleString() : 
+                                          'Unknown date'
+                                        }
+                                      </span>
+                                      <span className="flex items-center">
+                                        <svg className="w-3 h-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                                        </svg>
+                                        {currentFile?.active_sheet || 'Sheet1'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-800 rounded-lg p-4 mb-6 flex justify-between items-center">
                 <div>{error}</div>
@@ -1154,12 +1269,6 @@ const ClassDetails = ({ accessInfo }) => {
                     <div className="absolute -top-1 -right-4 w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
                   </h2>
                 </div>
-                {selectedFile && (
-                  <div className="text-sm text-gray-500 flex items-center px-3 py-1.5 bg-gray-50 rounded-full border border-gray-100 hover:bg-gray-100 hover:border-gray-200 transition-colors">
-                    <FiFileText className="mr-2 text-[#333D79]" />
-                    {selectedFile.name}
-                  </div>
-                )}
               </div>
 
              {fileLoading ? (

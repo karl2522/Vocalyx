@@ -179,6 +179,7 @@ export const classService = {
     deleteClass: (id) => api.delete(`/classes/${id}/`),
     getClassById: (id) => api.get(`/classes/${id}/`),
     getClassExcelFiles: (classId) => api.get(`/excel/?class_id=${classId}`),
+    getExcelFile: (fileId) => api.get(`/excel/${fileId}/`),
     updateExcelData: (fileId, data, sheetName) => api.patch(
         `/excel/${fileId}/update_data/`, 
         { 

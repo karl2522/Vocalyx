@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { FiCalendar, FiChevronDown, FiChevronLeft, FiChevronRight, FiClock } from 'react-icons/fi';
 import { Link } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { courseService } from '../services/api';
 import { commonHeaderAnimations } from '../utils/animation.js';
 import DashboardLayout from "./layouts/DashboardLayout.jsx";
@@ -129,24 +130,50 @@ const ScheduleStyles = () => {
       margin: 0 0.5rem;
       color: #999;
     }
+    
+    .dropdown-menu {
+      transition: all 0.2s ease;
+      opacity: 0;
+      transform: translateY(-10px);
+      pointer-events: none;
+    }
+    
+    .dropdown-menu.active {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+    
+    .dropdown-trigger {
+      transition: all 0.2s ease;
+    }
+    
+    .dropdown-trigger:hover {
+      background-color: #f0f2f8;
+    }
+    
+    .animate-fade {
+      animation: fadeIn 0.3s ease-out forwards;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
   `, []);
 
   return <style>{stylesContent}</style>;
 };
 
 const Schedule = () => {
+  const queryClient = useQueryClient();
   const [viewType, setViewType] = useState('week');
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [isLoading, setIsLoading] = useState(true);
-  const [courses, setCourses] = useState([]);
-  const [classes, setClasses] = useState([]);
-  const [selectedCourse, setSelectedCourse] = useState(null);
-  const [selectedClass, setSelectedClass] = useState(null);
+  const [selectedCourseId, setSelectedCourseId] = useState(null);
+  const [selectedClassId, setSelectedClassId] = useState(null);
   const [showCourseDropdown, setShowCourseDropdown] = useState(false);
   const [showClassDropdown, setShowClassDropdown] = useState(false);
   const [scheduledTimes, setScheduledTimes] = useState([]);
-  const [headerLoaded, setHeaderLoaded] = useState(false);
-  const [initialLoadDone, setInitialLoadDone] = useState(false);
   
   // Time slot data - these are 30-minute increments
   const timeSlots = [
@@ -184,18 +211,114 @@ const Schedule = () => {
   // Day names for column headers
   const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-  // Save selected course and class to localStorage when they change
+  // Fetch all courses
+  const { 
+    data: courses = [],
+    isLoading: isLoadingCourses 
+  } = useQuery({
+    queryKey: ['courses'],
+    queryFn: async () => {
+      const response = await courseService.getCourses();
+      return response.data;
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+
+  // Fetch selected course details
+  const { 
+    data: selectedCourse,
+    isLoading: isLoadingCourseDetails
+  } = useQuery({
+    queryKey: ['course', selectedCourseId],
+    queryFn: async () => {
+      if (!selectedCourseId) return null;
+      const response = await courseService.getCourse(selectedCourseId);
+      return response.data;
+    },
+    enabled: !!selectedCourseId,
+    staleTime: 5 * 60 * 1000
+  });
+
+  // Fetch classes for selected course
+  const { 
+    data: classes = [],
+    isLoading: isLoadingClasses
+  } = useQuery({
+    queryKey: ['classes', selectedCourseId],
+    queryFn: async () => {
+      if (!selectedCourseId) return [];
+      const response = await courseService.getCourseClasses(selectedCourseId);
+      return response.data;
+    },
+    enabled: !!selectedCourseId,
+    staleTime: 5 * 60 * 1000
+  });
+
+  // Get selected class details
+  const selectedClass = useMemo(() => {
+    if (!selectedClassId || !classes.length) return null;
+    return classes.find(c => c.id === selectedClassId) || null;
+  }, [selectedClassId, classes]);
+
+  // Restore saved state on initial load
   useEffect(() => {
-    if (selectedCourse && initialLoadDone) {
+    // Try to restore saved state
+    const savedViewType = localStorage.getItem('schedule_viewType');
+    if (savedViewType) {
+      setViewType(savedViewType);
+    }
+    
+    const savedSelectedCourse = localStorage.getItem('schedule_selectedCourse');
+    if (savedSelectedCourse) {
+      try {
+        const parsedCourse = JSON.parse(savedSelectedCourse);
+        setSelectedCourseId(parsedCourse.id);
+        
+        // Pre-fetch course data
+        queryClient.prefetchQuery({
+          queryKey: ['course', parsedCourse.id],
+          queryFn: async () => {
+            const response = await courseService.getCourse(parsedCourse.id);
+            return response.data;
+          }
+        });
+        
+        // Class will be restored after classes are loaded
+        const savedSelectedClass = localStorage.getItem('schedule_selectedClass');
+        if (savedSelectedClass) {
+          try {
+            const parsedClass = JSON.parse(savedSelectedClass);
+            setSelectedClassId(parsedClass.id);
+          } catch (error) {
+            console.error("Error parsing saved class:", error);
+          }
+        }
+      } catch (error) {
+        console.error("Error restoring saved course:", error);
+      }
+    }
+  }, [queryClient]);
+
+  // Save view type when it changes
+  useEffect(() => {
+    localStorage.setItem('schedule_viewType', viewType);
+  }, [viewType]);
+
+  // Save selected course when it changes
+  useEffect(() => {
+    if (selectedCourse) {
       localStorage.setItem('schedule_selectedCourse', JSON.stringify({
         id: selectedCourse.id,
         name: selectedCourse.name
       }));
+    } else if (selectedCourseId === null) {
+      localStorage.removeItem('schedule_selectedCourse');
     }
-  }, [selectedCourse, initialLoadDone]);
+  }, [selectedCourse, selectedCourseId]);
 
+  // Save selected class when it changes
   useEffect(() => {
-    if (selectedClass && initialLoadDone) {
+    if (selectedClass) {
       localStorage.setItem('schedule_selectedClass', JSON.stringify({
         id: selectedClass.id,
         name: selectedClass.name,
@@ -203,119 +326,14 @@ const Schedule = () => {
         schedule: selectedClass.schedule,
         student_count: selectedClass.student_count
       }));
-    }
-  }, [selectedClass, initialLoadDone]);
-
-  // On initial load, fetch courses and saved selections
-  useEffect(() => {
-    // Set header as loaded after initial mount
-    if (!headerLoaded) {
-      setHeaderLoaded(true);
-    }
-    
-    const fetchInitialData = async () => {
-      await fetchCourses();
       
-      // Try to restore saved state
-      const savedViewType = localStorage.getItem('schedule_viewType');
-      if (savedViewType) {
-        setViewType(savedViewType);
-      }
-      
-      const savedSelectedCourse = localStorage.getItem('schedule_selectedCourse');
-      const savedSelectedClass = localStorage.getItem('schedule_selectedClass');
-      
-      if (savedSelectedCourse) {
-        const parsedCourse = JSON.parse(savedSelectedCourse);
-        // We need to fetch the full course details with the ID
-        try {
-          const response = await courseService.getCourse(parsedCourse.id);
-          if (response && response.data) {
-            setSelectedCourse(response.data);
-            
-            // Fetch classes for this course
-            const classesResponse = await courseService.getCourseClasses(response.data.id);
-            if (classesResponse && classesResponse.data) {
-              setClasses(classesResponse.data);
-              
-              // If there was also a saved class, try to find it in the fetched classes
-              if (savedSelectedClass) {
-                const parsedClass = JSON.parse(savedSelectedClass);
-                const matchingClass = classesResponse.data.find(c => c.id === parsedClass.id);
-                if (matchingClass) {
-                  setSelectedClass(matchingClass);
-                  parseSchedule(matchingClass.schedule);
-                }
-              }
-            }
-          }
-        } catch (error) {
-          console.error("Error restoring saved course:", error);
-        }
-      }
-      
-      setInitialLoadDone(true);
-    };
-    
-    fetchInitialData();
-  }, [headerLoaded]);
-
-  // Save view type when it changes
-  useEffect(() => {
-    if (initialLoadDone) {
-      localStorage.setItem('schedule_viewType', viewType);
-    }
-  }, [viewType, initialLoadDone]);
-
-  useEffect(() => {
-    if (selectedCourse && initialLoadDone) {
-      fetchClasses(selectedCourse.id);
-    } else if (initialLoadDone) {
-      setClasses([]);
-      setSelectedClass(null);
-    }
-  }, [selectedCourse, initialLoadDone]);
-
-  useEffect(() => {
-    if (selectedClass) {
+      // Parse schedule when class changes
       parseSchedule(selectedClass.schedule);
-    } else {
+    } else if (selectedClassId === null) {
+      localStorage.removeItem('schedule_selectedClass');
       setScheduledTimes([]);
     }
-  }, [selectedClass]);
-
-  // For debugging
-  useEffect(() => {
-    if (scheduledTimes.length > 0) {
-      console.log("Scheduled times:", scheduledTimes);
-    }
-  }, [scheduledTimes]);
-
-  const fetchCourses = async () => {
-    setIsLoading(true);
-    try {
-      const response = await courseService.getCourses();
-      setCourses(response.data);
-      return response.data;
-    } catch (error) {
-      console.error("Error fetching courses:", error);
-      return [];
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const fetchClasses = async (courseId) => {
-    setIsLoading(true);
-    try {
-      const response = await courseService.getCourseClasses(courseId);
-      setClasses(response.data);
-    } catch (error) {
-      console.error("Error fetching classes:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  }, [selectedClass, selectedClassId]);
 
   // Function to parse schedule like "M,W,F 1:30 - 3:00 PM"
   const parseSchedule = (scheduleStr) => {
@@ -325,8 +343,6 @@ const Schedule = () => {
     }
     
     try {
-      console.log("Parsing schedule:", scheduleStr);
-      
       // First split by space to separate days from time
       const parts = scheduleStr.split(' ');
       if (parts.length < 3) {
@@ -345,8 +361,6 @@ const Schedule = () => {
       if (daysStr.includes('Sa')) days.push(6); // Saturday (6)
       if (daysStr.includes('Su')) days.push(0); // Sunday (0)
       
-      console.log("Parsed days:", days);
-      
       // Parse time range
       const startTimeStr = parts[1];
       // Get the end time (handle different formats)
@@ -363,16 +377,12 @@ const Schedule = () => {
         endTimeStr = parts[2];
       }
       
-      console.log("Start time:", startTimeStr, "End time:", endTimeStr);
-      
       // Determine AM/PM
       const isPM = scheduleStr.toUpperCase().includes('PM');
       
       // Convert times to minutes (since midnight)
       const startTime = convertToMinutes(startTimeStr, isPM);
       const endTime = convertToMinutes(endTimeStr, isPM);
-      
-      console.log("Start minutes:", startTime, "End minutes:", endTime);
       
       // Generate all 30-minute slots between start and end time for each day
       let scheduledSlots = [];
@@ -388,7 +398,6 @@ const Schedule = () => {
         }
       });
       
-      console.log("Generated slots:", scheduledSlots);
       setScheduledTimes(scheduledSlots);
     } catch (error) {
       console.error("Error parsing schedule:", error);
@@ -485,28 +494,35 @@ const Schedule = () => {
 
   // Handle course selection change
   const handleCourseSelect = (course) => {
-    setSelectedCourse(course);
-    // Clear the selected class since we're changing courses
-    setSelectedClass(null);
-    localStorage.removeItem('schedule_selectedClass');
+    setSelectedCourseId(course.id);
+    setSelectedClassId(null);
     setShowCourseDropdown(false);
   };
 
   // Handle class selection change
   const handleClassSelect = (classItem) => {
-    setSelectedClass(classItem);
+    setSelectedClassId(classItem.id);
     setShowClassDropdown(false);
   };
 
-  // Clear selections (for UI clarity)
+  // Clear selections
   const clearSelections = () => {
-    setSelectedCourse(null);
-    setSelectedClass(null);
+    setSelectedCourseId(null);
+    setSelectedClassId(null);
     localStorage.removeItem('schedule_selectedCourse');
     localStorage.removeItem('schedule_selectedClass');
   };
 
-  if (isLoading) {
+  // Determine the class name for a given cell based on scheduling
+  const getCellClassName = (dayIndex, timeSlot) => {
+    const isScheduled = isTimeSlotScheduled(dayIndex, timeSlot);
+    return isScheduled ? 'table-cell class-cell' : 'table-cell';
+  };
+  
+  // Show loading spinner only on the initial load
+  const isInitialLoading = isLoadingCourses && !courses.length;
+
+  if (isInitialLoading) {
     return (
       <DashboardLayout>
         <ScheduleStyles />
@@ -516,12 +532,6 @@ const Schedule = () => {
       </DashboardLayout>
     );
   }
-
-  // Determine the class name for a given cell based on scheduling
-  const getCellClassName = (dayIndex, timeSlot) => {
-    const isScheduled = isTimeSlotScheduled(dayIndex, timeSlot);
-    return isScheduled ? 'table-cell class-cell' : 'table-cell';
-  };
 
   return (
     <DashboardLayout>
@@ -582,30 +592,42 @@ const Schedule = () => {
               {/* Course Dropdown */}
               <div className="relative">
                 <button 
-                  className="flex items-center space-x-1 px-3 py-1.5 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                  className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg transition-colors dropdown-trigger ${
+                    isLoadingCourseDetails 
+                      ? 'bg-gray-100 text-gray-400' 
+                      : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                  }`}
                   onClick={() => setShowCourseDropdown(!showCourseDropdown)}
+                  disabled={isLoadingCourseDetails}
                 >
-                  <span>{selectedCourse ? selectedCourse.name : 'Select Course'}</span>
-                  <FiChevronDown />
+                  {isLoadingCourseDetails ? (
+                    <div className="flex items-center">
+                      <div className="animate-spin h-4 w-4 mr-2 border-t-2 border-[#333D79] rounded-full"></div>
+                      <span>Loading...</span>
+                    </div>
+                  ) : (
+                    <>
+                      <span>{selectedCourse ? selectedCourse.name : 'Select Course'}</span>
+                      <FiChevronDown />
+                    </>
+                  )}
                 </button>
                 
-                {showCourseDropdown && (
-                  <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto">
-                    {courses.length > 0 ? (
-                      courses.map(course => (
-                        <button 
-                          key={course.id}
-                          className="block w-full text-left px-4 py-2 hover:bg-gray-100 text-sm"
-                          onClick={() => handleCourseSelect(course)}
-                        >
-                          {course.name}
-                        </button>
-                      ))
-                    ) : (
-                      <div className="px-4 py-2 text-sm text-gray-600">No courses found</div>
-                    )}
-                  </div>
-                )}
+                <div className={`dropdown-menu absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto ${showCourseDropdown ? 'active' : ''}`}>
+                  {courses.length > 0 ? (
+                    courses.map(course => (
+                      <button 
+                        key={course.id}
+                        className={`block w-full text-left px-4 py-2 hover:bg-gray-100 text-sm ${selectedCourseId === course.id ? 'bg-gray-50 font-medium text-[#333D79]' : ''}`}
+                        onClick={() => handleCourseSelect(course)}
+                      >
+                        {course.name}
+                      </button>
+                    ))
+                  ) : (
+                    <div className="px-4 py-2 text-sm text-gray-600">No courses found</div>
+                  )}
+                </div>
               </div>
               
               {selectedCourse && (
@@ -615,30 +637,42 @@ const Schedule = () => {
                   {/* Class Dropdown */}
                   <div className="relative">
                     <button 
-                      className="flex items-center space-x-1 px-3 py-1.5 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                      className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg transition-colors dropdown-trigger ${
+                        isLoadingClasses 
+                          ? 'bg-gray-100 text-gray-400' 
+                          : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                      }`}
                       onClick={() => setShowClassDropdown(!showClassDropdown)}
+                      disabled={isLoadingClasses}
                     >
-                      <span>{selectedClass ? selectedClass.name : 'Select Class'}</span>
-                      <FiChevronDown />
+                      {isLoadingClasses ? (
+                        <div className="flex items-center">
+                          <div className="animate-spin h-4 w-4 mr-2 border-t-2 border-[#333D79] rounded-full"></div>
+                          <span>Loading...</span>
+                        </div>
+                      ) : (
+                        <>
+                          <span>{selectedClass ? selectedClass.name : 'Select Class'}</span>
+                          <FiChevronDown />
+                        </>
+                      )}
                     </button>
                     
-                    {showClassDropdown && (
-                      <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto">
-                        {classes.length > 0 ? (
-                          classes.map(classItem => (
-                            <button 
-                              key={classItem.id}
-                              className="block w-full text-left px-4 py-2 hover:bg-gray-100 text-sm"
-                              onClick={() => handleClassSelect(classItem)}
-                            >
-                              {classItem.name} - Section {classItem.section || 'A'}
-                            </button>
-                          ))
-                        ) : (
-                          <div className="px-4 py-2 text-sm text-gray-600">No classes found</div>
-                        )}
-                      </div>
-                    )}
+                    <div className={`dropdown-menu absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto ${showClassDropdown ? 'active' : ''}`}>
+                      {classes.length > 0 ? (
+                        classes.map(classItem => (
+                          <button 
+                            key={classItem.id}
+                            className={`block w-full text-left px-4 py-2 hover:bg-gray-100 text-sm ${selectedClassId === classItem.id ? 'bg-gray-50 font-medium text-[#333D79]' : ''}`}
+                            onClick={() => handleClassSelect(classItem)}
+                          >
+                            {classItem.name} - Section {classItem.section || 'A'}
+                          </button>
+                        ))
+                      ) : (
+                        <div className="px-4 py-2 text-sm text-gray-600">No classes found</div>
+                      )}
+                    </div>
                   </div>
                 </>
               )}
@@ -691,7 +725,7 @@ const Schedule = () => {
         {/* Schedule Grid */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-6 overflow-x-auto">
           {selectedClass ? (
-            <div>
+            <div className="animate-fade">
               {selectedClass.schedule && (
                 <div className="mb-4 px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg">
                   <p className="text-center text-gray-700 font-medium">
@@ -740,7 +774,7 @@ const Schedule = () => {
               </table>
             </div>
           ) : (
-            <div className="bg-[#f8faff] border border-dashed border-gray-300 rounded-xl p-10 text-center">
+            <div className="bg-[#f8faff] border border-dashed border-gray-300 rounded-xl p-10 text-center animate-fade">
               <div className="max-w-md mx-auto">
                 <FiClock className="mx-auto h-12 w-12 text-[#333D79] opacity-50 mb-4" />
                 <h3 className="text-2xl font-bold text-gray-800 mb-2">
@@ -758,7 +792,7 @@ const Schedule = () => {
 
         {/* Information Cards */}
         {selectedClass && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade">
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
               <h3 className="text-lg font-bold text-gray-800 mb-3 flex items-center">
                 <FiCalendar className="mr-2 text-[#333D79]" size={18} />

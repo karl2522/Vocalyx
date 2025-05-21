@@ -47,6 +47,8 @@ const Courses = () => {
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [dropdownPosition, setDropdownPosition] = useState(null);
   const [dropdownCourse, setDropdownCourse] = useState(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [courseToDelete, setCourseToDelete] = useState(null);
   
   // Replace useState and useEffect with useQuery
   const { 
@@ -96,17 +98,27 @@ const Courses = () => {
     }
   });
   
-  const deleteCourseMutation = useMutation({
-    mutationFn: (id) => courseService.deleteCourse(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries(['courses']);
-      toast.success('Course deleted successfully');
-    },
-    onError: (error) => {
-      console.error('Error deleting course:', error);
+ const deleteCourseMutation = useMutation({
+  mutationFn: (id) => courseService.deleteCourse(id),
+  onSuccess: () => {
+    queryClient.invalidateQueries(['courses']);
+    toast.success('Course deleted successfully');
+  },
+  onError: (error) => {
+    console.error('Error deleting course:', error);
+    
+    if (error.response?.status === 404) {
+      toast.error('Course not found or you do not have permission to delete it.');
+    } else if (error.response?.status === 403) {
+      toast.error('You do not have permission to delete this course.');
+    } else {
       toast.error('Failed to delete course');
     }
-  });
+    
+    setIsDeleteModalOpen(false);
+    setCourseToDelete(null);
+  }
+});
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -164,14 +176,17 @@ const Courses = () => {
     }
   };
   
-  const handleDeleteCourse = async (courseId) => {
-    if (!window.confirm('Are you sure you want to delete this course? This action cannot be undone.')) {
-      return;
-    }
-    
-    deleteCourseMutation.mutate(courseId);
-    setActiveDropdown(null);
-  };
+  const handleDeleteCourse = (courseId) => {
+  setCourseToDelete(courseId);
+  setIsDeleteModalOpen(true);
+  setActiveDropdown(null);
+};
+
+  const confirmDeleteCourse = () => {
+  deleteCourseMutation.mutate(courseToDelete);
+  setIsDeleteModalOpen(false);
+  setCourseToDelete(null);
+};
 
   const toggleDropdown = (courseId, event) => {
     if (activeDropdown === courseId) {
@@ -431,10 +446,95 @@ const Courses = () => {
                 {filteredCourses.map((course) => (
                   <div 
                     key={course.id} 
-                    className={`course-card bg-white rounded-lg shadow-sm ${getCourseStatusClasses(course.status)} overflow-hidden`}
+                    className={`course-card relative bg-white rounded-lg shadow-sm ${getCourseStatusClasses(course.status)} overflow-hidden`}
                   >
+                    {(!course.accessLevel || course.accessLevel !== 'view') && (
+                      <div className="absolute right-2 top-2 flex space-x-1 z-20">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditCourse(course);
+                          }}
+                          className="p-2 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-600"
+                          title="Edit Course"
+                        >
+                          <FiEdit size={14} />
+                        </button>
+                        
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteCourse(course.id);
+                          }}
+                          className="p-2 rounded-md bg-red-50 hover:bg-red-100 text-red-500"
+                          title="Delete Course"
+                        >
+                          <FiTrash2 size={14} />
+                        </button>
+                        
+                        <div className="relative dropdown-trigger">
+                          <button
+                            className="p-2 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-600"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleDropdown(course.id, e);
+                            }}
+                            title="More Options"
+                          >
+                            <FiMoreVertical size={14} />
+                          </button>
+                          
+                          {activeDropdown === course.id && (
+                            <div 
+                              className="absolute right-0 top-full mt-1 bg-white rounded-md shadow-lg py-1 border border-gray-100 w-48 z-50"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {course.status !== 'completed' && (
+                                <button 
+                                  className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleUpdateStatus(course.id, 'completed');
+                                  }}
+                                >
+                                  <FiBook className="mr-2" size={14} />
+                                  Mark as Completed
+                                </button>
+                              )}
+                              
+                              {course.status !== 'archived' && (
+                                <button 
+                                  className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleUpdateStatus(course.id, 'archived');
+                                  }}
+                                >
+                                  <MdArchive className="mr-2" size={14} />
+                                  Archive Course
+                                </button>
+                              )}
+                              
+                              {course.status !== 'active' && (
+                                <button 
+                                  className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleUpdateStatus(course.id, 'active');
+                                  }}
+                                >
+                                  <FiBook className="mr-2" size={14} />
+                                  Set as Active
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    
                     <div className="p-5">
-                      <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center mb-3 pr-20"> {/* Add right padding to make room for action buttons */}
                         <div className="flex items-center cursor-pointer" onClick={() => navigate(`/dashboard/course/${course.id}`)}>
                           <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center mr-3">
                             <MdOutlineSchool className="text-[#333D79]" size={20} />
@@ -448,95 +548,6 @@ const Courses = () => {
                             </div>
                           </div>
                         </div>
-                        {(!course.accessLevel || course.accessLevel !== 'view') && (
-                            <div className="relative dropdown-trigger">
-                              <button 
-                                className="p-1.5 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
-                                onClick={(e) => {
-                                e.stopPropagation();
-                                toggleDropdown(course.id, e);
-                              }}
-                              >
-                                <FiMoreVertical size={16} />
-                              </button>
-                              
-                              {activeDropdown === course.id && (
-                                <div 
-                                  className="fixed right-auto top-auto z-[1000] bg-white rounded-md shadow-lg py-1 border border-gray-100 w-48"
-                                  style={{
-                                    position: 'absolute',
-                                    top: '100%',
-                                    right: '0',
-                                    marginTop: '8px'
-                                  }}
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <button 
-                                    className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleEditCourse(course);
-                                    }}
-                                  >
-                                    <FiEdit className="mr-2" size={14} />
-                                    Edit Course
-                                  </button>
-                                  
-                                  {course.status !== 'completed' && (
-                                    <button 
-                                      className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleUpdateStatus(course.id, 'completed');
-                                      }}
-                                    >
-                                      <FiBook className="mr-2" size={14} />
-                                      Mark as Completed
-                                    </button>
-                                  )}
-                                  
-                                  {course.status !== 'archived' && (
-                                    <button 
-                                      className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleUpdateStatus(course.id, 'archived');
-                                      }}
-                                    >
-                                      <MdArchive className="mr-2" size={14} />
-                                      Archive Course
-                                    </button>
-                                  )}
-                                  
-                                  {course.status !== 'active' && (
-                                    <button 
-                                      className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleUpdateStatus(course.id, 'active');
-                                      }}
-                                    >
-                                      <FiBook className="mr-2" size={14} />
-                                      Set as Active
-                                    </button>
-                                  )}
-                                  
-                                  <div className="border-t border-gray-100 my-1"></div>
-                                  
-                                  <button 
-                                    className="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleDeleteCourse(course.id);
-                                    }}
-                                  >
-                                    <FiTrash2 className="mr-2" size={14} />
-                                    Delete Course
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          )}
                       </div>
                       
                       <div 
@@ -602,6 +613,39 @@ const Courses = () => {
           </>
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+        {isDeleteModalOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full mx-4 animate-fade-in-up">
+              <div className="flex items-center justify-center mb-4">
+                <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                  <FiTrash2 className="text-red-500" size={24} />
+                </div>
+              </div>
+              
+              <h3 className="text-xl font-semibold text-center mb-2">Delete Course</h3>
+              <p className="text-gray-600 text-center mb-6">
+                Are you sure you want to delete this course? This action cannot be undone.
+              </p>
+              
+              <div className="flex justify-center space-x-3">
+                <button
+                  onClick={() => setIsDeleteModalOpen(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteCourse}
+                  className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
     </DashboardLayout>
   );
 };

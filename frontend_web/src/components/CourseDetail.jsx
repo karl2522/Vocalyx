@@ -5,10 +5,11 @@ import {
     MdOutlinePersonOutline, MdOutlineSchool, MdOutlineWatchLater
 } from 'react-icons/md';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'react-hot-toast';
 import DashboardLayout from "./layouts/DashboardLayout.jsx";
 import ClassModal from './modals/ClassModal';
-import { courseService, classService, teamService } from '../services/api';
-import { showToast } from '../utils/toast.jsx';
+import { courseService, classService } from '../services/api';
 
 // Add some animation style elements
 const AnimationStyles = () => {
@@ -131,32 +132,19 @@ const AnimationStyles = () => {
 const CourseDetail = ({ accessInfo }) => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const location = useLocation();
-  const [courseData, setCourseData] = useState(null);
-  const [classes, setClasses] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [isClassModalOpen, setIsClassModalOpen] = useState(false);
+  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
+  const [isClassModalOpen, setIsClassModalOpen] = useState(false);
   const [activeClassDropdown, setActiveClassDropdown] = useState(null);
   const [isEditClassMode, setIsEditClassMode] = useState(false);
   const [currentClass, setCurrentClass] = useState(null);
   const dropdownRef = useRef(null);
   const [teamAccess, setTeamAccess] = useState(null);
+  const [dropdownPosition, setDropdownPosition] = useState(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [classToDelete, setClassToDelete] = useState(null);
 
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setActiveClassDropdown(null);
-      }
-    };
-    
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
-
-  // Initialize teamAccess and fetch course data when component mounts or accessInfo changes
+  // Initialize teamAccess when accessInfo changes
   useEffect(() => {
     console.log("CourseDetail received accessInfo:", accessInfo);
     
@@ -173,12 +161,129 @@ const CourseDetail = ({ accessInfo }) => {
         accessType: 'owner'
       });
     }
-    
-    fetchCourseData();
-  }, [id, accessInfo]);
+  }, [accessInfo]);
 
-  const toggleClassDropdown = (classId) => {
-    setActiveClassDropdown(activeClassDropdown === classId ? null : classId);
+  // Fetch course data
+  const { 
+    data: courseData, 
+    isLoading: isLoadingCourse,
+    error: courseError
+  } = useQuery({
+    queryKey: ['course', id],
+    queryFn: async () => {
+      console.log("Fetching course data for ID:", id);
+      const response = await courseService.getCourse(id);
+      console.log("Course data response:", response.data);
+      
+      return {
+        ...response.data,
+        academicYear: response.data.academic_year
+      };
+    },
+    onError: (error) => {
+      console.error('Error fetching course data:', error);
+      if (error.response?.status === 404) {
+        toast.error('Course not found');
+        navigate('/dashboard/courses', { replace: true });
+      } else if (error.response?.status === 403) {
+        toast.error('You don\'t have permission to view this course');
+        navigate('/dashboard/courses', { replace: true });
+      } else if (error.response?.status === 401) {
+        toast.error('Session expired. Please login again.');
+        navigate('/login', { replace: true });
+      } else {
+        toast.error('Failed to load course data');
+      }
+    }
+  });
+
+  // Fetch classes for the course
+  const { 
+    data: classes = [], 
+    isLoading: isLoadingClasses,
+    error: classesError 
+  } = useQuery({
+    queryKey: ['classes', id],
+    queryFn: async () => {
+      const response = await courseService.getCourseClasses(id);
+      console.log("Classes data response:", response.data);
+      return response.data;
+    },
+    onError: (error) => {
+      console.error('Error fetching classes:', error);
+      toast.error('Failed to load class data');
+    }
+  });
+
+  // Add class mutation
+  const addClassMutation = useMutation({
+    mutationFn: (classData) => classService.createClass(classData),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['classes', id]);
+      toast.success('Class added successfully');
+      setIsClassModalOpen(false);
+    },
+    onError: (error) => {
+      console.error('Error adding class:', error);
+      toast.error('Failed to add class');
+    }
+  });
+
+  // Update class mutation
+  const updateClassMutation = useMutation({
+    mutationFn: ({ classId, classData }) => classService.updateClass(classId, classData),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['classes', id]);
+      toast.success('Class updated successfully');
+      setIsClassModalOpen(false);
+      setIsEditClassMode(false);
+      setCurrentClass(null);
+    },
+    onError: (error) => {
+      console.error('Error updating class:', error);
+      toast.error('Failed to update class');
+    }
+  });
+
+  // Delete class mutation
+  const deleteClassMutation = useMutation({
+    mutationFn: (classId) => classService.deleteClass(classId),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['classes', id]);
+      toast.success('Class deleted successfully');
+      setIsDeleteModalOpen(false);
+      setClassToDelete(null);
+    },
+    onError: (error) => {
+      console.error('Error deleting class:', error);
+      toast.error('Failed to delete class');
+      setIsDeleteModalOpen(false);
+    }
+  });
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setActiveClassDropdown(null);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const toggleClassDropdown = (classId, event) => {
+    if (activeClassDropdown === classId) {
+      setActiveClassDropdown(null);
+      setDropdownPosition(null);
+      return;
+    }
+    
+    const rect = event.currentTarget.getBoundingClientRect();
+    setDropdownPosition({ top: rect.bottom, right: window.innerWidth - rect.right });
+    setActiveClassDropdown(classId);
   };
 
   const handleEditCourse = () => {
@@ -192,85 +297,14 @@ const CourseDetail = ({ accessInfo }) => {
     setActiveClassDropdown(null);
   };
 
-  const handleDeleteClass = async (classId) => {
-    if (!window.confirm('Are you sure you want to delete this class? This action cannot be undone.')) {
-      return;
-    }
-    
-    try {
-      await classService.deleteClass(classId);
-      setClasses(classes.filter(c => c.id !== classId));
-      showToast.success('Class deleted successfully');
-      fetchCourseData();
-    } catch (error) {
-      console.error('Error deleting class:', error);
-      showToast.error('Failed to delete class');
-    } finally {
-      setActiveClassDropdown(null);
-    }
+  const handleDeleteClass = (classId) => {
+    setClassToDelete(classId);
+    setIsDeleteModalOpen(true);
+    setActiveClassDropdown(null);
   };
 
-  const handleUpdateClass = (updatedClass) => {
-    setClasses(classes.map(c => 
-      c.id === updatedClass.id ? updatedClass : c
-    ));
-    fetchCourseData();
-  };
-
-  const handleUpdateClassStatus = async (classId, newStatus) => {
-    try {
-      const classToUpdate = classes.find(c => c.id === classId);
-      if (!classToUpdate) return;
-      
-      await classService.updateClass(classId, { status: newStatus });
-      
-      setClasses(classes.map(c => 
-        c.id === classId ? { ...c, status: newStatus } : c
-      ));
-      
-      showToast.success(`Class marked as ${newStatus}`);
-    } catch (error) {
-      console.error(`Error updating class status:`, error);
-      showToast.error('Failed to update class status');
-    } finally {
-      setActiveClassDropdown(null);
-    }
-  };
-
-  const fetchCourseData = async () => {
-    try {
-      setLoading(true);
-      console.log("Fetching course data for ID:", id);
-      
-      const response = await courseService.getCourse(id);
-      console.log("Course data response:", response.data);
-      
-      setCourseData({
-        ...response.data,
-        academicYear: response.data.academic_year
-      });
-      
-      const classesResponse = await courseService.getCourseClasses(id);
-      console.log("Classes data response:", classesResponse.data);
-      setClasses(classesResponse.data);
-      
-    } catch (error) {
-      console.error('Error fetching course data:', error);
-      if (error.response?.status === 404) {
-        showToast.error('Course not found');
-        navigate('/dashboard/courses', { replace: true });
-      } else if (error.response?.status === 403) {
-        showToast.error('You don\'t have permission to view this course');
-        navigate('/dashboard/courses', { replace: true });
-      } else if (error.response?.status === 401) {
-        showToast.error('Session expired. Please login again.');
-        navigate('/login', { replace: true });
-      } else {
-        showToast.error('Failed to load course data');
-      }
-    } finally {
-      setLoading(false);
-    }
+  const confirmDeleteClass = () => {
+    deleteClassMutation.mutate(classToDelete);
   };
 
   const handleAddClass = (newClass) => {
@@ -278,8 +312,22 @@ const CourseDetail = ({ accessInfo }) => {
       ...newClass,
       course_id: id
     };
-    setClasses([classWithCourseId, ...classes]);
-    fetchCourseData();
+    addClassMutation.mutate(classWithCourseId);
+  };
+
+  const handleUpdateClass = (updatedClass) => {
+    updateClassMutation.mutate({
+      classId: updatedClass.id,
+      classData: updatedClass
+    });
+  };
+
+  const handleUpdateClassStatus = (classId, newStatus) => {
+    updateClassMutation.mutate({
+      classId,
+      classData: { status: newStatus }
+    });
+    setActiveClassDropdown(null);
   };
 
   const filteredClasses = classes.filter(classItem => 
@@ -287,7 +335,10 @@ const CourseDetail = ({ accessInfo }) => {
     classItem.description?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  if (loading) {
+  // Determine if we're in a loading state
+  const isLoading = isLoadingCourse || isLoadingClasses;
+
+  if (isLoading) {
     return (
       <DashboardLayout>
         <AnimationStyles />
@@ -440,184 +491,224 @@ const CourseDetail = ({ accessInfo }) => {
           </div>
           
           {/* Classes */}
-          {filteredClasses.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {filteredClasses.map((classItem) => (
-                <div 
-                  key={classItem.id} 
-                  className="class-card bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"
-                >
-                  <div className="border-b border-gray-100 bg-gradient-to-r from-[#f8f9ff] to-[#f0f4ff]">
-                    <div className="flex items-center justify-between p-4">
-                      <div 
-                        className="flex items-center space-x-3 cursor-pointer"
-                        onClick={() => navigate(`/dashboard/class/${classItem.id}`)}
-                      >
-                        <div className="w-10 h-10 rounded-lg bg-[#333D79] bg-opacity-10 flex items-center justify-center">
-                          <MdOutlineClass className="text-[#333D79]" size={20} />
-                        </div>
-                        <div>
-                          <h3 className="font-medium text-gray-900">{classItem.name}</h3>
-                          <p className="text-xs text-gray-500">
-                            <span className="font-medium">Section:</span> {classItem.section || 'A'}
-                          </p>
-                        </div>
-                      </div>
-                      
-                      {/* Three-dot menu button - only show for edit permissions */}
-                      {(!teamAccess || teamAccess.accessLevel !== 'view') && (
-                        <div className="relative" ref={dropdownRef}>
-                          <button 
-                            className="p-1.5 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleClassDropdown(classItem.id);
-                            }}
-                          >
-                            <FiMoreVertical size={16} />
-                          </button>
-                          
-                          {/* Dropdown menu */}
-                          {activeClassDropdown === classItem.id && (
-                            <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 py-1 border border-gray-100">
-                              <button 
-                                className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleEditClass(classItem);
-                                }}
-                              >
-                                <FiEdit className="mr-2" size={14} />
-                                Edit Class
-                              </button>
-                              
-                              {classItem.status !== 'completed' && (
-                                <button 
-                                  className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleUpdateClassStatus(classItem.id, 'completed');
-                                  }}
-                                >
-                                  <MdOutlineClass className="mr-2" size={14} />
-                                  Mark as Completed
-                                </button>
-                              )}
-                              
-                              {classItem.status !== 'archived' && (
-                                <button 
-                                  className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleUpdateClassStatus(classItem.id, 'archived');
-                                  }}
-                                >
-                                  <MdArchive className="mr-2" size={14} />
-                                  Archive Class
-                                </button>
-                              )}
-                              
-                              {classItem.status !== 'active' && (
-                                <button 
-                                  className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleUpdateClassStatus(classItem.id, 'active');
-                                  }}
-                                >
-                                  <MdOutlineClass className="mr-2" size={14} />
-                                  Set as Active
-                                </button>
-                              )}
-                              
-                              <div className="border-t border-gray-100 my-1"></div>
-                              
-                              <button 
-                                className="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteClass(classItem.id);
-                                }}
-                              >
-                                <FiTrash2 className="mr-2" size={14} />
-                                Delete Class
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  
+            {filteredClasses.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {filteredClasses.map((classItem) => (
                   <div 
-                    className="p-4 cursor-pointer"
-                    onClick={() => navigate(`/dashboard/class/${classItem.id}`)}
+                    key={classItem.id} 
+                    className="class-card bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"
                   >
-                    <div className="flex items-center mb-3">
-                      <MdOutlineWatchLater className="text-[#333D79] mr-2" size={16} />
-                      <span className="text-sm text-gray-700">
-                        {classItem.schedule || 'M,W,F 1:30 - 3:00PM'}
-                      </span>
+                    <div className="border-b border-gray-100 bg-gradient-to-r from-[#f8f9ff] to-[#f0f4ff]">
+                      <div className="flex items-center justify-between p-4">
+                        <div 
+                          className="flex items-center space-x-3 cursor-pointer"
+                          onClick={() => navigate(`/dashboard/class/${classItem.id}`)}
+                        >
+                          <div className="w-10 h-10 rounded-lg bg-[#333D79] bg-opacity-10 flex items-center justify-center">
+                            <MdOutlineClass className="text-[#333D79]" size={20} />
+                          </div>
+                          <div>
+                            <h3 className="font-medium text-gray-900">{classItem.name}</h3>
+                            <p className="text-xs text-gray-500">
+                              <span className="font-medium">Section:</span> {classItem.section || 'A'}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        {/* Three-dot menu button - only show for edit permissions */}
+                        {(!teamAccess || teamAccess.accessLevel !== 'view') && (
+                          <div className="relative">
+                            <button 
+                              className="p-1.5 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors dropdown-trigger"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleClassDropdown(classItem.id, e);
+                              }}
+                            >
+                              <FiMoreVertical size={16} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                     
-                    <div className="flex justify-between text-sm">
-                      <div className="inline-flex items-center px-2.5 py-1 bg-[#f0f4ff] text-[#333D79] rounded-md">
-                        <MdOutlinePersonOutline className="mr-1" size={14} />
-                        <span>{classItem.student_count || 0} students</span>
+                    <div 
+                      className="p-4 cursor-pointer"
+                      onClick={() => navigate(`/dashboard/class/${classItem.id}`)}
+                    >
+                      <div className="flex items-center mb-3">
+                        <MdOutlineWatchLater className="text-[#333D79] mr-2" size={16} />
+                        <span className="text-sm text-gray-700">
+                          {classItem.schedule || 'M,W,F 1:30 - 3:00PM'}
+                        </span>
                       </div>
                       
-                      <button className="text-[#333D79] inline-flex items-center hover:underline">
-                        <span className="mr-1">View details</span>
-                        <MdArrowForward size={14} />
-                      </button>
+                      <div className="flex justify-between text-sm">
+                        <div className="inline-flex items-center px-2.5 py-1 bg-[#f0f4ff] text-[#333D79] rounded-md">
+                          <MdOutlinePersonOutline className="mr-1" size={14} />
+                          <span>{classItem.student_count || 0} students</span>
+                        </div>
+                        
+                        <button className="text-[#333D79] inline-flex items-center hover:underline">
+                          <span className="mr-1">View details</span>
+                          <MdArrowForward size={14} />
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="empty-state-animation bg-white rounded-xl shadow-sm border border-gray-100 p-10 text-center relative overflow-hidden">
-              <div className="absolute -top-20 -right-20 w-64 h-64 bg-[#333D79] opacity-5 rounded-full blur-3xl"></div>
-              <div className="absolute -bottom-32 -left-32 w-64 h-64 bg-[#6B77B7] opacity-5 rounded-full blur-3xl"></div>
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent animate-pulse opacity-30"></div>
-              
-              <div className="relative z-10 max-w-lg mx-auto">
-                <div className="flex justify-center mb-6">
-                  <div className="relative">
-                    <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-[#333D79] to-[#4A5491] flex items-center justify-center floating shadow-lg">
-                      <MdOutlineClass className="text-white" size={40} />
-                    </div>
-                    <div className="absolute -bottom-2 -right-2 w-10 h-10 rounded-full bg-white shadow-md flex items-center justify-center">
-                      <FiPlus className="text-[#333D79]" size={20} />
-                    </div>
-                  </div>
-                </div>
+                ))}
                 
-                <h3 className="text-2xl font-bold text-gray-900 mb-3">No classes in this course yet</h3>
-                <p className="text-gray-600 mb-8 mx-auto">
-                  Create your first class to start managing your course content, schedule sessions, track attendance and monitor student progress.
-                </p>
-                
-                {(!teamAccess || teamAccess.accessLevel !== 'view') && (
-                  <div className="inline-flex space-x-3">
+                {/* Fixed position dropdown menu - outside the loop but inside the main container */}
+                {activeClassDropdown !== null && dropdownPosition && (
+                  <div 
+                    className="fixed bg-white rounded-md shadow-lg z-50 py-1 border border-gray-100 w-48"
+                    style={{ 
+                      top: `${dropdownPosition.top}px`, 
+                      right: `${dropdownPosition.right}px` 
+                    }}
+                  >
                     <button 
-                      onClick={() => {
-                        setIsEditClassMode(false);
-                        setCurrentClass(null);
-                        setIsClassModalOpen(true);
+                      className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const classItem = filteredClasses.find(c => c.id === activeClassDropdown);
+                        handleEditClass(classItem);
                       }}
-                      className="bg-gradient-to-r from-[#333D79] to-[#4A5491] hover:from-[#4A5491] hover:to-[#5d6ba9] text-white px-6 py-3.5 rounded-xl transition-all shadow-md hover:shadow-lg transform hover:scale-105 inline-flex items-center"
                     >
-                      <FiPlus size={18} className="mr-2" />
-                      <span className="font-medium">Create First Class</span>
+                      <FiEdit className="mr-2" size={14} />
+                      Edit Class
+                    </button>
+                    
+                    {filteredClasses.find(c => c.id === activeClassDropdown)?.status !== 'completed' && (
+                      <button 
+                        className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleUpdateClassStatus(activeClassDropdown, 'completed');
+                        }}
+                      >
+                        <MdOutlineClass className="mr-2" size={14} />
+                        Mark as Completed
+                      </button>
+                    )}
+                    
+                    {filteredClasses.find(c => c.id === activeClassDropdown)?.status !== 'archived' && (
+                      <button 
+                        className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleUpdateClassStatus(activeClassDropdown, 'archived');
+                        }}
+                      >
+                        <MdArchive className="mr-2" size={14} />
+                        Archive Class
+                      </button>
+                    )}
+                    
+                    {filteredClasses.find(c => c.id === activeClassDropdown)?.status !== 'active' && (
+                      <button 
+                        className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleUpdateClassStatus(activeClassDropdown, 'active');
+                        }}
+                      >
+                        <MdOutlineClass className="mr-2" size={14} />
+                        Set as Active
+                      </button>
+                    )}
+                    
+                    <div className="border-t border-gray-100 my-1"></div>
+                    
+                    <button 
+                      className="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteClass(activeClassDropdown);
+                      }}
+                    >
+                      <FiTrash2 className="mr-2" size={14} />
+                      Delete Class
                     </button>
                   </div>
                 )}
               </div>
-            </div>
-          )}
+            ) : (
+              <div className="empty-state-animation bg-white rounded-xl shadow-sm border border-gray-100 p-10 text-center relative overflow-hidden">
+                <div className="absolute -top-20 -right-20 w-64 h-64 bg-[#333D79] opacity-5 rounded-full blur-3xl"></div>
+                <div className="absolute -bottom-32 -left-32 w-64 h-64 bg-[#6B77B7] opacity-5 rounded-full blur-3xl"></div>
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent animate-pulse opacity-30"></div>
+                
+                <div className="relative z-10 max-w-lg mx-auto">
+                  <div className="flex justify-center mb-6">
+                    <div className="relative">
+                      <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-[#333D79] to-[#4A5491] flex items-center justify-center floating shadow-lg">
+                        <MdOutlineClass className="text-white" size={40} />
+                      </div>
+                      <div className="absolute -bottom-2 -right-2 w-10 h-10 rounded-full bg-white shadow-md flex items-center justify-center">
+                        <FiPlus className="text-[#333D79]" size={20} />
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <h3 className="text-2xl font-bold text-gray-900 mb-3">No classes in this course yet</h3>
+                  <p className="text-gray-600 mb-8 mx-auto">
+                    Create your first class to start managing your course content, schedule sessions, track attendance and monitor student progress.
+                  </p>
+                  
+                  {(!teamAccess || teamAccess.accessLevel !== 'view') && (
+                    <div className="inline-flex space-x-3">
+                      <button 
+                        onClick={() => {
+                          setIsEditClassMode(false);
+                          setCurrentClass(null);
+                          setIsClassModalOpen(true);
+                        }}
+                        className="bg-gradient-to-r from-[#333D79] to-[#4A5491] hover:from-[#4A5491] hover:to-[#5d6ba9] text-white px-6 py-3.5 rounded-xl transition-all shadow-md hover:shadow-lg transform hover:scale-105 inline-flex items-center"
+                      >
+                        <FiPlus size={18} className="mr-2" />
+                        <span className="font-medium">Create First Class</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full mx-4 animate-fade-in-up">
+            <div className="flex items-center justify-center mb-4">
+              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                <FiTrash2 className="text-red-500" size={24} />
+              </div>
+            </div>
+            
+            <h3 className="text-xl font-semibold text-center mb-2">Delete Class</h3>
+            <p className="text-gray-600 text-center mb-6">
+              Are you sure you want to delete this class? This action cannot be undone.
+            </p>
+            
+            <div className="flex justify-center space-x-3">
+              <button
+                onClick={() => setIsDeleteModalOpen(false)}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteClass}
+                className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 };
