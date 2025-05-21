@@ -23,32 +23,34 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.vocalyxapk.ui.theme.VOCALYXAPKTheme
 import java.util.*
-import androidx.compose.ui.viewinterop.AndroidView
-import android.widget.Button
 import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.launch
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.result.ActivityResultLauncher
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.FilterAlt
+import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.vocalyxapk.composables.BackendClassCard
 import com.example.vocalyxapk.composables.CourseCard
-import com.example.vocalyxapk.data.ClassRepository
 import com.example.vocalyxapk.data.ImportedClass
-import com.example.vocalyxapk.viewmodel.ClassUIState
+import com.example.vocalyxapk.repository.AuthRepository
+import com.example.vocalyxapk.utils.AuthStateManager
 import com.example.vocalyxapk.viewmodel.CourseUIState
 import com.example.vocalyxapk.viewmodel.ClassViewModel
 import com.example.vocalyxapk.viewmodel.CourseCreationState
 import com.example.vocalyxapk.viewmodel.ViewModelFactory
-import kotlinx.parcelize.Parcelize
 
 class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
@@ -114,6 +116,7 @@ class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             Toast.makeText(this, "Speech recognition is not supported on this device.", Toast.LENGTH_SHORT).show()
         }
 
+
         setContent {
             VOCALYXAPKTheme {
                 Surface(
@@ -123,6 +126,7 @@ class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                     var drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
                     val scope = rememberCoroutineScope()
                     var selectedTab by remember { mutableStateOf(0) }
+                    val context = LocalContext.current
                     
                     val navigationItems = listOf(
                         Triple("Home", Icons.Rounded.Home, "Home"),
@@ -201,16 +205,37 @@ class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                                 )
                                 
                                 Divider(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
-                                
+
                                 NavigationDrawerItem(
                                     icon = { Icon(Icons.Rounded.Logout, contentDescription = "Logout", tint = MaterialTheme.colorScheme.primary) },
                                     label = { Text("Logout", color = MaterialTheme.colorScheme.onSurface) },
                                     selected = false,
-                                    onClick = { 
-                                        // Navigate to login screen
-                                        val intent = Intent(this@HomeActivity, LoginActivity::class.java)
-                                        startActivity(intent)
-                                        finish()
+                                    onClick = {
+                                        val authRepository = AuthRepository(context)
+
+                                        scope.launch {
+                                            try {
+                                                Toast.makeText(context, "Logging out...", Toast.LENGTH_SHORT).show()
+
+                                                val result = authRepository.logout()
+
+                                                AuthStateManager.setLoggedOut(context)
+
+                                                val intent = Intent(this@HomeActivity, LoginActivity::class.java)
+                                                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                                                startActivity(intent)
+                                                finish()
+                                            } catch (e: Exception) {
+                                                AuthStateManager.setLoggedOut(context)
+
+                                                Toast.makeText(context, "Logout failed on server but you're logged out locally", Toast.LENGTH_SHORT).show()
+
+                                                val intent = Intent(this@HomeActivity, LoginActivity::class.java)
+                                                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                                                startActivity(intent)
+                                                finish()
+                                            }
+                                        }
                                     },
                                     colors = NavigationDrawerItemDefaults.colors(
                                         selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
@@ -501,38 +526,35 @@ fun ClassesTab(modifier: Modifier = Modifier) {
     val application = context.applicationContext as Application
     val classViewModel: ClassViewModel = viewModel(factory = ViewModelFactory(application))
     val scope = rememberCoroutineScope()
-    
-    // Dialog state for adding a new course
+
+    // Filter state
+    var selectedStatusFilter by remember { mutableStateOf("all") }
+    val statusFilters = listOf("all", "active", "completed", "archived")
+
     var showAddCourseDialog by remember { mutableStateOf(false) }
     var courseName by remember { mutableStateOf("") }
     var courseCode by remember { mutableStateOf("") }
     var courseSemester by remember { mutableStateOf("") }
     var courseDescription by remember { mutableStateOf("") }
     var courseAcademicYear by remember { mutableStateOf("") }
-    
-    // Course creation state
+
     val courseCreationState by classViewModel.courseCreationState.collectAsState()
-    
-    // Observe backend data
     val classUIState by classViewModel.classUIState.collectAsState()
     val courseUIState by classViewModel.courseUIState.collectAsState()
-    
-    // Local data (for imported files)
     val importedClasses = com.example.vocalyxapk.data.ClassRepository.getClasses()
-    
+
     // File picker launcher
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let {
-            // Start FileViewerActivity with the selected file URI
             val intent = Intent(context, FileViewerActivity::class.java).apply {
                 data = uri
             }
             context.startActivity(intent)
         }
     }
-    
+
     // Fetch courses when the tab is displayed
     LaunchedEffect(Unit) {
         try {
@@ -540,7 +562,6 @@ fun ClassesTab(modifier: Modifier = Modifier) {
             classViewModel.fetchCourses()
         } catch (e: Exception) {
             android.util.Log.e("ClassesTab", "Error fetching courses", e)
-            // Show an error toast instead of crashing
             android.widget.Toast.makeText(
                 context,
                 "Error loading courses: ${e.message}",
@@ -548,30 +569,34 @@ fun ClassesTab(modifier: Modifier = Modifier) {
             ).show()
         }
     }
-    
-    // Filter courses based on search query and combine backend + local data
-    val courses = when (courseUIState) {
+
+    // Get all courses
+    val allCourses = when (courseUIState) {
         is CourseUIState.Success -> (courseUIState as CourseUIState.Success).courses
         else -> emptyList()
     }
-    
-    val filteredCourses = courses.filter {
-        it.name.contains(searchQuery, ignoreCase = true) ||
-        it.courseCode.contains(searchQuery, ignoreCase = true)
+
+    // Filter courses based on search query and status filter
+    val filteredCourses = allCourses.filter { course ->
+        (course.name.contains(searchQuery, ignoreCase = true) ||
+                course.courseCode.contains(searchQuery, ignoreCase = true)) &&
+                (selectedStatusFilter == "all" || course.status == selectedStatusFilter)
     }
-    
+
     val filteredImportedClasses = importedClasses.filter {
         it.name.contains(searchQuery, ignoreCase = true) ||
-        it.section.contains(searchQuery, ignoreCase = true)
+                it.section.contains(searchQuery, ignoreCase = true)
     }
-    
+
     // Determine if we have courses to show (either backend or imported)
     val hasCourses = filteredCourses.isNotEmpty() || filteredImportedClasses.isNotEmpty()
+    // Calculate total course count for display
+    val totalCourseCount = allCourses.size
 
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color.White)
+            .background(Color(0xFFF8F9FC)) // Light background for better contrast
     ) {
         // Add Course Dialog
         if (showAddCourseDialog) {
@@ -585,7 +610,7 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                             .padding(vertical = 8.dp)
                     ) {
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            // Course Code with title above field
+                            // Course Code
                             Text(
                                 text = "Course Code *",
                                 style = MaterialTheme.typography.bodyMedium,
@@ -595,15 +620,18 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                                 value = courseCode,
                                 onValueChange = { courseCode = it },
                                 placeholder = { Text("e.g. CS101") },
-                                modifier = Modifier
-                                    .fillMaxWidth(),
+                                modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
-                                isError = courseCode.isBlank() && courseCreationState !is CourseCreationState.Idle
+                                isError = courseCode.isBlank() && courseCreationState !is CourseCreationState.Idle,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = Color(0xFF333D79),
+                                    unfocusedBorderColor = Color(0xFFDDDDDD)
+                                )
                             )
-                            
+
                             Spacer(modifier = Modifier.height(16.dp))
-                            
-                            // Course Name with title above field
+
+                            // Course Name
                             Text(
                                 text = "Course Name *",
                                 style = MaterialTheme.typography.bodyMedium,
@@ -613,15 +641,18 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                                 value = courseName,
                                 onValueChange = { courseName = it },
                                 placeholder = { Text("e.g. Introduction to Computer Science") },
-                                modifier = Modifier
-                                    .fillMaxWidth(),
+                                modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
-                                isError = courseName.isBlank() && courseCreationState !is CourseCreationState.Idle
+                                isError = courseName.isBlank() && courseCreationState !is CourseCreationState.Idle,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = Color(0xFF333D79),
+                                    unfocusedBorderColor = Color(0xFFDDDDDD)
+                                )
                             )
-                            
+
                             Spacer(modifier = Modifier.height(16.dp))
-                            
-                            // Description field with title above
+
+                            // Description field
                             Text(
                                 text = "Description",
                                 style = MaterialTheme.typography.bodyMedium,
@@ -633,49 +664,51 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                                 placeholder = { Text("Describe the course content and objectives") },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(100.dp), // Match the height in the screenshot
-                                minLines = 2
+                                    .height(100.dp),
+                                minLines = 2,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = Color(0xFF333D79),
+                                    unfocusedBorderColor = Color(0xFFDDDDDD)
+                                )
                             )
-                            
+
                             Spacer(modifier = Modifier.height(16.dp))
-                            
+
                             // Semester Dropdown
                             Text(
                                 text = "Semester *",
                                 style = MaterialTheme.typography.bodyMedium,
                                 modifier = Modifier.padding(bottom = 4.dp)
                             )
-                            
-                            // Semester dropdown implementation
+
                             var semesterDropdownExpanded by remember { mutableStateOf(false) }
                             val semesterOptions = listOf("Fall", "Spring", "Summer", "Winter")
-                            
-                            Box(modifier = Modifier.fillMaxWidth()) {
+
+                            ExposedDropdownMenuBox(
+                                expanded = semesterDropdownExpanded,
+                                onExpandedChange = { semesterDropdownExpanded = it }
+                            ) {
                                 OutlinedTextField(
                                     value = courseSemester,
-                                    onValueChange = { },
+                                    onValueChange = { /* Read-only */ },
                                     readOnly = true,
                                     trailingIcon = {
-                                        Icon(Icons.Rounded.ArrowDropDown, "Expand dropdown")
+                                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = semesterDropdownExpanded)
                                     },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    singleLine = true,
-                                    placeholder = { Text("Select a semester") },
-                                    isError = courseSemester.isBlank() && courseCreationState !is CourseCreationState.Idle
-                                )
-                                
-                                // Overlay a transparent clickable box
-                                Box(
                                     modifier = Modifier
-                                        .matchParentSize()
-                                        .background(Color.Transparent)
-                                        .clickable(onClick = { semesterDropdownExpanded = true })
+                                        .fillMaxWidth()
+                                        .menuAnchor(),
+                                    placeholder = { Text("Select a semester") },
+                                    isError = courseSemester.isBlank() && courseCreationState !is CourseCreationState.Idle,
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = Color(0xFF333D79),
+                                        unfocusedBorderColor = Color(0xFFDDDDDD)
+                                    )
                                 )
-                                
-                                DropdownMenu(
+
+                                ExposedDropdownMenu(
                                     expanded = semesterDropdownExpanded,
-                                    onDismissRequest = { semesterDropdownExpanded = false },
-                                    modifier = Modifier.fillMaxWidth(0.9f) // Slightly smaller than parent
+                                    onDismissRequest = { semesterDropdownExpanded = false }
                                 ) {
                                     semesterOptions.forEach { semester ->
                                         DropdownMenuItem(
@@ -688,16 +721,16 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                                     }
                                 }
                             }
-                            
+
                             Spacer(modifier = Modifier.height(16.dp))
-                            
+
                             // Academic Year field
                             Text(
                                 text = "Academic Year *",
                                 style = MaterialTheme.typography.bodyMedium,
                                 modifier = Modifier.padding(bottom = 4.dp)
                             )
-                            
+
                             OutlinedTextField(
                                 value = courseAcademicYear,
                                 onValueChange = { courseAcademicYear = it },
@@ -705,10 +738,14 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
                                 isError = courseAcademicYear.isBlank() && courseCreationState !is CourseCreationState.Idle,
-                                supportingText = { Text("Format: YYYY-YYYY", style = MaterialTheme.typography.bodySmall) }
+                                supportingText = { Text("Format: YYYY-YYYY", style = MaterialTheme.typography.bodySmall) },
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = Color(0xFF333D79),
+                                    unfocusedBorderColor = Color(0xFFDDDDDD)
+                                )
                             )
-                            
-                            // Show error message if there was an error in course creation
+
+                            // Show error message
                             if (courseCreationState is CourseCreationState.Error) {
                                 Text(
                                     text = (courseCreationState as CourseCreationState.Error).message,
@@ -723,10 +760,8 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                     Button(
                         onClick = {
                             if (courseName.isBlank() || courseCode.isBlank() || courseSemester.isBlank()) {
-                                // Show error toast for missing fields
                                 Toast.makeText(context, "Please fill in all required fields", Toast.LENGTH_SHORT).show()
                             } else {
-                                // Create course
                                 classViewModel.createCourse(
                                     name = courseName,
                                     courseCode = courseCode,
@@ -734,7 +769,6 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                                     description = courseDescription.ifBlank { null },
                                     academicYear = courseAcademicYear.ifBlank { null }
                                 )
-                                // Reset fields
                                 courseName = ""
                                 courseCode = ""
                                 courseSemester = ""
@@ -743,7 +777,8 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                                 showAddCourseDialog = false
                             }
                         },
-                        enabled = courseCreationState !is CourseCreationState.Loading
+                        enabled = courseCreationState !is CourseCreationState.Loading,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF333D79))
                     ) {
                         if (courseCreationState is CourseCreationState.Loading) {
                             CircularProgressIndicator(
@@ -751,22 +786,24 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                                 color = Color.White,
                                 strokeWidth = 2.dp
                             )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Creating...")
                         } else {
-                            Text("Create")
+                            Text("Create Course")
                         }
                     }
                 },
                 dismissButton = {
-                    Button(
+                    OutlinedButton(
                         onClick = { showAddCourseDialog = false },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.Gray)
+                        border = BorderStroke(1.dp, Color(0xFF666666))
                     ) {
-                        Text("Cancel")
+                        Text("Cancel", color = Color(0xFF666666))
                     }
                 }
             )
         }
-        
+
         // Success message when course is created
         LaunchedEffect(courseCreationState) {
             if (courseCreationState is CourseCreationState.Success) {
@@ -777,34 +814,43 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                 ).show()
             }
         }
-        // Add FloatingActionButton (on left side)
-        FloatingActionButton(
-            onClick = { showAddCourseDialog = true },
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(16.dp),
-            containerColor = Color(0xFF333D79)
-        ) {
-            Icon(
-                imageVector = Icons.Rounded.Add,
-                contentDescription = "Add Course",
-                tint = Color.White
-            )
-        }
-        
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 20.dp)
         ) {
-            // Header
-            Text(
-                "My Courses",
-                style = MaterialTheme.typography.headlineMedium.copy(
-                    color = Color(0xFF333D79)
-                ),
-                modifier = Modifier.padding(top = 24.dp, bottom = 16.dp)
-            )
+            // Header with course count
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 24.dp, bottom = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    "My Courses",
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        color = Color(0xFF333D79),
+                        fontWeight = FontWeight.Bold
+                    )
+                )
+
+                // Course count badge
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xFFEEF0F8)
+                    ),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Text(
+                        text = "$totalCourseCount total",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFF333D79),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
+                }
+            }
 
             // Search Bar
             OutlinedTextField(
@@ -812,26 +858,125 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                 onValueChange = { searchQuery = it },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 20.dp)
+                    .padding(bottom = 12.dp)
                     .height(52.dp),
                 placeholder = { Text("Search courses...", color = Color(0xFF666666)) },
                 leadingIcon = {
                     Icon(
                         Icons.Rounded.Search,
                         contentDescription = "Search",
-                        tint = Color(0xFF666666),
-                        modifier = Modifier.padding(start = 8.dp)
+                        tint = Color(0xFF666666)
                     )
+                },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(
+                                imageVector = Icons.Default.Clear,
+                                contentDescription = "Clear search",
+                                tint = Color(0xFF666666)
+                            )
+                        }
+                    }
                 },
                 singleLine = true,
                 shape = RoundedCornerShape(12.dp),
                 colors = TextFieldDefaults.outlinedTextFieldColors(
-                    focusedBorderColor = Color(0xFFE0E0E0),
+                    focusedBorderColor = Color(0xFF333D79),
                     unfocusedBorderColor = Color(0xFFE0E0E0),
                     containerColor = Color.White
                 )
             )
-            
+
+            // Status filters
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                statusFilters.forEach { status ->
+                    val isSelected = selectedStatusFilter == status
+                    val displayName = when(status) {
+                        "all" -> "All"
+                        "active" -> "Active"
+                        "completed" -> "Completed"
+                        "archived" -> "Archived"
+                        else -> status.replaceFirstChar { it.uppercase() }
+                    }
+
+                    val containerColor = when {
+                        isSelected && status == "active" -> Color(0xFF1B5E20).copy(alpha = 0.9f)  // Green
+                        isSelected && status == "completed" -> Color(0xFF0D47A1).copy(alpha = 0.9f)  // Blue
+                        isSelected && status == "archived" -> Color(0xFF616161).copy(alpha = 0.9f)  // Grey
+                        isSelected -> Color(0xFF333D79)  // Default selected
+                        else -> Color.White
+                    }
+
+                    val contentColor = if (isSelected) Color.White else Color(0xFF333D79)
+
+                    val iconContent: @Composable (() -> Unit)? = when(status) {
+                        "active" -> {
+                            {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = contentColor,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                        "completed" -> {
+                            {
+                                Icon(
+                                    imageVector = Icons.Default.Done,
+                                    contentDescription = null,
+                                    tint = contentColor,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                        "archived" -> {
+                            {
+                                Icon(
+                                    imageVector = Icons.Default.Archive,
+                                    contentDescription = null,
+                                    tint = contentColor,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                        else -> null
+                    }
+
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { selectedStatusFilter = status },
+                        label = {
+                            Text(
+                                text = displayName,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        },
+                        leadingIcon = iconContent,
+                        enabled = true,
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = containerColor,
+                            selectedLabelColor = contentColor,
+                            containerColor = Color.White
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = isSelected,
+                            borderColor = if (isSelected) containerColor else Color(0xFFDDDDDD),
+                            selectedBorderColor = containerColor,
+                            borderWidth = 1.dp
+                        ),
+                        modifier = Modifier.animateContentSize()
+                    )
+                }
+            }
+
             // Loading indicator
             if (courseUIState is CourseUIState.Loading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -900,18 +1045,39 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                             modifier = Modifier.padding(bottom = 8.dp)
                         )
                         Text(
-                            "You don't have any courses yet. Create a course to get started with classes and import data.",
+                            if (searchQuery.isNotEmpty() || selectedStatusFilter != "all")
+                                "No courses match your current filters"
+                            else
+                                "You don't have any courses yet. Create a course to get started with classes and import data.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color(0xFF666666),
                             textAlign = TextAlign.Center
                         )
+
+                        if (searchQuery.isNotEmpty() || selectedStatusFilter != "all") {
+                            OutlinedButton(
+                                onClick = {
+                                    searchQuery = ""
+                                    selectedStatusFilter = "all"
+                                },
+                                modifier = Modifier.padding(top = 16.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.FilterAlt,
+                                    contentDescription = "Clear filters"
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Clear Filters")
+                            }
+                        }
                     }
                 }
             }
             // Display courses
             else {
+                // Show courses in a grid with 1 column (wider cards)
                 LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
+                    columns = GridCells.Fixed(1), // Changed to 1 column for wider cards
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     contentPadding = PaddingValues(bottom = 80.dp), // Add padding for FAB
@@ -929,12 +1095,24 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                                         putExtra("COURSE_NAME", courseData.name)
                                     }
                                     context.startActivity(intent)
+                                },
+                                onStatusChange = { newStatus ->
+                                    // Here you would call classViewModel to update course status
+                                    Toast.makeText(context, "Changed status to $newStatus", Toast.LENGTH_SHORT).show()
+                                },
+                                onDelete = {
+                                    // Here you would call classViewModel to delete the course
+                                    Toast.makeText(context, "Delete course: ${courseData.name}", Toast.LENGTH_SHORT).show()
+                                },
+                                onEdit = {
+                                    // Here you would open an edit dialog
+                                    Toast.makeText(context, "Edit course: ${courseData.name}", Toast.LENGTH_SHORT).show()
                                 }
                             )
                         }
                     }
-                    
-                    // Still showing imported classes (keeping this functionality as specified)
+
+                    // Imported classes
                     if (filteredImportedClasses.isNotEmpty()) {
                         items(filteredImportedClasses) { classData ->
                             ImportedClassCard(classData = classData)
@@ -943,8 +1121,23 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                 }
             }
         }
-        
-        // Floating Action Button for Import
+
+        // Add FAB for adding course
+        FloatingActionButton(
+            onClick = { showAddCourseDialog = true },
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(16.dp),
+            containerColor = Color(0xFF333D79)
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Add,
+                contentDescription = "Add Course",
+                tint = Color.White
+            )
+        }
+
+        // Import FAB
         FloatingActionButton(
             onClick = { filePickerLauncher.launch("*/*") },
             modifier = Modifier

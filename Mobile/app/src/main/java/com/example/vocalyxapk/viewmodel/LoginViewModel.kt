@@ -9,6 +9,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.vocalyxapk.R
 import com.example.vocalyxapk.repository.AuthRepository
+import com.example.vocalyxapk.utils.AuthStateManager
 import com.google.firebase.auth.AuthCredential
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
@@ -98,9 +99,6 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-
-
-
     fun login(email: String, password: String) {
         viewModelScope.launch {
             _uiState.value = LoginUIState.Loading
@@ -109,6 +107,7 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                 val result = authRepository.login(email, password)
                 result.fold(
                     onSuccess = {
+                        AuthStateManager.setLoggedIn(getApplication())
                         _uiState.value = LoginUIState.Success("Login successful")
                     },
                     onFailure = { exception ->
@@ -206,6 +205,7 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                 result.fold(
                     onSuccess = {
                         Log.d("MicrosoftAuth", "Backend login successful")
+                        AuthStateManager.setLoggedIn(getApplication())
                         _uiState.value = LoginUIState.Success("Microsoft login successful")
                     },
                     onFailure = { exception ->
@@ -246,6 +246,7 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                 result.fold(
                     onSuccess = {
                         println("Backend authentication successful")
+                        AuthStateManager.setLoggedIn(getApplication())
                     },
                     onFailure = { exception ->
                         println("Backend authentication failed: ${exception.message}")

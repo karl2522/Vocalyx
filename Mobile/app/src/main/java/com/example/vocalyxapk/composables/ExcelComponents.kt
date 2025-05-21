@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -22,10 +23,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.example.vocalyxapk.composables.ExcelTableContent
 import com.example.vocalyxapk.models.ExcelFileItem
 import java.text.SimpleDateFormat
 import java.util.*
@@ -46,7 +47,6 @@ fun ImportExcelCard(onImportClick: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // Upload icon
             Box(
                 modifier = Modifier
                     .size(80.dp)
@@ -115,6 +115,7 @@ fun ExcelDataDisplay(
 ) {
     // Track fullscreen state
     var isFullscreen by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -134,7 +135,7 @@ fun ExcelDataDisplay(
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF333D79)
                 )
-                
+
                 val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
                 val formattedDate = try {
                     val date = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
@@ -143,14 +144,14 @@ fun ExcelDataDisplay(
                 } catch (e: Exception) {
                     "Unknown date"
                 }
-                
+
                 Text(
                     text = "Uploaded on $formattedDate",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0xFF666666)
                 )
             }
-            
+
             // Delete button
             IconButton(
                 onClick = { onDelete(excelFile.id) },
@@ -167,9 +168,9 @@ fun ExcelDataDisplay(
                     tint = Color(0xFFE53935)
                 )
             }
-            
+
             Spacer(modifier = Modifier.width(8.dp))
-            
+
             // Fullscreen toggle button
             IconButton(
                 onClick = { isFullscreen = !isFullscreen },
@@ -187,115 +188,44 @@ fun ExcelDataDisplay(
                 )
             }
         }
-        
-        // Sheet selector
-        if (excelFile.sheet_names.size > 1) {
-            var expanded by remember { mutableStateOf(false) }
-            
-            ExposedDropdownMenuBox(
-                expanded = expanded,
-                onExpandedChange = { expanded = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp)
-            ) {
-                OutlinedTextField(
-                    value = selectedSheetName ?: "",
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Sheet") },
-                    trailingIcon = {
-                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
-                    },
-                    colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
-                    modifier = Modifier
-                        .menuAnchor()
-                        .fillMaxWidth()
-                )
-                
-                ExposedDropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false }
-                ) {
-                    excelFile.sheet_names.forEach { sheetName ->
-                        DropdownMenuItem(
-                            text = { Text(sheetName) },
-                            onClick = {
-                                onSelectSheet(sheetName)
-                                expanded = false
-                            }
-                        )
-                    }
-                }
-            }
+
+        // Sheet selector for non-fullscreen mode
+        if (excelFile.sheet_names.size > 1 && !isFullscreen) {
+            SheetSelector(
+                sheetNames = excelFile.sheet_names,
+                selectedSheetName = selectedSheetName,
+                onSelectSheet = onSelectSheet
+            )
         }
-        
-        // Excel data table
+
         if (sheetData.isNotEmpty()) {
-            // Table header and content
-            val horizontalScrollState = rememberScrollState()
-            
             Text(
                 text = "Student Records",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(vertical = 8.dp)
             )
-            
-            // Regular table view
+
             if (!isFullscreen) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
-                        .horizontalScroll(horizontalScrollState)
+                        .clip(RoundedCornerShape(8.dp))
+                        .border(1.dp, Color(0xFFEEEEEE), RoundedCornerShape(8.dp))
                 ) {
-                    ExcelTableContent(sheetData = sheetData)
-                }
-            }
-
-            // Fullscreen dialog for enlarged table view
-            if (isFullscreen) {
-                Dialog(
-                    onDismissRequest = { isFullscreen = false },
-                    properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = false, usePlatformDefaultWidth = false)
-                ) {
-                    Surface(
-                        modifier = Modifier.fillMaxSize(),
-                        color = MaterialTheme.colorScheme.background
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize()
                     ) {
-                        Column(modifier = Modifier.fillMaxSize()) {
-                            // Dialog header
-                            TopAppBar(
-                                title = { 
-                                    Column {
-                                        Text(
-                                            text = excelFile.file_name,
-                                            style = MaterialTheme.typography.titleMedium
-                                        )
-                                        Text(
-                                            text = selectedSheetName ?: "",
-                                            style = MaterialTheme.typography.bodySmall
-                                        )
-                                    }
-                                },
-                                navigationIcon = {
-                                    IconButton(onClick = { isFullscreen = false }) {
-                                        Icon(Icons.Default.Close, contentDescription = "Close")
-                                    }
-                                }
-                            )
-                            
-                            // Full-screen table
+                        item {
                             Box(
                                 modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(horizontal = 4.dp)
+                                    .fillMaxWidth()
                                     .horizontalScroll(rememberScrollState())
                             ) {
                                 ExcelTableContent(
                                     sheetData = sheetData,
-                                    cellWidth = 150.dp,
+                                    cellWidth = 120.dp,
                                     cellPadding = 12.dp
                                 )
                             }
@@ -303,8 +233,18 @@ fun ExcelDataDisplay(
                     }
                 }
             }
+
+            if (isFullscreen) {
+                // Fullscreen mode with improved controls
+                FullscreenExcelView(
+                    excelFile = excelFile,
+                    sheetData = sheetData,
+                    selectedSheetName = selectedSheetName,
+                    onSelectSheet = onSelectSheet,
+                    onClose = { isFullscreen = false }
+                )
+            }
         } else {
-            // Empty sheet message
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -317,6 +257,184 @@ fun ExcelDataDisplay(
                     color = Color(0xFF666666),
                     textAlign = TextAlign.Center
                 )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SheetSelector(
+    sheetNames: List<String>,
+    selectedSheetName: String?,
+    onSelectSheet: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+    ) {
+        OutlinedTextField(
+            value = selectedSheetName ?: "",
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Sheet") },
+            trailingIcon = {
+                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+            },
+            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+            modifier = Modifier
+                .menuAnchor()
+                .fillMaxWidth()
+        )
+
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            sheetNames.forEach { sheetName ->
+                DropdownMenuItem(
+                    text = { Text(sheetName) },
+                    onClick = {
+                        onSelectSheet(sheetName)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun FullscreenExcelView(
+    excelFile: ExcelFileItem,
+    sheetData: List<List<String>>,
+    selectedSheetName: String?,
+    onSelectSheet: (String) -> Unit,
+    onClose: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onClose,
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false,
+            usePlatformDefaultWidth = false
+        )
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Top bar with sheet selector
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = excelFile.file_name,
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onClose) {
+                            Icon(Icons.Default.Close, contentDescription = "Close")
+                        }
+                    },
+                    actions = {
+                        // Sheet selector in the app bar
+                        if (excelFile.sheet_names.size > 1) {
+                            var expanded by remember { mutableStateOf(false) }
+
+                            Box(modifier = Modifier.width(180.dp)) {
+                                OutlinedTextField(
+                                    value = selectedSheetName ?: "",
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    label = { Text("Sheet", style = MaterialTheme.typography.bodySmall) },
+                                    trailingIcon = {
+                                        IconButton(onClick = { expanded = !expanded }) {
+                                            Icon(
+                                                imageVector = if (expanded) Icons.Default.Close else Icons.Default.FullscreenExit,
+                                                contentDescription = "Select Sheet"
+                                            )
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp, horizontal = 8.dp),
+                                    textStyle = MaterialTheme.typography.bodyMedium,
+                                    singleLine = true
+                                )
+
+                                DropdownMenu(
+                                    expanded = expanded,
+                                    onDismissRequest = { expanded = false },
+                                    modifier = Modifier.width(180.dp)
+                                ) {
+                                    excelFile.sheet_names.forEach { sheetName ->
+                                        DropdownMenuItem(
+                                            text = { Text(sheetName) },
+                                            onClick = {
+                                                onSelectSheet(sheetName)
+                                                expanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                )
+
+                // This is the key change - use verticalScroll instead of LazyColumn for better scrolling
+                val verticalScrollState = rememberScrollState()
+                val horizontalScrollState = rememberScrollState()
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .verticalScroll(verticalScrollState)
+                ) {
+                    Column {
+                        Box(
+                            modifier = Modifier
+                                .horizontalScroll(horizontalScrollState)
+                        ) {
+                            ExcelTableContent(
+                                sheetData = sheetData,
+                                cellWidth = 150.dp,
+                                cellPadding = 16.dp
+                            )
+                        }
+
+                        // Add some space at the bottom to ensure last row is visible
+                        Spacer(modifier = Modifier.height(60.dp))
+                    }
+                }
+
+                // Optional: Add scroll hint at the bottom
+                if (verticalScrollState.canScrollForward || verticalScrollState.canScrollBackward) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFFEEF2FF))
+                            .padding(4.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "Scroll to see more rows",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF333D79)
+                        )
+                    }
+                }
             }
         }
     }

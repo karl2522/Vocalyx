@@ -1,25 +1,19 @@
 package com.example.vocalyxapk.models
 
-/**
- * Steps in the Excel import process
- */
+
 enum class ImportStep {
     FILE_INFO,
     PREVIEW_DATA,
     MAP_COLUMNS
 }
 
-/**
- * Template for column mapping
- */
+
 data class ImportTemplate(
     val name: String,
     val columns: List<String>
 )
 
-/**
- * State for the Excel import process
- */
+
 data class ExcelImportState(
     val currentStep: ImportStep = ImportStep.FILE_INFO,
     val fileName: String = "",
@@ -31,9 +25,7 @@ data class ExcelImportState(
     val customColumns: List<String> = emptyList()
 )
 
-/**
- * System fields enum for column mapping
- */
+
 enum class SystemField(val displayName: String) {
     STUDENT_ID("Student ID"),
     STUDENT_NAME("Student Name"),
@@ -47,9 +39,7 @@ enum class SystemField(val displayName: String) {
     PERCENTAGE("Percentage")
 }
 
-/**
- * Predefined templates for column mapping
- */
+
 object ImportTemplates {
     val QUIZ_TEMPLATE = ImportTemplate(
         name = "Quiz",

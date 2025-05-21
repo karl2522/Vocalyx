@@ -1,65 +1,84 @@
 package com.example.vocalyxapk
 
-import android.content.Intent
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import android.view.animation.AnimationUtils
-import android.widget.Button
-import android.widget.ImageView
-import android.widget.TextView
-import androidx.activity.enableEdgeToEdge
-import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
-import com.google.android.material.progressindicator.CircularProgressIndicator
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
+import com.example.vocalyxapk.ui.theme.VOCALYXAPKTheme
+import com.example.vocalyxapk.utils.AuthState
+import com.example.vocalyxapk.utils.AuthStateManager
+import com.example.vocalyxapk.utils.NavigationUtils
+import kotlinx.coroutines.delay
 
-class SplashScreenActivity : AppCompatActivity() {
+class SplashScreenActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        setContentView(R.layout.activity_splash_screen)
-
-        // Initialize views
-        val logoImage = findViewById<ImageView>(R.id.logo_image)
-        val appName = findViewById<TextView>(R.id.app_name)
-        val tagline = findViewById<TextView>(R.id.tagline)
-        val loadingIndicator = findViewById<CircularProgressIndicator>(R.id.loading_indicator)
-        val getStartedButton = findViewById<Button>(R.id.get_started_button)
-
-        // Load animations
-        val bounceAnimation = AnimationUtils.loadAnimation(this, R.anim.bounce)
-        val fadeInAnimation = AnimationUtils.loadAnimation(this, R.anim.fade_in)
-
-        // Start animations
-        logoImage.startAnimation(bounceAnimation)
-        appName.startAnimation(fadeInAnimation)
-
-        // Show tagline with delay
-        Handler(Looper.getMainLooper()).postDelayed({
-            tagline.alpha = 0f
-            tagline.animate()
-                .alpha(1f)
-                .setDuration(1000)
-                .start()
-        }, 1000)
-
-        // Show loading indicator
-        loadingIndicator.show()
-
-        // Auto-transition after 3 seconds
-        Handler(Looper.getMainLooper()).postDelayed({
-            loadingIndicator.hide()
-            getStartedButton.alpha = 0f
-            getStartedButton.animate()
-                .alpha(1f)
-                .setDuration(500)
-                .start()
-        }, 3000)
-
-        // Set click listener for Get Started button
-        getStartedButton.setOnClickListener {
-            startActivity(Intent(this, LoginActivity::class.java))
-            finish()
+        setContent {
+            VOCALYXAPKTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    SplashScreen()
+                }
+            }
         }
+    }
+}
+
+@Composable
+fun SplashScreen() {
+    val context = LocalContext.current
+
+    val authState by AuthStateManager.authState.collectAsState()
+
+    LaunchedEffect(key1 = true) {
+        AuthStateManager.checkAuthState(context)
+
+        delay(1500)
+
+        when (authState) {
+            is AuthState.Authenticated -> NavigationUtils.navigateToHome(context)
+            else -> NavigationUtils.navigateToLogin(context)
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.White),
+        contentAlignment = Alignment.Center
+    ) {
+        Image(
+            painter = painterResource(id = R.drawable.vocalyxlogo),
+            contentDescription = "Logo",
+            modifier = Modifier.size(120.dp)
+        )
+
+        CircularProgressIndicator(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 64.dp),
+            color = Color(0xFF333D79),
+            strokeWidth = 2.dp
+        )
     }
 }
