@@ -47,7 +47,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.vocalyxapk.models.ClassItem
 import com.example.vocalyxapk.viewmodel.ClassCreationState
+import com.example.vocalyxapk.viewmodel.ClassDeleteState
 import com.example.vocalyxapk.viewmodel.ClassUIState
+import com.example.vocalyxapk.viewmodel.ClassUpdateState
 import com.example.vocalyxapk.viewmodel.ClassViewModel
 import com.example.vocalyxapk.viewmodel.ViewModelFactory
 
@@ -81,6 +83,8 @@ fun MyClassesScreen(courseId: Int, courseName: String) {
     var classDescription by remember { mutableStateOf("") }
     var classSemester by remember { mutableStateOf("") }
     var classSchedule by remember { mutableStateOf("") }
+    val classUpdateState by classViewModel.classUpdateState.collectAsState()
+    val classDeleteState by classViewModel.classDeleteState.collectAsState()
 
     // Search and filter state
     var searchQuery by remember { mutableStateOf("") }
@@ -90,6 +94,46 @@ fun MyClassesScreen(courseId: Int, courseName: String) {
     // Observe classes state
     val classUIState by classViewModel.classUIState.collectAsState()
     val classCreationState by classViewModel.classCreationState.collectAsState()
+
+    LaunchedEffect(classUpdateState) {
+        when (classUpdateState) {
+            is ClassUpdateState.Success -> {
+                Toast.makeText(
+                    context,
+                    "Class updated successfully",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+            is ClassUpdateState.Error -> {
+                Toast.makeText(
+                    context,
+                    "Error: ${(classUpdateState as ClassUpdateState.Error).message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+            else -> {} // Handle other states if needed
+        }
+    }
+
+    LaunchedEffect(classDeleteState) {
+        when (classDeleteState) {
+            is ClassDeleteState.Success -> {
+                Toast.makeText(
+                    context,
+                    "Class deleted successfully",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+            is ClassDeleteState.Error -> {
+                Toast.makeText(
+                    context,
+                    "Error: ${(classDeleteState as ClassDeleteState.Error).message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+            else -> {} // Handle other states if needed
+        }
+    }
 
     // Fetch classes for the selected course
     LaunchedEffect(courseId) {
@@ -501,7 +545,7 @@ fun EmptyStateUI(courseName: String) {
 }
 
 @Composable
-fun ClassesGridView(classes: List<ClassItem>, courseName: String) {
+fun ClassesGridView(classes: List<ClassItem>, courseName: String, classViewModel: ClassViewModel = viewModel()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -572,11 +616,11 @@ fun ClassesGridView(classes: List<ClassItem>, courseName: String) {
                 columns = GridCells.Fixed(1),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
-                contentPadding = PaddingValues(bottom = 80.dp), // Space for FAB
+                contentPadding = PaddingValues(bottom = 80.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(classes) { classItem ->
-                    EnhancedClassCard(classItem)
+                    EnhancedClassCard(classItem, classViewModel)
                 }
             }
         }
@@ -584,11 +628,62 @@ fun ClassesGridView(classes: List<ClassItem>, courseName: String) {
 }
 
 @Composable
-fun EnhancedClassCard(classData: ClassItem) {
+fun EnhancedClassCard(
+    classData: ClassItem,
+    classViewModel: ClassViewModel = viewModel()
+) {
     val context = LocalContext.current
 
     // State for the dropdown menu
     var showMenu by remember { mutableStateOf(false) }
+    // State for delete confirmation dialog
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
+    // State for edit class dialog
+    var showEditDialog by remember { mutableStateOf(false) }
+
+    // Delete confirmation dialog
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation = false },
+            title = { Text("Delete Class") },
+            text = { Text("Are you sure you want to delete the class '${classData.name}'? This action cannot be undone.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteConfirmation = false
+                        classViewModel.deleteClass(classData.id)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showDeleteConfirmation = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Edit class dialog
+    if (showEditDialog) {
+        EditClassDialog(
+            classData = classData,
+            onDismiss = { showEditDialog = false },
+            onUpdate = { name, section, description, semester, schedule ->
+                classViewModel.updateClass(
+                    classId = classData.id,
+                    name = name,
+                    section = section,
+                    description = description,
+                    semester = semester,
+                    schedule = schedule
+                )
+                showEditDialog = false
+            }
+        )
+    }
 
     Card(
         modifier = Modifier
@@ -659,7 +754,6 @@ fun EnhancedClassCard(classData: ClassItem) {
                     Spacer(modifier = Modifier.width(8.dp))
                 }
 
-                // Class name and section
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
                     Text(
                         text = classData.name,
@@ -677,7 +771,6 @@ fun EnhancedClassCard(classData: ClassItem) {
                         )
                     }
 
-                    // Description if available
                     if (!classData.description.isNullOrBlank()) {
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
@@ -754,8 +847,7 @@ fun EnhancedClassCard(classData: ClassItem) {
                         leadingIcon = { Icon(Icons.Default.Edit, null) },
                         onClick = {
                             showMenu = false
-                            Toast.makeText(context, "Edit class: ${classData.name}", Toast.LENGTH_SHORT).show()
-                            // You would add your edit logic here
+                            showEditDialog = true
                         }
                     )
 
@@ -772,8 +864,7 @@ fun EnhancedClassCard(classData: ClassItem) {
                             },
                             onClick = {
                                 showMenu = false
-                                Toast.makeText(context, "Marked as Active: ${classData.name}", Toast.LENGTH_SHORT).show()
-                                // You would update the status to active here
+                                classViewModel.updateClassStatus(classData.id, "active")
                             }
                         )
                     }
@@ -790,8 +881,7 @@ fun EnhancedClassCard(classData: ClassItem) {
                             },
                             onClick = {
                                 showMenu = false
-                                Toast.makeText(context, "Marked as Completed: ${classData.name}", Toast.LENGTH_SHORT).show()
-                                // You would update the status to completed here
+                                classViewModel.updateClassStatus(classData.id, "completed")
                             }
                         )
                     }
@@ -808,8 +898,7 @@ fun EnhancedClassCard(classData: ClassItem) {
                             },
                             onClick = {
                                 showMenu = false
-                                Toast.makeText(context, "Archived: ${classData.name}", Toast.LENGTH_SHORT).show()
-                                // You would update the status to archived here
+                                classViewModel.updateClassStatus(classData.id, "archived")
                             }
                         )
                     }
@@ -828,15 +917,185 @@ fun EnhancedClassCard(classData: ClassItem) {
                         },
                         onClick = {
                             showMenu = false
-                            // Show confirmation dialog before deleting
-                            // You would implement the delete confirmation here
-                            Toast.makeText(context, "Delete class: ${classData.name}", Toast.LENGTH_SHORT).show()
+                            showDeleteConfirmation = true
                         }
                     )
                 }
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EditClassDialog(
+    classData: ClassItem,
+    onDismiss: () -> Unit,
+    onUpdate: (name: String, section: String, description: String, semester: String, schedule: String) -> Unit
+) {
+    var className by remember { mutableStateOf(classData.name) }
+    var classSection by remember { mutableStateOf(classData.section ?: "") }
+    var classDescription by remember { mutableStateOf(classData.description ?: "") }
+    var classSemester by remember { mutableStateOf(classData.semester ?: "") }
+    var classSchedule by remember { mutableStateOf(classData.schedule ?: "") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit Class", style = MaterialTheme.typography.titleLarge) },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                // Class Name
+                Text(
+                    text = "Class Name *",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                OutlinedTextField(
+                    value = className,
+                    onValueChange = { className = it },
+                    placeholder = { Text("Enter class name") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color(0xFF333D79),
+                        unfocusedBorderColor = Color(0xFFDDDDDD)
+                    )
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Section
+                Text(
+                    text = "Section",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                OutlinedTextField(
+                    value = classSection,
+                    onValueChange = { classSection = it },
+                    placeholder = { Text("e.g. A, B, C") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color(0xFF333D79),
+                        unfocusedBorderColor = Color(0xFFDDDDDD)
+                    )
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Schedule
+                Text(
+                    text = "Schedule",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                OutlinedTextField(
+                    value = classSchedule,
+                    onValueChange = { classSchedule = it },
+                    placeholder = { Text("e.g. MWF 1:30 - 3:00PM") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    leadingIcon = { Icon(Icons.Filled.Schedule, contentDescription = "Schedule") },
+                    supportingText = { Text("Format: Days, Time Range", style = MaterialTheme.typography.bodySmall) },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color(0xFF333D79),
+                        unfocusedBorderColor = Color(0xFFDDDDDD)
+                    )
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Semester Dropdown (Optional)
+                var semesterDropdownExpanded by remember { mutableStateOf(false) }
+                val semesterOptions = listOf("Fall", "Spring", "Summer", "Winter")
+
+                Text(
+                    text = "Semester (Optional)",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+
+                ExposedDropdownMenuBox(
+                    expanded = semesterDropdownExpanded,
+                    onExpandedChange = { semesterDropdownExpanded = it }
+                ) {
+                    OutlinedTextField(
+                        value = classSemester,
+                        onValueChange = { /* Read-only, handled by dropdown */ },
+                        readOnly = true,
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = semesterDropdownExpanded)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(),
+                        placeholder = { Text("Select a semester") },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF333D79),
+                            unfocusedBorderColor = Color(0xFFDDDDDD)
+                        )
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = semesterDropdownExpanded,
+                        onDismissRequest = { semesterDropdownExpanded = false }
+                    ) {
+                        semesterOptions.forEach { semester ->
+                            DropdownMenuItem(
+                                text = { Text(semester) },
+                                onClick = {
+                                    classSemester = semester
+                                    semesterDropdownExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Description (Optional)
+                Text(
+                    text = "Description (Optional)",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                OutlinedTextField(
+                    value = classDescription,
+                    onValueChange = { classDescription = it },
+                    placeholder = { Text("Enter class description") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color(0xFF333D79),
+                        unfocusedBorderColor = Color(0xFFDDDDDD)
+                    )
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onUpdate(
+                        className,
+                        classSection.ifBlank { null } ?: "",
+                        classDescription.ifBlank { null } ?: "",
+                        classSemester.ifBlank { null } ?: "",
+                        classSchedule.ifBlank { null } ?: ""
+                    )
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF333D79))
+            ) {
+                Text("Save Changes")
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

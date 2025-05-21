@@ -3,7 +3,10 @@ package com.example.vocalyxapk.repository
 import android.content.Context
 import com.example.vocalyxapk.api.RetrofitClient
 import com.example.vocalyxapk.models.ClassItem
+import com.example.vocalyxapk.models.ClassUpdateRequest
 import com.example.vocalyxapk.models.CourseItem
+import com.example.vocalyxapk.models.CourseUpdateRequest
+import com.example.vocalyxapk.utils.TokenManager
 
 class ClassRepository(private val context: Context) {
     private val apiService = RetrofitClient.apiService
@@ -147,6 +150,110 @@ class ClassRepository(private val context: Context) {
             }
         } catch (e: Exception) {
             android.util.Log.e(tag, "Exception in createClass", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteCourse(courseId: Int): Result<Unit> {
+        return try {
+            val token = TokenManager.getToken(context) ?: return Result.failure(Exception("No authentication token"))
+            val response = apiService.deleteCourse(courseId)
+
+            if (response.isSuccessful) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception(response.errorBody()?.string() ?: "Unknown error"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun updateCourseStatus(courseId: Int, newStatus: String): Result<CourseItem> {
+        return try {
+            val token = TokenManager.getToken(context) ?: return Result.failure(Exception("No authentication token"))
+            val updates = mapOf("status" to newStatus)
+
+            val response = apiService.patchCourse(courseId, updates)
+
+            if (response.isSuccessful) {
+                response.body()?.let {
+                    Result.success(it)
+                } ?: Result.failure(Exception("Empty response body"))
+            } else {
+                Result.failure(Exception(response.errorBody()?.string() ?: "Unknown error"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun updateCourse(courseId: Int, updateRequest: CourseUpdateRequest): Result<CourseItem> {
+        return try {
+            val token = TokenManager.getToken(context) ?: return Result.failure(Exception("No authentication token"))
+
+            val response = apiService.updateCourse(courseId, updateRequest)
+
+            if (response.isSuccessful) {
+                response.body()?.let {
+                    Result.success(it)
+                } ?: Result.failure(Exception("Empty response body"))
+            } else {
+                Result.failure(Exception(response.errorBody()?.string() ?: "Unknown error"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteClass(classId: Int): Result<Unit> {
+        return try {
+            val token = TokenManager.getToken(context) ?: return Result.failure(Exception("No authentication token"))
+            val response = apiService.deleteClass(classId)
+
+            if (response.isSuccessful) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception(response.errorBody()?.string() ?: "Unknown error"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun updateClassStatus(classId: Int, newStatus: String): Result<ClassItem> {
+        return try {
+            val token = TokenManager.getToken(context) ?: return Result.failure(Exception("No authentication token"))
+            val updates = mapOf("status" to newStatus)
+
+            val response = apiService.patchClass(classId, updates)
+
+            if (response.isSuccessful) {
+                response.body()?.let {
+                    Result.success(it)
+                } ?: Result.failure(Exception("Empty response body"))
+            } else {
+                Result.failure(Exception(response.errorBody()?.string() ?: "Unknown error"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun updateClass(classId: Int, updateRequest: ClassUpdateRequest): Result<ClassItem> {
+        return try {
+            val token = TokenManager.getToken(context) ?: return Result.failure(Exception("No authentication token"))
+
+            val response = apiService.updateClass(classId, updateRequest)
+
+            if (response.isSuccessful) {
+                response.body()?.let {
+                    Result.success(it)
+                } ?: Result.failure(Exception("Empty response body"))
+            } else {
+                Result.failure(Exception(response.errorBody()?.string() ?: "Unknown error"))
+            }
+        } catch (e: Exception) {
             Result.failure(e)
         }
     }

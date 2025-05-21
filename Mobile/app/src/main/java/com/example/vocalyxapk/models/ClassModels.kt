@@ -46,3 +46,21 @@ data class CourseItem(
     val student_count: Int,
     val accessLevel: String
 )
+
+data class CourseUpdateRequest(
+    val name: String? = null,
+    val courseCode: String? = null,
+    val semester: String? = null,
+    val academic_year: String? = null,
+    val description: String? = null,
+    val status: String? = null
+)
+
+data class ClassUpdateRequest(
+    val name: String? = null,
+    val section: String? = null,
+    val description: String? = null,
+    val semester: String? = null,
+    val schedule: String? = null,
+    val status: String? = null
+)

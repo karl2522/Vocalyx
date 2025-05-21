@@ -45,11 +45,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.vocalyxapk.composables.CourseCard
 import com.example.vocalyxapk.data.ImportedClass
+import com.example.vocalyxapk.models.CourseItem
 import com.example.vocalyxapk.repository.AuthRepository
 import com.example.vocalyxapk.utils.AuthStateManager
 import com.example.vocalyxapk.viewmodel.CourseUIState
 import com.example.vocalyxapk.viewmodel.ClassViewModel
 import com.example.vocalyxapk.viewmodel.CourseCreationState
+import com.example.vocalyxapk.viewmodel.CourseDeleteState
+import com.example.vocalyxapk.viewmodel.CourseUpdateState
 import com.example.vocalyxapk.viewmodel.ViewModelFactory
 
 class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
@@ -275,30 +278,32 @@ class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                             bottomBar = {
                                 NavigationBar(
                                     containerColor = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.height(64.dp)
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(64.dp)
                                 ) {
                                     navigationItems.forEachIndexed { index, (title, icon, label) ->
                                         NavigationBarItem(
-                                            icon = { 
+                                            icon = {
                                                 Icon(
                                                     imageVector = icon,
                                                     contentDescription = title,
-                                                    tint = if (selectedTab == index) 
-                                                        MaterialTheme.colorScheme.onPrimary 
-                                                    else 
+                                                    tint = if (selectedTab == index)
+                                                        MaterialTheme.colorScheme.onPrimary
+                                                    else
                                                         MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
                                                     modifier = Modifier.size(24.dp)
-                                                ) 
+                                                )
                                             },
-                                            label = { 
+                                            label = {
                                                 Text(
                                                     label,
-                                                    color = if (selectedTab == index) 
-                                                        MaterialTheme.colorScheme.onPrimary 
-                                                    else 
+                                                    color = if (selectedTab == index)
+                                                        MaterialTheme.colorScheme.onPrimary
+                                                    else
                                                         MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
                                                     style = MaterialTheme.typography.labelSmall
-                                                ) 
+                                                )
                                             },
                                             selected = selectedTab == index,
                                             onClick = { selectedTab = index },
@@ -307,7 +312,7 @@ class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                                                 unselectedIconColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
                                                 selectedTextColor = MaterialTheme.colorScheme.onPrimary,
                                                 unselectedTextColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
-                                                indicatorColor = MaterialTheme.colorScheme.primary
+                                                indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
                                             )
                                         )
                                     }
@@ -526,6 +531,8 @@ fun ClassesTab(modifier: Modifier = Modifier) {
     val application = context.applicationContext as Application
     val classViewModel: ClassViewModel = viewModel(factory = ViewModelFactory(application))
     val scope = rememberCoroutineScope()
+    val courseUpdateState by classViewModel.courseUpdateState.collectAsState()
+    val courseDeleteState by classViewModel.courseDeleteState.collectAsState()
 
     // Filter state
     var selectedStatusFilter by remember { mutableStateOf("all") }
@@ -542,6 +549,7 @@ fun ClassesTab(modifier: Modifier = Modifier) {
     val classUIState by classViewModel.classUIState.collectAsState()
     val courseUIState by classViewModel.courseUIState.collectAsState()
     val importedClasses = com.example.vocalyxapk.data.ClassRepository.getClasses()
+    var courseToEdit by remember { mutableStateOf<CourseItem?>(null) }
 
     // File picker launcher
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -552,6 +560,46 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                 data = uri
             }
             context.startActivity(intent)
+        }
+    }
+
+    LaunchedEffect(courseUpdateState) {
+        when (courseUpdateState) {
+            is CourseUpdateState.Success -> {
+                Toast.makeText(
+                    context,
+                    "Course updated successfully",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+            is CourseUpdateState.Error -> {
+                Toast.makeText(
+                    context,
+                    "Error: ${(courseUpdateState as CourseUpdateState.Error).message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+            else -> {}
+        }
+    }
+
+    LaunchedEffect(courseDeleteState) {
+        when (courseDeleteState) {
+            is CourseDeleteState.Success -> {
+                Toast.makeText(
+                    context,
+                    "Course deleted successfully",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+            is CourseDeleteState.Error -> {
+                Toast.makeText(
+                    context,
+                    "Error: ${(courseDeleteState as CourseDeleteState.Error).message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+            else -> {}
         }
     }
 
@@ -574,6 +622,14 @@ fun ClassesTab(modifier: Modifier = Modifier) {
     val allCourses = when (courseUIState) {
         is CourseUIState.Success -> (courseUIState as CourseUIState.Success).courses
         else -> emptyList()
+    }
+
+    courseToEdit?.let { course ->
+        showEditCourseDialog(
+            courseData = course,
+            classViewModel = classViewModel, // Pass the view model
+            onDismiss = { courseToEdit = null } // Set to null to close dialog
+        )
     }
 
     // Filter courses based on search query and status filter
@@ -1097,16 +1153,15 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                                     context.startActivity(intent)
                                 },
                                 onStatusChange = { newStatus ->
-                                    // Here you would call classViewModel to update course status
+                                    classViewModel.updateCourseStatus(courseData.id, newStatus)
                                     Toast.makeText(context, "Changed status to $newStatus", Toast.LENGTH_SHORT).show()
                                 },
                                 onDelete = {
-                                    // Here you would call classViewModel to delete the course
+                                    classViewModel.deleteCourse(courseData.id)
                                     Toast.makeText(context, "Delete course: ${courseData.name}", Toast.LENGTH_SHORT).show()
                                 },
                                 onEdit = {
-                                    // Here you would open an edit dialog
-                                    Toast.makeText(context, "Edit course: ${courseData.name}", Toast.LENGTH_SHORT).show()
+                                    courseToEdit = courseData
                                 }
                             )
                         }
@@ -1155,6 +1210,126 @@ fun ClassesTab(modifier: Modifier = Modifier) {
             )
         }
     }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun showEditCourseDialog(
+    courseData: CourseItem,
+    classViewModel: ClassViewModel, // Add this parameter
+    onDismiss: () -> Unit // Add this to handle dismissal from outside
+) {
+    var courseName by remember { mutableStateOf(courseData.name) }
+    var courseCode by remember { mutableStateOf(courseData.courseCode) }
+    var semester by remember { mutableStateOf(courseData.semester) }
+    var academicYear by remember { mutableStateOf(courseData.academic_year ?: "") }
+    var description by remember { mutableStateOf(courseData.description ?: "") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit Course", style = MaterialTheme.typography.titleLarge) },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = courseCode,
+                    onValueChange = { courseCode = it },
+                    label = { Text("Course Code") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp)
+                )
+
+                OutlinedTextField(
+                    value = courseName,
+                    onValueChange = { courseName = it },
+                    label = { Text("Course Name") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp)
+                )
+
+                // Add dropdown for semester
+                var semesterExpanded by remember { mutableStateOf(false) }
+
+                ExposedDropdownMenuBox(
+                    expanded = semesterExpanded,
+                    onExpandedChange = { semesterExpanded = it },
+                    modifier = Modifier.padding(vertical = 8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = semester,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Semester") },
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = semesterExpanded)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = semesterExpanded,
+                        onDismissRequest = { semesterExpanded = false }
+                    ) {
+                        listOf("Fall", "Spring", "Summer", "Winter").forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text(option) },
+                                onClick = {
+                                    semester = option
+                                    semesterExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                OutlinedTextField(
+                    value = academicYear,
+                    onValueChange = { academicYear = it },
+                    label = { Text("Academic Year") },
+                    placeholder = { Text("YYYY-YYYY") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp)
+                )
+
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text("Description") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(100.dp)
+                        .padding(vertical = 8.dp),
+                    minLines = 3
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onDismiss()
+                    classViewModel.updateCourse(
+                        courseId = courseData.id,
+                        name = courseName,
+                        courseCode = courseCode,
+                        semester = semester,
+                        academicYear = academicYear.ifBlank { null },
+                        description = description.ifBlank { null }
+                    )
+                }
+            ) {
+                Text("Save Changes")
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

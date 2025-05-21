@@ -4,7 +4,9 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.vocalyxapk.models.ClassItem
+import com.example.vocalyxapk.models.ClassUpdateRequest
 import com.example.vocalyxapk.models.CourseItem
+import com.example.vocalyxapk.models.CourseUpdateRequest
 import com.example.vocalyxapk.repository.ClassRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -38,6 +40,35 @@ sealed class ClassCreationState {
     data class Error(val message: String) : ClassCreationState()
 }
 
+sealed class CourseUpdateState {
+    object Idle : CourseUpdateState()
+    object Loading : CourseUpdateState()
+    data class Success(val course: CourseItem) : CourseUpdateState()
+    data class Error(val message: String) : CourseUpdateState()
+}
+
+sealed class CourseDeleteState {
+    object Idle : CourseDeleteState()
+    object Loading : CourseDeleteState()
+    object Success : CourseDeleteState()
+    data class Error(val message: String) : CourseDeleteState()
+}
+
+sealed class ClassUpdateState {
+    object Idle : ClassUpdateState()
+    object Loading : ClassUpdateState()
+    data class Success(val classItem: ClassItem) : ClassUpdateState()
+    data class Error(val message: String) : ClassUpdateState()
+}
+
+
+sealed class ClassDeleteState {
+    object Idle : ClassDeleteState()
+    object Loading : ClassDeleteState()
+    object Success : ClassDeleteState()
+    data class Error(val message: String) : ClassDeleteState()
+}
+
 class ClassViewModel(application: Application) : AndroidViewModel(application) {
     private val classRepository = ClassRepository(application)
 
@@ -46,7 +77,19 @@ class ClassViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _courseUIState = MutableStateFlow<CourseUIState>(CourseUIState.Idle)
     val courseUIState: StateFlow<CourseUIState> = _courseUIState
-    
+
+    private val _courseUpdateState = MutableStateFlow<CourseUpdateState>(CourseUpdateState.Idle)
+    val courseUpdateState: StateFlow<CourseUpdateState> = _courseUpdateState
+
+    private val _courseDeleteState = MutableStateFlow<CourseDeleteState>(CourseDeleteState.Idle)
+    val courseDeleteState: StateFlow<CourseDeleteState> = _courseDeleteState
+
+    private val _classUpdateState = MutableStateFlow<ClassUpdateState>(ClassUpdateState.Idle)
+    val classUpdateState: StateFlow<ClassUpdateState> = _classUpdateState
+
+    private val _classDeleteState = MutableStateFlow<ClassDeleteState>(ClassDeleteState.Idle)
+    val classDeleteState: StateFlow<ClassDeleteState> = _classDeleteState
+
     // State for course creation
     private val _courseCreationState = MutableStateFlow<CourseCreationState>(CourseCreationState.Idle)
     val courseCreationState: StateFlow<CourseCreationState> = _courseCreationState
@@ -189,6 +232,198 @@ class ClassViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: Exception) {
                 android.util.Log.e("ClassViewModel", "Exception in createClass", e)
                 _classCreationState.value = ClassCreationState.Error(e.message ?: "Unknown error")
+            }
+        }
+    }
+
+    fun updateCourseStatus(courseId: Int, newStatus: String) {
+        viewModelScope.launch {
+            _courseUpdateState.value = CourseUpdateState.Loading
+            android.util.Log.d("ClassViewModel", "Updating course $courseId status to $newStatus")
+
+            try {
+                val result = classRepository.updateCourseStatus(courseId, newStatus)
+
+                result.fold(
+                    onSuccess = { course ->
+                        android.util.Log.d("ClassViewModel", "Course status updated successfully")
+                        _courseUpdateState.value = CourseUpdateState.Success(course)
+                        // Refresh the courses list
+                        fetchCourses()
+                    },
+                    onFailure = { exception ->
+                        android.util.Log.e("ClassViewModel", "Error updating course status", exception)
+                        _courseUpdateState.value = CourseUpdateState.Error(exception.message ?: "Unknown error")
+                    }
+                )
+            } catch (e: Exception) {
+                android.util.Log.e("ClassViewModel", "Exception in updateCourseStatus", e)
+                _courseUpdateState.value = CourseUpdateState.Error(e.message ?: "Unknown error")
+            }
+        }
+    }
+
+    fun updateCourse(
+        courseId: Int,
+        name: String? = null,
+        courseCode: String? = null,
+        semester: String? = null,
+        academicYear: String? = null,
+        description: String? = null
+    ) {
+        viewModelScope.launch {
+            _courseUpdateState.value = CourseUpdateState.Loading
+            android.util.Log.d("ClassViewModel", "Updating course $courseId")
+
+            try {
+                val updateRequest = CourseUpdateRequest(
+                    name = name,
+                    courseCode = courseCode,
+                    semester = semester,
+                    academic_year = academicYear,
+                    description = description
+                )
+
+                android.util.Log.d("ClassViewModel", "Sending update with course_code: ${updateRequest.courseCode}")
+
+                val result = classRepository.updateCourse(courseId, updateRequest)
+
+                result.fold(
+                    onSuccess = { course ->
+                        android.util.Log.d("ClassViewModel", "Course updated successfully")
+                        _courseUpdateState.value = CourseUpdateState.Success(course)
+                        fetchCourses()
+                    },
+                    onFailure = { exception ->
+                        android.util.Log.e("ClassViewModel", "Error updating course", exception)
+                        _courseUpdateState.value = CourseUpdateState.Error(exception.message ?: "Unknown error")
+                    }
+                )
+            } catch (e: Exception) {
+                android.util.Log.e("ClassViewModel", "Exception in updateCourse", e)
+                _courseUpdateState.value = CourseUpdateState.Error(e.message ?: "Unknown error")
+            }
+        }
+    }
+
+    fun deleteCourse(courseId: Int) {
+        viewModelScope.launch {
+            _courseDeleteState.value = CourseDeleteState.Loading
+            android.util.Log.d("ClassViewModel", "Deleting course $courseId")
+
+            try {
+                val result = classRepository.deleteCourse(courseId)
+
+                result.fold(
+                    onSuccess = {
+                        android.util.Log.d("ClassViewModel", "Course deleted successfully")
+                        _courseDeleteState.value = CourseDeleteState.Success
+                        fetchCourses()
+                    },
+                    onFailure = { exception ->
+                        android.util.Log.e("ClassViewModel", "Error deleting course", exception)
+                        _courseDeleteState.value = CourseDeleteState.Error(exception.message ?: "Unknown error")
+                    }
+                )
+            } catch (e: Exception) {
+                android.util.Log.e("ClassViewModel", "Exception in deleteCourse", e)
+                _courseDeleteState.value = CourseDeleteState.Error(e.message ?: "Unknown error")
+            }
+        }
+    }
+
+    fun updateClassStatus(classId: Int, newStatus: String) {
+        viewModelScope.launch {
+            _classUpdateState.value = ClassUpdateState.Loading
+            android.util.Log.d("ClassViewModel", "Updating class $classId status to $newStatus")
+
+            try {
+                val result = classRepository.updateClassStatus(classId, newStatus)
+
+                result.fold(
+                    onSuccess = { classItem ->
+                        android.util.Log.d("ClassViewModel", "Class status updated successfully")
+                        _classUpdateState.value = ClassUpdateState.Success(classItem)
+                        // Refresh the classes list
+                        fetchClasses(_currentCourseId.value)
+                    },
+                    onFailure = { exception ->
+                        android.util.Log.e("ClassViewModel", "Error updating class status", exception)
+                        _classUpdateState.value = ClassUpdateState.Error(exception.message ?: "Unknown error")
+                    }
+                )
+            } catch (e: Exception) {
+                android.util.Log.e("ClassViewModel", "Exception in updateClassStatus", e)
+                _classUpdateState.value = ClassUpdateState.Error(e.message ?: "Unknown error")
+            }
+        }
+    }
+
+    fun updateClass(
+        classId: Int,
+        name: String? = null,
+        section: String? = null,
+        description: String? = null,
+        semester: String? = null,
+        schedule: String? = null
+    ) {
+        viewModelScope.launch {
+            _classUpdateState.value = ClassUpdateState.Loading
+            android.util.Log.d("ClassViewModel", "Updating class $classId")
+
+            try {
+                val updateRequest = ClassUpdateRequest(
+                    name = name,
+                    section = section,
+                    description = description,
+                    semester = semester,
+                    schedule = schedule
+                )
+
+                val result = classRepository.updateClass(classId, updateRequest)
+
+                result.fold(
+                    onSuccess = { classItem ->
+                        android.util.Log.d("ClassViewModel", "Class updated successfully")
+                        _classUpdateState.value = ClassUpdateState.Success(classItem)
+                        // Refresh the classes list
+                        fetchClasses(_currentCourseId.value)
+                    },
+                    onFailure = { exception ->
+                        android.util.Log.e("ClassViewModel", "Error updating class", exception)
+                        _classUpdateState.value = ClassUpdateState.Error(exception.message ?: "Unknown error")
+                    }
+                )
+            } catch (e: Exception) {
+                android.util.Log.e("ClassViewModel", "Exception in updateClass", e)
+                _classUpdateState.value = ClassUpdateState.Error(e.message ?: "Unknown error")
+            }
+        }
+    }
+
+    fun deleteClass(classId: Int) {
+        viewModelScope.launch {
+            _classDeleteState.value = ClassDeleteState.Loading
+            android.util.Log.d("ClassViewModel", "Deleting class $classId")
+
+            try {
+                val result = classRepository.deleteClass(classId)
+
+                result.fold(
+                    onSuccess = {
+                        android.util.Log.d("ClassViewModel", "Class deleted successfully")
+                        _classDeleteState.value = ClassDeleteState.Success
+                        // Refresh the classes list
+                        fetchClasses(_currentCourseId.value)
+                    },
+                    onFailure = { exception ->
+                        android.util.Log.e("ClassViewModel", "Error deleting class", exception)
+                        _classDeleteState.value = ClassDeleteState.Error(exception.message ?: "Unknown error")
+                    }
+                )
+            } catch (e: Exception) {
+                android.util.Log.e("ClassViewModel", "Exception in deleteClass", e)
+                _classDeleteState.value = ClassDeleteState.Error(e.message ?: "Unknown error")
             }
         }
     }
