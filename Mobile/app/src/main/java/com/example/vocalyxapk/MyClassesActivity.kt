@@ -10,6 +10,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -207,89 +209,90 @@ fun MyClassesScreen(courseId: Int, courseName: String) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    statusFilters.forEach { status ->
-                        val isSelected = selectedStatusFilter == status
-                        val displayName = when(status) {
-                            "all" -> "All"
-                            "active" -> "Active"
-                            "completed" -> "Completed"
-                            "archived" -> "Archived"
-                            else -> status.replaceFirstChar { it.uppercase() }
-                        }
-
-                        val containerColor = when {
-                            isSelected && status == "active" -> Color(0xFF1B5E20).copy(alpha = 0.9f)  // Green
-                            isSelected && status == "completed" -> Color(0xFF0D47A1).copy(alpha = 0.9f)  // Blue
-                            isSelected && status == "archived" -> Color(0xFF616161).copy(alpha = 0.9f)  // Grey
-                            isSelected -> Color(0xFF333D79)  // Default selected
-                            else -> Color.White
-                        }
-
-                        val contentColor = if (isSelected) Color.White else Color(0xFF333D79)
-
-                        val iconContent: @Composable (() -> Unit)? = when(status) {
-                            "active" -> {
-                                {
-                                    Icon(
-                                        imageVector = Icons.Default.CheckCircle,
-                                        contentDescription = null,
-                                        tint = contentColor,
-                                        modifier = Modifier.size(16.dp)
-                                    )
+                            statusFilters.forEach { status ->
+                                val isSelected = selectedStatusFilter == status
+                                val displayName = when(status) {
+                                    "all" -> "All"
+                                    "active" -> "Active"
+                                    "completed" -> "Completed"
+                                    "archived" -> "Archived"
+                                    else -> status.replaceFirstChar { it.uppercase() }
                                 }
-                            }
-                            "completed" -> {
-                                {
-                                    Icon(
-                                        imageVector = Icons.Default.Done,
-                                        contentDescription = null,
-                                        tint = contentColor,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                            }
-                            "archived" -> {
-                                {
-                                    Icon(
-                                        imageVector = Icons.Default.Archive,
-                                        contentDescription = null,
-                                        tint = contentColor,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                            }
-                            else -> null
-                        }
 
-                        FilterChip(
-                            selected = isSelected,
-                            onClick = { selectedStatusFilter = status },
-                            label = {
-                                Text(
-                                    text = displayName,
-                                    style = MaterialTheme.typography.bodyMedium
+                                val containerColor = when {
+                                    isSelected && status == "active" -> Color(0xFF1B5E20).copy(alpha = 0.9f)  // Green
+                                    isSelected && status == "completed" -> Color(0xFF0D47A1).copy(alpha = 0.9f)  // Blue
+                                    isSelected && status == "archived" -> Color(0xFF616161).copy(alpha = 0.9f)  // Grey
+                                    isSelected -> Color(0xFF333D79)  // Default selected
+                                    else -> Color.White
+                                }
+
+                                val contentColor = if (isSelected) Color.White else Color(0xFF333D79)
+
+                                val iconContent: @Composable (() -> Unit)? = when(status) {
+                                    "active" -> {
+                                        {
+                                            Icon(
+                                                imageVector = Icons.Default.CheckCircle,
+                                                contentDescription = null,
+                                                tint = contentColor,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                    "completed" -> {
+                                        {
+                                            Icon(
+                                                imageVector = Icons.Default.Done,
+                                                contentDescription = null,
+                                                tint = contentColor,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                    "archived" -> {
+                                        {
+                                            Icon(
+                                                imageVector = Icons.Default.Archive,
+                                                contentDescription = null,
+                                                tint = contentColor,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                    else -> null
+                                }
+
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = { selectedStatusFilter = status },
+                                    label = {
+                                        Text(
+                                            text = displayName,
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                    },
+                                    leadingIcon = iconContent,
+                                    enabled = true,
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = containerColor,
+                                        selectedLabelColor = contentColor,
+                                        containerColor = Color.White
+                                    ),
+                                    border = FilterChipDefaults.filterChipBorder(
+                                        enabled = true,
+                                        selected = isSelected,
+                                        borderColor = if (isSelected) containerColor else Color(0xFFDDDDDD),
+                                        selectedBorderColor = containerColor,
+                                        borderWidth = 1.dp
+                                    ),
+                                    modifier = Modifier.animateContentSize()
                                 )
-                            },
-                            leadingIcon = iconContent,
-                            enabled = true,
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = containerColor,
-                                selectedLabelColor = contentColor,
-                                containerColor = Color.White
-                            ),
-                            border = FilterChipDefaults.filterChipBorder(
-                                enabled = true,
-                                selected = isSelected,
-                                borderColor = if (isSelected) containerColor else Color(0xFFDDDDDD),
-                                selectedBorderColor = containerColor,
-                                borderWidth = 1.dp
-                            ),
-                            modifier = Modifier.animateContentSize()
-                        )
-                    }
+                            }
                 }
             }
         }
