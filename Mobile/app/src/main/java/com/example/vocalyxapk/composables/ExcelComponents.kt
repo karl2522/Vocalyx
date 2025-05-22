@@ -23,7 +23,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -392,7 +391,6 @@ fun FullscreenExcelView(
                     }
                 )
 
-                // This is the key change - use verticalScroll instead of LazyColumn for better scrolling
                 val verticalScrollState = rememberScrollState()
                 val horizontalScrollState = rememberScrollState()
 

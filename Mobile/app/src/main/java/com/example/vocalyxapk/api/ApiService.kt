@@ -99,4 +99,10 @@ interface ApiService {
         @Path("id") classId: Int,
         @Body updates: Map<String, String>
     ): Response<ClassItem>
+
+    @PATCH("api/excel/{id}/update_data/")
+    suspend fun updateExcelData(
+        @Path("id") excelId: Int,
+        @Body data: Map<String, Any>
+    ): Response<Map<String, Any>>
 }

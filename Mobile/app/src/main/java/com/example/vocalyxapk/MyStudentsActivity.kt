@@ -7,16 +7,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Rect
@@ -29,13 +24,11 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -46,23 +39,19 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.vocalyxapk.composables.ExcelDataDisplay
 import com.example.vocalyxapk.composables.ImportExcelCard
-import com.example.vocalyxapk.models.ExcelFileItem
+import com.example.vocalyxapk.composables.VoiceRecordingDialog
 import com.example.vocalyxapk.ui.theme.VOCALYXAPKTheme
 import com.example.vocalyxapk.viewmodel.ExcelUIState
 import com.example.vocalyxapk.viewmodel.ExcelViewModel
 import kotlinx.coroutines.launch
-import org.apache.poi.ss.usermodel.WorkbookFactory
 import java.io.File
 import java.io.FileOutputStream
-import java.text.SimpleDateFormat
-import java.util.*
 
 class MyStudentsActivity : ComponentActivity() {
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        // Get class data from intent
+
         val classId = intent.getIntExtra("CLASS_ID", -1)
         val className = intent.getStringExtra("CLASS_NAME") ?: "My Students"
         val classSection = intent.getStringExtra("CLASS_SECTION")
@@ -80,9 +69,7 @@ class MyStudentsActivity : ComponentActivity() {
     }
 }
 
-/**
- * Extension function to create a dashed border
- */
+
 fun Modifier.dashedBorder(
     color: Color,
     strokeWidth: Dp,
@@ -338,7 +325,7 @@ fun StudentsScreen(
                                 color = Color(0xFF333D79),
                                 modifier = Modifier.padding(bottom = 8.dp)
                             )
-                            
+
                             // Recordings container
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
@@ -352,6 +339,9 @@ fun StudentsScreen(
                                         .padding(16.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
+                                    // State for showing the recording dialog
+                                    var showRecordingDialog by remember { mutableStateOf(false) }
+
                                     // Record with voice button - gray square with dashed outline
                                     Box(
                                         modifier = Modifier
@@ -363,7 +353,16 @@ fun StudentsScreen(
                                                 dashWidth = 8.dp,
                                                 dashGap = 4.dp
                                             )
-                                            .clickable { /* No implementation, design only */ },
+                                            .clickable {
+                                                // Only enable if Excel file is selected
+                                                if (selectedExcelFile != null) {
+                                                    showRecordingDialog = true
+                                                } else {
+                                                    coroutineScope.launch {
+                                                        snackbarHostState.showSnackbar("Please select an Excel file first")
+                                                    }
+                                                }
+                                            },
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -371,24 +370,34 @@ fun StudentsScreen(
                                                 imageVector = Icons.Default.Mic,
                                                 contentDescription = "Record with voice",
                                                 modifier = Modifier.size(32.dp),
-                                                tint = Color(0xFF9E9E9E)
+                                                tint = if (selectedExcelFile != null) Color(0xFF333D79) else Color(0xFF9E9E9E)
                                             )
                                             Spacer(modifier = Modifier.height(4.dp))
                                             Text(
                                                 "Record",
                                                 style = MaterialTheme.typography.bodySmall,
-                                                color = Color(0xFF9E9E9E)
+                                                color = if (selectedExcelFile != null) Color(0xFF333D79) else Color(0xFF9E9E9E)
                                             )
                                         }
                                     }
-                                    
+
                                     Spacer(modifier = Modifier.height(8.dp))
-                                    
+
                                     Text(
-                                        "Tap to record your voice",
+                                        text = if (selectedExcelFile != null)
+                                            "Tap to record your voice"
+                                        else
+                                            "Select an Excel file first",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = Color(0xFF666666)
                                     )
+
+                                    if (showRecordingDialog) {
+                                        VoiceRecordingDialog(
+                                            excelViewModel = excelViewModel,
+                                            onDismiss = { showRecordingDialog = false }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -425,7 +434,6 @@ fun StudentsScreen(
                 }
                 
                 is ExcelUIState.Empty -> {
-                    // Show "Import Excel" card for empty state
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
@@ -433,7 +441,6 @@ fun StudentsScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         ImportExcelCard(onImportClick = {
-                            // Launch the import wizard activity instead of direct file picker
                             val intent = Intent(context, ExcelImportActivity::class.java).apply {
                                 putExtra("CLASS_ID", classId)
                                 putExtra("CLASS_NAME", className)

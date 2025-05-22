@@ -10,15 +10,10 @@ import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
 
-/**
- * Repository for handling Excel file operations
- */
+
 class ExcelRepository {
     private val apiService = RetrofitClient.apiService
 
-    /**
-     * Get all Excel files for a specific class
-     */
     suspend fun getExcelFiles(classId: Int): Result<List<ExcelFileItem>> = withContext(Dispatchers.IO) {
         try {
             val response = apiService.getExcelFiles(classId)
@@ -33,9 +28,6 @@ class ExcelRepository {
         }
     }
 
-    /**
-     * Upload an Excel file to the backend
-     */
     suspend fun uploadExcelFile(file: File, classId: Int): Result<Boolean> = withContext(Dispatchers.IO) {
         try {
             // Prepare file part
@@ -55,10 +47,7 @@ class ExcelRepository {
             Result.failure(e)
         }
     }
-    
-    /**
-     * Delete an Excel file from the backend
-     */
+
     suspend fun deleteExcelFile(excelId: Int): Result<Boolean> = withContext(Dispatchers.IO) {
         try {
             val response = apiService.deleteExcelFile(excelId)
@@ -71,4 +60,23 @@ class ExcelRepository {
             Result.failure(e)
         }
     }
+
+    suspend fun updateExcelData(excelId: Int, sheetName: String, data: List<Map<String, String>>): Result<Boolean> =
+        withContext(Dispatchers.IO) {
+            try {
+                val requestBody = mapOf(
+                    "sheet_name" to sheetName,
+                    "sheet_data" to data
+                )
+
+                val response = apiService.updateExcelData(excelId, requestBody)
+                if (response.isSuccessful) {
+                    Result.success(true)
+                } else {
+                    Result.failure(Exception("Failed to update Excel data: ${response.message()}"))
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
 }

@@ -30,3 +30,8 @@ data class ExcelUploadResponse(
     val uploaded_at: String,
     val message: String
 )
+
+data class VoiceParseResult(
+    val studentName: String?,
+    val value: String?
+)
