@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.rounded.ArrowBack
@@ -29,6 +30,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -122,6 +124,8 @@ fun StudentsScreen(
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
+    var excelFileToDelete by remember { mutableStateOf<Int?>(null) }
     
     // Fetch Excel files when the screen is first displayed
     LaunchedEffect(classId) {
@@ -233,15 +237,37 @@ fun StudentsScreen(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     excelFiles.forEach { excelFile ->
-                                        FilterChip(
-                                            selected = selectedExcelFile?.id == excelFile.id,
-                                            onClick = { excelViewModel.selectExcelFile(excelFile) },
-                                            label = { Text(excelFile.file_name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                            leadingIcon = if (selectedExcelFile?.id == excelFile.id) {
-                                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
-                                            } else null,
+                                        Box(
                                             modifier = Modifier.height(32.dp)
-                                        )
+                                        ) {
+                                            FilterChip(
+                                                selected = selectedExcelFile?.id == excelFile.id,
+                                                onClick = { excelViewModel.selectExcelFile(excelFile) },
+                                                label = { Text(excelFile.file_name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                                leadingIcon = if (selectedExcelFile?.id == excelFile.id) {
+                                                    { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                                } else null,
+                                            )
+
+                                            IconButton(
+                                                onClick = {
+                                                    excelFileToDelete = excelFile.id
+                                                    showDeleteConfirmation = true
+                                                },
+                                                modifier = Modifier
+                                                    .size(24.dp)
+                                                    .align(Alignment.TopEnd)
+                                                    .offset(x = 12.dp, y = (-6).dp)
+                                                    .alpha(0.7f)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Delete,
+                                                    contentDescription = "Delete Excel File",
+                                                    tint = Color.Red,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        }
                                     }
                                     
                                     // Import new file button
@@ -451,5 +477,43 @@ fun StudentsScreen(
                 }
             }
         }
+    }
+
+    if (showDeleteConfirmation && excelFileToDelete != null) {
+        AlertDialog(
+            onDismissRequest = {
+                showDeleteConfirmation = false
+                excelFileToDelete = null
+            },
+            title = { Text("Confirm Deletion") },
+            text = {
+                Text("Are you sure you want to delete this Excel file? This action cannot be undone.")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        // Delete the file
+                        excelViewModel.deleteExcelFile(excelFileToDelete!!, classId)
+                        showDeleteConfirmation = false
+                        excelFileToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Red
+                    )
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = {
+                        showDeleteConfirmation = false
+                        excelFileToDelete = null
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }

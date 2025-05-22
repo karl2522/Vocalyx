@@ -62,19 +62,22 @@ class ExcelViewModel : ViewModel() {
     }
 
     fun deleteExcelFile(excelId: Int, classId: Int) {
-        val currentFile = selectedExcelFile
+        val currentExcelFile = selectedExcelFile
+
         excelUIState = ExcelUIState.Loading
+
         viewModelScope.launch {
             excelRepository.deleteExcelFile(excelId).fold(
                 onSuccess = {
                     fetchExcelFiles(classId)
-                    if (currentFile?.id == excelId) {
+
+                    if (currentExcelFile?.id == excelId) {
                         selectedExcelFile = null
                         selectedSheetName = null
                     }
                 },
                 onFailure = { error ->
-                    excelUIState = ExcelUIState.Error(error.message ?: "Unknown error")
+                    excelUIState = ExcelUIState.Error(error.message ?: "Failed to delete Excel file")
                 }
             )
         }
@@ -216,11 +219,9 @@ class ExcelViewModel : ViewModel() {
         val words = text.trim().split(" ")
         if (words.isEmpty()) return VoiceParseResult(null, null)
 
-        // Look for the last word as it's likely the value (number)
         val lastWord = words.last()
         val value = if (lastWord.toDoubleOrNull() != null) lastWord else null
 
-        // If value is found, everything before it is the student name
         val studentName = if (value != null) {
             words.dropLast(1).joinToString(" ")
         } else {

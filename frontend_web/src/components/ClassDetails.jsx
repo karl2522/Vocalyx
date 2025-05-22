@@ -17,6 +17,7 @@ import ImportProgress from './ImportProgress';
 import ExcelViewer from './ExcelViewer';
 import RecordingsSection from './RecordingSections';
 import FileDropzone from './FileDropzone';
+import { showToast } from '../utils/toast';
 
 registerAllModules();
 
@@ -55,6 +56,44 @@ styleElement.innerHTML = `
   }
 `;
 document.head.appendChild(styleElement);
+
+const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, fileName }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 animate-fadeIn">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+        <div className="mb-4 flex items-center">
+          <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center mr-3">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-600" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-medium text-gray-900">Delete Excel File</h3>
+        </div>
+        
+        <p className="text-sm text-gray-600 mb-6">
+          Are you sure you want to delete <span className="font-medium text-gray-900">{fileName}</span>? This action cannot be undone.
+        </p>
+        
+        <div className="flex justify-end space-x-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const ClassDetails = ({ accessInfo }) => {
   const { id } = useParams();
@@ -96,6 +135,9 @@ const ClassDetails = ({ accessInfo }) => {
   const [teamAccess, setTeamAccess] = useState(null);
   const initialDataLoadRef = useRef(false);
   const [availableFiles, setAvailableFiles] = useState([]);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [fileToDelete, setFileToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   
   const visibleData = useMemo(() => {
     if (!excelData) return null;
@@ -192,6 +234,47 @@ const ClassDetails = ({ accessInfo }) => {
 
   const handleDragLeave = () => {
     setIsDragging(false);
+  };
+
+    const handleDeleteFile = async () => {
+    if (!fileToDelete) return;
+    
+    try {
+      setIsDeleting(true);
+      
+      // Call API to delete the file
+      await classService.deleteExcelFile(fileToDelete.id);
+      
+      // Close modal
+      setIsDeleteModalOpen(false);
+      
+      // If the deleted file was the selected file, reset selection
+      if (selectedFile && selectedFile.id === fileToDelete.id) {
+        setSelectedFile(null);
+        setExcelData(null);
+      }
+      
+      // Update available files list
+      setAvailableFiles(prevFiles => prevFiles.filter(file => file.id !== fileToDelete.id));
+      
+      // Show success notification
+      // If you have a notification system, you can use it here
+      showToast.success(`File deleted successfully ${fileToDelete.file_name}`);
+      
+      // If there are other files, select the first one
+      if (availableFiles.length > 1) {
+        const remainingFiles = availableFiles.filter(file => file.id !== fileToDelete.id);
+        if (remainingFiles.length > 0) {
+          loadFileData(remainingFiles[0]);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to delete file:', error);
+      setError('Failed to delete file. Please try again.');
+    } finally {
+      setIsDeleting(false);
+      setFileToDelete(null);
+    }
   };
 
   const loadFileData = (fileObj) => {
@@ -1154,41 +1237,60 @@ const ClassDetails = ({ accessInfo }) => {
                     </div>
                     
                     <div className="relative group">
-                      <div className="relative">
-                        <select
-                          className="appearance-none w-full sm:w-72 border border-gray-300 rounded-lg text-gray-700 pl-4 pr-10 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-[#333D79] focus:border-[#333D79] transition-all hover:border-gray-400"
-                          value={selectedFile?.id}
-                          onChange={(e) => handleSwitchFile(e.target.value)}
-                        >
-                          {availableFiles.map(file => {
-                            // Get file extension to show appropriate icon
-                            const fileExt = file.file_name?.split('.').pop()?.toLowerCase() || '';
-                            
-                            // Format the date properly using uploaded_at instead of created_at
-                            const formattedDate = file.uploaded_at ? 
-                              new Date(file.uploaded_at).toLocaleDateString() : 
-                              'Unknown date';
-                            
-                            return (
-                              <option key={file.id} value={file.id}>
-                                {file.file_name} ({formattedDate})
-                              </option>
-                            );
-                          })}
-                        </select>
-                        
-                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[#333D79]">
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-                          </svg>
+                      <div className="flex items-center">
+                        <div className="relative">
+                          <select
+                            className="appearance-none w-full sm:w-72 border border-gray-300 rounded-lg text-gray-700 pl-4 pr-10 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-[#333D79] focus:border-[#333D79] transition-all hover:border-gray-400"
+                            value={selectedFile?.id}
+                            onChange={(e) => handleSwitchFile(e.target.value)}
+                          >
+                            {availableFiles.map(file => {
+                              // Format the date properly using uploaded_at instead of created_at
+                              const formattedDate = file.uploaded_at ? 
+                                new Date(file.uploaded_at).toLocaleDateString() : 
+                                'Unknown date';
+                              
+                              return (
+                                <option key={file.id} value={file.id}>
+                                  {file.file_name} ({formattedDate})
+                                </option>
+                              );
+                            })}
+                          </select>
+                          
+                          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[#333D79]">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                          </div>
                         </div>
+                        
+                        {/* Always visible delete button */}
+                        {(!teamAccess || teamAccess.accessLevel === 'edit' || teamAccess.accessLevel === 'full') && selectedFile && (
+                          <button 
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              const currentFile = availableFiles.find(f => f.id === selectedFile.id);
+                              if (currentFile) {
+                                setFileToDelete(currentFile);
+                                setIsDeleteModalOpen(true);
+                              }
+                            }}
+                            className="ml-2 p-2 rounded-md text-gray-500 hover:text-red-500 hover:bg-red-50 transition-colors border border-gray-200"
+                            title="Delete spreadsheet"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        )}
                       </div>
                       
                       {/* File details indicator for selected file */}
                       {selectedFile && (
                         <div className="hidden group-hover:block absolute top-full left-0 mt-1 w-full bg-white rounded-lg shadow-lg border border-gray-200 z-10 p-3 animate-fadeIn">
                           <div className="flex items-start">
-                            {/* Get the full file object from availableFiles using selectedFile.id */}
                             {(() => {
                               const currentFile = availableFiles.find(f => f.id === selectedFile.id);
                               const fileName = currentFile?.file_name || selectedFile.name;
@@ -1521,6 +1623,29 @@ const ClassDetails = ({ accessInfo }) => {
           <span>You have view-only access to this data through team {teamAccess.teamName}</span>
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+        <DeleteConfirmationModal
+          isOpen={isDeleteModalOpen}
+          onClose={() => {
+            setIsDeleteModalOpen(false);
+            setFileToDelete(null);
+          }}
+          onConfirm={handleDeleteFile}
+          fileName={fileToDelete?.file_name || ''}
+      />
+
+      {/* Loading Indicator for Delete Operation */}
+        {isDeleting && (
+          <div className="fixed bottom-4 right-4 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg shadow-lg z-50">
+            <div className="flex items-center gap-2">
+              <div className="animate-spin rounded-full h-4 w-4 border-2 border-red-500 border-t-transparent"></div>
+              <span>Deleting file...</span>
+            </div>
+          </div>
+        )}
+                
+
     </DashboardLayout>
   );
 };
