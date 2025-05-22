@@ -301,25 +301,39 @@ class ExcelViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-    @action(detail=True, methods=['PATCH'])
+    @action(detail=True, methods=['PATCH'], permission_classes=[IsAuthenticated])
     def update_data(self, request, pk=None):
         try:
-            excel_file = self.get_object()
+            excel_file = ExcelFile.objects.get(pk=pk)
             sheet_data = request.data.get('sheet_data')
             sheet_name = request.data.get('sheet_name', excel_file.active_sheet)
 
-            if excel_file.user != request.user:
-                from teams.models import TeamMember
+            # Add a simple permission check to ensure user owns the file or is in the right team
+            if excel_file.user.id != request.user.id:
+                # Simple log to debug permission issues
+                print(f"Permission check: File owner: {excel_file.user.id}, Request user: {request.user.id}")
 
-                team_member = TeamMember.objects.filter(
-                    team__courses__course_id=excel_file.class_ref.course.id if excel_file.class_ref and excel_file.class_ref.course else None,
-                    user=request.user,
-                    is_active=True
-                ).first()
+                # Only allow if user is a team member with appropriate access (optional)
+                has_team_access = False
+                if excel_file.class_ref and excel_file.class_ref.course:
+                    from teams.models import TeamMember
+                    team_access = TeamMember.objects.filter(
+                        team__courses__course_id=excel_file.class_ref.course.id,
+                        user=request.user,
+                        is_active=True,
+                        permissions__in=['edit', 'full']
+                    ).exists()
+                    if team_access:
+                        has_team_access = True
+                        print("Team access granted")
 
-                if not team_member or team_member.permissions not in ['edit', 'full']:
-                    return Response({'error': 'You do not have permission to modify this file'},
-                                    status=status.HTTP_403_FORBIDDEN)
+                # If neither owner nor team access, deny
+                if not has_team_access:
+                    print("Permission denied: Not owner and no team access")
+                    return Response(
+                        {'error': 'You do not have permission to modify this file'},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
 
             if not sheet_data:
                 return Response(
@@ -354,6 +368,8 @@ class ExcelViewSet(viewsets.ModelViewSet):
                 'sheet_name': sheet_name
             })
 
+        except ExcelFile.DoesNotExist:
+            return Response({'error': 'File not found'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             import traceback
             print("Error updating data:", str(e))

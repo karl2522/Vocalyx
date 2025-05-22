@@ -1,5 +1,6 @@
 package com.example.vocalyxapk.repository
 
+import android.util.Log
 import com.example.vocalyxapk.api.RetrofitClient
 import com.example.vocalyxapk.models.ExcelFileItem
 import kotlinx.coroutines.Dispatchers
@@ -61,21 +62,34 @@ class ExcelRepository {
         }
     }
 
-    suspend fun updateExcelData(excelId: Int, sheetName: String, data: List<Map<String, String>>): Result<Boolean> =
+    suspend fun updateExcelData(excelId: Int, sheetName: String, data: List<Map<String, Any?>>): Result<Boolean> =
         withContext(Dispatchers.IO) {
             try {
-                val requestBody = mapOf(
-                    "sheet_name" to sheetName,
-                    "sheet_data" to data
-                )
+                Log.d("ExcelRepository", "Updating excel data: fileId=$excelId, sheet=$sheetName, records=${data.size}")
+
+                // Create a new list of maps with String values only
+                val sanitizedData = data.map { row ->
+                    row.mapValues { (_, value) ->
+                        value?.toString() ?: ""  // Convert everything to String
+                    }
+                }
+
+                // Create the request with String-based values
+                val requestBody = HashMap<String, Any>()
+                requestBody["sheet_name"] = sheetName
+                requestBody["sheet_data"] = sanitizedData
 
                 val response = apiService.updateExcelData(excelId, requestBody)
                 if (response.isSuccessful) {
+                    Log.d("ExcelRepository", "Excel data updated successfully")
                     Result.success(true)
                 } else {
-                    Result.failure(Exception("Failed to update Excel data: ${response.message()}"))
+                    val errorMsg = response.errorBody()?.string() ?: response.message()
+                    Log.e("ExcelRepository", "Failed to update Excel data: $errorMsg")
+                    Result.failure(Exception("Failed to update Excel data: $errorMsg"))
                 }
             } catch (e: Exception) {
+                Log.e("ExcelRepository", "Exception updating Excel data", e)
                 Result.failure(e)
             }
         }

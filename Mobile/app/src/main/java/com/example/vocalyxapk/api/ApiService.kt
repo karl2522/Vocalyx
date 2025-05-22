@@ -103,6 +103,6 @@ interface ApiService {
     @PATCH("api/excel/{id}/update_data/")
     suspend fun updateExcelData(
         @Path("id") excelId: Int,
-        @Body data: Map<String, Any>
+        @Body data: HashMap<String, Any>
     ): Response<Map<String, Any>>
 }

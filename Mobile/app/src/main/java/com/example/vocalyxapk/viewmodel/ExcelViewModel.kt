@@ -1,5 +1,6 @@
 package com.example.vocalyxapk.viewmodel
 
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -8,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.vocalyxapk.models.ExcelFileItem
 import com.example.vocalyxapk.models.VoiceParseResult
 import com.example.vocalyxapk.repository.ExcelRepository
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -24,6 +26,16 @@ class ExcelViewModel : ViewModel() {
 
     var selectedSheetName by mutableStateOf<String?>(null)
         private set
+
+    var isSaving by mutableStateOf(false)
+        private set
+
+    var lastSaveStatus by mutableStateOf<SaveStatus?>(null)
+        private set
+
+    enum class SaveStatus {
+        SUCCESS, ERROR
+    }
 
     fun fetchExcelFiles(classId: Int) {
         excelUIState = ExcelUIState.Loading
@@ -162,23 +174,54 @@ class ExcelViewModel : ViewModel() {
         updateExcelData()
     }
 
-    fun updateStudentValue(studentName: String, columnName: String, value: String): Boolean {
-        val file = selectedExcelFile ?: return false
-        val sheet = selectedSheetName ?: return false
-        val sheetContent = file.all_sheets[sheet] ?: return false
+    fun updateStudentValue(studentName: String, columnName: String, value: String, onComplete: (Boolean) -> Unit) {
+        val file = selectedExcelFile ?: run {
+            onComplete(false)
+            return
+        }
+        val sheet = selectedSheetName ?: run {
+            onComplete(false)
+            return
+        }
+        val sheetContent = file.all_sheets[sheet] ?: run {
+            onComplete(false)
+            return
+        }
 
         // Find column index
         val columnIndex = sheetContent.headers.indexOf(columnName)
-        if (columnIndex == -1) return false
-
-        // Find student row by name (assuming there's a student name column - typically first column)
-        val nameColumnIndex = 0  // Assuming first column is student name
-        val studentRowIndex = sheetContent.data.indexOfFirst { row ->
-            val studentNameInRow = row[sheetContent.headers[nameColumnIndex]]?.toString() ?: ""
-            studentNameInRow.contains(studentName, ignoreCase = true)
+        if (columnIndex == -1) {
+            onComplete(false)
+            return
         }
 
-        if (studentRowIndex == -1) return false
+        // Find name-related columns for matching
+        val nameColumns = sheetContent.headers.filter { header ->
+            header.contains("name", ignoreCase = true) ||
+                    header.contains("last", ignoreCase = true) ||
+                    header.contains("first", ignoreCase = true)
+        }
+
+        // If no name columns found, use the first column as fallback
+        val columnsToSearch = if (nameColumns.isEmpty()) listOf(sheetContent.headers[0]) else nameColumns
+
+        // Find student row by checking all name columns
+        val studentRowIndex = sheetContent.data.indexOfFirst { row ->
+            // Check if any of the name columns contain the search term
+            columnsToSearch.any { nameColumn ->
+                val cellValue = row[nameColumn]?.toString()?.trim() ?: ""
+                cellValue.contains(studentName, ignoreCase = true)
+            } ||
+                    // Also check if the full name (combined from all name columns) contains the search term
+                    columnsToSearch.mapNotNull { col -> row[col]?.toString()?.trim() }
+                        .joinToString(" ")
+                        .contains(studentName, ignoreCase = true)
+        }
+
+        if (studentRowIndex == -1) {
+            onComplete(false)
+            return
+        }
 
         // Update the data
         val updatedData = sheetContent.data.toMutableList()
@@ -199,10 +242,38 @@ class ExcelViewModel : ViewModel() {
         // Update the selected file
         selectedExcelFile = updatedFile
 
-        // Save changes to backend
-        updateExcelData()
+        // Save changes to backend and wait for result
+        isSaving = true
+        viewModelScope.launch {
+            try {
+                excelRepository.updateExcelData(file.id, sheet, updatedData).fold(
+                    onSuccess = {
+                        lastSaveStatus = SaveStatus.SUCCESS
+                        onComplete(true)
 
-        return true
+                        delay(3000)
+                        lastSaveStatus = null
+                    },
+                    onFailure = { error ->
+                        Log.e("ExcelViewModel", "Failed to save data: ${error.message}")
+                        lastSaveStatus = SaveStatus.ERROR
+                        onComplete(false)
+
+                        delay(3000)
+                        lastSaveStatus = null
+                    }
+                )
+            } catch (e: Exception) {
+                Log.e("ExcelViewModel", "Exception while saving data", e)
+                lastSaveStatus = SaveStatus.ERROR
+                onComplete(false)
+
+                delay(3000)
+                lastSaveStatus = null
+            } finally {
+                isSaving = false
+            }
+        }
     }
 
     private fun updateExcelData() {
@@ -210,8 +281,43 @@ class ExcelViewModel : ViewModel() {
         val sheet = selectedSheetName ?: return
         val sheetContent = file.all_sheets[sheet] ?: return
 
+        // Prevent duplicate save operations
+        if (isSaving) return
+
+        isSaving = true
+
         viewModelScope.launch {
-            excelRepository.updateExcelData(file.id, sheet, sheetContent.data)
+            try {
+                excelRepository.updateExcelData(file.id, sheet, sheetContent.data).fold(
+                    onSuccess = {
+                        // Update was successful
+                        Log.d("ExcelViewModel", "Data saved successfully")
+                        lastSaveStatus = SaveStatus.SUCCESS
+
+                        // Clear the success status after a delay
+                        delay(3000)
+                        lastSaveStatus = null
+                    },
+                    onFailure = { error ->
+                        // Handle failure
+                        Log.e("ExcelViewModel", "Failed to save data: ${error.message}")
+                        lastSaveStatus = SaveStatus.ERROR
+
+                        // Clear the error status after a delay
+                        delay(3000)
+                        lastSaveStatus = null
+                    }
+                )
+            } catch (e: Exception) {
+                Log.e("ExcelViewModel", "Exception while saving data", e)
+                lastSaveStatus = SaveStatus.ERROR
+
+                // Clear the error status after a delay
+                delay(3000)
+                lastSaveStatus = null
+            } finally {
+                isSaving = false
+            }
         }
     }
 
@@ -219,13 +325,28 @@ class ExcelViewModel : ViewModel() {
         val words = text.trim().split(" ")
         if (words.isEmpty()) return VoiceParseResult(null, null)
 
+        // First, try to extract the last word as a numeric value
         val lastWord = words.last()
         val value = if (lastWord.toDoubleOrNull() != null) lastWord else null
 
+        // If we found a numeric value at the end, the rest is the student name
         val studentName = if (value != null) {
+            // Use all but the last word as the student name
             words.dropLast(1).joinToString(" ")
         } else {
-            if (words.size > 1) words.first() else text
+            // If no value is detected, check if the input contains keywords like "absent" or "present"
+            val statusKeywords = listOf("absent", "present", "excused", "late")
+            val statusWordIndex = words.indexOfFirst { it.toLowerCase() in statusKeywords }
+
+            if (statusWordIndex >= 0) {
+                // Use the words before the status keyword as the name
+                val name = words.take(statusWordIndex).joinToString(" ")
+                // Use the status word as the value
+                return VoiceParseResult(name, words[statusWordIndex])
+            } else {
+                // Default: assume the first word is a last name
+                words.firstOrNull() ?: ""
+            }
         }
 
         return VoiceParseResult(studentName, value)
@@ -238,11 +359,36 @@ class ExcelViewModel : ViewModel() {
 
         if (sheetContent.data.isEmpty() || sheetContent.headers.isEmpty()) return emptyList()
 
-        val nameColumn = sheetContent.headers[0]
+        // Find name-related columns (look for "name", "last", "first" in headers)
+        val nameColumns = sheetContent.headers.filter { header ->
+            header.contains("name", ignoreCase = true) ||
+                    header.contains("last", ignoreCase = true) ||
+                    header.contains("first", ignoreCase = true)
+        }
 
-        return sheetContent.data
-            .mapNotNull { row -> row[nameColumn]?.toString() }
-            .filter { it.contains(nameFragment, ignoreCase = true) }
+        // If no name columns found, use the first column as fallback
+        val columnsToSearch = if (nameColumns.isEmpty()) listOf(sheetContent.headers[0]) else nameColumns
+
+        return sheetContent.data.mapNotNull { row ->
+            // For each row, concatenate all the name-related values
+            val fullName = columnsToSearch.mapNotNull { column ->
+                row[column]?.toString()?.trim()
+            }.joinToString(" ")
+
+            // Only include if it contains the search fragment
+            if (fullName.contains(nameFragment, ignoreCase = true)) {
+                fullName
+            } else {
+                // Also check individual name parts
+                for (column in columnsToSearch) {
+                    val value = row[column]?.toString()?.trim() ?: continue
+                    if (value.contains(nameFragment, ignoreCase = true)) {
+                        return@mapNotNull fullName
+                    }
+                }
+                null
+            }
+        }.distinct()
     }
 }
 

@@ -13,6 +13,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -388,15 +389,36 @@ fun VoiceRecordingDialog(
                                 Text(
                                     "Say: \"[Student Name] [Value]\"",
                                     style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium
+                                    fontWeight = FontWeight.Bold
                                 )
 
                                 Spacer(modifier = Modifier.height(8.dp))
 
                                 Text(
-                                    "Example: \"John Smith 95\" or \"Emma absent\"",
+                                    "Examples:",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Medium
+                                )
+
+                                Text(
+                                    "• \"Amparo 8\" (sets ${selectedColumn} to 8 for student Amparo)",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = Color(0xFF666666)
+                                )
+
+                                Text(
+                                    "• \"Joemarie absent\" (marks student as absent)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF666666)
+                                )
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                Text(
+                                    "You can use first name, last name, or full name.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                                    color = Color(0xFF333D79)
                                 )
                             }
                         }
@@ -548,11 +570,43 @@ fun VoiceRecordingDialog(
                             Spacer(modifier = Modifier.height(16.dp))
                         } else if (suggestedStudents.isEmpty() && parsedResult?.studentName != null) {
                             // No matching students found
-                            Text(
-                                "No matching student found for \"${parsedResult?.studentName}\"",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.Red
-                            )
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = Color(0xFFFEF3F2)
+                                ),
+                                border = BorderStroke(1.dp, Color(0xFFFEE4E2))
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(16.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Warning,
+                                        contentDescription = null,
+                                        tint = Color(0xFFD92D20),
+                                        modifier = Modifier.size(24.dp)
+                                    )
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    Text(
+                                        "No matching student found for \"${parsedResult?.studentName}\"",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = Color(0xFFD92D20),
+                                        textAlign = TextAlign.Center
+                                    )
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    Text(
+                                        "Try using a different name or add this student manually.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color(0xFF912018),
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
 
                             Spacer(modifier = Modifier.height(16.dp))
                         }
@@ -596,30 +650,39 @@ fun VoiceRecordingDialog(
                                     val studentName = selectedStudent.ifEmpty { parsedResult?.studentName ?: "" }
                                     val value = parsedResult?.value ?: ""
 
+
                                     if (studentName.isNotBlank() && selectedColumn != null) {
-                                        val success = excelViewModel.updateStudentValue(
+                                        excelViewModel.updateStudentValue(
                                             studentName,
                                             selectedColumn!!,
                                             value
-                                        )
-
-                                        if (success) {
-                                            saveSuccess = true
-                                            currentStep = 4
-                                        } else {
-                                            errorMessage = "Failed to update data"
+                                        ) { success ->
+                                            if (success) {
+                                                saveSuccess = true
+                                                currentStep = 4
+                                            } else {
+                                                errorMessage = "Failed to update data"
+                                            }
                                         }
                                     } else {
                                         errorMessage = "Student name or column is missing"
                                     }
                                 },
                                 enabled = (selectedStudent.isNotBlank() || parsedResult?.studentName?.isNotBlank() == true) &&
-                                        selectedColumn != null,
+                                        selectedColumn != null && !excelViewModel.isSaving,
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = Color(0xFF333D79),
                                     disabledContainerColor = Color(0xFF9E9E9E)
                                 )
-                            ) {
+                            )  {
+                                if (excelViewModel.isSaving) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        color = Color.White,
+                                        strokeWidth = 2.dp
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                }
                                 Text("Confirm")
                             }
                         }
@@ -651,6 +714,60 @@ fun VoiceRecordingDialog(
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
+
+                        AnimatedVisibility(
+                            visible = excelViewModel.isSaving || excelViewModel.lastSaveStatus != null
+                        ) {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = when (excelViewModel.lastSaveStatus) {
+                                        ExcelViewModel.SaveStatus.SUCCESS -> Color(0xFFE8F5E9)
+                                        ExcelViewModel.SaveStatus.ERROR -> Color(0xFFFFEBEE)
+                                        null -> Color(0xFFF5F5F5)
+                                    }
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    when {
+                                        excelViewModel.isSaving -> {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(20.dp),
+                                                strokeWidth = 2.dp,
+                                                color = Color(0xFF333D79)
+                                            )
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Text("Saving changes...", color = Color(0xFF555555))
+                                        }
+                                        excelViewModel.lastSaveStatus == ExcelViewModel.SaveStatus.SUCCESS -> {
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = null,
+                                                tint = Color(0xFF4CAF50),
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Text("Changes saved successfully", color = Color(0xFF2E7D32))
+                                        }
+                                        excelViewModel.lastSaveStatus == ExcelViewModel.SaveStatus.ERROR -> {
+                                            Icon(
+                                                imageVector = Icons.Default.Warning,
+                                                contentDescription = null,
+                                                tint = Color(0xFFF44336),
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Text("Failed to save changes", color = Color(0xFFD32F2F))
+                                        }
+                                    }
+                                }
+                            }
+                        }
 
                         Spacer(modifier = Modifier.height(8.dp))
 
