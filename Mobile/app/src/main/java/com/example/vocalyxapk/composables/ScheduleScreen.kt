@@ -1,5 +1,6 @@
 package com.example.vocalyxapk.composables
 
+import android.content.Intent
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.Spring
@@ -9,6 +10,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -83,6 +85,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.vocalyxapk.MyClassesActivity
 import com.example.vocalyxapk.models.ClassItem
 import com.example.vocalyxapk.models.CourseItem
 import com.example.vocalyxapk.viewmodel.ClassUIState
@@ -796,6 +799,9 @@ fun ScheduleGrid(
     selectedClass: ClassItem?,
     modifier: Modifier = Modifier
 ) {
+    // Track fullscreen state
+    var isFullScreen by remember { mutableStateOf(false) }
+
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -805,117 +811,204 @@ fun ScheduleGrid(
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
+            // Header with schedule info and fullscreen toggle
             if (selectedClass?.schedule != null) {
-                Text(
-                    text = "${selectedClass.name} meets ${selectedClass.schedule}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color(0xFFF5F5F5), RoundedCornerShape(8.dp))
-                        .padding(12.dp),
-                    textAlign = TextAlign.Center,
-                    color = Color(0xFF333D79)
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "${selectedClass.name} meets ${selectedClass.schedule}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier
+                            .weight(1f)
+                            .background(Color(0xFFF5F5F5), RoundedCornerShape(8.dp))
+                            .padding(12.dp),
+                        textAlign = TextAlign.Center,
+                        color = Color(0xFF333D79)
+                    )
+
+                    // Fullscreen toggle button
+                    IconButton(
+                        onClick = { isFullScreen = !isFullScreen },
+                        modifier = Modifier.padding(start = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isFullScreen)
+                                Icons.Default.KeyboardArrowDown
+                            else
+                                Icons.Default.KeyboardArrowDown,
+                            contentDescription = if (isFullScreen) "Exit fullscreen" else "Enter fullscreen",
+                            tint = Color(0xFF333D79)
+                        )
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // Day headers
-            Row(modifier = Modifier.fillMaxWidth()) {
-                // Time column header
-                Box(
-                    modifier = Modifier
-                        .weight(0.5f)
-                        .height(40.dp)
-                        .background(Color(0xFFF8F9FA), RoundedCornerShape(topStart = 8.dp))
-                        .border(0.5.dp, Color(0xFFDDDDDD), RoundedCornerShape(topStart = 8.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "Time",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-
-                // Day headers
-                dayNames.forEach { day ->
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(40.dp)
-                            .background(Color(0xFFF8F9FA))
-                            .border(0.5.dp, Color(0xFFDDDDDD)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = day,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-            }
-
-            // Time slots - limit to a reasonable number for mobile
-            // and make it SCROLLABLE without a fixed height
-            val visibleTimeSlots = timeSlots.take(12)
-
-            Column(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 300.dp, max = 400.dp)
-                    .verticalScroll(rememberScrollState())
+                    .horizontalScroll(rememberScrollState())
             ) {
-                visibleTimeSlots.forEach { timeSlot ->
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        // Time cell
+                Column {
+                    Row(modifier = Modifier.width(800.dp)) {
                         Box(
                             modifier = Modifier
-                                .weight(0.5f)
-                                .height(50.dp)
-                                .background(Color(0xFFE6EAFF))
-                                .border(0.5.dp, Color(0xFFDDDDDD)),
+                                .width(80.dp)
+                                .height(40.dp)
+                                .background(Color(0xFFF8F9FA), RoundedCornerShape(topStart = 8.dp))
+                                .border(0.5.dp, Color(0xFFDDDDDD), RoundedCornerShape(topStart = 8.dp)),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = timeSlot.display,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF666666)
+                                text = "Time",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
                             )
                         }
 
-                        // Day cells
-                        for (dayIndex in 0..6) {
-                            val isScheduled = isTimeSlotScheduled(dayIndex, timeSlot)
+                        dayNames.forEach { day ->
                             Box(
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .height(50.dp)
-                                    .background(
-                                        if (isScheduled) Color(0xFF333D79) else Color.White
-                                    )
+                                    .width(103.dp)
+                                    .height(40.dp)
+                                    .background(Color(0xFFF8F9FA))
                                     .border(0.5.dp, Color(0xFFDDDDDD)),
                                 contentAlignment = Alignment.Center
                             ) {
-                                if (isScheduled) {
-                                    // Only show class name in first cell of sequence
-                                    if (timeSlot.value == "13:30" && dayIndex == 1) {
-                                        Text(
-                                            text = selectedClass?.name ?: "",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = Color.White,
-                                            maxLines = 2,
-                                            textAlign = TextAlign.Center,
-                                            modifier = Modifier.padding(4.dp)
-                                        )
+                                Text(
+                                    text = day,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+
+                    val relevantTimeSlots = if (selectedClass?.schedule != null) {
+                        val scheduleStr = selectedClass.schedule
+                        val startTimeIndex = timeSlots.indexOfFirst {
+                            scheduleStr.contains(it.display) || scheduleStr.contains(it.value)
+                        }
+
+                        if (startTimeIndex >= 0) {
+                            val startIdx = maxOf(0, startTimeIndex - 2)
+                            val endIdx = minOf(timeSlots.size - 1, startTimeIndex + 6)
+                            timeSlots.subList(startIdx, endIdx + 1)
+                        } else {
+                            timeSlots.filter {
+                                it.value.startsWith("11:") ||
+                                        it.value.startsWith("12:") ||
+                                        it.value.startsWith("13:") ||
+                                        it.value.startsWith("14:") ||
+                                        it.value.startsWith("15:")
+                            }
+                        }
+                    } else {
+                        timeSlots.filter {
+                            it.value.startsWith("11:") ||
+                                    it.value.startsWith("12:") ||
+                                    it.value.startsWith("13:") ||
+                                    it.value.startsWith("14:") ||
+                                    it.value.startsWith("15:")
+                        }
+                    }
+
+                    // Dynamic height based on fullscreen state
+                    Column(
+                        // Use animateContentSize to smoothly animate between heights
+                        modifier = Modifier
+                            .height(if (isFullScreen) 550.dp else 350.dp)
+                            .animateContentSize(
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                                    stiffness = Spring.StiffnessLow
+                                )
+                            )
+                    ) {
+                        relevantTimeSlots.forEach { timeSlot ->
+                            Row(modifier = Modifier.width(800.dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .width(80.dp)
+                                        .height(50.dp)
+                                        .background(Color(0xFFE6EAFF))
+                                        .border(0.5.dp, Color(0xFFDDDDDD)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = timeSlot.display,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color(0xFF666666)
+                                    )
+                                }
+
+                                // Day cells
+                                for (dayIndex in 0..6) {
+                                    val isScheduled = isTimeSlotScheduled(dayIndex, timeSlot)
+                                    Box(
+                                        modifier = Modifier
+                                            .width(103.dp)
+                                            .height(50.dp)
+                                            .background(
+                                                if (isScheduled) Color(0xFF333D79) else Color.White
+                                            )
+                                            .border(0.5.dp, Color(0xFFDDDDDD)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (isScheduled) {
+                                            val prevTimeSlotValue = relevantTimeSlots.getOrNull(
+                                                relevantTimeSlots.indexOf(timeSlot) - 1
+                                            )?.value
+
+                                            val isPrevScheduled = prevTimeSlotValue?.let {
+                                                isTimeSlotScheduled(dayIndex, TimeSlot("", it))
+                                            } ?: false
+
+                                            if (!isPrevScheduled) {
+                                                Text(
+                                                    text = selectedClass?.name ?: "",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = Color.White,
+                                                    maxLines = 1,
+                                                    textAlign = TextAlign.Center,
+                                                    modifier = Modifier.padding(horizontal = 4.dp)
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "Swipe horizontally to see all days",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF666666),
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = " • ${if (isFullScreen) "Minimize" else "Expand"} view",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF333D79),
+                    fontWeight = FontWeight.Medium
+                )
             }
         }
     }
@@ -927,6 +1020,9 @@ fun ClassScheduleDetails(
     selectedClass: ClassItem?,
     modifier: Modifier = Modifier
 ) {
+
+    val context = LocalContext.current
+
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -971,7 +1067,17 @@ fun ClassScheduleDetails(
             Spacer(modifier = Modifier.height(12.dp))
 
             OutlinedButton(
-                onClick = { /* Navigate to class details */ },
+                onClick = {
+                    if (selectedClass != null) {
+                        val intent = Intent(context, MyClassesActivity::class.java).apply {
+                            putExtra("CLASS_ID", selectedClass.id)
+                            putExtra("CLASS_NAME", selectedClass.name)
+                            putExtra("COURSE_ID", selectedClass.courseId)
+                            putExtra("COURSE_NAME", selectedCourse?.name)
+                        }
+                        context.startActivity(intent)
+                    }
+                },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("View Class Details")
@@ -1052,11 +1158,9 @@ fun EmptyScheduleState(
     }
 }
 
-// Helper data classes
 data class TimeSlot(val display: String, val value: String)
 data class ScheduledTimeSlot(val day: Int, val hour: Int, val minute: Int)
 
-// Helper function to convert time strings to minutes
 fun convertToMinutes(timeStr: String, isPM: Boolean): Int {
     val cleanTime = timeStr.replace(Regex("[^\\d:]"), "")
     val parts = cleanTime.split(":")
@@ -1064,11 +1168,9 @@ fun convertToMinutes(timeStr: String, isPM: Boolean): Int {
     var hours = if (parts.isNotEmpty()) parts[0].toIntOrNull() ?: 0 else 0
     val minutes = if (parts.size > 1) parts[1].toIntOrNull() ?: 0 else 0
 
-    // Adjust for PM
     if (isPM && hours < 12) {
         hours += 12
     }
-    // Adjust for AM with 12 (which is 0 in 24-hour format)
     if (!isPM && hours == 12) {
         hours = 0
     }
