@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FiCalendar, FiClock, FiPlus, FiTrendingUp, FiUsers } from 'react-icons/fi';
+import { FiArchive, FiCalendar, FiCheck, FiClock, FiPlus, FiSearch, FiTag, FiTrendingUp, FiTrash2, FiUsers } from 'react-icons/fi';
 import { MdOutlineClass, MdOutlineSchool } from 'react-icons/md';
 import { RiBookOpenLine, RiSoundModuleLine } from 'react-icons/ri';
 import { Link, useNavigate } from 'react-router-dom';
@@ -10,7 +10,6 @@ import { showToast } from '../utils/toast.jsx';
 import DashboardLayout from './layouts/DashboardLayout';
 import CourseModal from './modals/CourseModal';
 
-// Custom animation styles - optimized to prevent blinking
 const DashboardStyles = () => {
   const styles = useMemo(() => `
     ${commonHeaderAnimations}
@@ -546,194 +545,441 @@ const Dashboard = () => {
         )}
 
         {/* Recent Activity */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="border-b border-gray-100 bg-gradient-to-r from-[#f8f9ff] to-[#f0f4ff]">
-            <div className="flex">
-              <button
-                className={`px-6 py-4 font-medium text-sm flex items-center gap-2 transition-colors ${
-                  activeTab === 'recent' ? 'text-[#333D79] border-b-2 border-[#333D79]' : 'text-gray-500 hover:text-gray-700'
-                }`}
-                onClick={() => setActiveTab('recent')}
-              >
-                <RiBookOpenLine size={18} />
-                Recent Courses
-              </button>
-              <button
-                className={`px-6 py-4 font-medium text-sm flex items-center gap-2 transition-colors ${
-                  activeTab === 'recordings' ? 'text-[#333D79] border-b-2 border-[#333D79]' : 'text-gray-500 hover:text-gray-700'
-                }`}
-                onClick={() => setActiveTab('recordings')}
-              >
-                <RiBookOpenLine size={18} />
-                Recent Recordings
-              </button>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="border-b border-gray-100 bg-gradient-to-r from-[#f8f9ff] to-[#f0f4ff]">
+              <div className="flex overflow-x-auto">
+                <button
+                  className={`px-6 py-4 font-medium text-sm flex items-center gap-2 transition-colors ${
+                    activeTab === 'recent' ? 'text-[#333D79] border-b-2 border-[#333D79]' : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                  onClick={() => setActiveTab('recent')}
+                >
+                  <RiBookOpenLine size={18} />
+                  Active Courses
+                </button>
+                <button
+                  className={`px-6 py-4 font-medium text-sm flex items-center gap-2 transition-colors ${
+                    activeTab === 'completed' ? 'text-[#333D79] border-b-2 border-[#333D79]' : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                  onClick={() => setActiveTab('completed')}
+                >
+                  <FiCheck size={18} />
+                  Completed
+                </button>
+                <button
+                  className={`px-6 py-4 font-medium text-sm flex items-center gap-2 transition-colors ${
+                    activeTab === 'archived' ? 'text-[#333D79] border-b-2 border-[#333D79]' : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                  onClick={() => setActiveTab('archived')}
+                >
+                  <FiArchive size={18} />
+                  Archived
+                </button>
+                <button
+                  className={`px-6 py-4 font-medium text-sm flex items-center gap-2 transition-colors ${
+                    activeTab === 'recordings' ? 'text-[#333D79] border-b-2 border-[#333D79]' : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                  onClick={() => setActiveTab('recordings')}
+                >
+                  <RiSoundModuleLine size={18} />
+                  Recent Recordings
+                </button>
+              </div>
             </div>
-          </div>
 
-          {activeTab === 'recent' && (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-[#F8F9FF]">
-                  <tr>
-                    <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Course Name
-                    </th>
-                    <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Course Code
-                    </th>
-                    <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Last Updated
-                    </th>
-                    <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {loading ? [
-                    <tr key="loading-row"> 
-                      <td colSpan="4" className="px-6 py-4 text-center text-gray-500">
-                        <div className="flex justify-center">
-                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#333D79]"></div>
-                        </div>
-                      </td>
+            {activeTab === 'recent' && (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  {/* Swapped Course Code and Course Name columns */}
+                  <thead className="bg-[#F8F9FF]">
+                    <tr>
+                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Course Code
+                      </th>
+                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Course Name
+                      </th>
+                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Last Updated
+                      </th>
+                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                      </th>
                     </tr>
-                  ] : courses.length > 0 ? 
-                    courses.slice(0, 5).map((course) => (
-                      <tr
-                        key={course.id}
-                        className="hover:bg-[#F8F9FF] cursor-pointer transition-colors"
-                        onClick={() => handleCourseClick(course.id)}
-                      >
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {loading ? [
+                      <tr key="loading-row"> 
+                        <td colSpan="4" className="px-6 py-4 text-center text-gray-500">
+                          <div className="flex justify-center">
+                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#333D79]"></div>
+                          </div>
+                        </td>
+                      </tr>
+                    ] : courses.filter(course => course.status === 'active' || !course.status).length > 0 ? 
+                      courses.filter(course => course.status === 'active' || !course.status).slice(0, 5).map((course) => (
+                        <tr
+                          key={course.id}
+                          className="hover:bg-[#F8F9FF] cursor-pointer transition-colors"
+                          onClick={() => handleCourseClick(course.id)}
+                        >
+                          {/* Swapped Course Code and Course Name cells */}
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="h-8 w-8 rounded-md bg-[#EEF0F8] text-[#333D79] flex items-center justify-center mr-2.5 shadow-sm">
+                                <FiTag size={16} />
+                              </div>
+                              <div className="text-sm font-medium text-gray-900">{course.courseCode || 'No code'}</div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="h-10 w-10 rounded-lg bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white flex items-center justify-center mr-3 shadow-sm">
+                                <RiBookOpenLine size={18} />
+                              </div>
+                              <div>
+                                <div className="text-sm font-medium text-gray-900">{course.name}</div>
+                                <div className="text-xs text-gray-500">{course.semester || ''} {course.academic_year || ''}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="h-8 w-8 rounded-md bg-[#EEF0F8] text-[#333D79] flex items-center justify-center mr-2.5 shadow-sm">
+                                <FiClock size={16} />
+                              </div>
+                              <div className="text-sm text-gray-900">{new Date(course.updated_at || course.created_at).toLocaleDateString()}</div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-3 py-1.5 inline-flex items-center text-xs leading-5 font-semibold rounded-full shadow-sm ${
+                              course.status === 'active' || !course.status ? 'bg-green-100 text-green-800' : 
+                              course.status === 'completed' ? 'bg-blue-100 text-blue-800' : 
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              {(course.status === 'active' || !course.status) && 
+                                <span className="h-2 w-2 rounded-full bg-green-500 mr-1.5 animate-pulse"></span>
+                              }
+                              {course.status === 'completed' && 
+                                <span className="h-2 w-2 rounded-full bg-blue-500 mr-1.5"></span>
+                              }
+                              {course.status === 'archived' && 
+                                <span className="h-2 w-2 rounded-full bg-gray-500 mr-1.5"></span>
+                              }
+                              {course.status ? (course.status.charAt(0).toUpperCase() + course.status.slice(1)) : 'Active'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    : [
+                      <tr key="empty-courses">
+                        <td colSpan="4" className="px-6 py-12 text-center">
+                          <div className="flex flex-col items-center">
+                            <div className="h-16 w-16 rounded-full bg-[#EEF0F8] flex items-center justify-center mb-4 float-animation">
+                              <RiBookOpenLine className="h-8 w-8 text-[#333D79]" />
+                            </div>
+                            <p className="text-gray-500 mb-4">No active courses found</p>
+                            <button
+                              onClick={() => setIsCourseModalOpen(true)}
+                              className="px-5 py-2.5 bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white rounded-lg shadow-md hover:shadow-lg transition-all flex items-center gap-2 group"
+                            >
+                              <FiPlus size={16} className="group-hover:rotate-90 transition-transform duration-300" />
+                              Add a new course
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ]}
+                  </tbody>
+                </table>
+                
+                {/* Pagination footer */}
+                {courses.filter(course => course.status === 'active' || !course.status).length > 5 && (
+                  <div className="px-6 py-4 bg-[#F8F9FF] text-right border-t border-gray-100">
+                    <button
+                      onClick={() => navigate('/dashboard/courses')}
+                      className="text-sm text-[#333D79] font-medium hover:underline flex items-center justify-end ml-auto gap-1"
+                    >
+                      View all active courses
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'completed' && (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  {/* Swapped Course Code and Course Name columns */}
+                  <thead className="bg-[#F8F9FF]">
+                    <tr>
+                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Course Code
+                      </th>
+                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Course Name
+                      </th>
+                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Last Updated
+                      </th>
+                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {loading ? [
+                      <tr key="loading-row"> 
+                        <td colSpan="4" className="px-6 py-4 text-center text-gray-500">
+                          <div className="flex justify-center">
+                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#333D79]"></div>
+                          </div>
+                        </td>
+                      </tr>
+                    ] : courses.filter(course => course.status === 'completed').length > 0 ? 
+                      courses.filter(course => course.status === 'completed').slice(0, 5).map((course) => (
+                        <tr
+                          key={course.id}
+                          className="hover:bg-[#F8F9FF] cursor-pointer transition-colors"
+                          onClick={() => handleCourseClick(course.id)}
+                        >
+                          {/* Swapped Course Code and Course Name cells */}
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="h-8 w-8 rounded-md bg-[#EEF0F8] text-[#333D79] flex items-center justify-center mr-2.5 shadow-sm">
+                                <FiTag size={16} />
+                              </div>
+                              <div className="text-sm font-medium text-gray-900">{course.courseCode || 'No code'}</div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="h-10 w-10 rounded-lg bg-gradient-to-r from-[#4CAF50] to-[#81C784] text-white flex items-center justify-center mr-3 shadow-sm">
+                                <FiCheck size={18} />
+                              </div>
+                              <div>
+                                <div className="text-sm font-medium text-gray-900">{course.name}</div>
+                                <div className="text-xs text-gray-500">{course.semester || ''} {course.academic_year || ''}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="h-8 w-8 rounded-md bg-[#EEF0F8] text-[#333D79] flex items-center justify-center mr-2.5 shadow-sm">
+                                <FiClock size={16} />
+                              </div>
+                              <div className="text-sm text-gray-900">{new Date(course.updated_at || course.created_at).toLocaleDateString()}</div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="px-3 py-1.5 inline-flex items-center text-xs leading-5 font-semibold rounded-full shadow-sm bg-green-100 text-green-800">
+                              <span className="h-2 w-2 rounded-full bg-green-500 mr-1.5"></span>
+                              Completed
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    : [
+                      <tr key="empty-completed">
+                        <td colSpan="4" className="px-6 py-12 text-center">
+                          <div className="flex flex-col items-center">
+                            <div className="h-16 w-16 rounded-full bg-green-50 flex items-center justify-center mb-4 float-animation">
+                              <FiCheck className="h-8 w-8 text-green-500" />
+                            </div>
+                            <p className="text-gray-500 mb-4">No completed courses found</p>
+                          </div>
+                        </td>
+                      </tr>
+                    ]}
+                  </tbody>
+                </table>
+                
+                {courses.filter(course => course.status === 'completed').length > 5 && (
+                  <div className="px-6 py-4 bg-[#F8F9FF] text-right border-t border-gray-100">
+                    <button
+                      onClick={() => navigate('/dashboard/courses?status=completed')}
+                      className="text-sm text-[#333D79] font-medium hover:underline flex items-center justify-end ml-auto gap-1"
+                    >
+                      View all completed courses
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'archived' && (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  {/* Swapped Course Code and Course Name columns */}
+                  <thead className="bg-[#F8F9FF]">
+                    <tr>
+                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Course Code
+                      </th>
+                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Course Name
+                      </th>
+                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Last Updated
+                      </th>
+                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {loading ? [
+                      <tr key="loading-row"> 
+                        <td colSpan="4" className="px-6 py-4 text-center text-gray-500">
+                          <div className="flex justify-center">
+                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#333D79]"></div>
+                          </div>
+                        </td>
+                      </tr>
+                    ] : courses.filter(course => course.status === 'archived').length > 0 ? 
+                      courses.filter(course => course.status === 'archived').slice(0, 5).map((course) => (
+                        <tr
+                          key={course.id}
+                          className="hover:bg-[#F8F9FF] cursor-pointer transition-colors"
+                          onClick={() => handleCourseClick(course.id)}
+                        >
+                          {/* Swapped Course Code and Course Name cells */}
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="h-8 w-8 rounded-md bg-[#EEF0F8] text-[#333D79] flex items-center justify-center mr-2.5 shadow-sm">
+                                <FiTag size={16} />
+                              </div>
+                              <div className="text-sm font-medium text-gray-900">{course.courseCode || 'No code'}</div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="h-10 w-10 rounded-lg bg-gradient-to-r from-[#9E9E9E] to-[#BDBDBD] text-white flex items-center justify-center mr-3 shadow-sm">
+                                <FiArchive size={18} />
+                              </div>
+                              <div>
+                                <div className="text-sm font-medium text-gray-900">{course.name}</div>
+                                <div className="text-xs text-gray-500">{course.semester || ''} {course.academic_year || ''}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="h-8 w-8 rounded-md bg-[#EEF0F8] text-[#333D79] flex items-center justify-center mr-2.5 shadow-sm">
+                                <FiClock size={16} />
+                              </div>
+                              <div className="text-sm text-gray-900">{new Date(course.updated_at || course.created_at).toLocaleDateString()}</div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="px-3 py-1.5 inline-flex items-center text-xs leading-5 font-semibold rounded-full shadow-sm bg-gray-100 text-gray-700">
+                              <span className="h-2 w-2 rounded-full bg-gray-500 mr-1.5"></span>
+                              Archived
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    : [
+                      <tr key="empty-archived">
+                        <td colSpan="4" className="px-6 py-12 text-center">
+                          <div className="flex flex-col items-center">
+                            <div className="h-16 w-16 rounded-full bg-gray-100 flex items-center justify-center mb-4 float-animation">
+                              <FiArchive className="h-8 w-8 text-gray-500" />
+                            </div>
+                            <p className="text-gray-500 mb-4">No archived courses found</p>
+                          </div>
+                        </td>
+                      </tr>
+                    ]}
+                  </tbody>
+                </table>
+                
+                {courses.filter(course => course.status === 'archived').length > 5 && (
+                  <div className="px-6 py-4 bg-[#F8F9FF] text-right border-t border-gray-100">
+                    <button
+                      onClick={() => navigate('/dashboard/courses?status=archived')}
+                      className="text-sm text-[#333D79] font-medium hover:underline flex items-center justify-end ml-auto gap-1"
+                    >
+                      View all archived courses
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* The recordings tab remains unchanged since it has a different structure */}
+            {activeTab === 'recordings' && (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-[#F8F9FF]">
+                    <tr>
+                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Recording
+                      </th>
+                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Duration
+                      </th>
+                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Project
+                      </th>
+                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Date
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {recentRecordings.map((recording) => (
+                      <tr key={recording.id} className="hover:bg-[#F8F9FF] cursor-pointer transition-colors">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
-                            <div className="h-10 w-10 rounded-lg bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white flex items-center justify-center mr-3 shadow-sm">
-                              <RiBookOpenLine size={18} />
+                            <div className="h-10 w-10 rounded-lg bg-gradient-to-r from-[#4A5491] to-[#5D69A5] text-white flex items-center justify-center mr-3 shadow-sm">
+                              <RiSoundModuleLine size={18} />
                             </div>
-                            <div>
-                              <div className="text-sm font-medium text-gray-900">{course.name}</div>
-                              <div className="text-xs text-gray-500">{course.semester || ''} {course.academic_year || ''}</div>
-                            </div>
+                            <div className="text-sm font-medium text-gray-900">{recording.name}</div>
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{course.courseCode || 'No code'}</div>
+                          <div className="flex items-center text-sm text-gray-900">
+                            <FiClock size={14} className="mr-1.5 text-[#333D79]" />
+                            {recording.duration}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {recording.projectName}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{new Date(course.updated_at || course.created_at).toLocaleDateString()}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-3 py-1.5 inline-flex text-xs leading-5 font-semibold rounded-full shadow-sm ${
-                            course.status === 'active' ? 'bg-[#EEF0F8] text-[#333D79]' : 
-                            course.status === 'completed' ? 'bg-green-100 text-green-800' : 
-                            'bg-gray-100 text-gray-800'
-                          }`}>
-                            {course.status ? (course.status.charAt(0).toUpperCase() + course.status.slice(1)) : 'Unknown'}
+                          <span className="px-3 py-1 inline-flex text-xs leading-5 font-medium rounded-full bg-gray-100 text-gray-800">
+                            {recording.date}
                           </span>
                         </td>
                       </tr>
-                    ))
-                  : [
-                    <tr key="empty-courses">
-                      <td colSpan="4" className="px-6 py-12 text-center">
-                        <div className="flex flex-col items-center">
-                          <div className="h-16 w-16 rounded-full bg-[#EEF0F8] flex items-center justify-center mb-4 float-animation">
-                            <RiBookOpenLine className="h-8 w-8 text-[#333D79]" />
-                          </div>
-                          <p className="text-gray-500 mb-4">No courses found</p>
-                          <button
-                            onClick={() => setIsCourseModalOpen(true)}
-                            className="px-5 py-2.5 bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white rounded-lg shadow-md hover:shadow-lg transition-all flex items-center gap-2 group"
-                          >
-                            <FiPlus size={16} className="group-hover:rotate-90 transition-transform duration-300" />
-                            Add your first course
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ]}
-                </tbody>
-              </table>
+                    ))}
+                  </tbody>
+                </table>
 
-              {courses.length > 5 && (
                 <div className="px-6 py-4 bg-[#F8F9FF] text-right border-t border-gray-100">
                   <button
-                    onClick={() => navigate('/dashboard/courses')}
+                    onClick={() => navigate('/dashboard/recordings')}
                     className="text-sm text-[#333D79] font-medium hover:underline flex items-center justify-end ml-auto gap-1"
                   >
-                    View all courses
+                    View all recordings
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                     </svg>
                   </button>
                 </div>
-              )}
-            </div>
-          )}
-
-          {activeTab === 'recordings' && (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-[#F8F9FF]">
-                  <tr>
-                    <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Recording
-                    </th>
-                    <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Duration
-                    </th>
-                    <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Project
-                    </th>
-                    <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Date
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {recentRecordings.map((recording) => (
-                    <tr key={recording.id} className="hover:bg-[#F8F9FF] cursor-pointer transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="h-10 w-10 rounded-lg bg-gradient-to-r from-[#4A5491] to-[#5D69A5] text-white flex items-center justify-center mr-3 shadow-sm">
-                            <RiSoundModuleLine size={18} />
-                          </div>
-                          <div className="text-sm font-medium text-gray-900">{recording.name}</div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center text-sm text-gray-900">
-                          <FiClock size={14} className="mr-1.5 text-[#333D79]" />
-                          {recording.duration}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {recording.projectName}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="px-3 py-1 inline-flex text-xs leading-5 font-medium rounded-full bg-gray-100 text-gray-800">
-                          {recording.date}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-
-              <div className="px-6 py-4 bg-[#F8F9FF] text-right border-t border-gray-100">
-                <button
-                  onClick={() => navigate('/dashboard/recordings')}
-                  className="text-sm text-[#333D79] font-medium hover:underline flex items-center justify-end ml-auto gap-1"
-                >
-                  View all recordings
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
       </div>
     </DashboardLayout>
   );

@@ -42,11 +42,12 @@ class ClassSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'description', 'semester', 'student_count',
             'status', 'created_at', 'updated_at', 'recordings_count',
-            'course_id', 'section', 'schedule', 'last_updated'
+            'course_id', 'schedule', 'last_updated'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
     def get_last_updated(self, obj):
+        # This method stays the same
         from django.utils import timezone
         from datetime import timedelta
 

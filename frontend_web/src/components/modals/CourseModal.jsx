@@ -1,6 +1,7 @@
 import PropTypes from 'prop-types';
 import { useState, useEffect } from 'react';
-import { MdClose, MdOutlineSchool } from 'react-icons/md';
+import { MdClose, MdOutlineSchool, MdWarning } from 'react-icons/md';
+import { FiCheck } from 'react-icons/fi';
 import { courseService } from '../../services/api';
 import { showToast } from '../../utils/toast.jsx';
 
@@ -12,7 +13,35 @@ const CourseModal = ({ isOpen, onClose, onAddCourse, onUpdateCourse, isEditMode,
     const [academicYear, setAcademicYear] = useState('');
     const [status, setStatus] = useState('active');
     const [loading, setLoading] = useState(false);
+    const [existingCourses, setExistingCourses] = useState([]);
+    const [loadingCourses, setLoadingCourses] = useState(false);
+    const [duplicateCourse, setDuplicateCourse] = useState(null);
+    const [forceSubmit, setForceSubmit] = useState(false);
+    
+    // Get academic year options dynamically (current year + 4 future years)
+    const getAcademicYearOptions = () => {
+        const currentYear = new Date().getFullYear();
+        const options = [];
+        
+        for (let i = 0; i < 5; i++) {
+            const startYear = currentYear + i;
+            const endYear = startYear + 1;
+            options.push(`${startYear}-${endYear}`);
+        }
+        
+        return options;
+    };
+    
+    const academicYearOptions = getAcademicYearOptions();
 
+    // Fetch existing courses when modal opens
+    useEffect(() => {
+        if (isOpen) {
+            fetchExistingCourses();
+        }
+    }, [isOpen]);
+
+    // Reset form when modal reopens or when switching between create/edit mode
     useEffect(() => {
         if (isEditMode && currentCourse) {
             setCourseCode(currentCourse.courseCode || '');
@@ -22,10 +51,22 @@ const CourseModal = ({ isOpen, onClose, onAddCourse, onUpdateCourse, isEditMode,
             setAcademicYear(currentCourse.academic_year || '');
             setStatus(currentCourse.status || 'active');
         } else {
-            // Reset form when opening in create mode
             resetForm();
         }
+        
+        // Reset duplicate check state
+        setDuplicateCourse(null);
+        setForceSubmit(false);
     }, [isEditMode, currentCourse, isOpen]);
+
+    // Check for duplicates when form fields change
+    useEffect(() => {
+        if (courseCode && semester && academicYear) {
+            checkForDuplicates();
+        } else {
+            setDuplicateCourse(null);
+        }
+    }, [courseCode, semester, academicYear]);
 
     const resetForm = () => {
         setCourseCode('');
@@ -34,6 +75,42 @@ const CourseModal = ({ isOpen, onClose, onAddCourse, onUpdateCourse, isEditMode,
         setSemester('');
         setAcademicYear('');
         setStatus('active');
+        setDuplicateCourse(null);
+        setForceSubmit(false);
+    };
+
+    // Fetch all existing courses to check for duplicates
+    const fetchExistingCourses = async () => {
+        try {
+            setLoadingCourses(true);
+            const response = await courseService.getCourses();
+            setExistingCourses(response.data || []);
+        } catch (error) {
+            console.error('Error fetching courses:', error);
+        } finally {
+            setLoadingCourses(false);
+        }
+    };
+
+    // Check if current form values match an existing course
+    const checkForDuplicates = () => {
+        if (!courseCode || !semester || !academicYear) return;
+        
+        // Don't check against the current course when editing
+        const coursesToCheck = isEditMode 
+            ? existingCourses.filter(course => course.id !== currentCourse?.id)
+            : existingCourses;
+        
+        const normalizedCourseCode = courseCode.trim().toLowerCase();
+        
+        const duplicate = coursesToCheck.find(course => {
+            const existingCode = (course.courseCode || '').trim().toLowerCase();
+            return existingCode === normalizedCourseCode && 
+                   course.semester === semester && 
+                   course.academic_year === academicYear;
+        });
+        
+        setDuplicateCourse(duplicate);
     };
 
     if (!isOpen) return null;
@@ -55,10 +132,10 @@ const CourseModal = ({ isOpen, onClose, onAddCourse, onUpdateCourse, isEditMode,
             showToast.error('Academic year is required');
             return false;
         }
-
-        const academicYearPattern = /^\d{4}-\d{4}$/;
-        if (!academicYearPattern.test(academicYear)) {
-            showToast.error('Academic year must be in format YYYY-YYYY');
+        
+        // If there's a duplicate and user hasn't explicitly chosen to continue
+        if (duplicateCourse && !forceSubmit) {
+            setForceSubmit(true); // Enable force submit option
             return false;
         }
 
@@ -66,46 +143,46 @@ const CourseModal = ({ isOpen, onClose, onAddCourse, onUpdateCourse, isEditMode,
     };
 
     const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!validateForm()) return;
-    
-    setLoading(true);
+        e.preventDefault();
+        
+        if (!validateForm()) return;
+        
+        setLoading(true);
 
-    const courseData = {
-        name: courseName,
-        courseCode,
-        description,
-        semester,
-        academic_year: academicYear,
-        status
-    };
+        const courseData = {
+            name: courseName,
+            courseCode,
+            description,
+            semester,
+            academic_year: academicYear,
+            status
+        };
 
-    try {
-        if (isEditMode) {
-            if (onUpdateCourse) {
-                onUpdateCourse({
-                    id: currentCourse.id,
-                    ...courseData
-                });
+        try {
+            if (isEditMode) {
+                if (onUpdateCourse) {
+                    onUpdateCourse({
+                        id: currentCourse.id,
+                        ...courseData
+                    });
+                }
+                // Let parent component handle toast
+            } else {
+                if (onAddCourse) {
+                    onAddCourse(courseData);
+                }
+                // Let parent component handle toast
             }
-            // Let parent component handle toast
-        } else {
-            if (onAddCourse) {
-                onAddCourse(courseData);
-            }
-            // Let parent component handle toast
+
+            resetForm();
+            onClose();
+        } catch (error) {
+            console.error('Error saving course:', error);
+            showToast.error(`Failed to ${isEditMode ? 'update' : 'create'} course`);
+        } finally {
+            setLoading(false);
         }
-
-        resetForm();
-        onClose();
-    } catch (error) {
-        console.error('Error saving course:', error);
-        showToast.error(`Failed to ${isEditMode ? 'update' : 'create'} course`);
-    } finally {
-        setLoading(false);
-    }
-};
+    };
 
     return (
         <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
@@ -137,6 +214,43 @@ const CourseModal = ({ isOpen, onClose, onAddCourse, onUpdateCourse, isEditMode,
                             </button>
                         </div>
 
+                        {/* Duplicate Course Warning */}
+                        {duplicateCourse && (
+                            <div className="mb-4 rounded-md bg-amber-50 p-4 border border-amber-200">
+                                <div className="flex">
+                                    <div className="flex-shrink-0">
+                                        <MdWarning className="h-5 w-5 text-amber-400" aria-hidden="true" />
+                                    </div>
+                                    <div className="ml-3">
+                                        <h3 className="text-sm font-medium text-amber-800">Duplicate Course Detected</h3>
+                                        <div className="mt-2 text-sm text-amber-700">
+                                            <p>
+                                                A course with the same code (<strong>{duplicateCourse.courseCode}</strong>), 
+                                                semester (<strong>{duplicateCourse.semester}</strong>), 
+                                                and academic year (<strong>{duplicateCourse.academic_year}</strong>) already exists:
+                                            </p>
+                                            <p className="mt-1 font-semibold">{duplicateCourse.name}</p>
+                                        </div>
+                                        {forceSubmit && (
+                                            <div className="mt-3">
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        setDuplicateCourse(null);
+                                                        setForceSubmit(true);
+                                                    }}
+                                                    className="inline-flex items-center px-3 py-1.5 border border-amber-500 text-xs font-medium rounded-md bg-amber-50 hover:bg-amber-100 text-amber-800 focus:outline-none"
+                                                >
+                                                    <FiCheck className="mr-1.5 h-4 w-4" /> Create anyway
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         <form onSubmit={handleSubmit}>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                                 <div>
@@ -146,8 +260,8 @@ const CourseModal = ({ isOpen, onClose, onAddCourse, onUpdateCourse, isEditMode,
                                     <input
                                         type="text"
                                         id="courseCode"
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#333D79] focus:border-transparent"
-                                        placeholder="e.g. CS101"
+                                        className={`w-full px-3 py-2 border ${duplicateCourse ? 'border-amber-300' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#333D79] focus:border-transparent`}
+                                        placeholder="e.g. CSIT-101"
                                         value={courseCode}
                                         onChange={(e) => setCourseCode(e.target.value)}
                                         required
@@ -191,7 +305,7 @@ const CourseModal = ({ isOpen, onClose, onAddCourse, onUpdateCourse, isEditMode,
                                     </label>
                                     <select
                                         id="semester"
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#333D79] focus:border-transparent"
+                                        className={`w-full px-3 py-2 border ${duplicateCourse ? 'border-amber-300' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#333D79] focus:border-transparent`}
                                         value={semester}
                                         onChange={(e) => setSemester(e.target.value)}
                                         required
@@ -208,16 +322,20 @@ const CourseModal = ({ isOpen, onClose, onAddCourse, onUpdateCourse, isEditMode,
                                     <label htmlFor="academicYear" className="block text-sm font-medium text-gray-700 mb-1">
                                         Academic Year *
                                     </label>
-                                    <input
-                                        type="text"
+                                    <select
                                         id="academicYear"
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#333D79] focus:border-transparent"
-                                        placeholder="e.g. 2023-2024"
+                                        className={`w-full px-3 py-2 border ${duplicateCourse ? 'border-amber-300' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#333D79] focus:border-transparent`}
                                         value={academicYear}
                                         onChange={(e) => setAcademicYear(e.target.value)}
                                         required
-                                    />
-                                    <small className="text-gray-500">Format: YYYY-YYYY</small>
+                                    >
+                                        <option value="">Select academic year</option>
+                                        {academicYearOptions.map((year) => (
+                                            <option key={year} value={year}>
+                                                {year}
+                                            </option>
+                                        ))}
+                                    </select>
                                 </div>
                             </div>
 
@@ -242,10 +360,16 @@ const CourseModal = ({ isOpen, onClose, onAddCourse, onUpdateCourse, isEditMode,
                             <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse mt-4 -mx-6">
                                 <button
                                     type="submit"
-                                    disabled={loading}
-                                    className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-[#333D79] text-base font-medium text-white hover:bg-[#4A5491] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#333D79] sm:ml-3 sm:w-auto sm:text-sm transition-colors"
+                                    disabled={loading || (duplicateCourse && !forceSubmit)}
+                                    className={`w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 ${
+                                        duplicateCourse && !forceSubmit ? 'bg-gray-400' : 'bg-[#333D79] hover:bg-[#4A5491]'
+                                    } text-base font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#333D79] sm:ml-3 sm:w-auto sm:text-sm transition-colors`}
                                 >
-                                    {loading ? (isEditMode ? 'Updating...' : 'Creating...') : (isEditMode ? 'Update Course' : 'Add Course')}
+                                    {loading 
+                                        ? (isEditMode ? 'Updating...' : 'Creating...') 
+                                        : duplicateCourse && !forceSubmit 
+                                            ? 'Duplicate Detected' 
+                                            : (isEditMode ? 'Update Course' : 'Add Course')}
                                 </button>
                                 <button
                                     type="button"

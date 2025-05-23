@@ -1534,9 +1534,6 @@ const ClassDetails = ({ accessInfo }) => {
                 </div>
               </div>
             )}
-
-            {/* Recordings Section */}
-            <RecordingsSection />
           </div>
           
           {/* Add Custom Column Modal */}
@@ -1644,8 +1641,6 @@ const ClassDetails = ({ accessInfo }) => {
             </div>
           </div>
         )}
-                
-
     </DashboardLayout>
   );
 };

@@ -143,6 +143,7 @@ const CourseDetail = ({ accessInfo }) => {
   const [dropdownPosition, setDropdownPosition] = useState(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [classToDelete, setClassToDelete] = useState(null);
+  const [sortBy, setSortBy] = useState('date');
 
   // Initialize teamAccess when accessInfo changes
   useEffect(() => {
@@ -307,19 +308,31 @@ const CourseDetail = ({ accessInfo }) => {
     deleteClassMutation.mutate(classToDelete);
   };
 
-  const handleAddClass = (newClass) => {
-    const classWithCourseId = {
-      ...newClass,
-      course_id: id
-    };
-    addClassMutation.mutate(classWithCourseId);
-  };
+  const handleAddClass = (classData) => {
+    addClassMutation.mutate(classData, {
+        onSuccess: () => {
+            queryClient.invalidateQueries(['classes', id]);
+            toast.success('Class added successfully');
+            setIsClassModalOpen(false);
+        }
+    });
+};
 
   const handleUpdateClass = (updatedClass) => {
     updateClassMutation.mutate({
       classId: updatedClass.id,
       classData: updatedClass
     });
+  };
+
+  const sortClasses = (classes) => {
+    if (sortBy === 'name') {
+      return [...classes].sort((a, b) => a.name?.localeCompare(b.name));
+    } else {
+      return [...classes].sort((a, b) => 
+        new Date(b.created_at) - new Date(a.created_at)
+      );
+    }
   };
 
   const handleUpdateClassStatus = (classId, newStatus) => {
@@ -330,9 +343,11 @@ const CourseDetail = ({ accessInfo }) => {
     setActiveClassDropdown(null);
   };
 
-  const filteredClasses = classes.filter(classItem => 
-    classItem.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    classItem.description?.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredClasses = sortClasses(
+    classes.filter(classItem => 
+      classItem.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      classItem.description?.toLowerCase().includes(searchTerm.toLowerCase())
+    )
   );
 
   // Determine if we're in a loading state
@@ -476,17 +491,47 @@ const CourseDetail = ({ accessInfo }) => {
             currentClass={currentClass}
           />
           
-          {/* Search */}
+         {/* Search and Sort */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-6">
-            <div className="relative">
-              <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-              <input
-                type="text"
-                placeholder="Search classes by name, section, date..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#333D79] focus:border-transparent bg-gray-50"
-              />
+            <div className="flex flex-col md:flex-row md:items-center gap-4">
+              <div className="relative flex-1">
+                <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                <input
+                  type="text"
+                  placeholder="Search classes by name..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#333D79] focus:border-transparent bg-gray-50"
+                />
+              </div>
+              
+              <div className="flex items-center">
+                <span className="text-sm text-gray-500 mr-2">Sort by:</span>
+                <div className="inline-flex rounded-md shadow-sm" role="group">
+                  <button
+                    type="button"
+                    className={`px-4 py-2 text-sm font-medium rounded-l-lg border ${
+                      sortBy === 'date' 
+                        ? 'bg-[#333D79] text-white border-[#333D79]' 
+                        : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                    }`}
+                    onClick={() => setSortBy('date')}
+                  >
+                    Newest
+                  </button>
+                  <button
+                    type="button"
+                    className={`px-4 py-2 text-sm font-medium rounded-r-lg border ${
+                      sortBy === 'name' 
+                        ? 'bg-[#333D79] text-white border-[#333D79]' 
+                        : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                    }`}
+                    onClick={() => setSortBy('name')}
+                  >
+                    A-Z
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
           
@@ -509,9 +554,6 @@ const CourseDetail = ({ accessInfo }) => {
                           </div>
                           <div>
                             <h3 className="font-medium text-gray-900">{classItem.name}</h3>
-                            <p className="text-xs text-gray-500">
-                              <span className="font-medium">Section:</span> {classItem.section || 'A'}
-                            </p>
                           </div>
                         </div>
                         

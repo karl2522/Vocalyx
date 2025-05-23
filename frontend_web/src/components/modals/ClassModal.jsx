@@ -6,29 +6,154 @@ import { showToast } from '../../utils/toast.jsx';
 
 const ClassModal = ({ isOpen, onClose, onAddClass, onUpdateClass, courseId, courseName, isEditMode, currentClass }) => {
     const [className, setClassName] = useState('');
-    const [section, setSection] = useState('');
     const [studentCount, setStudentCount] = useState('');
-    const [schedule, setSchedule] = useState('');
     const [status, setStatus] = useState('active');
     const [loading, setLoading] = useState(false);
+    
+    // Schedule state (split into components for better UX)
+    const [selectedDays, setSelectedDays] = useState([]);
+    const [startTime, setStartTime] = useState('');
+    const [endTime, setEndTime] = useState('');
+    
+    // For displaying the full schedule format when editing an existing schedule
+    const [formattedSchedule, setFormattedSchedule] = useState('');
+
+    // Day options for the schedule
+    const dayOptions = [
+        { value: 'M', label: 'Monday (M)' },
+        { value: 'T', label: 'Tuesday (T)' },
+        { value: 'W', label: 'Wednesday (W)' },
+        { value: 'TH', label: 'Thursday (TH)' },
+        { value: 'F', label: 'Friday (F)' },
+    ];
+
+    // Generate time options from 7:30 AM to 9:30 PM in 30 minute increments
+    const generateTimeOptions = () => {
+        const options = [];
+        let hour = 7;
+        let minute = 30;
+        let period = 'AM';
+        
+        while (!(hour === 9 && minute === 30 && period === 'PM')) {
+            const formattedHour = hour > 12 ? hour - 12 : hour;
+            const formattedMinute = minute === 0 ? '00' : minute;
+            const timeString = `${formattedHour}:${formattedMinute} ${period}`;
+            
+            options.push({
+                value: timeString,
+                label: timeString
+            });
+            
+            // Increment by 30 minutes
+            if (minute === 30) {
+                minute = 0;
+                hour++;
+                if (hour === 12 && period === 'AM') {
+                    period = 'PM';
+                } else if (hour === 13) {
+                    hour = 1;
+                }
+            } else {
+                minute = 30;
+            }
+        }
+        
+        // Add the last option (9:30 PM)
+        options.push({
+            value: '9:30 PM',
+            label: '9:30 PM'
+        });
+        
+        return options;
+    };
+    
+    const timeOptions = generateTimeOptions();
+    
+    // Common day patterns for quick selection
+    const dayPatterns = [
+        { value: 'M,W,F', label: 'Monday, Wednesday, Friday (M,W,F)' },
+        { value: 'T,TH', label: 'Tuesday, Thursday (T,TH)' },
+        { value: 'M,W', label: 'Monday, Wednesday (M,W)' },
+        { value: 'M,T,W,TH,F', label: 'Every Day (M,T,W,TH,F)' },
+    ];
 
     useEffect(() => {
         if (isEditMode && currentClass) {
             setClassName(currentClass.name || '');
-            setSection(currentClass.section || '');
             setStudentCount(currentClass.student_count || '');
-            setSchedule(currentClass.schedule || '');
             setStatus(currentClass.status || 'active');
+            
+            // Parse existing schedule if available
+            if (currentClass.schedule) {
+                setFormattedSchedule(currentClass.schedule);
+                parseScheduleString(currentClass.schedule);
+            }
         } else {
             resetForm();
         }
     }, [isEditMode, currentClass, isOpen]);
+    
+    // Parse a schedule string like "M,W,F 1:30 - 3:00 PM" into component parts
+    const parseScheduleString = (scheduleString) => {
+        try {
+            // Try to extract days and time range
+            const parts = scheduleString.split(' ');
+            if (parts.length >= 3) {
+                const days = parts[0].split(',');
+                
+                // Find the time parts
+                let timeStartIndex = 1;
+                let timeString = parts.slice(timeStartIndex).join(' ');
+                
+                // Split on the dash for start and end times
+                const timeParts = timeString.split('-').map(t => t.trim());
+                
+                if (timeParts.length === 2) {
+                    let startTimeValue = timeParts[0];
+                    let endTimeValue = timeParts[1];
+                    
+                    // Make sure we have periods (AM/PM) on both times
+                    if (endTimeValue.includes('AM') || endTimeValue.includes('PM')) {
+                        // End time has period, check if start time needs it
+                        if (!startTimeValue.includes('AM') && !startTimeValue.includes('PM')) {
+                            const period = endTimeValue.includes('AM') ? 'AM' : 'PM';
+                            startTimeValue = `${startTimeValue} ${period}`;
+                        }
+                    }
+                    
+                    // Set the component states
+                    setSelectedDays(days);
+                    setStartTime(startTimeValue);
+                    setEndTime(endTimeValue);
+                }
+            }
+        } catch (e) {
+            console.error('Error parsing schedule:', e);
+            // If parsing fails, just show the original string
+        }
+    };
+
+    // Format the schedule for display and submission
+    const formatSchedule = () => {
+        if (selectedDays.length === 0 || !startTime || !endTime) return '';
+        
+        return `${selectedDays.join(',')} ${startTime} - ${endTime}`;
+    };
+
+    useEffect(() => {
+        const schedule = formatSchedule();
+        if (schedule) {
+            setFormattedSchedule(schedule);
+        }
+    }, [selectedDays, startTime, endTime]);
 
     const resetForm = () => {
         setClassName('');
-        setSection('');
         setStudentCount('');
-        setSchedule('');
+        setSelectedDays([]);
+        setStartTime('');
+        setEndTime('');
+        setFormattedSchedule('');
         setStatus('active');
     };
 
@@ -39,10 +164,6 @@ const ClassModal = ({ isOpen, onClose, onAddClass, onUpdateClass, courseId, cour
             showToast.error('Class name is required');
             return false;
         }
-        if (!section) {
-            showToast.error('Section is required');
-            return false;
-        }
         if (!studentCount) {
             showToast.error('Number of students is required');
             return false;
@@ -51,10 +172,37 @@ const ClassModal = ({ isOpen, onClose, onAddClass, onUpdateClass, courseId, cour
             showToast.error('Number of students must be at least 1');
             return false;
         }
-        if (!schedule) {
-            showToast.error('Schedule is required');
+        if (selectedDays.length === 0) {
+            showToast.error('Please select at least one day for the schedule');
             return false;
         }
+        if (!startTime) {
+            showToast.error('Please select a start time');
+            return false;
+        }
+        if (!endTime) {
+            showToast.error('Please select an end time');
+            return false;
+        }
+        
+        // Check if end time is after start time
+        const startHour = parseInt(startTime.split(':')[0]);
+        const endHour = parseInt(endTime.split(':')[0]);
+        const startPeriod = startTime.includes('PM') ? 'PM' : 'AM';
+        const endPeriod = endTime.includes('PM') ? 'PM' : 'AM';
+        
+        if (startPeriod === 'PM' && endPeriod === 'AM') {
+            showToast.error('End time must be after start time');
+            return false;
+        } else if (startPeriod === endPeriod) {
+            if (startHour > endHour || 
+                (startHour === endHour && 
+                 parseInt(startTime.split(':')[1]) >= parseInt(endTime.split(':')[1]))) {
+                showToast.error('End time must be after start time');
+                return false;
+            }
+        }
+        
         return true;
     };
 
@@ -67,26 +215,27 @@ const ClassModal = ({ isOpen, onClose, onAddClass, onUpdateClass, courseId, cour
 
         const classData = {
             name: className,
-            section,
             student_count: studentCount,
-            schedule,
+            schedule: formattedSchedule,
             status,
             ...(courseId && !isEditMode ? { course_id: courseId } : {})
         };
 
         try {
             if (isEditMode) {
+                // For edit mode, we'll continue using the API directly
                 const response = await classService.updateClass(currentClass.id, classData);
                 if (onUpdateClass) {
                     onUpdateClass(response.data);
                 }
                 showToast.success('Class updated successfully!');
             } else {
-                const response = await classService.createClass(classData);
+                // For new classes, we'll let the parent handle the API call
+                // to avoid duplicate submissions
                 if (onAddClass) {
-                    onAddClass(response.data);
+                    onAddClass(classData);
+                    // Don't show success toast here, let parent handle it
                 }
-                showToast.success('Class created successfully!', 'New Class Added');
             }
 
             resetForm();
@@ -96,6 +245,24 @@ const ClassModal = ({ isOpen, onClose, onAddClass, onUpdateClass, courseId, cour
             showToast.error(error.response?.data?.message || `Failed to ${isEditMode ? 'update' : 'create'} class`);
         } finally {
             setLoading(false);
+        }
+    };
+    
+    // Handler for when a day is selected or unselected
+    const handleDayChange = (day) => {
+        if (selectedDays.includes(day)) {
+            setSelectedDays(selectedDays.filter(d => d !== day));
+        } else {
+            setSelectedDays([...selectedDays, day]);
+        }
+    };
+    
+    // Handler for selecting a common day pattern
+    const handleDayPatternChange = (pattern) => {
+        if (pattern) {
+            setSelectedDays(pattern.split(','));
+        } else {
+            setSelectedDays([]);
         }
     };
 
@@ -138,26 +305,12 @@ const ClassModal = ({ isOpen, onClose, onAddClass, onUpdateClass, courseId, cour
                                     type="text"
                                     id="className"
                                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#333D79] focus:border-transparent"
-                                    placeholder="Enter class name"
+                                    placeholder="Enter class name (e.g. 'BSIT 1-A')"
                                     value={className}
                                     onChange={(e) => setClassName(e.target.value)}
                                     required
                                 />
-                            </div>
-
-                            <div className="mb-4">
-                                <label htmlFor="section" className="block text-sm font-medium text-gray-700 mb-1">
-                                    Section *
-                                </label>
-                                <input
-                                    type="text"
-                                    id="section"
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#333D79] focus:border-transparent"
-                                    placeholder="e.g. A, B, C"
-                                    value={section}
-                                    onChange={(e) => setSection(e.target.value)}
-                                    required
-                                />
+                                <p className="mt-1 text-xs text-gray-500">Include section information in the class name (e.g. "BSIT 1-A", "CS101 Section 2")</p>
                             </div>
 
                             <div className="mb-4">
@@ -177,24 +330,101 @@ const ClassModal = ({ isOpen, onClose, onAddClass, onUpdateClass, courseId, cour
                             </div>
 
                             <div className="mb-4">
-                                <label htmlFor="schedule" className="block text-sm font-medium text-gray-700 mb-1">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
                                     Schedule *
                                 </label>
-                                <div className="relative">
-                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                        <MdOutlineWatchLater className="h-5 w-5 text-gray-400" />
+                                
+                                {/* Display the formatted schedule */}
+                                {formattedSchedule && (
+                                    <div className="mb-2 p-2 bg-gray-50 border border-gray-200 rounded-md">
+                                        <div className="flex items-center">
+                                            <MdOutlineWatchLater className="h-5 w-5 text-gray-500 mr-2" />
+                                            <span className="font-medium text-gray-700">{formattedSchedule}</span>
+                                        </div>
                                     </div>
-                                    <input
-                                        type="text"
-                                        id="schedule"
-                                        className="w-full pl-10 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#333D79] focus:border-transparent"
-                                        placeholder="e.g. M,W,F 1:30 - 3:00PM"
-                                        value={schedule}
-                                        onChange={(e) => setSchedule(e.target.value)}
-                                        required
-                                    />
+                                )}
+                                
+                                {/* Common day patterns */}
+                                <div className="mb-3">
+                                    <label className="block text-sm text-gray-600 mb-1">
+                                        Common Patterns:
+                                    </label>
+                                    <select 
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#333D79] focus:border-transparent"
+                                        onChange={(e) => handleDayPatternChange(e.target.value)}
+                                        value={selectedDays.join(',')}
+                                    >
+                                        <option value="">Choose a common pattern</option>
+                                        {dayPatterns.map((pattern) => (
+                                            <option key={pattern.value} value={pattern.value}>
+                                                {pattern.label}
+                                            </option>
+                                        ))}
+                                    </select>
                                 </div>
-                                <p className="mt-1 text-xs text-gray-500">Format: Days, Time Range (e.g. M,W,F 1:30 - 3:00PM)</p>
+                                
+                                {/* Individual day selection */}
+                                <div className="mb-3">
+                                    <label className="block text-sm text-gray-600 mb-1">
+                                        Or select individual days:
+                                    </label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {dayOptions.map((day) => (
+                                            <button
+                                                key={day.value}
+                                                type="button"
+                                                className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                                                    selectedDays.includes(day.value)
+                                                        ? 'bg-[#333D79] text-white'
+                                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                                }`}
+                                                onClick={() => handleDayChange(day.value)}
+                                            >
+                                                {day.value}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                
+                                {/* Time selection */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm text-gray-600 mb-1">
+                                            Start Time:
+                                        </label>
+                                        <select
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#333D79] focus:border-transparent"
+                                            value={startTime}
+                                            onChange={(e) => setStartTime(e.target.value)}
+                                            required
+                                        >
+                                            <option value="">Select start time</option>
+                                            {timeOptions.map((time) => (
+                                                <option key={`start-${time.value}`} value={time.value}>
+                                                    {time.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm text-gray-600 mb-1">
+                                            End Time:
+                                        </label>
+                                        <select
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#333D79] focus:border-transparent"
+                                            value={endTime}
+                                            onChange={(e) => setEndTime(e.target.value)}
+                                            required
+                                        >
+                                            <option value="">Select end time</option>
+                                            {timeOptions.map((time) => (
+                                                <option key={`end-${time.value}`} value={time.value}>
+                                                    {time.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
 
                             {isEditMode && (
@@ -244,7 +474,7 @@ ClassModal.propTypes = {
     onClose: PropTypes.func.isRequired,
     onAddClass: PropTypes.func,
     onUpdateClass: PropTypes.func,
-    courseId: PropTypes.string,
+    courseId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
     courseName: PropTypes.string,
     isEditMode: PropTypes.bool,
     currentClass: PropTypes.object
