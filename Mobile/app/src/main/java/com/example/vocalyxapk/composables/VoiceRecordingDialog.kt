@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -39,9 +40,14 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import com.example.vocalyxapk.models.VoiceParseResult
+import com.example.vocalyxapk.utils.AudioRecorder
 import com.example.vocalyxapk.viewmodel.ExcelViewModel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Locale
 
 @Composable
@@ -72,6 +78,12 @@ fun VoiceRecordingDialog(
         ) == PackageManager.PERMISSION_GRANTED
     )}
 
+     var audioRecorder: AudioRecorder? = null
+     var useAdvancedRecognition by remember { mutableStateOf(false) }
+     var capturedAudioBytes: ByteArray? = null
+     var isProcessingAudio by remember { mutableStateOf(false) }
+     var autoEndHandler: AutoEndRecordingHandler? = null
+
     // Get columns
     val columns = excelViewModel.getColumnNames()
 
@@ -91,6 +103,16 @@ fun VoiceRecordingDialog(
         }
     }
 
+    DisposableEffect(Unit) {
+        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context)
+
+        onDispose {
+            autoEndHandler?.stopMonitoring()
+            audioRecorder?.forceStop()
+            speechRecognizer?.destroy()
+        }
+    }
+
     fun getErrorMessage(errorCode: Int): String {
         return when (errorCode) {
             SpeechRecognizer.ERROR_AUDIO -> "Audio recording error"
@@ -106,10 +128,70 @@ fun VoiceRecordingDialog(
         }
     }
 
-    // Stop recording function
     fun stopRecording() {
-        speechRecognizer?.stopListening()
-        isRecording = false
+        if (useAdvancedRecognition) {
+
+            autoEndHandler?.stopMonitoring()
+            // Stop advanced recording and process audio
+            isRecording = false
+            isProcessingAudio = true
+
+            coroutineScope.launch {
+                try {
+                    // Get the recorded audio
+                    val audioBytes = withContext(Dispatchers.IO) {
+                        audioRecorder?.forceStop()
+                        val bytes = audioRecorder?.stopRecording()
+                        Log.d("VoiceRecordingDialog", "Captured audio bytes: ${bytes?.size ?: 0}")
+
+                        // Don't proceed if no real audio data was captured
+                        if (bytes == null || bytes.size < 1000) { // At least 1KB of data
+                            Log.e("VoiceRecordingDialog", "Insufficient audio data captured: ${bytes?.size ?: 0} bytes")
+                            errorMessage = "Not enough audio data captured. Please speak louder or closer to the microphone."
+                            return@withContext null
+                        }
+
+                        bytes
+                    }
+
+                    if (audioBytes != null) {
+                        recognizedText = "Processing audio..."
+
+                        // Use the real API
+                        val result = excelViewModel.performAdvancedSpeechRecognition(audioBytes)
+
+                        result.fold(
+                            onSuccess = { transcription ->
+                                recognizedText = transcription
+
+                                // Process the recognized speech
+                                parsedResult = excelViewModel.parseVoiceInput(transcription)
+
+                                // Get matching students
+                                parsedResult?.studentName?.let { name ->
+                                    suggestedStudents = excelViewModel.findMatchingStudents(name)
+                                    if (suggestedStudents.size == 1) {
+                                        selectedStudent = suggestedStudents[0]
+                                    }
+                                }
+                            },
+                            onFailure = { error ->
+                                errorMessage = "Speech recognition failed: ${error.message}"
+                            }
+                        )
+                    }
+                } catch (e: Exception) {
+                    Log.e("VoiceRecordingDialog", "Error processing audio", e)
+                    errorMessage = "Error processing audio: ${e.message}"
+                } finally {
+                    isProcessingAudio = false
+                }
+            }
+        } else {
+            // Use native speech recognition
+            speechRecognizer?.stopListening()
+            isRecording = false
+        }
     }
 
     // Define the start recording function and store it in the mutable state
@@ -138,9 +220,91 @@ fun VoiceRecordingDialog(
         }
     }
 
-    // Convenience function to call the stored function
     fun startRecording(ctx: Context) {
-        startRecordingFunction.value?.invoke(ctx)
+        if (useAdvancedRecognition) {
+            // Start advanced recording with AudioRecorder
+            if (!hasRecordingPermission) {
+                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            } else {
+                recognizedText = ""
+                recordingVolume = 0f
+                isRecording = true
+
+                // Create a new AudioRecorder instance every time
+                audioRecorder = AudioRecorder(context)
+                val success = audioRecorder?.startRecording()
+
+                if (success != true) {
+                    isRecording = false
+                    errorMessage = "Failed to start recording"
+                } else {
+                    Log.d("VoiceRecordingDialog", "Advanced recording started successfully")
+
+                    // Start monitoring for auto-end of recording
+                    autoEndHandler = AutoEndRecordingHandler(audioRecorder) { bytes ->
+                        // This gets called when recording auto-stops
+                        isRecording = false
+                        isProcessingAudio = true
+
+                        coroutineScope.launch {
+                            if (bytes != null && bytes.size > 1000) {
+                                recognizedText = "Processing audio..."
+
+                                // Process the audio with our API
+                                val result = excelViewModel.performAdvancedSpeechRecognition(bytes)
+
+                                result.fold(
+                                    onSuccess = { transcription ->
+                                        recognizedText = transcription
+
+                                        // Process the recognized speech
+                                        parsedResult = excelViewModel.parseVoiceInput(transcription)
+
+                                        // Get matching students
+                                        parsedResult?.studentName?.let { name ->
+                                            suggestedStudents = excelViewModel.findMatchingStudents(name)
+                                            if (suggestedStudents.size == 1) {
+                                                selectedStudent = suggestedStudents[0]
+                                            }
+                                        }
+                                    },
+                                    onFailure = { error ->
+                                        errorMessage = "Speech recognition failed: ${error.message}"
+                                    }
+                                )
+                            } else {
+                                errorMessage = "Not enough audio data captured"
+                            }
+                            isProcessingAudio = false
+                        }
+                    }
+
+                    autoEndHandler?.startMonitoring(coroutineScope)
+                }
+            }
+        }  else {
+            // Use native Android recognition
+            if (!hasRecordingPermission) {
+                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            } else {
+                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+                }
+
+                try {
+                    recognizedText = ""
+                    recordingVolume = 0f
+                    isRecording = true
+                    speechRecognizer?.startListening(intent)
+                } catch (e: Exception) {
+                    isRecording = false
+                    errorMessage = "Error: ${e.message}"
+                }
+            }
+        }
     }
 
     // Initialize speech recognizer
@@ -150,6 +314,12 @@ fun VoiceRecordingDialog(
         onDispose {
             speechRecognizer?.destroy()
         }
+    }
+
+    LaunchedEffect(Unit) {
+        audioRecorder = AudioRecorder(context)
+        // Initialize the whisper client
+        excelViewModel.initializeWhisperClient(context)
     }
 
     // Setup speech recognizer listener
@@ -271,6 +441,27 @@ fun VoiceRecordingDialog(
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.Medium
                         )
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Use Advanced Recognition",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+
+                            Spacer(modifier = Modifier.weight(1f))
+
+                            Switch(
+                                checked = useAdvancedRecognition,
+                                onCheckedChange = { enabled ->
+                                    useAdvancedRecognition = enabled
+                                }
+                            )
+                        }
 
                         Spacer(modifier = Modifier.height(16.dp))
 
@@ -495,6 +686,30 @@ fun VoiceRecordingDialog(
                             color = if (isRecording) Color(0xFF333D79) else Color(0xFF666666)
                         )
 
+                        if (isProcessingAudio) {
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    color = Color(0xFF333D79),
+                                    strokeWidth = 2.dp
+                                )
+
+                                Spacer(modifier = Modifier.width(8.dp))
+
+                                Text(
+                                    "Processing audio...",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color(0xFF333D79)
+                                )
+                            }
+                        }
+
                         Spacer(modifier = Modifier.height(8.dp))
 
                         // If text has been recognized, show it
@@ -554,8 +769,6 @@ fun VoiceRecordingDialog(
                                 Text("Back")
                             }
                         }
-
-
                     }
 
                     3 -> {
@@ -1208,5 +1421,41 @@ private fun DetailsRow(label: String, value: String) {
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Normal
         )
+    }
+}
+
+class AutoEndRecordingHandler(
+    private val audioRecorder: AudioRecorder?,
+    private val onRecordingFinished: (ByteArray?) -> Unit
+) {
+    private var checkingJob: Job? = null
+    private var isMonitoring = false
+
+    fun startMonitoring(coroutineScope: CoroutineScope) {
+        if (isMonitoring) return
+        isMonitoring = true
+
+        checkingJob = coroutineScope.launch {
+            while (isMonitoring) {
+                delay(100) // Check every 100ms
+
+                // If we're not recording anymore (auto-stopped due to silence),
+                // retrieve the audio data and process it
+                if (audioRecorder != null && !audioRecorder.isRecording) {
+                    isMonitoring = false
+                    val audioBytes = withContext(Dispatchers.IO) {
+                        audioRecorder.stopRecording()
+                    }
+                    onRecordingFinished(audioBytes)
+                    break
+                }
+            }
+        }
+    }
+
+    fun stopMonitoring() {
+        isMonitoring = false
+        checkingJob?.cancel()
+        checkingJob = null
     }
 }

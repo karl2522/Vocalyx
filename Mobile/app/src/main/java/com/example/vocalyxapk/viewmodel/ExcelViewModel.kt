@@ -1,11 +1,15 @@
 package com.example.vocalyxapk.viewmodel
 
+import android.content.Context
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.vocalyxapk.api.SpeechApiService
+import com.example.vocalyxapk.api.SpeechApiServiceFactory
+import com.example.vocalyxapk.api.WhisperApiClient
 import com.example.vocalyxapk.models.ExcelFileItem
 import com.example.vocalyxapk.models.VoiceEntryRecord
 import com.example.vocalyxapk.models.VoiceParseResult
@@ -13,6 +17,9 @@ import com.example.vocalyxapk.repository.ExcelRepository
 import info.debatty.java.stringsimilarity.JaroWinkler
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
 import java.io.File
 
 
@@ -38,11 +45,76 @@ class ExcelViewModel : ViewModel() {
     var attemptedNames = mutableListOf<String>()
         private set
 
+    private lateinit var speechApiService: SpeechApiService
+
     private val _voiceEntryHistory = mutableListOf<VoiceEntryRecord>()
     val voiceEntryHistory: List<VoiceEntryRecord> get() = _voiceEntryHistory.toList()
 
+    private lateinit var whisperApiClient: WhisperApiClient
+    private var useAdvancedRecognition = false
+
     enum class SaveStatus {
         SUCCESS, ERROR
+    }
+
+    fun initializeWhisperClient(context: Context) {
+        whisperApiClient = WhisperApiClient(context)
+
+        initializeSpeechApi("http://10.0.191.212:8000/")
+    }
+
+
+    fun initializeSpeechApi(baseUrl: String) {
+        speechApiService = SpeechApiServiceFactory.create(baseUrl)
+    }
+
+    suspend fun setWhisperApiKey(apiKey: String) {
+        whisperApiClient.saveApiKey(apiKey)
+    }
+
+    fun toggleAdvancedRecognition(enabled: Boolean) {
+        useAdvancedRecognition = enabled
+    }
+
+    suspend fun transcribeAudio(context: Context, audioBytes: ByteArray, language: String? = null): Result<String> {
+        return try {
+            // Create a temporary file from the audio bytes
+            val tempFile = File.createTempFile("audio_", ".wav", context.cacheDir)
+            tempFile.writeBytes(audioBytes)
+
+            // Create the request parts
+            val requestFile = tempFile.asRequestBody("audio/wav".toMediaTypeOrNull())
+            val filePart = MultipartBody.Part.createFormData("audio_file", "audio.wav", requestFile)
+
+            // Optional language part
+            val languagePart = language?.let {
+                MultipartBody.Part.createFormData("language", it)
+            }
+
+            // Make the API call
+            val response = speechApiService.transcribeAudio(filePart, languagePart)
+
+            // Clean up temp file
+            tempFile.delete()
+
+            if (response.isSuccessful && response.body()?.success == true) {
+                Result.success(response.body()?.text ?: "")
+            } else {
+                Result.failure(Exception(response.body()?.error ?: "Transcription failed"))
+            }
+        } catch (e: Exception) {
+            Log.e("ExcelViewModel", "Failed to transcribe audio", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun performAdvancedSpeechRecognition(audioBytes: ByteArray): Result<String> {
+        return try {
+            whisperApiClient.transcribeAudioBytes(audioBytes)
+        } catch (e: Exception) {
+            Log.e("ExcelViewModel", "Advanced speech recognition failed", e)
+            Result.failure(e)
+        }
     }
 
     fun fetchExcelFiles(classId: Int) {

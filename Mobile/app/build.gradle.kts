@@ -97,4 +97,6 @@ dependencies {
     implementation("com.github.tdebatty:java-string-similarity:2.0.0") {
         exclude(group = "net.jcip", module = "jcip-annotations")
     }
+
+    implementation("androidx.datastore:datastore-preferences:1.0.0")
 }

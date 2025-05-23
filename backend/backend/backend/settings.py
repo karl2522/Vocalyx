@@ -64,6 +64,7 @@ INSTALLED_APPS = [
     'classes',
     'teams',
     'notifications',
+    'speech_services',
     'token_management.apps.TokenManagementConfig',
 ]
 
@@ -180,6 +181,8 @@ MICROSOFT_AUTH_CLIENT_ID = '5a7221d3-d167-4f9d-b62e-79c987bb5d5f'
 MICROSOFT_AUTH_TENANT_ID = 'common'
 
 MICROSOFT_AUTH_CLIENT_SECRET = '36831e3e-4390-41b4-a7d2-6248bf7e3a4b'
+
+GOOGLE_APPLICATION_CREDENTIALS = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
 
 #Email Settings
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
