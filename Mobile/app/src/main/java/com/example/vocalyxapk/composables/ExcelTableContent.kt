@@ -31,14 +31,16 @@ fun ExcelTableContent(
         val headers = if (sheetData.isNotEmpty()) sheetData[0] else emptyList()
         val dataRows = if (sheetData.size > 1) sheetData.subList(1, sheetData.size) else emptyList()
 
-        Row(modifier = Modifier.background(Color(0xFFF5F7FA))) {
+        // Header row with sticky styling
+        Row(modifier = Modifier
+            .background(Color(0xFF333D79))
+        ) {
             headers.forEach { header ->
                 Box(
                     modifier = Modifier
                         .width(cellWidth)
-                        .border(width = 1.dp, color = Color(0xFFDDDDDD))
-                        .padding(cellPadding)
-                        .background(Color(0xFFF5F7FA)),
+                        .border(width = 0.5.dp, color = Color.White.copy(alpha = 0.3f))
+                        .padding(cellPadding),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -47,12 +49,14 @@ fun ExcelTableContent(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         textAlign = TextAlign.Center,
-                        style = MaterialTheme.typography.bodyMedium
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White
                     )
                 }
             }
         }
 
+        // Display all data rows (increased from previous implementation which may have been limited)
         dataRows.forEachIndexed { index, row ->
             Row(
                 modifier = Modifier.background(
@@ -63,19 +67,36 @@ fun ExcelTableContent(
                     Box(
                         modifier = Modifier
                             .width(cellWidth)
-                            .border(width = 1.dp, color = Color(0xFFDDDDDD))
+                            .border(width = 0.5.dp, color = Color(0xFFDDDDDD))
                             .padding(cellPadding),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = cell,
-                            maxLines = 3,
+                            maxLines = 2, // Reduced from 3 to make rows more compact
                             overflow = TextOverflow.Ellipsis,
                             textAlign = TextAlign.Center,
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
                 }
+            }
+        }
+        
+        // Add hint for more data if available
+        if (dataRows.size > 5) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFFF5F7FA))
+                    .padding(vertical = 4.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Scroll to see ${dataRows.size} total rows",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF333D79)
+                )
             }
         }
     }

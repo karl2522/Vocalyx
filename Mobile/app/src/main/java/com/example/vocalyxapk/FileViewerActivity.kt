@@ -39,6 +39,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.runtime.saveable.rememberSaveable
 import android.content.Intent
 import android.os.Parcelable
+import androidx.compose.foundation.border
 import kotlinx.parcelize.Parcelize
 import kotlinx.coroutines.launch
 import androidx.compose.material3.SnackbarHostState
@@ -48,6 +49,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.text.style.TextAlign
 import com.example.vocalyxapk.ClassRepository
 import com.example.vocalyxapk.ImportedClass
 
@@ -234,42 +237,92 @@ fun FileViewerScreen(
                         modifier = Modifier.padding(bottom = 16.dp)
                     )
                 } else if (fileData.isNotEmpty()) {
-                    // Improved File preview with horizontal scroll and better cell width
+                    // Improved File preview with horizontal scroll and table styling
                     val horizontalScrollState = rememberScrollState()
+                    val verticalScrollState = rememberScrollState()
+                    
+                    // Table header info
+                    Text(
+                        text = "${fileData.size - 1} rows, ${if (fileData.isNotEmpty()) fileData[0].size else 0} columns",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFF666666),
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
-                            .horizontalScroll(horizontalScrollState)
+                            .background(Color(0xFFF8F9FC))
+                            .border(width = 1.dp, color = Color(0xFFDDDDDD))
                     ) {
-                        Column {
-                            fileData.forEachIndexed { rowIndex, row ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .background(
-                                            if (rowIndex == 0)
-                                                Color(0xFFE1D7F0)
-                                            else
-                                                Color.Transparent
-                                        )
-                                ) {
-                                    row.forEach { cell ->
-                                        Text(
-                                            text = cell,
+                        Column(
+                            modifier = Modifier
+                                .verticalScroll(verticalScrollState)
+                                .horizontalScroll(horizontalScrollState)
+                        ) {
+                            if (fileData.isNotEmpty()) {
+                                // Header row with sticky styling
+                                Row(modifier = Modifier.background(Color(0xFF333D79))) {
+                                    fileData[0].forEach { header ->
+                                        Box(
                                             modifier = Modifier
-                                                .padding(8.dp)
-                                                .widthIn(min = 120.dp, max = 200.dp),
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            fontWeight = if (rowIndex == 0) FontWeight.Bold else FontWeight.Normal,
-                                            color = if (rowIndex == 0) Color(0xFF333D79) else Color.Unspecified
-                                        )
+                                                .width(120.dp)
+                                                .border(width = 0.5.dp, color = Color.White.copy(alpha = 0.3f))
+                                                .padding(vertical = 12.dp, horizontal = 8.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = header,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis,
+                                                textAlign = TextAlign.Center,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = Color.White
+                                            )
+                                        }
                                     }
                                 }
-                                Divider()
+
+                                // Data rows with alternating background
+                                if (fileData.size > 1) {
+                                    for (i in 1 until fileData.size) {
+                                        Row(modifier = Modifier.background(
+                                            if (i % 2 == 0) Color.White else Color(0xFFF5F7FA)
+                                        )) {
+                                            fileData[i].forEach { cell ->
+                                                Box(
+                                                    modifier = Modifier
+                                                        .width(120.dp)
+                                                        .border(width = 0.5.dp, color = Color(0xFFDDDDDD))
+                                                        .padding(vertical = 10.dp, horizontal = 8.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Text(
+                                                        text = cell,
+                                                        maxLines = 2,
+                                                        overflow = TextOverflow.Ellipsis,
+                                                        textAlign = TextAlign.Center,
+                                                        style = MaterialTheme.typography.bodySmall
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
+                    }
+                    
+                    // Scrolling hint
+                    if (fileData.size > 5) {
+                        Text(
+                            text = "Scroll to view all data",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF333D79),
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
                     }
 
                     // Only show Upload to Class button and dialog in import mode

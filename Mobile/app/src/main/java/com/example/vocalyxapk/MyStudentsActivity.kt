@@ -12,6 +12,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Rect
@@ -209,7 +210,12 @@ fun StudentsScreen(
                     val excelFiles = (excelUIState as ExcelUIState.Success).excelFiles
                     val selectedExcelFile = excelViewModel.selectedExcelFile
                     
-                    Column(modifier = Modifier.fillMaxSize()) {
+                    // Make the entire screen scrollable to allow the table to expand without affecting Class Recordings
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                    ) {
                         // File selector section
                         Card(
                             modifier = Modifier
@@ -300,9 +306,26 @@ fun StudentsScreen(
                             }
                         }
                         
-                        // Display selected file
+                        // Display selected file with fixed height for the table
                         if (selectedExcelFile != null) {
-                            Box(modifier = Modifier.weight(1f)) {
+                            // Add a spacer to push content down
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
+                            // Title for student records table
+                            Text(
+                                text = "Student Records",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                            )
+                            
+                            // Make the container for Excel data explicitly tall
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(350.dp) // Fixed height to ensure enough space for multiple rows
+                                    .padding(horizontal = 16.dp)
+                            ) {
                                 ExcelDataDisplay(
                                     excelFile = selectedExcelFile,
                                     sheetData = excelViewModel.getSelectedSheetData(),
@@ -324,6 +347,9 @@ fun StudentsScreen(
                                     }
                                 )
                             }
+                            
+                            // Add spacer between student records and recordings section
+                            Spacer(modifier = Modifier.height(16.dp))
                         } else if (excelFiles.isNotEmpty()) {
                             // Select a file message
                             Box(

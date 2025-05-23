@@ -11,7 +11,8 @@ object AuthStateManager {
     private const val KEY_IS_LOGGED_IN = "is_logged_in"
     private const val KEY_LAST_LOGIN_TIME = "last_login_time"
 
-    private const val SESSION_TIMEOUT = 24 * 60 * 60 * 1000L
+    // Set to 1 hour to match backend session timeout
+    private const val SESSION_TIMEOUT = 60 * 60 * 1000L
 
     private val _authState = MutableStateFlow<AuthState>(AuthState.Unknown)
     val authState: StateFlow<AuthState> = _authState.asStateFlow()

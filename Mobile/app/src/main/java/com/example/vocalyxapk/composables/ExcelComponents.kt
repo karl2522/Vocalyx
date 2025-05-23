@@ -198,37 +198,100 @@ fun ExcelDataDisplay(
         }
 
         if (sheetData.isNotEmpty()) {
-            Text(
-                text = "Student Records",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(vertical = 8.dp)
-            )
 
+            // Display summary of data
+            Text(
+                text = "${sheetData.size - 1} rows, ${if (sheetData.isNotEmpty()) sheetData[0].size else 0} columns",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFF666666),
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            
             if (!isFullscreen) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
+                        // Set a minimum height to show at least 5 rows (header + 4 data rows)
+                        .heightIn(min = 300.dp)
                         .weight(1f)
                         .clip(RoundedCornerShape(8.dp))
                         .border(1.dp, Color(0xFFEEEEEE), RoundedCornerShape(8.dp))
                 ) {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize()
+                    // Use vertical and horizontal scrolling for better table navigation
+                    val verticalScrollState = rememberScrollState()
+                    val horizontalScrollState = rememberScrollState()
+                    
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(verticalScrollState)
+                            .horizontalScroll(horizontalScrollState)
                     ) {
-                        item {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState())
-                            ) {
-                                ExcelTableContent(
-                                    sheetData = sheetData,
-                                    cellWidth = 120.dp,
-                                    cellPadding = 12.dp
-                                )
+                        // Header row with blue background
+                        if (sheetData.isNotEmpty()) {
+                            Row(modifier = Modifier.background(Color(0xFF333D79))) {
+                                sheetData[0].forEach { header ->
+                                    Box(
+                                        modifier = Modifier
+                                            .width(120.dp)
+                                            .border(width = 0.5.dp, color = Color.White.copy(alpha = 0.3f))
+                                            .padding(vertical = 12.dp, horizontal = 8.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = header,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                            textAlign = TextAlign.Center,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = Color.White
+                                        )
+                                    }
+                                }
+                            }
+                            
+                            // Data rows with alternating background
+                            if (sheetData.size > 1) {
+                                for (i in 1 until sheetData.size) {
+                                    Row(modifier = Modifier.background(
+                                        if (i % 2 == 0) Color.White else Color(0xFFF5F7FA)
+                                    )) {
+                                        sheetData[i].forEach { cell ->
+                                            Box(
+                                                modifier = Modifier
+                                                    .width(120.dp)
+                                                    .border(width = 0.5.dp, color = Color(0xFFDDDDDD))
+                                                    .padding(vertical = 10.dp, horizontal = 8.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    text = cell,
+                                                    maxLines = 2,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    textAlign = TextAlign.Center,
+                                                    style = MaterialTheme.typography.bodySmall
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
+                    }
+                    
+                    // Show scrolling hint
+                    if (sheetData.size > 5) {
+                        Text(
+                            text = "Scroll to view all data",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF333D79),
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = 4.dp)
+                                .background(Color(0xFFF5F7FA).copy(alpha = 0.8f))
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        )
                     }
                 }
             }
