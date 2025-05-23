@@ -43,3 +43,13 @@ data class VoiceEntryRecord(
     val value: String,
     val successful: Boolean
 )
+
+
+data class BatchEntry(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val studentName: String,
+    val originalText: String,
+    val value: String,
+    val suggestedName: String? = null,
+    val confirmed: Boolean = false
+)

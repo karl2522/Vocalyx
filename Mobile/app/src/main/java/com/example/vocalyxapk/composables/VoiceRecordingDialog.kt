@@ -1341,7 +1341,7 @@ private fun StepIndicator(currentStep: Int) {
 }
 
 @Composable
-private fun ColumnSelectionItem(
+fun ColumnSelectionItem(
     columnName: String,
     isSelected: Boolean,
     onSelect: () -> Unit

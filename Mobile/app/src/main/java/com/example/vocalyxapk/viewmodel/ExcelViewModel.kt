@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.vocalyxapk.api.SpeechApiService
 import com.example.vocalyxapk.api.SpeechApiServiceFactory
 import com.example.vocalyxapk.api.WhisperApiClient
+import com.example.vocalyxapk.models.BatchEntry
 import com.example.vocalyxapk.models.ExcelFileItem
 import com.example.vocalyxapk.models.VoiceEntryRecord
 import com.example.vocalyxapk.models.VoiceParseResult
@@ -50,8 +51,16 @@ class ExcelViewModel : ViewModel() {
     private val _voiceEntryHistory = mutableListOf<VoiceEntryRecord>()
     val voiceEntryHistory: List<VoiceEntryRecord> get() = _voiceEntryHistory.toList()
 
+    private val _batchEntries = mutableListOf<BatchEntry>()
+    val batchEntries: List<BatchEntry> get() = _batchEntries.toList()
+
+    var isInBatchMode by mutableStateOf(false)
+        private set
+
     private lateinit var whisperApiClient: WhisperApiClient
     private var useAdvancedRecognition = false
+
+    private var selectedBatchColumn: String? = null
 
     enum class SaveStatus {
         SUCCESS, ERROR
@@ -74,38 +83,6 @@ class ExcelViewModel : ViewModel() {
 
     fun toggleAdvancedRecognition(enabled: Boolean) {
         useAdvancedRecognition = enabled
-    }
-
-    suspend fun transcribeAudio(context: Context, audioBytes: ByteArray, language: String? = null): Result<String> {
-        return try {
-            // Create a temporary file from the audio bytes
-            val tempFile = File.createTempFile("audio_", ".wav", context.cacheDir)
-            tempFile.writeBytes(audioBytes)
-
-            // Create the request parts
-            val requestFile = tempFile.asRequestBody("audio/wav".toMediaTypeOrNull())
-            val filePart = MultipartBody.Part.createFormData("audio_file", "audio.wav", requestFile)
-
-            // Optional language part
-            val languagePart = language?.let {
-                MultipartBody.Part.createFormData("language", it)
-            }
-
-            // Make the API call
-            val response = speechApiService.transcribeAudio(filePart, languagePart)
-
-            // Clean up temp file
-            tempFile.delete()
-
-            if (response.isSuccessful && response.body()?.success == true) {
-                Result.success(response.body()?.text ?: "")
-            } else {
-                Result.failure(Exception(response.body()?.error ?: "Transcription failed"))
-            }
-        } catch (e: Exception) {
-            Log.e("ExcelViewModel", "Failed to transcribe audio", e)
-            Result.failure(e)
-        }
     }
 
     suspend fun performAdvancedSpeechRecognition(audioBytes: ByteArray): Result<String> {
@@ -617,26 +594,130 @@ class ExcelViewModel : ViewModel() {
         )
     }
 
-    fun getVoiceEntryStats(): Map<String, Int> {
-        val total = _voiceEntryHistory.size
-        val successful = _voiceEntryHistory.count { it.successful }
-        val failed = total - successful
+    fun startBatchMode(columnName: String) {
+        _batchEntries.clear()
+        isInBatchMode = true
+        // Store the column for all batch entries
+        selectedBatchColumn = columnName
+    }
+
+    fun stopBatchMode() {
+        isInBatchMode = false
+        _batchEntries.clear()
+        selectedBatchColumn = null
+    }
+
+    fun addBatchEntry(recognizedText: String) {
+        val parseResult = parseVoiceInput(recognizedText)
+
+        if (parseResult.studentName.isNullOrBlank() || parseResult.value.isNullOrBlank()) {
+            return
+        }
+
+        // Find matching students
+        val matches = findMatchingStudents(parseResult.studentName)
+        val suggestedName = if (matches.size == 1) matches.first() else null
+
+        // Add to batch
+        _batchEntries.add(BatchEntry(
+            studentName = parseResult.studentName,
+            originalText = recognizedText,
+            value = parseResult.value,
+            suggestedName = suggestedName
+        ))
+    }
+
+
+    fun removeBatchEntry(id: String) {
+        _batchEntries.removeIf { it.id == id }
+    }
+
+    fun updateBatchEntry(id: String, studentName: String, value: String) {
+        val index = _batchEntries.indexOfFirst { it.id == id }
+        if (index >= 0) {
+            _batchEntries[index] = _batchEntries[index].copy(
+                studentName = studentName,
+                value = value,
+                confirmed = true
+            )
+        }
+    }
+
+    fun confirmBatchEntry(id: String, useRecommended: Boolean = false) {
+        val index = _batchEntries.indexOfFirst { it.id == id }
+        if (index >= 0) {
+            val entry = _batchEntries[index]
+            _batchEntries[index] = entry.copy(
+                studentName = if (useRecommended && entry.suggestedName != null) entry.suggestedName else entry.studentName,
+                confirmed = true
+            )
+        }
+    }
+
+    fun processAllBatchEntries(onProgress: (Int, Int) -> Unit, onComplete: (Int, Int) -> Unit) {
+        if (_batchEntries.isEmpty() || selectedBatchColumn == null) {
+            onComplete(0, 0)
+            return
+        }
+
+        val columnName = selectedBatchColumn!!
+        var successCount = 0
+        var failureCount = 0
+        val totalEntries = _batchEntries.size
+
+        viewModelScope.launch {
+            _batchEntries.forEachIndexed { index, entry ->
+                val studentName = if (entry.confirmed && entry.suggestedName != null)
+                    entry.suggestedName else entry.studentName
+
+                // Update the student value
+                var updateSuccess = false
+                updateStudentValue(studentName, columnName, entry.value) { success ->
+                    updateSuccess = success
+                }
+
+                // Wait for the operation to complete
+                delay(500) // Small delay between operations
+
+                if (updateSuccess) {
+                    successCount++
+                    recordSuccessfulEntry(studentName, columnName, entry.value)
+                } else {
+                    failureCount++
+                    recordFailedEntry(studentName, columnName, entry.value)
+                }
+
+                // Report progress
+                onProgress(index + 1, totalEntries)
+            }
+
+            // Complete
+            onComplete(successCount, failureCount)
+            stopBatchMode()
+        }
+    }
+
+    fun getBatchSummary(): Map<String, Int> {
+        val total = _batchEntries.size
+        val withSuggestions = _batchEntries.count { it.suggestedName != null }
+        val confirmed = _batchEntries.count { it.confirmed }
 
         return mapOf(
             "total" to total,
-            "successful" to successful,
-            "failed" to failed
+            "withSuggestions" to withSuggestions,
+            "confirmed" to confirmed,
+            "needsReview" to (total - confirmed)
         )
     }
 
     fun correctCommonPhoneticMismatches(recognizedName: String): String {
         // Common Filipino/English phonetic substitutions
         val substitutions = mapOf(
-            'k' to 'c', 'c' to 'k',  // k/c swap (Kabanada -> Cabanada)
-            'v' to 'b', 'b' to 'v',  // v/b swap
-            's' to 'z', 'z' to 's',  // s/z swap
-            'f' to 'p', 'p' to 'f',  // f/p swap in some dialects
-            'j' to 'h', 'h' to 'j'   // j/h swap in some names
+            'k' to 'c', 'c' to 'k',
+            'v' to 'b', 'b' to 'v',
+            's' to 'z', 'z' to 's',
+            'f' to 'p', 'p' to 'f',
+            'j' to 'h', 'h' to 'j'
         )
 
         // Try different phonetic variations
