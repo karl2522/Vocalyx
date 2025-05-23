@@ -35,3 +35,11 @@ data class VoiceParseResult(
     val studentName: String?,
     val value: String?
 )
+
+data class VoiceEntryRecord(
+    val timestamp: Long,
+    val studentName: String,
+    val column: String,
+    val value: String,
+    val successful: Boolean
+)

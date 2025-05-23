@@ -347,6 +347,20 @@ class ExcelViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_404_NOT_FOUND
                 )
 
+            existing_headers = excel_file.all_sheets[sheet_name]['headers']
+
+            all_keys = set()
+            for row in sheet_data:
+                all_keys.update(row.keys())
+
+            new_headers = existing_headers.copy()
+            for key in all_keys:
+                if key not in new_headers:
+                    print(f"Adding new column: {key}")
+                    new_headers.append(key)
+
+            excel_file.all_sheets[sheet_name]['headers'] = new_headers
+
             formatted_data = []
             for row in sheet_data:
                 formatted_row = {}
@@ -360,12 +374,15 @@ class ExcelViewSet(viewsets.ModelViewSet):
                 formatted_data.append(formatted_row)
 
             excel_file.all_sheets[sheet_name]['data'] = formatted_data
+
             excel_file.save()
+            print(f"Updated Excel file with new headers: {new_headers}")
 
             return Response({
                 'message': f'Data updated successfully for sheet {sheet_name}',
                 'sheet_data': formatted_data,
-                'sheet_name': sheet_name
+                'sheet_name': sheet_name,
+                'headers': new_headers
             })
 
         except ExcelFile.DoesNotExist:

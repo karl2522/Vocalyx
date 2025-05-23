@@ -41,6 +41,13 @@ android {
     }
 }
 
+configurations.all {
+    resolutionStrategy {
+        force("net.jcip:jcip-annotations:1.0")
+        exclude(group = "com.github.stephenc.jcip", module = "jcip-annotations")
+    }
+}
+
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -82,7 +89,12 @@ dependencies {
     // Apache POI for Excel files
     implementation("org.apache.poi:poi:5.2.3")
     implementation("org.apache.poi:poi-ooxml:5.2.3")
-    
+
     // OpenCSV for CSV files
     implementation("com.opencsv:opencsv:5.7.1")
+
+    // String similarity with exclusion for conflict resolution
+    implementation("com.github.tdebatty:java-string-similarity:2.0.0") {
+        exclude(group = "net.jcip", module = "jcip-annotations")
+    }
 }

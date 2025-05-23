@@ -7,8 +7,10 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.vocalyxapk.models.ExcelFileItem
+import com.example.vocalyxapk.models.VoiceEntryRecord
 import com.example.vocalyxapk.models.VoiceParseResult
 import com.example.vocalyxapk.repository.ExcelRepository
+import info.debatty.java.stringsimilarity.JaroWinkler
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
@@ -32,6 +34,12 @@ class ExcelViewModel : ViewModel() {
 
     var lastSaveStatus by mutableStateOf<SaveStatus?>(null)
         private set
+
+    var attemptedNames = mutableListOf<String>()
+        private set
+
+    private val _voiceEntryHistory = mutableListOf<VoiceEntryRecord>()
+    val voiceEntryHistory: List<VoiceEntryRecord> get() = _voiceEntryHistory.toList()
 
     enum class SaveStatus {
         SUCCESS, ERROR
@@ -325,7 +333,7 @@ class ExcelViewModel : ViewModel() {
         val words = text.trim().split(" ")
         if (words.isEmpty()) return VoiceParseResult(null, null)
 
-        // First, try to extract the last word as a numeric value
+        // First, try to extract the last word as a numeric value or status keyword
         val lastWord = words.last()
         val value = if (lastWord.toDoubleOrNull() != null) lastWord else null
 
@@ -349,6 +357,7 @@ class ExcelViewModel : ViewModel() {
             }
         }
 
+        // Add phonetic correction for student name
         return VoiceParseResult(studentName, value)
     }
 
@@ -389,6 +398,220 @@ class ExcelViewModel : ViewModel() {
                 null
             }
         }.distinct()
+    }
+
+    fun findMatchingStudentsWithFuzzy(nameFragment: String, threshold: Double = 0.75): List<Pair<String, Double>> {
+        val file = selectedExcelFile ?: return emptyList()
+        val sheet = selectedSheetName ?: return emptyList()
+        val sheetContent = file.all_sheets[sheet] ?: return emptyList()
+
+        if (sheetContent.data.isEmpty() || sheetContent.headers.isEmpty()) return emptyList()
+
+        // Track attempted names
+        if (!attemptedNames.contains(nameFragment)) {
+            attemptedNames.add(nameFragment)
+        }
+
+        // Find name-related columns
+        val nameColumns = sheetContent.headers.filter { header ->
+            header.contains("name", ignoreCase = true) ||
+                    header.contains("last", ignoreCase = true) ||
+                    header.contains("first", ignoreCase = true)
+        }
+
+        // If no name columns found, use the first column as fallback
+        val columnsToSearch = if (nameColumns.isEmpty()) listOf(sheetContent.headers[0]) else nameColumns
+
+        // Use Jaro-Winkler for fuzzy string matching
+        val jaroWinkler = JaroWinkler()
+
+        // Map to store student name and its best match score
+        val matchScores = mutableMapOf<String, Double>()
+
+        sheetContent.data.forEach { row ->
+            // Get full name from name columns
+            val fullName = columnsToSearch.mapNotNull { column ->
+                row[column]?.toString()?.trim()
+            }.joinToString(" ")
+
+            if (fullName.isNotBlank()) {
+                // Check similarity with the input name fragment
+                val similarity = jaroWinkler.similarity(fullName.toLowerCase(), nameFragment.toLowerCase())
+
+                // Also check individual components
+                val bestComponentMatch = columnsToSearch.maxOfOrNull { column ->
+                    val value = row[column]?.toString()?.trim() ?: ""
+                    if (value.isNotBlank()) jaroWinkler.similarity(value.toLowerCase(), nameFragment.toLowerCase()) else 0.0
+                } ?: 0.0
+
+                // Use the better of the two scores
+                val bestScore = maxOf(similarity, bestComponentMatch)
+
+                // If score exceeds threshold, add to results
+                if (bestScore >= threshold) {
+                    matchScores[fullName] = bestScore
+                }
+            }
+        }
+
+        // Return results sorted by score (highest first)
+        return matchScores.entries.sortedByDescending { it.value }
+            .map { Pair(it.key, it.value) }
+    }
+
+    fun getSuggestedNames(maxSuggestions: Int = 5): List<String> {
+        // If no attempted names, return empty list
+        if (attemptedNames.isEmpty()) return emptyList()
+
+        // Get last attempted name
+        val lastAttempt = attemptedNames.last()
+
+        // Use lower threshold to find possible matches
+        val possibleMatches = findMatchingStudentsWithFuzzy(lastAttempt, 0.5)
+            .map { it.first }
+            .take(maxSuggestions)
+
+        return possibleMatches
+    }
+
+    fun resetAttemptedNames() {
+        attemptedNames.clear()
+    }
+
+    fun getMaxScoreForColumn(columnName: String): Double? {
+        // First check if the column name contains a max score pattern like "Assignment (20 pts)"
+        val maxScorePattern = """\((\d+(\.\d+)?)\s*(pts|points|marks|score)?\)""".toRegex(RegexOption.IGNORE_CASE)
+        val matchResult = maxScorePattern.find(columnName)
+
+        if (matchResult != null) {
+            return matchResult.groupValues[1].toDoubleOrNull()
+        }
+
+        // If no pattern in column name, analyze data to estimate max score
+        val file = selectedExcelFile ?: return null
+        val sheet = selectedSheetName ?: return null
+        val sheetContent = file.all_sheets[sheet] ?: return null
+
+        // Calculate stats on existing values
+        val values = sheetContent.data.mapNotNull { row ->
+            val value = row[columnName]?.toString()
+            if (value.isNullOrBlank()) null else value.toDoubleOrNull()
+        }
+
+        if (values.isEmpty()) return null
+
+        // Use the maximum existing value, rounded up to next 5 or 10
+        val maxValue = values.maxOrNull() ?: return null
+
+        // Round up to next 5
+        val roundedMax = (Math.ceil(maxValue / 5.0) * 5).coerceAtLeast(10.0)
+
+        return roundedMax
+    }
+
+    fun validateScore(columnName: String, score: Double): ValidationResult {
+        val maxScore = getMaxScoreForColumn(columnName)
+
+        return when {
+            maxScore == null -> ValidationResult.Valid
+            score > maxScore -> ValidationResult.ExceedsMaximum(maxScore)
+            score < 0 -> ValidationResult.NegativeValue
+            score > maxScore * 0.9 && score != maxScore -> ValidationResult.NearMaximum(maxScore)
+            else -> ValidationResult.Valid
+        }
+    }
+
+    fun recordSuccessfulEntry(studentName: String, column: String, value: String) {
+        _voiceEntryHistory.add(
+            VoiceEntryRecord(
+                timestamp = System.currentTimeMillis(),
+                studentName = studentName,
+                column = column,
+                value = value,
+                successful = true
+            )
+        )
+    }
+
+    fun recordFailedEntry(studentName: String, column: String, value: String) {
+        _voiceEntryHistory.add(
+            VoiceEntryRecord(
+                timestamp = System.currentTimeMillis(),
+                studentName = studentName,
+                column = column,
+                value = value,
+                successful = false
+            )
+        )
+    }
+
+    fun getVoiceEntryStats(): Map<String, Int> {
+        val total = _voiceEntryHistory.size
+        val successful = _voiceEntryHistory.count { it.successful }
+        val failed = total - successful
+
+        return mapOf(
+            "total" to total,
+            "successful" to successful,
+            "failed" to failed
+        )
+    }
+
+    fun correctCommonPhoneticMismatches(recognizedName: String): String {
+        // Common Filipino/English phonetic substitutions
+        val substitutions = mapOf(
+            'k' to 'c', 'c' to 'k',  // k/c swap (Kabanada -> Cabanada)
+            'v' to 'b', 'b' to 'v',  // v/b swap
+            's' to 'z', 'z' to 's',  // s/z swap
+            'f' to 'p', 'p' to 'f',  // f/p swap in some dialects
+            'j' to 'h', 'h' to 'j'   // j/h swap in some names
+        )
+
+        // Try different phonetic variations
+        val nameVariations = mutableListOf<String>()
+        nameVariations.add(recognizedName)
+
+        // Generate variations with common substitutions
+        val chars = recognizedName.toCharArray()
+        for (i in chars.indices) {
+            val c = chars[i].lowercaseChar()
+            if (substitutions.containsKey(c)) {
+                val newChars = chars.clone()
+                // Keep original capitalization
+                if (chars[i].isUpperCase()) {
+                    newChars[i] = substitutions[c]!!.uppercaseChar()
+                } else {
+                    newChars[i] = substitutions[c]!!
+                }
+                nameVariations.add(String(newChars))
+            }
+        }
+
+        // For each variation, check if there's an exact match in the data
+        for (variation in nameVariations) {
+            val exactMatches = findMatchingStudents(variation)
+            if (exactMatches.isNotEmpty()) {
+                return exactMatches.first()
+            }
+        }
+
+        // If no exact match found, use fuzzy matching
+        val allVariationsWithScores = nameVariations
+            .flatMap { variation -> findMatchingStudentsWithFuzzy(variation, 0.6) }
+            .sortedByDescending { it.second }
+
+        return if (allVariationsWithScores.isNotEmpty()) {
+            allVariationsWithScores.first().first
+        } else {
+            recognizedName // Return original if no matches found
+        }
+    }
+
+    sealed class ValidationResult {
+        object Valid : ValidationResult()
+        data class ExceedsMaximum(val maxScore: Double) : ValidationResult()
+        object NegativeValue : ValidationResult()
+        data class NearMaximum(val maxScore: Double) : ValidationResult()
     }
 }
 

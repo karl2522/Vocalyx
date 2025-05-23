@@ -512,7 +512,28 @@ fun VoiceRecordingDialog(
                                 Spacer(modifier = Modifier.height(16.dp))
 
                                 Button(
-                                    onClick = { currentStep = 3 },
+                                    onClick = {
+                                        // First parse the recognized text
+                                        parsedResult = excelViewModel.parseVoiceInput(recognizedText)
+
+                                        // Check if the student name needs phonetic correction
+                                        if (parsedResult?.studentName != null) {
+                                            val originalName = parsedResult?.studentName!!
+                                            val correctedName = excelViewModel.correctCommonPhoneticMismatches(originalName)
+
+                                            // Check if name was corrected and if it differs from original
+                                            if (correctedName != originalName) {
+                                                // Offer suggestion by updating the UI
+                                                suggestedStudents = listOf(correctedName)
+                                                // In step 3, you'll already be showing the suggestion as a clickable option
+                                            } else {
+                                                // Use regular matching
+                                                suggestedStudents = excelViewModel.findMatchingStudents(originalName)
+                                            }
+                                        }
+
+                                        currentStep = 3
+                                    },
                                     modifier = Modifier.fillMaxWidth(),
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = Color(0xFF333D79)
@@ -533,10 +554,12 @@ fun VoiceRecordingDialog(
                                 Text("Back")
                             }
                         }
+
+
                     }
 
                     3 -> {
-                        // Step 3: Confirmation (unchanged)
+                        // Step 3: Confirmation with enhanced validation
                         Text(
                             "Confirm Details",
                             style = MaterialTheme.typography.bodyLarge,
@@ -544,6 +567,166 @@ fun VoiceRecordingDialog(
                         )
 
                         Spacer(modifier = Modifier.height(16.dp))
+
+                        // Score validation check - NEW
+                        if (parsedResult?.value?.toDoubleOrNull() != null && selectedColumn != null) {
+                            val scoreValue = parsedResult?.value?.toDoubleOrNull() ?: 0.0
+                            val validationResult = excelViewModel.validateScore(selectedColumn!!, scoreValue)
+
+                            when (validationResult) {
+                                is ExcelViewModel.ValidationResult.ExceedsMaximum -> {
+                                    Card(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 8.dp),
+                                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0))
+                                    ) {
+                                        Column(modifier = Modifier.padding(16.dp)) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.padding(bottom = 8.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Warning,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFFFF9800)
+                                                )
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text(
+                                                    "Score exceeds maximum",
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFFE65100)
+                                                )
+                                            }
+                                            Text(
+                                                "The value ${parsedResult?.value} exceeds the maximum score of ${validationResult.maxScore} for this column.",
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
+
+                                            Spacer(modifier = Modifier.height(8.dp))
+
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.End
+                                            ) {
+                                                TextButton(onClick = {
+                                                    // Use maximum score instead
+                                                    parsedResult = VoiceParseResult(
+                                                        parsedResult?.studentName,
+                                                        validationResult.maxScore.toString()
+                                                    )
+                                                }) {
+                                                    Text("Use Max (${validationResult.maxScore})")
+                                                }
+
+                                                TextButton(onClick = {
+                                                    // Keep original value
+                                                    // No action needed
+                                                }) {
+                                                    Text("Keep Value")
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                is ExcelViewModel.ValidationResult.NearMaximum -> {
+                                    Card(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 8.dp),
+                                        colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9))
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(16.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Info,
+                                                contentDescription = null,
+                                                tint = Color(0xFF4CAF50)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                "Value ${parsedResult?.value} is close to the maximum score of ${validationResult.maxScore}",
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
+                                        }
+                                    }
+                                }
+
+                                else -> { /* No special UI for valid scores */ }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+
+                        if (suggestedStudents.size == 1 && parsedResult?.studentName != null &&
+                            parsedResult?.studentName != suggestedStudents[0]) {
+
+                            Card(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD)) // Light blue for suggestions
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(bottom = 8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Info,
+                                            contentDescription = null,
+                                            tint = Color(0xFF2196F3)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            "Did you mean this student?",
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF0D47A1)
+                                        )
+                                    }
+
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                selectedStudent = suggestedStudents[0]
+                                            }
+                                            .padding(8.dp)
+                                            .background(
+                                                color = Color(0xFFBBDEFB),
+                                                shape = RoundedCornerShape(4.dp)
+                                            )
+                                            .padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            "\"${parsedResult?.studentName}\" → \"${suggestedStudents[0]}\"",
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = FontWeight.Medium
+                                        )
+
+                                        Spacer(modifier = Modifier.weight(1f))
+
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = "Select this name",
+                                            tint = Color(0xFF2196F3)
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    Text(
+                                        "The student name might have been misheard. Click the suggestion to use this name instead.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color(0xFF666666)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
 
                         // Student selection (if multiple matches)
                         if (suggestedStudents.size > 1 && selectedStudent.isEmpty()) {
@@ -569,42 +752,81 @@ fun VoiceRecordingDialog(
 
                             Spacer(modifier = Modifier.height(16.dp))
                         } else if (suggestedStudents.isEmpty() && parsedResult?.studentName != null) {
-                            // No matching students found
+                            // ENHANCED No matching students found with suggestions
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = Color(0xFFFEF3F2)
-                                ),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3F2)),
                                 border = BorderStroke(1.dp, Color(0xFFFEE4E2))
                             ) {
-                                Column(
-                                    modifier = Modifier.padding(16.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Warning,
-                                        contentDescription = null,
-                                        tint = Color(0xFFD92D20),
-                                        modifier = Modifier.size(24.dp)
-                                    )
-
-                                    Spacer(modifier = Modifier.height(8.dp))
-
-                                    Text(
-                                        "No matching student found for \"${parsedResult?.studentName}\"",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = Color(0xFFD92D20),
-                                        textAlign = TextAlign.Center
-                                    )
-
-                                    Spacer(modifier = Modifier.height(8.dp))
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(bottom = 8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Warning,
+                                            contentDescription = null,
+                                            tint = Color(0xFFD32F2F)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            "No matching student found",
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFFB71C1C)
+                                        )
+                                    }
 
                                     Text(
-                                        "Try using a different name or add this student manually.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = Color(0xFF912018),
-                                        textAlign = TextAlign.Center
+                                        "No student found matching \"${parsedResult?.studentName}\"",
+                                        style = MaterialTheme.typography.bodyMedium
                                     )
+
+                                    // Show fuzzy match suggestions if available
+                                    val suggestions = excelViewModel.getSuggestedNames()
+                                    if (suggestions.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Text(
+                                            "Did you mean:",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Medium
+                                        )
+
+                                        LazyColumn(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .heightIn(max = 150.dp)
+                                                .padding(top = 4.dp)
+                                        ) {
+                                            items(suggestions) { suggestion ->
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clickable {
+                                                            selectedStudent = suggestion
+                                                        }
+                                                        .padding(vertical = 8.dp, horizontal = 16.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Person,
+                                                        contentDescription = null,
+                                                        tint = Color(0xFF666666),
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(8.dp))
+                                                    Text(suggestion)
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Text(
+                                            "Try using a different name or add this student manually.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Color(0xFF912018),
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
                                 }
                             }
 
@@ -627,6 +849,61 @@ fun VoiceRecordingDialog(
 
                         Spacer(modifier = Modifier.height(24.dp))
 
+                        // Saving indicator
+                        AnimatedVisibility(
+                            visible = excelViewModel.isSaving || excelViewModel.lastSaveStatus != null
+                        ) {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 16.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = when (excelViewModel.lastSaveStatus) {
+                                        ExcelViewModel.SaveStatus.SUCCESS -> Color(0xFFE8F5E9)
+                                        ExcelViewModel.SaveStatus.ERROR -> Color(0xFFFFEBEE)
+                                        null -> Color(0xFFF5F5F5)
+                                    }
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    when {
+                                        excelViewModel.isSaving -> {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(20.dp),
+                                                strokeWidth = 2.dp,
+                                                color = Color(0xFF333D79)
+                                            )
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Text("Saving changes...", color = Color(0xFF555555))
+                                        }
+                                        excelViewModel.lastSaveStatus == ExcelViewModel.SaveStatus.SUCCESS -> {
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = null,
+                                                tint = Color(0xFF4CAF50),
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Text("Changes saved successfully", color = Color(0xFF2E7D32))
+                                        }
+                                        excelViewModel.lastSaveStatus == ExcelViewModel.SaveStatus.ERROR -> {
+                                            Icon(
+                                                imageVector = Icons.Default.Warning,
+                                                contentDescription = null,
+                                                tint = Color(0xFFF44336),
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Text("Failed to save changes", color = Color(0xFFD32F2F))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
@@ -638,6 +915,7 @@ fun VoiceRecordingDialog(
                                     parsedResult = null
                                     suggestedStudents = emptyList()
                                     selectedStudent = ""
+                                    excelViewModel.resetAttemptedNames() // Reset attempted names
                                     currentStep = 2
                                 }
                             ) {
@@ -650,7 +928,6 @@ fun VoiceRecordingDialog(
                                     val studentName = selectedStudent.ifEmpty { parsedResult?.studentName ?: "" }
                                     val value = parsedResult?.value ?: ""
 
-
                                     if (studentName.isNotBlank() && selectedColumn != null) {
                                         excelViewModel.updateStudentValue(
                                             studentName,
@@ -658,9 +935,13 @@ fun VoiceRecordingDialog(
                                             value
                                         ) { success ->
                                             if (success) {
+                                                // Record successful entry for stats
+                                                excelViewModel.recordSuccessfulEntry(studentName, selectedColumn!!, value)
                                                 saveSuccess = true
                                                 currentStep = 4
                                             } else {
+                                                // Record failed entry for stats
+                                                excelViewModel.recordFailedEntry(studentName, selectedColumn!!, value)
                                                 errorMessage = "Failed to update data"
                                             }
                                         }
@@ -674,7 +955,7 @@ fun VoiceRecordingDialog(
                                     containerColor = Color(0xFF333D79),
                                     disabledContainerColor = Color(0xFF9E9E9E)
                                 )
-                            )  {
+                            ) {
                                 if (excelViewModel.isSaving) {
                                     CircularProgressIndicator(
                                         modifier = Modifier.size(16.dp),
