@@ -371,31 +371,31 @@ fun StudentsScreen(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 16.dp)
+                                .padding(vertical = 16.dp)
                         ) {
                             // Section title
                             Text(
-                                "Class Recordings",
+                                "Class  Recordings",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF333D79),
-                                modifier = Modifier.padding(bottom = 8.dp)
+                                /*color = Color(0xFF333D79),*/
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                             )
 
                             // Class Recordings section
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 16.dp)
+                                    .padding(vertical = 8.dp)
                             ) {
                                 // Section title
-                                Text(
+                                /*Text(
                                     "Class Recordings",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFF333D79),
                                     modifier = Modifier.padding(bottom = 8.dp)
-                                )
+                                )*/
 
                                 // Recordings container
                                 Card(
@@ -458,7 +458,7 @@ fun StudentsScreen(
                                         // Side-by-side recording options
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                                         ) {
                                             // Single entry button
                                             FilledTonalButton(
@@ -483,7 +483,11 @@ fun StudentsScreen(
                                                     modifier = Modifier.size(18.dp)
                                                 )
                                                 Spacer(modifier = Modifier.width(8.dp))
-                                                Text("Single Entry")
+                                                Text(
+                                                    "Single Entry",
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
                                             }
 
                                             Spacer(modifier = Modifier.width(12.dp))
@@ -510,7 +514,11 @@ fun StudentsScreen(
                                                     modifier = Modifier.size(18.dp)
                                                 )
                                                 Spacer(modifier = Modifier.width(8.dp))
-                                                Text("Batch Mode")
+                                                Text(
+                                                    "Batch Mode",
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
                                             }
                                         }
 

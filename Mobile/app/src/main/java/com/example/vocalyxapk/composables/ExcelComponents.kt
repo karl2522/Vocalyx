@@ -155,35 +155,37 @@ fun ExcelDataDisplay(
             IconButton(
                 onClick = { onDelete(excelFile.id) },
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(36.dp)
                     .background(
-                        color = Color(0xFFFEE8E8),
-                        shape = RoundedCornerShape(20.dp)
+                        color = Color(0xFFFFEBEE),
+                        shape = RoundedCornerShape(18.dp)
                     )
             ) {
                 Icon(
                     imageVector = Icons.Filled.Delete,
                     contentDescription = "Delete File",
-                    tint = Color(0xFFE53935)
+                    tint = Color(0xFFE53935),
+                    modifier = Modifier.size(18.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(16.dp))
 
             // Fullscreen toggle button
             IconButton(
                 onClick = { isFullscreen = !isFullscreen },
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(36.dp)
                     .background(
                         color = Color(0xFFEEF2FF),
-                        shape = RoundedCornerShape(20.dp)
+                        shape = RoundedCornerShape(18.dp)
                     )
             ) {
                 Icon(
                     imageVector = if (isFullscreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
                     contentDescription = if (isFullscreen) "Exit Fullscreen" else "Fullscreen",
-                    tint = Color(0xFF333D79)
+                    tint = Color(0xFF333D79),
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }

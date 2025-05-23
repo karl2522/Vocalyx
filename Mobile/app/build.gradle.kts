@@ -63,6 +63,7 @@ dependencies {
     implementation(libs.androidx.constraintlayout)
     implementation("androidx.compose.material:material-icons-extended:1.5.4")
     implementation(libs.androidx.lifecycle.runtime.compose.android)
+    implementation(libs.androidx.ui.text.google.fonts)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -99,4 +100,7 @@ dependencies {
     }
 
     implementation("androidx.datastore:datastore-preferences:1.0.0")
+    
+    // Google Fonts for DM Sans
+    implementation("androidx.compose.ui:ui-text-google-fonts:1.6.0")
 }

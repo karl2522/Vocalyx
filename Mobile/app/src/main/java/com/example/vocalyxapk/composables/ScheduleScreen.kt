@@ -82,6 +82,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -449,7 +450,8 @@ fun ScheduleHeader(
             SingleChoiceSegmentedButtonRow(
                 modifier = Modifier
                     .align(Alignment.End)
-                    .fillMaxWidth(0.8f) // Use 80% of available width
+                    .fillMaxWidth() // Use full width
+                    .horizontalScroll(rememberScrollState()) // Make horizontally scrollable for smaller screens
             ) {
                 // Day Button
                 SegmentedButton(
@@ -477,7 +479,8 @@ fun ScheduleHeader(
                         Text(
                             "Day",
                             maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Visible
+                            overflow = TextOverflow.Ellipsis,
+                            color = if (viewType == "day") Color.White else Color(0xFF333D79)
                         )
                     }
                 }
@@ -508,7 +511,8 @@ fun ScheduleHeader(
                         Text(
                             "Week",
                             maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Visible
+                            overflow = TextOverflow.Ellipsis,
+                            color = if (viewType == "week") Color.White else Color(0xFF333D79)
                         )
                     }
                 }
@@ -539,7 +543,8 @@ fun ScheduleHeader(
                         Text(
                             "Month",
                             maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Visible
+                            overflow = TextOverflow.Ellipsis,
+                            color = if (viewType == "month") Color.White else Color(0xFF333D79)
                         )
                     }
                 }

@@ -18,7 +18,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.vocalyxapk.composables.ClassesTab
 import com.example.vocalyxapk.composables.HomeTab
-import com.example.vocalyxapk.composables.ManualInputTab
+import com.example.vocalyxapk.composables.TeamsTab
 import com.example.vocalyxapk.composables.ScheduleTab
 import com.example.vocalyxapk.repository.AuthRepository
 import com.example.vocalyxapk.ui.theme.VOCALYXAPKTheme
@@ -47,7 +47,7 @@ class HomeActivity : ComponentActivity() {
                     val navigationItems = listOf(
                         Triple("Home", Icons.Rounded.Home, "Home"),
                         Triple("Schedule", Icons.Rounded.CalendarToday, "Schedule"),
-                        Triple("Manual", Icons.Rounded.Edit, "Manual"),
+                        Triple("Teams", Icons.Rounded.Group, "Teams"),
                         Triple("Classes", Icons.Rounded.List, "Classes")
                     )
                     
@@ -242,7 +242,7 @@ class HomeActivity : ComponentActivity() {
                             when (selectedTab) {
                                 0 -> HomeTab(modifier = Modifier.padding(paddingValues))
                                 1 -> ScheduleTab(modifier = Modifier.padding(paddingValues))
-                                2 -> ManualInputTab(modifier = Modifier.padding(paddingValues))
+                                2 -> TeamsTab(modifier = Modifier.padding(paddingValues))
                                 3 -> ClassesTab(modifier = Modifier.padding(paddingValues))
                             }
                         }
@@ -260,7 +260,7 @@ fun HomeScreen() {
     val navigationItems = listOf(
         Triple("Home", Icons.Rounded.Home, "Home"),
         Triple("Schedule", Icons.Rounded.CalendarToday, "Schedule"),
-        Triple("Manual", Icons.Rounded.Edit, "Manual"),
+        Triple("Teams", Icons.Rounded.Group, "Teams"),
         Triple("Courses", Icons.Rounded.List, "Courses")
     )
     
@@ -317,7 +317,7 @@ fun HomeScreen() {
         when (selectedTab) {
             0 -> HomeTab(modifier = Modifier.padding(paddingValues))
             1 -> ScheduleTab(modifier = Modifier.padding(paddingValues))
-            2 -> ManualInputTab(modifier = Modifier.padding(paddingValues))
+            2 -> TeamsTab(modifier = Modifier.padding(paddingValues))
             3 -> ClassesTab(modifier = Modifier.padding(paddingValues))
         }
     }
