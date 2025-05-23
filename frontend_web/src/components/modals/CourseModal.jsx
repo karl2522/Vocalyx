@@ -89,12 +89,12 @@ const CourseModal = ({ isOpen, onClose, onAddCourse, onUpdateCourse, isEditMode,
                     ...courseData
                 });
             }
-            showToast.success('Course updated successfully!');
+            // Let parent component handle toast
         } else {
             if (onAddCourse) {
                 onAddCourse(courseData);
             }
-            showToast.success('Course created successfully!');
+            // Let parent component handle toast
         }
 
         resetForm();

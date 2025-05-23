@@ -268,9 +268,21 @@ const Dashboard = () => {
     { id: 4, name: "New feature walkthrough.mp3", duration: "24:30", projectName: "Training Presentations", date: "3 days ago" },
   ];
 
-  const handleAddCourse = (newCourse) => {
-    setCourses([newCourse, ...courses]);
-  };
+  const handleAddCourse = async (courseData) => {
+    try {
+        setLoading(true);
+        const response = await courseService.createCourse(courseData);
+        
+        setCourses(prevCourses => [response.data, ...prevCourses]);
+        
+        showToast.success('Course created successfully!');
+    } catch (error) {
+        console.error('Error creating course:', error);
+        showToast.error('Failed to create course');
+    } finally {
+        setLoading(false);
+    }
+};
 
   const handleCourseClick = (id) => {
     navigate(`/dashboard/course/${id}`);
@@ -578,15 +590,15 @@ const Dashboard = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {loading ? (
-                    <tr>
+                  {loading ? [
+                    <tr key="loading-row"> 
                       <td colSpan="4" className="px-6 py-4 text-center text-gray-500">
                         <div className="flex justify-center">
                           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#333D79]"></div>
                         </div>
                       </td>
                     </tr>
-                  ) : courses.length > 0 ? (
+                  ] : courses.length > 0 ? 
                     courses.slice(0, 5).map((course) => (
                       <tr
                         key={course.id}
@@ -621,8 +633,8 @@ const Dashboard = () => {
                         </td>
                       </tr>
                     ))
-                  ) : (
-                    <tr>
+                  : [
+                    <tr key="empty-courses">
                       <td colSpan="4" className="px-6 py-12 text-center">
                         <div className="flex flex-col items-center">
                           <div className="h-16 w-16 rounded-full bg-[#EEF0F8] flex items-center justify-center mb-4 float-animation">
@@ -639,7 +651,7 @@ const Dashboard = () => {
                         </div>
                       </td>
                     </tr>
-                  )}
+                  ]}
                 </tbody>
               </table>
 
