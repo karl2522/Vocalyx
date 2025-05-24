@@ -26,6 +26,7 @@ replay_pid*
 # Dependencies
 node_modules/
 .venv/
+venv310/
 __pycache__/
 
 
