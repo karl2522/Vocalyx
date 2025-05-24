@@ -9,11 +9,11 @@ class Course(models.Model):
         ('archived', 'Archived'),
     ]
 
+    # Updated semester choices
     SEMESTER_CHOICES = [
-        ('Fall', 'Fall'),
-        ('Spring', 'Spring'),
-        ('Summer', 'Summer'),
-        ('Winter', 'Winter'),
+        ('1st Semester', '1st Semester'),
+        ('2nd Semester', '2nd Semester'),
+        ('Mid Year', 'Mid Year'),
     ]
 
     name = models.CharField(max_length=255)

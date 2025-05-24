@@ -18,7 +18,6 @@ const CourseModal = ({ isOpen, onClose, onAddCourse, onUpdateCourse, isEditMode,
     const [duplicateCourse, setDuplicateCourse] = useState(null);
     const [forceSubmit, setForceSubmit] = useState(false);
     
-    // Get academic year options dynamically (current year + 4 future years)
     const getAcademicYearOptions = () => {
         const currentYear = new Date().getFullYear();
         const options = [];
@@ -34,7 +33,6 @@ const CourseModal = ({ isOpen, onClose, onAddCourse, onUpdateCourse, isEditMode,
     
     const academicYearOptions = getAcademicYearOptions();
 
-    // Fetch existing courses when modal opens
     useEffect(() => {
         if (isOpen) {
             fetchExistingCourses();
@@ -311,10 +309,9 @@ const CourseModal = ({ isOpen, onClose, onAddCourse, onUpdateCourse, isEditMode,
                                         required
                                     >
                                         <option value="">Select a semester</option>
-                                        <option value="Fall">Fall</option>
-                                        <option value="Spring">Spring</option>
-                                        <option value="Summer">Summer</option>
-                                        <option value="Winter">Winter</option>
+                                        <option value="1st Semester">1st Semester</option>
+                                        <option value="2nd Semester">2nd Semester</option>
+                                        <option value="Mid Year">Mid Year</option>
                                     </select>
                                 </div>
 
