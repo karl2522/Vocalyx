@@ -114,20 +114,29 @@ class ClassRepository(private val context: Context) {
             Result.failure(e)
         }
     }
-    
-    suspend fun createClass(name: String, courseId: Int, section: String? = null, description: String? = null, semester: String? = null, schedule: String? = null): Result<ClassItem> {
+
+    suspend fun createClass(
+        name: String,
+        courseId: Int,
+        section: String? = null,
+        description: String? = null,
+        semester: String? = null,
+        schedule: String? = null,
+        studentCount: Int? = null
+    ): Result<ClassItem> {
         val tag = "ClassRepository"
         android.util.Log.d(tag, "createClass called with name: $name, courseId: $courseId")
-        
+
         return try {
             android.util.Log.d(tag, "Creating class with courseId: $courseId (this is the parent course ID)")
             val classRequest = com.example.vocalyxapk.models.ClassCreateRequest(
                 name = name,
-                courseId = courseId,  // This must be sent to backend as course_id
+                courseId = courseId,
                 section = section,
                 description = description,
                 semester = semester,
-                schedule = schedule
+                schedule = schedule,
+                studentCount = studentCount
             )
             
             android.util.Log.d(tag, "Making API call to create class")

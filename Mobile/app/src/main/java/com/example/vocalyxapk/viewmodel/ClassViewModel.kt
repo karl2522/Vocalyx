@@ -201,12 +201,20 @@ class ClassViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
-    
-    fun createClass(name: String, courseId: Int, section: String? = null, description: String? = null, semester: String? = null, schedule: String? = null) {
+
+    fun createClass(
+        name: String,
+        courseId: Int,
+        section: String? = null,
+        description: String? = null,
+        semester: String? = null,
+        schedule: String? = null,
+        studentCount: Int? = null
+    ) {
         viewModelScope.launch {
             _classCreationState.value = ClassCreationState.Loading
             android.util.Log.d("ClassViewModel", "Creating new class: $name for course ID: $courseId")
-            
+
             try {
                 val result = classRepository.createClass(
                     name = name,
@@ -214,9 +222,10 @@ class ClassViewModel(application: Application) : AndroidViewModel(application) {
                     section = section,
                     description = description,
                     semester = semester,
-                    schedule = schedule
+                    schedule = schedule,
+                    studentCount = studentCount
                 )
-                
+
                 result.fold(
                     onSuccess = { classItem ->
                         android.util.Log.d("ClassViewModel", "Class created successfully: ${classItem.id}")

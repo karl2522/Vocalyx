@@ -37,6 +37,7 @@ import com.example.vocalyxapk.data.ImportedClass
 import com.example.vocalyxapk.models.CourseItem
 import com.example.vocalyxapk.viewmodel.*
 import kotlinx.coroutines.launch
+import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -159,9 +160,7 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                 it.section.contains(searchQuery, ignoreCase = true)
     }
 
-    // Determine if we have courses to show (either backend or imported)
     val hasCourses = filteredCourses.isNotEmpty() || filteredImportedClasses.isNotEmpty()
-    // Calculate total course count for display
     val totalCourseCount = allCourses.size
 
     Box(
@@ -171,6 +170,45 @@ fun ClassesTab(modifier: Modifier = Modifier) {
     ) {
         // Add Course Dialog
         if (showAddCourseDialog) {
+
+            val isDuplicate = remember { mutableStateOf(false) }
+            val duplicateDetails = remember { mutableStateOf<CourseItem?>(null) }
+            val forceSubmit = remember { mutableStateOf(false) }
+
+            val academicYearOptions = remember {
+                val currentYear = Calendar.getInstance().get(Calendar.YEAR)
+                (0 until 5).map { i ->
+                    val startYear = currentYear + i
+                    val endYear = startYear + 1
+                    "$startYear-$endYear"
+                }
+            }
+
+            val checkForDuplicates = {
+                if (courseCode.isNotBlank() && courseSemester.isNotBlank() && courseAcademicYear.isNotBlank()) {
+                    val normalizedCourseCode = courseCode.trim().lowercase()
+
+                    // Filter out current course if in edit mode
+                    val coursesToCheck = allCourses
+
+                    val duplicate = coursesToCheck.find { course ->
+                        val existingCode = course.courseCode.trim().lowercase()
+                        existingCode == normalizedCourseCode &&
+                                course.semester == courseSemester &&
+                                course.academic_year == courseAcademicYear
+                    }
+
+                    isDuplicate.value = duplicate != null
+                    duplicateDetails.value = duplicate
+                } else {
+                    isDuplicate.value = false
+                }
+            }
+
+            LaunchedEffect(courseCode, courseSemester, courseAcademicYear) {
+                checkForDuplicates()
+            }
+
             AlertDialog(
                 onDismissRequest = { showAddCourseDialog = false },
                 title = { Text("Add New Course", style = MaterialTheme.typography.titleLarge) },
@@ -181,6 +219,71 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                             .padding(vertical = 8.dp)
                     ) {
                         Column(modifier = Modifier.fillMaxWidth()) {
+
+                            if (isDuplicate.value && !forceSubmit.value) {
+                                Card(
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = Color(0xFFFFF8E1) // Amber 50
+                                    ),
+                                    border = BorderStroke(1.dp, Color(0xFFFFCC80)), // Amber 200
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 16.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(16.dp)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                imageVector = Icons.Default.Warning,
+                                                contentDescription = null,
+                                                tint = Color(0xFFFF8F00) // Amber 800
+                                            )
+                                            Text(
+                                                text = "Duplicate Course Detected",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                color = Color(0xFFF57C00), // Amber 800
+                                                modifier = Modifier.padding(start = 8.dp)
+                                            )
+                                        }
+
+                                        Text(
+                                            text = "A course with the same code (${duplicateDetails.value?.courseCode}), " +
+                                                    "semester (${duplicateDetails.value?.semester}), and " +
+                                                    "academic year (${duplicateDetails.value?.academic_year}) already exists:",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = Color(0xFFF57C00), // Amber 700
+                                            modifier = Modifier.padding(top = 8.dp)
+                                        )
+
+                                        Text(
+                                            text = duplicateDetails.value?.name ?: "",
+                                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                                            color = Color(0xFFF57C00), // Amber 800
+                                            modifier = Modifier.padding(top = 4.dp)
+                                        )
+
+                                        Button(
+                                            onClick = {
+                                                forceSubmit.value = true
+                                                isDuplicate.value = false
+                                            },
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = Color(0xFFF57C00) // Amber 700
+                                            ),
+                                            modifier = Modifier.padding(top = 8.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = null,
+                                                tint = Color.White,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Create anyway", color = Color.White)
+                                        }
+                                    }
+                                }
+                            }
+
                             // Course Code
                             Text(
                                 text = "Course Code *",
@@ -190,13 +293,15 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                             OutlinedTextField(
                                 value = courseCode,
                                 onValueChange = { courseCode = it },
-                                placeholder = { Text("e.g. CS101") },
+                                placeholder = { Text("e.g. CSIT-101") },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
-                                isError = courseCode.isBlank() && courseCreationState !is CourseCreationState.Idle,
+                                isError = courseCode.isBlank() && courseCreationState !is CourseCreationState.Idle ||
+                                        isDuplicate.value && !forceSubmit.value,
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedBorderColor = Color(0xFF333D79),
-                                    unfocusedBorderColor = Color(0xFFDDDDDD)
+                                    unfocusedBorderColor = if (isDuplicate.value && !forceSubmit.value)
+                                        Color(0xFFFFB74D) else Color(0xFFDDDDDD)
                                 )
                             )
 
@@ -253,7 +358,7 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                             )
 
                             var semesterDropdownExpanded by remember { mutableStateOf(false) }
-                            val semesterOptions = listOf("Fall", "Spring", "Summer", "Winter")
+                            val semesterOptions = listOf("1st Semester", "2nd Semester", "Mid Year")
 
                             ExposedDropdownMenuBox(
                                 expanded = semesterDropdownExpanded,
@@ -270,10 +375,12 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                                         .fillMaxWidth()
                                         .menuAnchor(),
                                     placeholder = { Text("Select a semester") },
-                                    isError = courseSemester.isBlank() && courseCreationState !is CourseCreationState.Idle,
+                                    isError = (courseSemester.isBlank() && courseCreationState !is CourseCreationState.Idle) ||
+                                            (isDuplicate.value && !forceSubmit.value),
                                     colors = OutlinedTextFieldDefaults.colors(
                                         focusedBorderColor = Color(0xFF333D79),
-                                        unfocusedBorderColor = Color(0xFFDDDDDD)
+                                        unfocusedBorderColor = if (isDuplicate.value && !forceSubmit.value)
+                                            Color(0xFFFFB74D) else Color(0xFFDDDDDD)
                                     )
                                 )
 
@@ -302,19 +409,48 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                                 modifier = Modifier.padding(bottom = 4.dp)
                             )
 
-                            OutlinedTextField(
-                                value = courseAcademicYear,
-                                onValueChange = { courseAcademicYear = it },
-                                placeholder = { Text("e.g. 2023-2024") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                isError = courseAcademicYear.isBlank() && courseCreationState !is CourseCreationState.Idle,
-                                supportingText = { Text("Format: YYYY-YYYY", style = MaterialTheme.typography.bodySmall) },
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = Color(0xFF333D79),
-                                    unfocusedBorderColor = Color(0xFFDDDDDD)
+                            var academicYearDropdownExpanded by remember { mutableStateOf(false) }
+
+                            ExposedDropdownMenuBox(
+                                expanded = academicYearDropdownExpanded,
+                                onExpandedChange = { academicYearDropdownExpanded = it }
+                            ) {
+                                OutlinedTextField(
+                                    value = courseAcademicYear,
+                                    onValueChange = { /* Read-only */ },
+                                    readOnly = true,
+                                    trailingIcon = {
+                                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = academicYearDropdownExpanded)
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .menuAnchor(),
+                                    placeholder = { Text("Select academic year") },
+                                    isError = (courseAcademicYear.isBlank() && courseCreationState !is CourseCreationState.Idle) ||
+                                            (isDuplicate.value && !forceSubmit.value),
+                                    supportingText = { Text("Format: YYYY-YYYY", style = MaterialTheme.typography.bodySmall) },
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = Color(0xFF333D79),
+                                        unfocusedBorderColor = if (isDuplicate.value && !forceSubmit.value)
+                                            Color(0xFFFFB74D) else Color(0xFFDDDDDD)
+                                    )
                                 )
-                            )
+
+                                ExposedDropdownMenu(
+                                    expanded = academicYearDropdownExpanded,
+                                    onDismissRequest = { academicYearDropdownExpanded = false }
+                                ) {
+                                    academicYearOptions.forEach { year ->
+                                        DropdownMenuItem(
+                                            text = { Text(year) },
+                                            onClick = {
+                                                courseAcademicYear = year
+                                                academicYearDropdownExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
 
                             // Show error message
                             if (courseCreationState is CourseCreationState.Error) {
@@ -330,15 +466,17 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                 confirmButton = {
                     Button(
                         onClick = {
-                            if (courseName.isBlank() || courseCode.isBlank() || courseSemester.isBlank()) {
+                            if (courseName.isBlank() || courseCode.isBlank() || courseSemester.isBlank() || courseAcademicYear.isBlank()) {
                                 Toast.makeText(context, "Please fill in all required fields", Toast.LENGTH_SHORT).show()
+                            } else if (isDuplicate.value && !forceSubmit.value) {
+                                // Do nothing - user needs to use "Create anyway" button
                             } else {
                                 classViewModel.createCourse(
                                     name = courseName,
                                     courseCode = courseCode,
                                     semester = courseSemester,
                                     description = courseDescription.ifBlank { null },
-                                    academicYear = courseAcademicYear.ifBlank { null }
+                                    academicYear = courseAcademicYear
                                 )
                                 courseName = ""
                                 courseCode = ""
@@ -348,8 +486,13 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                                 showAddCourseDialog = false
                             }
                         },
-                        enabled = courseCreationState !is CourseCreationState.Loading,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF333D79))
+                        enabled = courseCreationState !is CourseCreationState.Loading &&
+                                !(isDuplicate.value && !forceSubmit.value),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isDuplicate.value && !forceSubmit.value)
+                                Color.Gray else Color(0xFF333D79),
+                            disabledContainerColor = Color.Gray
+                        )
                     ) {
                         if (courseCreationState is CourseCreationState.Loading) {
                             CircularProgressIndicator(
@@ -359,6 +502,8 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Creating...")
+                        } else if (isDuplicate.value && !forceSubmit.value) {
+                            Text("Duplicate Detected")
                         } else {
                             Text("Create Course")
                         }
@@ -741,6 +886,15 @@ private fun showEditCourseDialog(
     var academicYear by remember { mutableStateOf(courseData.academic_year ?: "") }
     var description by remember { mutableStateOf(courseData.description ?: "") }
 
+    val academicYearOptions = remember {
+        val currentYear = Calendar.getInstance().get(Calendar.YEAR)
+        (0 until 5).map { i ->
+            val startYear = currentYear + i
+            val endYear = startYear + 1
+            "$startYear-$endYear"
+        }
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Edit Course", style = MaterialTheme.typography.titleLarge) },
@@ -766,6 +920,7 @@ private fun showEditCourseDialog(
 
                 // Add dropdown for semester
                 var semesterExpanded by remember { mutableStateOf(false) }
+                val semesterOptions = listOf("1st Semester", "2nd Semester", "Mid Year")
 
                 ExposedDropdownMenuBox(
                     expanded = semesterExpanded,
@@ -789,7 +944,7 @@ private fun showEditCourseDialog(
                         expanded = semesterExpanded,
                         onDismissRequest = { semesterExpanded = false }
                     ) {
-                        listOf("Fall", "Spring", "Summer", "Winter").forEach { option ->
+                        semesterOptions.forEach { option ->
                             DropdownMenuItem(
                                 text = { Text(option) },
                                 onClick = {
@@ -801,15 +956,41 @@ private fun showEditCourseDialog(
                     }
                 }
 
-                OutlinedTextField(
-                    value = academicYear,
-                    onValueChange = { academicYear = it },
-                    label = { Text("Academic Year") },
-                    placeholder = { Text("YYYY-YYYY") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp)
-                )
+                var academicYearExpanded by remember { mutableStateOf(false) }
+
+                ExposedDropdownMenuBox(
+                    expanded = academicYearExpanded,
+                    onExpandedChange = { academicYearExpanded = it },
+                    modifier = Modifier.padding(vertical = 8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = academicYear,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Academic Year") },
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = academicYearExpanded)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = academicYearExpanded,
+                        onDismissRequest = { academicYearExpanded = false }
+                    ) {
+                        academicYearOptions.forEach { year ->
+                            DropdownMenuItem(
+                                text = { Text(year) },
+                                onClick = {
+                                    academicYear = year
+                                    academicYearExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
 
                 OutlinedTextField(
                     value = description,
