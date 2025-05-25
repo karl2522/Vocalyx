@@ -1,8 +1,9 @@
-import React from 'react';
-import { FiX, FiFileText, FiCheckCircle, FiInfo, FiEye } from 'react-icons/fi';
+import React, { useState } from 'react';
+import { FiX, FiFileText, FiCheckCircle, FiInfo, FiEye, FiUpload } from 'react-icons/fi';
 import { BsFiletypeXlsx, BsFiletypeCsv, BsFileEarmarkSpreadsheet } from 'react-icons/bs';
 import { HiSwitchHorizontal } from 'react-icons/hi';
 import { MdDragIndicator } from 'react-icons/md';
+import CategorySelectionTab from '../CategorySelectionTab';
 
 const ImportPreviewModal = ({ 
   showPreview, 
@@ -25,9 +26,25 @@ const ImportPreviewModal = ({
   customColumns = [],
   setCustomColumns = () => {},
   setShowAddColumnModal = () => {},
-  handleAddColumnTemplate = () => {}
+  handleAddColumnTemplate = () => {},
+  selectedCategory,
+  setSelectedCategory
 }) => {
   if (!showPreview || !previewInfo) return null;
+
+  const [existingCategories, setExistingCategories] = useState([]);
+
+  const handleSelectCategory = (category) => {
+    setSelectedCategory(category);
+  };
+
+  const handleCreateCategory = (newCategory) => {
+    // Add the new category to the existing list
+    setExistingCategories(prev => [...prev, newCategory]);
+    
+    // Select the newly created category
+    setSelectedCategory(newCategory);
+  };
 
   return (
     <div 
@@ -67,17 +84,26 @@ const ImportPreviewModal = ({
             <div className={`flex-1 h-1 mx-2 ${previewTab === 'info' ? 'bg-gray-200' : 'bg-[#333D79]'}`}></div>
             
             <div className="flex flex-col items-center">
-              <div className={`h-10 w-10 rounded-full flex items-center justify-center ${previewTab === 'data' ? 'bg-[#333D79] text-white' : previewTab === 'columns' ? 'bg-gray-100 text-gray-500' : 'bg-gray-100 text-gray-400'} mb-2`}>
+              <div className={`h-10 w-10 rounded-full flex items-center justify-center ${previewTab === 'data' ? 'bg-[#333D79] text-white' : previewTab === 'category' || previewTab === 'columns' ? 'bg-gray-100 text-gray-500' : 'bg-gray-100 text-gray-400'} mb-2`}>
                 <span className="font-medium">2</span>
               </div>
               <span className={`text-xs ${previewTab === 'data' ? 'text-[#333D79] font-medium' : 'text-gray-500'}`}>Preview Data</span>
+            </div>
+            
+            <div className={`flex-1 h-1 mx-2 ${previewTab === 'category' || previewTab === 'columns' ? 'bg-[#333D79]' : 'bg-gray-200'}`}></div>
+            
+            <div className="flex flex-col items-center">
+              <div className={`h-10 w-10 rounded-full flex items-center justify-center ${previewTab === 'category' ? 'bg-[#333D79] text-white' : previewTab === 'columns' ? 'bg-gray-100 text-gray-500' : 'bg-gray-100 text-gray-400'} mb-2`}>
+                <span className="font-medium">3</span>
+              </div>
+              <span className={`text-xs ${previewTab === 'category' ? 'text-[#333D79] font-medium' : 'text-gray-500'}`}>Select Category</span>
             </div>
             
             <div className={`flex-1 h-1 mx-2 ${previewTab === 'columns' ? 'bg-[#333D79]' : 'bg-gray-200'}`}></div>
             
             <div className="flex flex-col items-center">
               <div className={`h-10 w-10 rounded-full flex items-center justify-center ${previewTab === 'columns' ? 'bg-[#333D79] text-white' : 'bg-gray-100 text-gray-400'} mb-2`}>
-                <span className="font-medium">3</span>
+                <span className="font-medium">4</span>
               </div>
               <span className={`text-xs ${previewTab === 'columns' ? 'text-[#333D79] font-medium' : 'text-gray-500'}`}>Map Columns</span>
             </div>
@@ -319,6 +345,13 @@ const ImportPreviewModal = ({
                             </div>
                           )}
                         </div>
+                      ) : previewTab === 'category' ? (
+                        <CategorySelectionTab
+                          existingCategories={existingCategories || []}
+                          selectedCategory={selectedCategory}
+                          onSelectCategory={handleSelectCategory}
+                          onCreateCategory={handleCreateCategory}
+                        />
                       ) : previewTab === 'columns' ? (
                         <div className="h-full overflow-y-auto p-6">
                           <div className="mb-4">
@@ -568,10 +601,14 @@ const ImportPreviewModal = ({
               </button>
             )}
             <button
-              onClick={previewTab === 'info' ? () => setPreviewTab('data') : 
-                      previewTab === 'data' ? () => setPreviewTab('columns') : 
-                      processSelectedFile}
+              onClick={
+                previewTab === 'info' ? () => setPreviewTab('data') : 
+                previewTab === 'data' ? () => setPreviewTab('category') :
+                previewTab === 'category' ? () => setPreviewTab('columns') :
+                () => processSelectedFile(selectedCategory)
+              }
               className="px-4 py-2 text-white bg-[#333D79] hover:bg-[#4A5491] rounded-lg transition-colors flex items-center shadow-sm"
+              disabled={previewTab === 'category' && !selectedCategory}
             >
               {previewTab === 'columns' ? (
                 <>

@@ -178,6 +178,17 @@ class ExcelViewSet(viewsets.ModelViewSet):
         if not class_id:
             return Response({'error': 'class_id is required'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Parse category information if provided
+        category_info = None
+        if 'category' in request.data:
+            try:
+                import json
+                category_info = json.loads(request.data.get('category'))
+                print(f"Received category information: {category_info}")
+            except Exception as e:
+                print("Error parsing category information:", str(e))
+                # Continue processing even if category parsing fails
+
         custom_columns = []
         if 'custom_columns' in request.data:
             try:
@@ -254,12 +265,16 @@ class ExcelViewSet(viewsets.ModelViewSet):
 
             first_sheet_name = list(all_sheets_data.keys())[0] if all_sheets_data else 'Sheet1'
 
+            # Create the ExcelFile with additional category info
             excel_file = ExcelFile.objects.create(
                 user=request.user,
                 class_ref=class_obj,
                 file_name=file.name,
                 all_sheets=all_sheets_data,
-                active_sheet=first_sheet_name
+                active_sheet=first_sheet_name,
+                # Add category information if provided
+                category=category_info['name'] if category_info else None,
+                category_info=category_info if category_info else {}
             )
             print(f"ExcelFile created with ID: {excel_file.id}, containing {len(all_sheets_data)} sheets")
 

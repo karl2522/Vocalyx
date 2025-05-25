@@ -1,6 +1,7 @@
 from django.db import models
 from users.models import CustomUser
 
+
 class ExcelFile(models.Model):
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     class_ref = models.ForeignKey('classes.Class', on_delete=models.CASCADE, related_name='excel_files', null=True,
@@ -9,6 +10,10 @@ class ExcelFile(models.Model):
     uploaded_at = models.DateTimeField(auto_now_add=True)
     all_sheets = models.JSONField(default=dict)
     active_sheet = models.CharField(max_length=255, default='Sheet1')
+
+    # New fields for category support
+    category = models.CharField(max_length=255, null=True, blank=True)
+    category_info = models.JSONField(default=dict, blank=True)
 
     class Meta:
         db_table = 'excel_files'

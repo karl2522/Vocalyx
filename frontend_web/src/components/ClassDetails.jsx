@@ -105,6 +105,7 @@ const ClassDetails = ({ accessInfo }) => {
   const [excelData, setExcelData] = useState(null);
   const [error, setError] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedCategory, setSelectedCategory] = useState(null);
   const [fileStats, setFileStats] = useState(null);
   const [sheets, setSheets] = useState([]);
   const [activeSheet, setActiveSheet] = useState(0);
@@ -397,6 +398,14 @@ const ClassDetails = ({ accessInfo }) => {
 
   try {
       setIsSaving(true);
+      
+      // Check if hotTableRef.current exists before accessing hotInstance
+      if (!hotTableRef.current || !hotTableRef.current.hotInstance) {
+          console.warn('HotTable ref not available yet');
+          setIsSaving(false);
+          return;
+      }
+      
       const currentData = hotTableRef.current.hotInstance.getData();
       
       const formattedData = currentData.map(row => {
@@ -693,7 +702,7 @@ const ClassDetails = ({ accessInfo }) => {
   };
   
   const processSelectedFile = async () => {
-  if (!selectedFile) return;
+  if (!selectedFile || !selectedCategory) return; // Check for both file and category
   
   setFileLoading(true);
   setShowPreview(false);
@@ -744,6 +753,15 @@ const ClassDetails = ({ accessInfo }) => {
     formData.append('file', selectedFile);
     formData.append('class_id', id);
     
+    // Add category information
+    formData.append('category', JSON.stringify({
+      id: selectedCategory.id,
+      name: selectedCategory.name,
+      isNew: selectedCategory.isNew || false,
+      description: selectedCategory.description || '',
+      color: selectedCategory.color || '#333D79'
+    }));
+    
     // Include custom columns in the upload if there are any
     if (customColumns.length > 0) {
       formData.append('custom_columns', JSON.stringify(customColumns));
@@ -751,7 +769,7 @@ const ClassDetails = ({ accessInfo }) => {
     }
     
     // Upload the file directly with formData to ensure custom columns are included
-    setImportStage('Uploading file with custom columns...');
+    setImportStage('Uploading file with category...');
     
     const response = await fetch(`http://127.0.0.1:8000/api/excel/upload/`, {
       method: 'POST',
@@ -788,12 +806,14 @@ const ClassDetails = ({ accessInfo }) => {
           data,
           fileId,
           activeSheet,
-          availableSheets: sheetNames
+          availableSheets: sheetNames,
+          category: selectedCategory.name // Store the category name in the Excel data
         });
         
         setSelectedFile({ 
           name: responseData.file_name,
-          id: fileId
+          id: fileId,
+          category: selectedCategory.name // Store the category name in the selected file
         });
       } else {
         console.log("No data in the active sheet or sheet data structure is incorrect");
@@ -808,6 +828,7 @@ const ClassDetails = ({ accessInfo }) => {
       setImportProgress(0);
       setImportStage('');
       setCustomColumns([]); 
+      // Don't reset selectedCategory here to allow for consecutive uploads to same category
     }, 500);
     
   } catch (error) {
@@ -1561,6 +1582,8 @@ const ClassDetails = ({ accessInfo }) => {
         setPreviewTab={setPreviewTab}
         previewRowsToShow={previewRowsToShow}
         cancelImport={cancelImport}
+        selectedCategory={selectedCategory}
+        setSelectedCategory={setSelectedCategory}
         handleShowMoreRows={handleShowMoreRows}
         handleDragOver={handleDragOver}
         handleDragLeave={handleDragLeave}
