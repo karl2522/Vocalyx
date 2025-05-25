@@ -4,6 +4,7 @@ import { BsFileEarmarkSpreadsheet } from 'react-icons/bs';
 import { FiDownload, FiEye, FiInfo, FiUpload, FiX } from 'react-icons/fi';
 import { MdOutlineClass } from 'react-icons/md';
 import { useNavigate, useParams } from 'react-router-dom';
+import * as XLSX from 'xlsx';
 import { classService } from '../services/api';
 import { showToast } from '../utils/toast';
 import ExcelViewer from './ExcelViewer';
@@ -13,6 +14,7 @@ import DashboardLayout from './layouts/DashboardLayout';
 import AddColumnModal from './modals/AddColumnModal';
 import ExportOptionsModal from './modals/ExportOptionsModal';
 import ImportPreviewModal from './modals/ImportPreviewModal';
+import MergeExcelModal from './MergeExcelModal';
 
 const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, fileName }) => {
   if (!isOpen) return null;
@@ -62,8 +64,7 @@ const ClassDetails = ({ accessInfo }) => {
   const [error, setError] = useState(null);
   const [teamAccess, setTeamAccess] = useState(null);
 
-  // File management state
-  const [availableFiles, setAvailableFiles] = useState([]);
+  // File management state - simplified to single file
   const [selectedFile, setSelectedFile] = useState(null);
   const [currentFileData, setCurrentFileData] = useState(null);
 
@@ -88,6 +89,10 @@ const ClassDetails = ({ accessInfo }) => {
   const [exportLoading, setExportLoading] = useState(false);
   const [exportPreviewData, setExportPreviewData] = useState(null);
 
+  const [showMergeModal, setShowMergeModal] = useState(false);
+  const [mergeFile, setMergeFile] = useState(null);
+  const [mergeFileData, setMergeFileData] = useState(null);
+
   // Column management state
   const [customColumns, setCustomColumns] = useState([]);
   const [showAddColumnModal, setShowAddColumnModal] = useState(false);
@@ -98,7 +103,6 @@ const ClassDetails = ({ accessInfo }) => {
 
   // Delete modal state
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [fileToDelete, setFileToDelete] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Initialize team access
@@ -136,9 +140,8 @@ const ClassDetails = ({ accessInfo }) => {
         console.log("Class data received:", classResponse.data);
         setClassData(classResponse.data);
 
+        // Only use the latest file (first in the response)
         if (excelResponse.data.length > 0) {
-          setAvailableFiles(excelResponse.data);
-
           const latestFile = excelResponse.data[0];
           setSelectedFile({
             name: latestFile.file_name,
@@ -159,72 +162,23 @@ const ClassDetails = ({ accessInfo }) => {
     }
   }, [id, navigate, teamAccess]);
 
-  // File management functions
-  const handleSwitchFile = async (fileId) => {
-    setFileLoading(true);
-    try {
-      const selectedFileObj = availableFiles.find(file => file.id === fileId);
-
-      if (selectedFileObj) {
-        setSelectedFile({
-          name: selectedFileObj.file_name,
-          id: selectedFileObj.id
-        });
-        setCurrentFileData(selectedFileObj);
-      } else {
-        const response = await classService.getExcelFile(fileId);
-        if (response.data) {
-          setSelectedFile({
-            name: response.data.file_name,
-            id: response.data.id
-          });
-          setCurrentFileData(response.data);
-        }
-      }
-    } catch (error) {
-      console.error('Error switching file:', error);
-      setError('Failed to switch file');
-    } finally {
-      setFileLoading(false);
-    }
-  };
-
   const handleDeleteFile = async () => {
-    if (!fileToDelete) return;
+    if (!currentFileData) return;
 
     try {
       setIsDeleting(true);
 
-      await classService.deleteExcelFile(fileToDelete.id);
-
+      await classService.deleteExcelFile(currentFileData.id);
       setIsDeleteModalOpen(false);
+      setSelectedFile(null);
+      setCurrentFileData(null);
 
-      if (selectedFile && selectedFile.id === fileToDelete.id) {
-        setSelectedFile(null);
-        setCurrentFileData(null);
-      }
-
-      setAvailableFiles(prevFiles => prevFiles.filter(file => file.id !== fileToDelete.id));
-
-      showToast.success(`File deleted successfully ${fileToDelete.file_name}`);
-
-      if (availableFiles.length > 1) {
-        const remainingFiles = availableFiles.filter(file => file.id !== fileToDelete.id);
-        if (remainingFiles.length > 0) {
-          const nextFile = remainingFiles[0];
-          setSelectedFile({
-            name: nextFile.file_name,
-            id: nextFile.id
-          });
-          setCurrentFileData(nextFile);
-        }
-      }
+      showToast.success(`File deleted successfully`);
     } catch (error) {
       console.error('Failed to delete file:', error);
       setError('Failed to delete file. Please try again.');
     } finally {
       setIsDeleting(false);
-      setFileToDelete(null);
     }
   };
 
@@ -253,6 +207,24 @@ const ClassDetails = ({ accessInfo }) => {
     }
   };
 
+  const handleSaveExcelChanges = async (updatedFileData) => {
+    try {
+      // Call your API to save the updated file data
+      await classService.updateExcelData(updatedFileData.id, {
+        sheet_data: updatedFileData.all_sheets
+      });
+      
+      // Show success toast notification
+      showToast.success("Changes saved successfully!");
+      
+      // Update the local state with the new data
+      setCurrentFileData(updatedFileData);
+    } catch (error) {
+      console.error('Error saving changes:', error);
+      showToast.error("Failed to save changes. Please try again.");
+    }
+  };
+
   const handleFileInput = (e) => {
     const fileList = e.target.files;
     if (fileList && fileList.length > 0) {
@@ -269,6 +241,131 @@ const ClassDetails = ({ accessInfo }) => {
     }
   };
 
+  const handleUpdateClassRecord = () => {
+    // Create a hidden file input and trigger it
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.xlsx,.xls,.csv';
+    fileInput.onchange = (e) => {
+      if (e.target.files && e.target.files[0]) {
+        const file = e.target.files[0];
+        processFileForMerge(file);
+      }
+    };
+    fileInput.click();
+  };
+
+  const processFileForMerge = async (file) => {
+    try {
+      // Process the file data
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+          
+          if (jsonData.length > 0) {
+            const headers = jsonData[0] || [];
+            const rows = jsonData.slice(1);
+            
+            // Format the file data similar to how API returns it
+            const formattedData = {
+              file_name: file.name,
+              active_sheet: firstSheetName,
+              all_sheets: {
+                [firstSheetName]: {
+                  headers: headers,
+                  data: rows
+                }
+              }
+            };
+            
+            setMergeFile(file);
+            setMergeFileData(formattedData);
+            setShowMergeModal(true);
+          }
+        } catch (error) {
+          console.error("Error processing file for merge:", error);
+          showToast.error(`Error reading file: ${error.message}`);
+        }
+      };
+      
+      reader.readAsArrayBuffer(file);
+    } catch (error) {
+      console.error("Error preparing file for merge:", error);
+      showToast.error(`Error preparing file: ${error.message}`);
+    }
+  };
+
+  const handleMergeFiles = async (mergeOptions) => {
+  if (!mergeFile || !currentFileData) return;
+  
+  setFileLoading(true);
+  setImportStage('Merging files...');
+  setImportProgress(0);
+  
+  // Animation for progress
+  const animateProgress = () => {
+    setImportProgress(prev => {
+      if (prev < 90) return prev + Math.random() * 10;
+      return prev;
+    });
+    
+    if (importProgress < 90) {
+      setTimeout(animateProgress, 200);
+    }
+  };
+  
+  setTimeout(animateProgress, 200);
+  
+  try {
+    // Create form data for API call
+    const formData = new FormData();
+    formData.append('file', mergeFile);
+    formData.append('class_id', id);
+    formData.append('merge', 'true');
+    formData.append('override_names', mergeOptions.overrideNames.toString());
+    
+    // Add category mappings
+    formData.append('category_mappings', JSON.stringify(mergeOptions.categories));
+    
+    // Call API to merge files
+    const response = await classService.mergeExcel(formData);
+    
+    // Update state with new data
+     if (response.data) {
+      // Add the mappings directly to the returned data
+      response.data.column_categories = mergeOptions.categoryMappings;
+      
+      setCurrentFileData(response.data);
+      setSelectedFile({
+        name: response.data.file_name,
+        id: response.data.id
+      });
+      
+      showToast.success("Files merged successfully!");
+    }
+    
+    setImportProgress(100);
+    
+    setTimeout(() => {
+      setFileLoading(false);
+      setImportProgress(0);
+      setImportStage('');
+    }, 500);
+    
+  } catch (error) {
+    console.error("Error merging files:", error);
+    showToast.error("Failed to merge files. Please try again.");
+    setFileLoading(false);
+    setImportProgress(0);
+    setImportStage('');
+  }
+};
+
   // File upload and preview functions
   const handleFileUpload = async (file) => {
     if (!file) return;
@@ -284,15 +381,78 @@ const ClassDetails = ({ accessInfo }) => {
     setError(null);
     setPreviewError(null);
 
+    // Create preview info
     const previewData = {
       name: file.name,
       size: formatFileSize(file.size),
       type: file.type || getFileTypeFromExtension(file.name),
       lastModified: new Date(file.lastModified).toLocaleString()
     };
-
     setPreviewInfo(previewData);
     setSelectedFile(file);
+    
+    // Generate preview data from file
+    try {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          // Parse the file
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, {
+            type: 'array',
+            cellDates: true
+          });
+          
+          // Get first sheet
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          
+          // Convert to JSON with headers
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+          
+          if (jsonData.length > 0) {
+            const headers = jsonData[0] || [];
+            const rows = jsonData.slice(1);
+            
+            // Set preview data
+            setPreviewData({
+              headers: headers,
+              data: rows,
+              totalRows: rows.length,
+              totalColumns: headers.length,
+              sheetName: firstSheetName
+            });
+            
+            // Auto-detect name column
+            const namePatterns = ['name', 'student', 'learner', 'pupil', 'full name', 'first name', 'last name'];
+            const nameColumnIndex = headers.findIndex(header => 
+              namePatterns.some(pattern => 
+                String(header).toLowerCase().includes(pattern.toLowerCase())
+              )
+            );
+            
+            if (nameColumnIndex !== -1) {
+              setDetectedNameColumn(nameColumnIndex);
+            }
+          } else {
+            setPreviewError("No data found in the file");
+          }
+        } catch (error) {
+          console.error("Error processing file for preview:", error);
+          setPreviewError(`Error reading file: ${error.message}`);
+        }
+      };
+      
+      reader.onerror = () => {
+        setPreviewError("Error reading file");
+      };
+      
+      reader.readAsArrayBuffer(file);
+    } catch (error) {
+      console.error("Error during file preview:", error);
+      setPreviewError(`Error preparing file preview: ${error.message}`);
+    }
+    
     setShowPreview(true);
   };
 
@@ -302,9 +462,11 @@ const ClassDetails = ({ accessInfo }) => {
     setFileLoading(true);
     setShowPreview(false);
 
+    // Initialize progress tracking
     setImportProgress(0);
     setImportStage('Reading file...');
-
+    
+    // Set up progress animation
     const progressStages = [
       { stage: 'Reading file...', targetProgress: 20 },
       { stage: 'Processing data...', targetProgress: 40 },
@@ -314,7 +476,6 @@ const ClassDetails = ({ accessInfo }) => {
     ];
 
     let currentStageIndex = 0;
-
     const animateProgress = () => {
       const currentStage = progressStages[currentStageIndex];
       const nextProgress = Math.min(
@@ -350,6 +511,7 @@ const ClassDetails = ({ accessInfo }) => {
         throw new Error("Invalid file selected. Please try selecting the file again.");
       }
 
+      // File size validation
       const maxFileSizeMB = 10;
       const maxFileSizeBytes = maxFileSizeMB * 1024 * 1024;
 
@@ -357,6 +519,7 @@ const ClassDetails = ({ accessInfo }) => {
         throw new Error(`File size exceeds ${maxFileSizeMB}MB limit. Please select a smaller file.`);
       }
 
+      // File type validation
       const fileExtension = selectedFile.name.split('.').pop().toLowerCase();
       const validExtensions = ['xlsx', 'xls', 'csv'];
 
@@ -366,6 +529,7 @@ const ClassDetails = ({ accessInfo }) => {
 
       setImportStage('Processing custom columns...');
 
+      // Process custom columns
       let validatedColumns = [];
       if (customColumns && customColumns.length > 0) {
         validatedColumns = customColumns.filter(col => {
@@ -385,6 +549,7 @@ const ClassDetails = ({ accessInfo }) => {
 
       setImportStage('Uploading file...');
 
+      // Make the API call with the real implementation
       const response = await classService.uploadExcel(
           selectedFile,
           id,
@@ -395,16 +560,18 @@ const ClassDetails = ({ accessInfo }) => {
       console.log("Upload response:", responseData);
 
       if (responseData) {
-        setAvailableFiles(prevFiles => [responseData, ...prevFiles]);
         setSelectedFile({
           name: responseData.file_name,
-          id: responseData.id
+          id: responseData.id,
         });
         setCurrentFileData(responseData);
       }
 
       setImportStage('Finalizing import...');
       setImportProgress(100);
+
+      // Show success notification
+      showToast.success("File imported successfully!");
 
       setTimeout(() => {
         setFileLoading(false);
@@ -416,29 +583,15 @@ const ClassDetails = ({ accessInfo }) => {
     } catch (error) {
       console.error("File upload error:", error);
 
+      // Handle different error scenarios
       let errorMessage = 'Failed to upload file';
-
       if (error.response) {
         if (error.response.data) {
           console.log("Server error details:", error.response.data);
           if (typeof error.response.data === 'object') {
-            if (error.response.data.message) {
-              errorMessage = error.response.data.message;
-            } else if (error.response.data.error) {
-              errorMessage = error.response.data.error;
-            } else if (error.response.data.detail) {
-              errorMessage = error.response.data.detail;
-            } else {
-              try {
-                errorMessage = `Server error: ${JSON.stringify(error.response.data)}`;
-              } catch {
-                errorMessage = `Server error: ${error.response.status}`;
-              }
-            }
+            errorMessage = error.response.data.message || error.response.data.error || error.response.data.detail || `Server error: ${error.response.status}`;
           } else if (typeof error.response.data === 'string') {
             errorMessage = error.response.data;
-          } else {
-            errorMessage = `Server error: ${error.response.status}`;
           }
         }
       } else if (error.request) {
@@ -448,6 +601,8 @@ const ClassDetails = ({ accessInfo }) => {
       }
 
       setError(errorMessage);
+      showToast.error(errorMessage);
+      
       setFileLoading(false);
       setImportProgress(0);
       setImportStage('');
@@ -675,14 +830,15 @@ const ClassDetails = ({ accessInfo }) => {
         {/* Full screen Excel view */}
         {isFullScreen && currentFileData ? (
             <ExcelViewer
-                isFullScreen={isFullScreen}
-                setIsFullScreen={setIsFullScreen}
-                classData={classData}
-                teamAccess={teamAccess}
-                fileData={currentFileData}
-                selectedFile={selectedFile}
-                onExport={handleExport}
-                classId={id}
+              isFullScreen={isFullScreen}
+              setIsFullScreen={setIsFullScreen}
+              classData={classData}
+              teamAccess={teamAccess}
+              fileData={currentFileData}
+              selectedFile={selectedFile}
+              onExport={handleExport}
+              onSave={handleSaveExcelChanges} // Add this
+              classId={id}
             />
         ) : (
             <>
@@ -707,10 +863,19 @@ const ClassDetails = ({ accessInfo }) => {
                     {currentFileData ? (
                         <>
                           {(!teamAccess || teamAccess.accessLevel === 'edit' || teamAccess.accessLevel === 'full') && (
+                            <>
+                               <button
+                                  onClick={handleUpdateClassRecord}
+                                  className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm hover:bg-gray-50"
+                                >
+                                  <BsFileEarmarkSpreadsheet size={18} />
+                                  <span>Update Class Record</span>
+                                </button>
+
                               <label htmlFor="add-file" className="cursor-pointer">
                                 <div className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm hover:bg-gray-50">
                                   <FiUpload size={18} />
-                                  <span>Add File</span>
+                                  <span>Replace File</span>
                                 </div>
                                 <input
                                     id="add-file"
@@ -720,6 +885,7 @@ const ClassDetails = ({ accessInfo }) => {
                                     onChange={handleFileInput}
                                 />
                               </label>
+                            </>
                           )}
                           <button
                               onClick={handleExport}
@@ -728,7 +894,7 @@ const ClassDetails = ({ accessInfo }) => {
                             <FiDownload size={18} />
                             <span>Export Data</span>
                           </button>
-                        </>
+                        </> 
                     ) : (
                         !teamAccess || teamAccess.accessLevel !== 'view' ? (
                             <label htmlFor="file-upload" className="cursor-pointer">
@@ -761,69 +927,34 @@ const ClassDetails = ({ accessInfo }) => {
                   <span className="text-[#333D79]">{classData?.name}</span>
                 </div>
 
-                {/* File Selection Dropdown */}
-                {availableFiles.length > 1 && (
-                    <div className="mb-2">
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex items-center mb-2 sm:mb-0">
-                          <div className="w-8 h-8 rounded-md bg-[#EEF0F8] flex items-center justify-center mr-2 shadow-sm">
-                            <BsFileEarmarkSpreadsheet className="text-[#333D79]" size={16} />
-                          </div>
-                          <span className="text-sm font-medium text-gray-700">Current Spreadsheet</span>
-                        </div>
-
-                        <div className="relative group">
-                          <div className="flex items-center">
-                            <div className="relative">
-                              <select
-                                  className="appearance-none w-full sm:w-72 border border-gray-300 rounded-lg text-gray-700 pl-4 pr-10 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-[#333D79] focus:border-[#333D79] transition-all hover:border-gray-400"
-                                  value={selectedFile?.id}
-                                  onChange={(e) => handleSwitchFile(e.target.value)}
-                              >
-                                {availableFiles.map(file => {
-                                  const formattedDate = file.uploaded_at ?
-                                      new Date(file.uploaded_at).toLocaleDateString() :
-                                      'Unknown date';
-
-                                  return (
-                                      <option key={file.id} value={file.id}>
-                                        {file.file_name} ({formattedDate})
-                                      </option>
-                                  );
-                                })}
-                              </select>
-
-                              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[#333D79]">
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-                                </svg>
-                              </div>
-                            </div>
-
-                            {/* Delete button */}
-                            {(!teamAccess || teamAccess.accessLevel === 'edit' || teamAccess.accessLevel === 'full') && selectedFile && (
-                                <button
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      const currentFile = availableFiles.find(f => f.id === selectedFile.id);
-                                      if (currentFile) {
-                                        setFileToDelete(currentFile);
-                                        setIsDeleteModalOpen(true);
-                                      }
-                                    }}
-                                    className="ml-2 p-2 rounded-md text-gray-500 hover:text-red-500 hover:bg-red-50 transition-colors border border-gray-200"
-                                    title="Delete spreadsheet"
-                                >
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                  </svg>
-                                </button>
-                            )}
-                          </div>
-                        </div>
+                {/* File Info Bar - Simplified to show current file only */}
+                {currentFileData && (
+                  <div className="mb-4 flex items-center justify-between bg-gray-50 rounded-lg p-3 border border-gray-200">
+                    <div className="flex items-center">
+                      <div className="w-8 h-8 rounded-md bg-[#EEF0F8] flex items-center justify-center mr-3 shadow-sm">
+                        <BsFileEarmarkSpreadsheet className="text-[#333D79]" size={16} />
+                      </div>
+                      <div>
+                        <span className="text-sm font-medium text-gray-700">{selectedFile?.name}</span>
+                        <p className="text-xs text-gray-500">
+                          {currentFileData?.uploaded_at ? new Date(currentFileData.uploaded_at).toLocaleString() : 'Recently uploaded'}
+                        </p>
                       </div>
                     </div>
+
+                    {/* Delete button */}
+                    {(!teamAccess || teamAccess.accessLevel === 'edit' || teamAccess.accessLevel === 'full') && (
+                      <button
+                          onClick={() => setIsDeleteModalOpen(true)}
+                          className="p-2 rounded-md text-gray-500 hover:text-red-500 hover:bg-red-50 transition-colors border border-gray-200"
+                          title="Delete spreadsheet"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
                 )}
 
                 {error && (
@@ -920,14 +1051,15 @@ const ClassDetails = ({ accessInfo }) => {
                           {/* Container with fixed height for ExcelViewer */}
                           <div className="h-[calc(70vh-130px)]">
                             <ExcelViewer
-                                isFullScreen={false}
-                                setIsFullScreen={setIsFullScreen}
-                                classData={classData}
-                                teamAccess={teamAccess}
-                                fileData={currentFileData}
-                                selectedFile={selectedFile}
-                                onExport={handleExport}
-                                classId={id}
+                              isFullScreen={false}
+                              setIsFullScreen={setIsFullScreen}
+                              classData={classData}
+                              teamAccess={teamAccess}
+                              fileData={currentFileData}
+                              selectedFile={selectedFile}
+                              onExport={handleExport}
+                              onSave={handleSaveExcelChanges} // Add this
+                              classId={id}
                             />
                           </div>
                         </div>
@@ -988,6 +1120,15 @@ const ClassDetails = ({ accessInfo }) => {
             processExport={processExport}
         />
 
+        <MergeExcelModal
+          isOpen={showMergeModal}
+          onClose={() => setShowMergeModal(false)}
+          currentFile={currentFileData}
+          newFile={mergeFileData}
+          onMerge={handleMergeFiles}
+          teamAccess={teamAccess}
+        />
+
         {/* Loading Overlay for Export */}
         {exportLoading && (
             <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[1000] backdrop-blur-sm">
@@ -1024,12 +1165,9 @@ const ClassDetails = ({ accessInfo }) => {
         {/* Delete Confirmation Modal */}
         <DeleteConfirmationModal
             isOpen={isDeleteModalOpen}
-            onClose={() => {
-              setIsDeleteModalOpen(false);
-              setFileToDelete(null);
-            }}
+            onClose={() => setIsDeleteModalOpen(false)}
             onConfirm={handleDeleteFile}
-            fileName={fileToDelete?.file_name || ''}
+            fileName={currentFileData?.file_name || ''}
         />
 
         {/* Loading Indicator for Delete Operation */}

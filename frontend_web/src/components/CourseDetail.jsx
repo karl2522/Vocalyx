@@ -221,7 +221,6 @@ const CourseDetail = ({ accessInfo }) => {
     mutationFn: (classData) => classService.createClass(classData),
     onSuccess: () => {
       queryClient.invalidateQueries(['classes', id]);
-      toast.success('Class added successfully');
       setIsClassModalOpen(false);
     },
     onError: (error) => {
