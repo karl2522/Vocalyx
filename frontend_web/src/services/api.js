@@ -1,4 +1,5 @@
 import axios from 'axios';
+import * as XLSX from 'xlsx';
 
 const API_URL = 'http://127.0.0.1:8000/api';
 
@@ -12,7 +13,8 @@ const api = axios.create({
 
 api.interceptors.request.use(
     (config) => {
-        const token = localStorage.getItem('authToken');
+        // Try to get token from both possible storage keys for backward compatibility
+        const token = localStorage.getItem('authToken') || localStorage.getItem('access_token');
         
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
@@ -39,14 +41,17 @@ api.interceptors.response.use(
             originalRequest._retry = true;
             
             try {
-                const refreshTokenStr = localStorage.getItem('refreshToken');
+                // Try both possible refresh token keys for backward compatibility
+                const refreshTokenStr = localStorage.getItem('refreshToken') || localStorage.getItem('refresh_token');
+                
                 if (refreshTokenStr) {
                     // Try to refresh the token
                     const response = await refreshToken(refreshTokenStr);
                     
                     if (response && response.access) {
-                        // Update the token in localStorage
+                        // Update the token in localStorage (both keys for compatibility)
                         localStorage.setItem('authToken', response.access);
+                        localStorage.setItem('access_token', response.access);
                         
                         // Update the authorization header
                         originalRequest.headers.Authorization = `Bearer ${response.access}`;
@@ -63,6 +68,8 @@ api.interceptors.response.use(
                 // Clear auth data
                 localStorage.removeItem('authToken');
                 localStorage.removeItem('refreshToken');
+                localStorage.removeItem('access_token');
+                localStorage.removeItem('refresh_token');
                 localStorage.removeItem('user');
             }
         }
@@ -177,55 +184,475 @@ export const classService = {
     getClass: (id) => api.get(`/classes/${id}/`),
     updateClass: (id, classData) => api.patch(`/classes/${id}/`, classData),
     deleteClass: (id) => api.delete(`/classes/${id}/`),
-    getClassById: (id) => api.get(`/classes/${id}/`),
-    getClassExcelFiles: (classId) => api.get(`/excel/?class_id=${classId}`),
-    getExcelFile: (fileId) => api.get(`/excel/${fileId}/`),
-    deleteExcelFile: (fileId) => api.delete(`/excel/${fileId}/`),
-    updateExcelData: (fileId, data, sheetName) => api.patch(
-        `/excel/${fileId}/update_data/`, 
-        { 
-            sheet_data: data,
-            sheet_name: sheetName 
-        },
-        {
-            headers: {
-                'Content-Type': 'application/json',
+    getClassById: (id) => {
+        console.log("MOCK: getClassById for id:", id);
+        
+        // Return mock class data
+        return Promise.resolve({
+            data: {
+                id: id,
+                name: "Mock Class for Testing",
+                description: "This is a mock class for testing Excel functionality",
+                course_id: "mock_course_1",
+                course_name: "Mock Course",
+                created_at: "2023-01-15T10:30:00Z",
+                updated_at: "2023-06-20T14:45:00Z",
+                lastUpdated: "June 20, 2023",
+                student_count: 25
             }
-        }
-    ),
-    setActiveSheet: (fileId, sheetName) => api.patch(
-        `/excel/${fileId}/set_active_sheet/`,
-        { sheet_name: sheetName },
-        {
-            headers: {
-                'Content-Type': 'application/json',
+        });
+        
+        /* ORIGINAL IMPLEMENTATION - COMMENTED OUT
+        return api.get(`/classes/${id}/`);
+        */
+    },
+    getClassExcelFiles: (classId) => {
+        console.log("MOCK: getClassExcelFiles for classId:", classId);
+        
+        // Return mock data for testing
+        return Promise.resolve({
+            data: [
+                {
+                    id: "mock_file_1",
+                    file_name: "Sample Grades.xlsx",
+                    active_sheet: "Sheet1",
+                    sheet_names: ["Sheet1", "Sheet2", "Sheet3"],
+                    uploaded_at: new Date().toISOString(),
+                    all_sheets: {
+                        "Sheet1": {
+                            headers: ["Student Name", "Quiz 1", "Quiz 2", "Quiz 3", "Quiz 4", "Quiz 5", 
+                                      "Lab 1", "Lab 2", "Lab 3", "Lab 4", "Lab 5",
+                                      "PE", "ME", "PFE", "FE"],
+                            data: [
+                                { "Student Name": "John Doe", "Quiz 1": 85, "Quiz 2": 90, "Quiz 3": 78, "Quiz 4": 92, "Quiz 5": 88, 
+                                  "Lab 1": 95, "Lab 2": 87, "Lab 3": 90, "Lab 4": 92, "Lab 5": 94,
+                                  "PE": 88, "ME": 92, "PFE": 85, "FE": 91 },
+                                { "Student Name": "Jane Smith", "Quiz 1": 92, "Quiz 2": 88, "Quiz 3": 95, "Quiz 4": 96, "Quiz 5": 90, 
+                                  "Lab 1": 90, "Lab 2": 92, "Lab 3": 88, "Lab 4": 94, "Lab 5": 91,
+                                  "PE": 94, "ME": 97, "PFE": 92, "FE": 95 },
+                                { "Student Name": "Bob Johnson", "Quiz 1": 78, "Quiz 2": 82, "Quiz 3": 80, "Quiz 4": 85, "Quiz 5": 79, 
+                                  "Lab 1": 82, "Lab 2": 80, "Lab 3": 85, "Lab 4": 79, "Lab 5": 83,
+                                  "PE": 75, "ME": 78, "PFE": 72, "FE": 80 }
+                            ]
+                        }
+                    }
+                }
+            ]
+        });
+        
+        /* ORIGINAL IMPLEMENTATION - COMMENTED OUT
+        return api.get(`/excel/?class_id=${classId}`);
+        */
+    },
+    getExcelFile: (fileId) => {
+        console.log("MOCK: getExcelFile for fileId:", fileId);
+        
+        // Return mock data for testing
+        return Promise.resolve({
+            data: {
+                id: fileId,
+                file_name: "Requested File.xlsx",
+                active_sheet: "Sheet1",
+                sheet_names: ["Sheet1", "Sheet2"],
+                uploaded_at: new Date().toISOString(),
+                all_sheets: {
+                    "Sheet1": {
+                        headers: ["Student Name", "Quiz 1", "Quiz 2", "Quiz 3", "Quiz 4", "Quiz 5", 
+                                  "Lab 1", "Lab 2", "Lab 3", "Lab 4", "Lab 5",
+                                  "PE", "ME", "PFE", "FE"],
+                        data: [
+                            { "Student Name": "John Doe", "Quiz 1": 85, "Quiz 2": 90, "Quiz 3": 78, "Quiz 4": 92, "Quiz 5": 88, 
+                              "Lab 1": 95, "Lab 2": 87, "Lab 3": 90, "Lab 4": 92, "Lab 5": 94,
+                              "PE": 88, "ME": 92, "PFE": 85, "FE": 91 },
+                            { "Student Name": "Jane Smith", "Quiz 1": 92, "Quiz 2": 88, "Quiz 3": 95, "Quiz 4": 96, "Quiz 5": 90, 
+                              "Lab 1": 90, "Lab 2": 92, "Lab 3": 88, "Lab 4": 94, "Lab 5": 91,
+                              "PE": 94, "ME": 97, "PFE": 92, "FE": 95 },
+                            { "Student Name": "Bob Johnson", "Quiz 1": 78, "Quiz 2": 82, "Quiz 3": 80, "Quiz 4": 85, "Quiz 5": 79, 
+                              "Lab 1": 82, "Lab 2": 80, "Lab 3": 85, "Lab 4": 79, "Lab 5": 83,
+                              "PE": 75, "ME": 78, "PFE": 72, "FE": 80 }
+                        ]
+                    },
+                    "Sheet2": {
+                        headers: ["Student Name", "Attendance", "Participation"],
+                        data: [
+                            { "Student Name": "John Doe", "Attendance": "95%", "Participation": "Good" },
+                            { "Student Name": "Jane Smith", "Attendance": "98%", "Participation": "Excellent" },
+                            { "Student Name": "Bob Johnson", "Attendance": "85%", "Participation": "Fair" }
+                        ]
+                    }
+                }
             }
+        });
+        
+        /* ORIGINAL IMPLEMENTATION - COMMENTED OUT
+        return api.get(`/excel/${fileId}/`);
+        */
+    },
+    deleteExcelFile: (fileId) => {
+        console.log("MOCK: deleteExcelFile for fileId:", fileId);
+        
+        // Simulate successful deletion
+        return Promise.resolve({ data: { success: true, message: "File deleted successfully" } });
+        
+        /* ORIGINAL IMPLEMENTATION - COMMENTED OUT
+        return api.delete(`/excel/${fileId}/`);
+        */
+    },
+    updateExcelData: (fileId, data, sheetName) => {
+        console.log("MOCK: updateExcelData for fileId:", fileId);
+        console.log("MOCK: Sheet name:", sheetName);
+        console.log("MOCK: Data to update:", data);
+        
+        // Simulate successful update
+        return Promise.resolve({
+            data: {
+                success: true,
+                message: "Data updated successfully",
+                updated_at: new Date().toISOString()
+            }
+        });
+        
+        /* ORIGINAL IMPLEMENTATION - COMMENTED OUT
+        return api.patch(
+            `/excel/${fileId}/update_data/`, 
+            { 
+                sheet_data: data,
+                sheet_name: sheetName 
+            },
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            }
+        );
+        */
+    },
+    setActiveSheet: (fileId, sheetName) => {
+        console.log("MOCK: setActiveSheet for fileId:", fileId);
+        console.log("MOCK: New active sheet:", sheetName);
+        
+        // Create mock response with the requested sheet as active
+        return Promise.resolve({
+            data: {
+                id: fileId,
+                file_name: "Sample File.xlsx",
+                active_sheet: sheetName,
+                sheet_names: ["Sheet1", "Sheet2", "Sheet3"],
+                all_sheets: {
+                    [sheetName]: {
+                        headers: ["Student Name", "Assignment 1", "Assignment 2", "Midterm", "Final"],
+                        data: [
+                            { "Student Name": "John Doe", "Assignment 1": 85, "Assignment 2": 90, "Midterm": 78, "Final": 92 },
+                            { "Student Name": "Jane Smith", "Assignment 1": 92, "Assignment 2": 88, "Midterm": 95, "Final": 96 },
+                            { "Student Name": "Bob Johnson", "Assignment 1": 78, "Assignment 2": 82, "Midterm": 80, "Final": 85 }
+                        ]
+                    }
+                }
+            }
+        });
+        
+        /* ORIGINAL IMPLEMENTATION - COMMENTED OUT
+        return api.patch(
+            `/excel/${fileId}/set_active_sheet/`,
+            { sheet_name: sheetName },
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            }
+        );
+        */
+    },
+    uploadExcelWithColumns: (formData) => {
+        console.log("MOCK: uploadExcelWithColumns called");
+        
+        // Try to extract file from FormData
+        const file = formData.get('file');
+        
+        if (file && file instanceof File) {
+            // Use the same mock implementation as uploadExcel
+            return new Promise((resolve) => {
+                console.log("MOCK: Processing file locally instead of sending to backend");
+                
+                // Create a FileReader to read the file locally
+                const reader = new FileReader();
+                
+                reader.onload = (event) => {
+                    try {
+                        // Parse Excel file
+                        const data = new Uint8Array(event.target.result);
+                        const workbook = XLSX.read(data, {
+                            type: 'array',
+                            cellDates: true
+                        });
+                        
+                        // Get sheet names
+                        const sheetNames = workbook.SheetNames || [];
+                        if (!sheetNames.length) {
+                            throw new Error("No sheets found");
+                        }
+                        
+                        // Process first sheet as active sheet
+                        const activeSheet = sheetNames[0];
+                        const worksheet = workbook.Sheets[activeSheet];
+                        
+                        // Convert to JSON
+                        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                        
+                        // Extract headers and data
+                        const headers = jsonData[0] || [];
+                        const rows = jsonData.slice(1);
+                        
+                        // Format data for response
+                        const formattedData = rows.map(row => {
+                            const rowObj = {};
+                            headers.forEach((header, index) => {
+                                rowObj[header] = row[index] || null;
+                            });
+                            return rowObj;
+                        });
+                        
+                        // Create mock response
+                        const mockResponse = {
+                            id: `mock_${Date.now()}`,
+                            file_name: file.name,
+                            active_sheet: activeSheet,
+                            sheet_names: sheetNames,
+                            all_sheets: {
+                                [activeSheet]: {
+                                    headers: headers,
+                                    data: formattedData
+                                }
+                            },
+                            uploaded_at: new Date().toISOString()
+                        };
+                        
+                        console.log("MOCK: Created response:", mockResponse);
+                        
+                        // Simulate network delay
+                        setTimeout(() => {
+                            resolve({ data: mockResponse });
+                        }, 1000);
+                        
+                    } catch (error) {
+                        console.error("MOCK: Error processing file:", error);
+                        // Still resolve with error for testing
+                        resolve({ 
+                            data: {
+                                id: `mock_error_${Date.now()}`,
+                                file_name: file.name,
+                                error: error.message
+                            } 
+                        });
+                    }
+                };
+                
+                reader.onerror = () => {
+                    console.error("MOCK: Error reading file");
+                    resolve({ 
+                        data: {
+                            id: `mock_error_${Date.now()}`,
+                            file_name: file.name,
+                            error: "Error reading file"
+                        } 
+                    });
+                };
+                
+                // Read the file
+                reader.readAsArrayBuffer(file);
+            });
+        } else {
+            console.error("MOCK: No file found in FormData");
+            return Promise.resolve({
+                data: {
+                    id: `mock_error_${Date.now()}`,
+                    error: "No file found in FormData"
+                }
+            });
         }
-    ),
-        uploadExcelWithColumns: (formData) => {
+        
+        /* ORIGINAL IMPLEMENTATION - COMMENTED OUT
         return api.post('/excel/upload/', formData, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },
         });
+        */
     },
     uploadExcel: (file, classId, customColumns = null) => {
+        console.log("MOCK: uploadExcel called with:", { 
+            fileName: file.name, 
+            fileType: file.type, 
+            fileSize: file.size,
+            classId: classId,
+            hasCustomColumns: customColumns ? true : false 
+        });
+        
+        // MOCK IMPLEMENTATION - For testing without backend
+        return new Promise((resolve) => {
+            console.log("MOCK: Processing file locally instead of sending to backend");
+            
+            // Create a FileReader to read the file locally
+            const reader = new FileReader();
+            
+            reader.onload = (event) => {
+                try {
+                    // Parse Excel file
+                    const data = new Uint8Array(event.target.result);
+                    const workbook = XLSX.read(data, {
+                        type: 'array',
+                        cellDates: true
+                    });
+                    
+                    // Get sheet names
+                    const sheetNames = workbook.SheetNames || [];
+                    if (!sheetNames.length) {
+                        throw new Error("No sheets found");
+                    }
+                    
+                    // Process first sheet as active sheet
+                    const activeSheet = sheetNames[0];
+                    const worksheet = workbook.Sheets[activeSheet];
+                    
+                    // Convert to JSON
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                    
+                    // Extract headers and data
+                    const headers = jsonData[0] || [];
+                    const rows = jsonData.slice(1);
+                    
+                    // Format data for response
+                    const formattedData = rows.map(row => {
+                        const rowObj = {};
+                        headers.forEach((header, index) => {
+                            rowObj[header] = row[index] || null;
+                        });
+                        return rowObj;
+                    });
+                    
+                    // Create mock response
+                    const mockResponse = {
+                        id: `mock_${Date.now()}`,
+                        file_name: file.name,
+                        active_sheet: activeSheet,
+                        sheet_names: sheetNames,
+                        all_sheets: {
+                            [activeSheet]: {
+                                headers: headers,
+                                data: formattedData
+                            }
+                        },
+                        uploaded_at: new Date().toISOString()
+                    };
+                    
+                    console.log("MOCK: Created response:", mockResponse);
+                    
+                    // Simulate network delay
+                    setTimeout(() => {
+                        resolve({ data: mockResponse });
+                    }, 1000);
+                    
+                } catch (error) {
+                    console.error("MOCK: Error processing file:", error);
+                    // Still resolve with error for testing
+                    resolve({ 
+                        data: {
+                            id: `mock_error_${Date.now()}`,
+                            file_name: file.name,
+                            error: error.message
+                        } 
+                    });
+                }
+            };
+            
+            reader.onerror = () => {
+                console.error("MOCK: Error reading file");
+                resolve({ 
+                    data: {
+                        id: `mock_error_${Date.now()}`,
+                        file_name: file.name,
+                        error: "Error reading file"
+                    } 
+                });
+            };
+            
+            // Read the file
+            reader.readAsArrayBuffer(file);
+        });
+        
+        /* ORIGINAL IMPLEMENTATION - COMMENTED OUT
+        if (!(file instanceof File)) {
+            console.error("Not a valid File object:", file);
+            return Promise.reject(new Error("Invalid file object"));
+        }
+        
+        // Create a fresh FormData object
         const formData = new FormData();
-        formData.append('file', file);
-        formData.append('class_id', classId);
+        
+        // Add file first - make sure it has the correct filename
+        formData.append('file', file, file.name);
+        
+        // Add class_id as a string
+        formData.append('class_id', String(classId));
         
         // Include custom columns if provided
         if (customColumns && customColumns.length > 0) {
-            formData.append('custom_columns', JSON.stringify(customColumns));
+            try {
+                const columnsJson = JSON.stringify(customColumns);
+                formData.append('custom_columns', columnsJson);
+            } catch (err) {
+                console.error("Error stringifying custom columns:", err);
+            }
+        }
+        
+        // Log form data for debugging (can't directly log FormData)
+        console.log("FormData entries:");
+        for (let pair of formData.entries()) {
+            console.log(pair[0] + ': ' + (pair[0] === 'file' ? pair[1].name : pair[1]));
         }
         
         return api.post('/excel/upload/', formData, {
             headers: {
-            'Content-Type': 'multipart/form-data',
+                'Content-Type': 'multipart/form-data',
             },
+        }).catch(error => {
+            console.error("API uploadExcel error:", error.message);
+            console.error("Response data:", error.response?.data);
+            throw error;
         });
+        */
     },
-    downloadExcel: (fileId) => api.get(`/excel/${fileId}/download/`),
+    downloadExcel: (fileId) => {
+        console.log("MOCK: downloadExcel for fileId:", fileId);
+        
+        // Create a simple Excel file with mock data for download
+        const mockData = [
+            ["Student Name", "Quiz 1", "Quiz 2", "Midterm", "Final"],
+            ["John Doe", 85, 90, 78, 92],
+            ["Jane Smith", 92, 88, 95, 96],
+            ["Bob Johnson", 78, 82, 80, 85]
+        ];
+        
+        // Create a workbook
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(mockData);
+        XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+        
+        // Generate and download the file
+        XLSX.writeFile(wb, "downloaded_file.xlsx");
+        
+        // Return a successful response
+        return Promise.resolve({
+            data: {
+                success: true,
+                message: "File downloaded successfully"
+            }
+        });
+        
+        /* ORIGINAL IMPLEMENTATION - COMMENTED OUT
+        return api.get(`/excel/${fileId}/download/`);
+        */
+    },
 };
 
 export const courseService = {
@@ -310,4 +737,14 @@ export const notificationService = {
   markAllAsRead: () => api.post('/notifications/mark_all_as_read/')
 };
 
-export default api;
+// Add default export
+const apiService = {
+    register,
+    verifyEmail,
+    login,
+    logout,
+    refreshToken,
+    classService
+};
+
+export default apiService;

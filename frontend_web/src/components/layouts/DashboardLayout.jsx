@@ -1,7 +1,7 @@
 import PropTypes from 'prop-types';
 import { useState } from 'react';
 import Sidebar from './Sidebar.jsx';
-import TopNavbar from './TopNavbar.jsx';
+import { TopNavbar } from './TopNavbar.jsx';
 
 const DashboardLayout = ({ children }) => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);

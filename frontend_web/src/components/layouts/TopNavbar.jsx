@@ -6,8 +6,8 @@ import { MdOutlineClass } from 'react-icons/md';
 import { RiBookOpenLine, RiSoundModuleLine } from 'react-icons/ri';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
-import LogoutModal from '../modals/LogoutModal';
 import { notificationService } from '../../services/api';
+import LogoutModal from '../modals/LogoutModal';
 
 // Custom animation styles for notifications
 const notificationStyles = `
@@ -232,7 +232,7 @@ const TopNavbar = ({ sidebarCollapsed }) => {
       {/* Add notification styles */}
       <style>{notificationStyles}</style>
       
-      <div className={`bg-white shadow-md h-16 fixed top-0 right-0 left-0 z-40 transition-all duration-300 ${
+      <div className={`shadow-md h-16 fixed top-0 right-0 left-0 z-40 transition-all duration-300 bg-white ${
         sidebarCollapsed ? 'ml-20' : 'ml-64'
       }`}>
         <div className="flex items-center justify-between h-full px-6">
@@ -457,4 +457,6 @@ TopNavbar.defaultProps = {
   sidebarCollapsed: false
 };
 
+// Export both as default and named export
+export { TopNavbar };
 export default TopNavbar;
