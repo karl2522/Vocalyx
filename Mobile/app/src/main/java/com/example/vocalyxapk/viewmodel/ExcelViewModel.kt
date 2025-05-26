@@ -12,6 +12,7 @@ import com.example.vocalyxapk.api.SpeechApiServiceFactory
 import com.example.vocalyxapk.api.WhisperApiClient
 import com.example.vocalyxapk.models.BatchEntry
 import com.example.vocalyxapk.models.ExcelFileItem
+import com.example.vocalyxapk.models.SheetContent
 import com.example.vocalyxapk.models.VoiceEntryRecord
 import com.example.vocalyxapk.models.VoiceParseResult
 import com.example.vocalyxapk.repository.ExcelRepository
@@ -171,7 +172,7 @@ class ExcelViewModel : ViewModel() {
     fun getSelectedSheetData(): List<List<String>> {
         val file = selectedExcelFile ?: return emptyList()
         val sheet = selectedSheetName ?: return emptyList()
-        val sheetContent = file.all_sheets[sheet] ?: return emptyList()
+        val sheetContent = file.getSheetContent(sheet) ?: return emptyList()
         
         // Convert the data to a list of lists format for display
         val headers = sheetContent.headers
@@ -195,7 +196,7 @@ class ExcelViewModel : ViewModel() {
     fun getSelectedSheetDataAsMap(): Map<String, Any> {
         val file = selectedExcelFile ?: return mapOf("headers" to emptyList<String>(), "data" to emptyList<Map<String, String>>())
         val sheet = selectedSheetName ?: return mapOf("headers" to emptyList<String>(), "data" to emptyList<Map<String, String>>())
-        val sheetContent = file.all_sheets[sheet] ?: return mapOf("headers" to emptyList<String>(), "data" to emptyList<Map<String, String>>())
+        val sheetContent = file.getSheetContent(sheet) ?: return mapOf("headers" to emptyList<String>(), "data" to emptyList<Map<String, String>>())
         
         return mapOf(
             "headers" to sheetContent.headers,
@@ -207,7 +208,7 @@ class ExcelViewModel : ViewModel() {
     fun getColumnNames(): List<String> {
         val file = selectedExcelFile ?: return emptyList()
         val sheet = selectedSheetName ?: return emptyList()
-        val sheetContent = file.all_sheets[sheet] ?: return emptyList()
+        val sheetContent = file.getSheetContent(sheet) ?: return emptyList()
         
         return sheetContent.headers
     }
@@ -217,7 +218,7 @@ class ExcelViewModel : ViewModel() {
         val sheet = selectedSheetName ?: return
 
         // Get the current sheet data
-        val sheetContent = file.all_sheets[sheet] ?: return
+        val sheetContent = file.getSheetContent(sheet) ?: return
 
         // Add the new column to headers
         val updatedHeaders = sheetContent.headers.toMutableList()
@@ -235,14 +236,20 @@ class ExcelViewModel : ViewModel() {
         }
 
         // Update the sheet content
-        val updatedSheetContent = sheetContent.copy(
+        val updatedSheetContent = SheetContent(
             headers = updatedHeaders,
             data = updatedData
         )
 
+        // We'll need to update the all_sheets map manually
+        // This is a temporary solution - ideally we'd update the backend
+        val updatedSheetsMap = (file.all_sheets[sheet] as? Map<String, Any>)?.toMutableMap() ?: mutableMapOf<String, Any>()
+        updatedSheetsMap["headers"] = updatedHeaders
+        updatedSheetsMap["data"] = updatedData
+        
         // Update the file's sheets
         val updatedSheets = file.all_sheets.toMutableMap()
-        updatedSheets[sheet] = updatedSheetContent
+        updatedSheets[sheet] = updatedSheetsMap
 
         // Create updated file object
         val updatedFile = file.copy(all_sheets = updatedSheets)
@@ -263,7 +270,7 @@ class ExcelViewModel : ViewModel() {
             onComplete(false)
             return
         }
-        val sheetContent = file.all_sheets[sheet] ?: run {
+        val sheetContent = file.getSheetContent(sheet) ?: run {
             onComplete(false)
             return
         }
@@ -309,12 +316,15 @@ class ExcelViewModel : ViewModel() {
         updatedRow[columnName] = value
         updatedData[studentRowIndex] = updatedRow
 
-        // Update the sheet content
-        val updatedSheetContent = sheetContent.copy(data = updatedData)
-
+        // We'll need to update the all_sheets map manually
+        // This is a temporary solution - ideally we'd update the backend
+        val updatedSheetsMap = (file.all_sheets[sheet] as? Map<String, Any>)?.toMutableMap() ?: mutableMapOf<String, Any>()
+        updatedSheetsMap["headers"] = sheetContent.headers
+        updatedSheetsMap["data"] = updatedData
+        
         // Update the file's sheets
         val updatedSheets = file.all_sheets.toMutableMap()
-        updatedSheets[sheet] = updatedSheetContent
+        updatedSheets[sheet] = updatedSheetsMap
 
         // Create updated file object
         val updatedFile = file.copy(all_sheets = updatedSheets)
@@ -359,7 +369,7 @@ class ExcelViewModel : ViewModel() {
     private fun updateExcelData() {
         val file = selectedExcelFile ?: return
         val sheet = selectedSheetName ?: return
-        val sheetContent = file.all_sheets[sheet] ?: return
+        val sheetContent = file.getSheetContent(sheet) ?: return
 
         // Prevent duplicate save operations
         if (isSaving) return
@@ -436,7 +446,7 @@ class ExcelViewModel : ViewModel() {
     fun findMatchingStudents(nameFragment: String): List<String> {
         val file = selectedExcelFile ?: return emptyList()
         val sheet = selectedSheetName ?: return emptyList()
-        val sheetContent = file.all_sheets[sheet] ?: return emptyList()
+        val sheetContent = file.getSheetContent(sheet) ?: return emptyList()
 
         if (sheetContent.data.isEmpty() || sheetContent.headers.isEmpty()) return emptyList()
 
@@ -475,7 +485,7 @@ class ExcelViewModel : ViewModel() {
     fun findMatchingStudentsWithFuzzy(nameFragment: String, threshold: Double = 0.75): List<Pair<String, Double>> {
         val file = selectedExcelFile ?: return emptyList()
         val sheet = selectedSheetName ?: return emptyList()
-        val sheetContent = file.all_sheets[sheet] ?: return emptyList()
+        val sheetContent = file.getSheetContent(sheet) ?: return emptyList()
 
         if (sheetContent.data.isEmpty() || sheetContent.headers.isEmpty()) return emptyList()
 
@@ -562,7 +572,7 @@ class ExcelViewModel : ViewModel() {
         // If no pattern in column name, analyze data to estimate max score
         val file = selectedExcelFile ?: return null
         val sheet = selectedSheetName ?: return null
-        val sheetContent = file.all_sheets[sheet] ?: return null
+        val sheetContent = file.getSheetContent(sheet) ?: return null
 
         // Calculate stats on existing values
         val values = sheetContent.data.mapNotNull { row ->

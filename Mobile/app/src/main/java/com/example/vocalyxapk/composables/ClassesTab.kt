@@ -211,7 +211,7 @@ fun ClassesTab(modifier: Modifier = Modifier) {
 
             AlertDialog(
                 onDismissRequest = { showAddCourseDialog = false },
-                title = { Text("Add New Course", style = MaterialTheme.typography.titleLarge) },
+                title = { Text("Add New Course", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color(0xFF333D79) ) },
                 text = {
                     Box(
                         modifier = Modifier
@@ -287,6 +287,7 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                             // Course Code
                             Text(
                                 text = "Course Code *",
+                                fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.bodyMedium,
                                 modifier = Modifier.padding(bottom = 4.dp)
                             )
@@ -310,6 +311,7 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                             // Course Name
                             Text(
                                 text = "Course Name *",
+                                fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.bodyMedium,
                                 modifier = Modifier.padding(bottom = 4.dp)
                             )
@@ -331,6 +333,7 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                             // Description field
                             Text(
                                 text = "Description",
+                                fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.bodyMedium,
                                 modifier = Modifier.padding(bottom = 4.dp)
                             )
@@ -353,6 +356,7 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                             // Semester Dropdown
                             Text(
                                 text = "Semester *",
+                                fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.bodyMedium,
                                 modifier = Modifier.padding(bottom = 4.dp)
                             )
@@ -405,6 +409,7 @@ fun ClassesTab(modifier: Modifier = Modifier) {
                             // Academic Year field
                             Text(
                                 text = "Academic Year *",
+                                fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.bodyMedium,
                                 modifier = Modifier.padding(bottom = 4.dp)
                             )
