@@ -75,6 +75,10 @@
             android:name=".ExcelImportActivity"
             android:exported="false"
             android:theme="@style/Theme.VOCALYXAPK" />
+        <activity
+            android:name=".FriendlyStudentsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.VOCALYXAPK" />
     </application>
 
 </manifest>

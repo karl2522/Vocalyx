@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -183,11 +184,31 @@ fun StudentsScreen(
                     }
                 },
                 actions = {
+                    // Eye icon for mobile-friendly view
+                    IconButton(
+                        onClick = {
+                            val intent = Intent(context, FriendlyStudentsActivity::class.java).apply {
+                                putExtra("CLASS_ID", classId)
+                                putExtra("CLASS_NAME", className)
+                                putExtra("CLASS_SECTION", classSection)
+                            }
+                            context.startActivity(intent)
+                        }
+                    ) {
+                        Icon(Icons.Default.Visibility, contentDescription = "Mobile-friendly view")
+                    }
+                    
                     // Refresh button
                     IconButton(onClick = { excelViewModel.fetchExcelFiles(classId) }) {
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color(0xFF333D79),
+                    titleContentColor = Color.White,
+                    navigationIconContentColor = Color.White,
+                    actionIconContentColor = Color.White
+                )
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
@@ -252,7 +273,7 @@ fun StudentsScreen(
                                         ) {
                                             FilterChip(
                                                 selected = selectedExcelFile?.id == excelFile.id,
-                                                onClick = { excelViewModel.selectExcelFile(excelFile) },
+                                                onClick = { excelViewModel.selectExcelFile(excelFile.id) },
                                                 label = { Text(excelFile.file_name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                                 leadingIcon = if (selectedExcelFile?.id == excelFile.id) {
                                                     { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
