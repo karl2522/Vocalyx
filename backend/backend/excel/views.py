@@ -1,3 +1,6 @@
+import os
+
+from drf_spectacular.types import OpenApiTypes
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -7,7 +10,7 @@ from django.http import HttpResponse
 from io import BytesIO
 from .models import ExcelFile
 from .serializers import ExcelFileSerializer
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import extend_schema, OpenApiParameter
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 import datetime
 
@@ -156,6 +159,270 @@ class ExcelViewSet(viewsets.ModelViewSet):
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @extend_schema(
+        description='Merge Excel file with existing file',
+        request={
+            'multipart/form-data': {
+                'type': 'object',
+                'properties': {
+                    'file': {'type': 'string', 'format': 'binary'},
+                    'class_id': {'type': 'integer'},
+                    'merge': {'type': 'boolean'},
+                    'override_names': {'type': 'boolean'},
+                    'category_mappings': {'type': 'string'}  # JSON string of category mappings
+                }
+            }
+        },
+        responses={200: ExcelFileSerializer}
+    )
+    @action(detail=False, methods=['POST'])
+    def merge(self, request):
+        print("Merge request received")
+
+        if 'file' not in request.FILES:
+            return Response({'error': 'No file provided'}, status=status.HTTP_400_BAD_REQUEST)
+
+        file = request.FILES['file']
+        print(f"File received for merge: {file.name}")
+
+        if not file.name.endswith(('.xlsx', '.xls', '.csv')):
+            return Response({'error': 'File must be an Excel file'}, status=status.HTTP_400_BAD_REQUEST)
+
+        class_id = request.data.get('class_id')
+        if not class_id:
+            return Response({'error': 'class_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        override_names = request.data.get('override_names', 'false').lower() == 'true'
+
+        try:
+            # Check permissions for the class
+            from classes.models import Class
+            class_obj = Class.objects.get(id=class_id)
+
+            if class_obj.user != request.user:
+                from teams.models import TeamMember
+
+                team_member = TeamMember.objects.filter(
+                    team__courses__course_id=class_obj.course.id if class_obj.course else None,
+                    user=request.user,
+                    is_active=True
+                ).first()
+
+                if not team_member or team_member.permissions not in ['edit', 'full']:
+                    return Response({'error': 'You do not have permission to modify files in this class'},
+                                    status=status.HTTP_403_FORBIDDEN)
+
+            # Get the most recent excel file for this class to merge with
+            existing_file = ExcelFile.objects.filter(class_ref=class_obj).order_by('-uploaded_at').first()
+
+            if not existing_file:
+                # If no existing file, just upload as new
+                return self.upload(request)
+
+            # Load both excel files
+            new_excel = pd.read_excel(file, sheet_name=None)
+
+            # Process the new file first
+            all_sheets_data = {}
+            for sheet_name, df in new_excel.items():
+                print(f"Processing sheet: {sheet_name}, shape: {df.shape}")
+
+                df = df.replace({pd.NA: None})
+                df = df.fillna("")
+
+                for column in df.select_dtypes(include=['float64', 'int64']).columns:
+                    df[column] = df[column].apply(
+                        lambda x: None if pd.isna(x) else float(x) if isinstance(x, float) else int(x))
+
+                records = []
+                for record in df.to_dict('records'):
+                    cleaned_record = {}
+                    for key, value in record.items():
+                        if pd.isna(value):
+                            cleaned_record[key] = None
+                        elif isinstance(value, (pd.Timestamp, pd.DatetimeTZDtype, datetime.datetime, datetime.date)):
+                            cleaned_record[key] = value.isoformat()
+                        else:
+                            cleaned_record[key] = value
+                    records.append(cleaned_record)
+
+                headers = df.columns.tolist()
+
+                all_sheets_data[sheet_name] = {
+                    'headers': headers,
+                    'data': records
+                }
+
+            # Now merge with existing file
+            active_sheet = existing_file.active_sheet
+            existing_data = existing_file.all_sheets[active_sheet]
+            new_data = all_sheets_data[list(all_sheets_data.keys())[0]]  # First sheet of new file
+
+            # Find name columns in both datasets
+            name_patterns = ['name', 'student', 'learner', 'no.', 'id']
+
+            def find_name_column(headers):
+                for header in headers:
+                    if any(pattern in str(header).lower() for pattern in name_patterns):
+                        return header
+                return headers[0] if headers else None
+
+            existing_name_col = find_name_column(existing_data['headers'])
+            new_name_col = find_name_column(new_data['headers'])
+
+            # Build lookup dictionaries for quick access
+            existing_lookup = {}
+            for record in existing_data['data']:
+                if existing_name_col and existing_name_col in record:
+                    name = str(record[existing_name_col]).strip().lower()
+                    existing_lookup[name] = record
+
+            # Start with existing data
+            merged_data = existing_data.copy()
+
+            # Merge headers
+            all_new_cols = []
+            # Add new columns from new file that aren't in existing headers
+            for col in new_data['headers']:
+                if col not in merged_data['headers'] and col != new_name_col:
+                    merged_data['headers'].append(col)
+                    all_new_cols.append(col)
+
+            print(f"Added {len(all_new_cols)} new columns to headers")
+
+            # Update existing records and add new ones
+            added_count = 0
+            updated_count = 0
+
+            for record in new_data['data']:
+                if not new_name_col or new_name_col not in record:
+                    continue
+
+                name = str(record[new_name_col]).strip().lower()
+                if name in existing_lookup:
+                    # Update existing record
+                    existing_record = existing_lookup[name]
+                    if override_names and new_name_col and existing_name_col:
+                        existing_record[existing_name_col] = record[new_name_col]
+
+                    # Add all new columns from new record
+                    for key, value in record.items():
+                        if key != new_name_col or key not in existing_record:
+                            existing_record[key] = value
+
+                    updated_count += 1
+                else:
+                    # Add new record
+                    new_record = {key: None for key in merged_data['headers']}
+                    for key, value in record.items():
+                        new_record[key] = value
+
+                    merged_data['data'].append(new_record)
+                    added_count += 1
+
+            # Get existing category mappings if they exist
+            existing_mappings = {}
+            if 'category_mappings' in existing_file.all_sheets:
+                print("Found existing category mappings, will preserve them")
+                try:
+                    for category in existing_file.all_sheets['category_mappings']:
+                        for column in category.get('columns', []):
+                            if column in existing_data['headers']:  # Only keep columns that still exist
+                                existing_mappings[column] = category['id']
+                    print(f"Loaded {len(existing_mappings)} existing column mappings")
+                except Exception as e:
+                    print(f"Error processing existing mappings: {str(e)}")
+
+            # Process new category mappings if provided
+            new_column_mappings = {}
+            if 'category_mappings' in request.data:
+                try:
+                    import json
+                    category_mappings_str = request.data.get('category_mappings')
+                    print(
+                        f"Raw category mappings from request: {category_mappings_str[:100]}...")  # Print first 100 chars
+
+                    category_mappings_data = json.loads(category_mappings_str)
+                    print(f"Parsed category mappings - type: {type(category_mappings_data)}")
+
+                    # Handle dictionary format directly
+                    if isinstance(category_mappings_data, dict):
+                        for column, category in category_mappings_data.items():
+                            if column in merged_data['headers']:
+                                new_column_mappings[column] = category
+                    # Handle array format with 'columns' property
+                    elif isinstance(category_mappings_data, list):
+                        for item in category_mappings_data:
+                            if isinstance(item, dict) and 'id' in item and 'columns' in item:
+                                for column in item['columns']:
+                                    if column in merged_data['headers']:
+                                        new_column_mappings[column] = item['id']
+
+                    print(f"Processed {len(new_column_mappings)} new column mappings")
+                except Exception as e:
+                    import traceback
+                    print("Error parsing category mappings:", str(e))
+                    print("Traceback:", traceback.format_exc())
+
+            # Combine existing and new mappings (new mappings override existing ones)
+            combined_mappings = {**existing_mappings, **new_column_mappings}
+            print(f"Combined mappings: {len(combined_mappings)} columns mapped")
+
+            # Convert back to category -> columns format for storage
+            category_structure = []
+            category_ids = set(combined_mappings.values())
+            for cat_id in category_ids:
+                # Find all columns for this category
+                columns = [col for col, cat in combined_mappings.items() if cat == cat_id]
+                if columns:
+                    # Use the standard category names or default names
+                    category_name = {
+                        'quiz': 'Quizzes',
+                        'laboratory': 'Laboratory',
+                        'exams': 'Major Exams',
+                        'other': 'Other Activities'
+                    }.get(cat_id, cat_id.capitalize())
+
+                    category_structure.append({
+                        'id': cat_id,
+                        'name': category_name,
+                        'columns': columns
+                    })
+
+            # Update the existing file with merged data
+            existing_file.all_sheets[active_sheet] = merged_data
+
+            # Store the combined category mappings
+            if category_structure:
+                existing_file.all_sheets['category_mappings'] = category_structure
+                print(f"Saved category structure with {len(category_structure)} categories")
+
+                # Debug output of categories
+                for cat in category_structure:
+                    print(f"  Category '{cat['name']}' ({cat['id']}): {len(cat['columns'])} columns")
+            else:
+                print("Warning: No category structure to save")
+
+            existing_file.update_count += 1
+            # Log the updated counter - ADD THIS LINE
+            print(f"Incremented update count to: {existing_file.update_count}")
+
+            existing_file.save()
+
+            print(f"Merge complete: {updated_count} records updated, {added_count} records added")
+            print(f"Category mappings preserved: {len(category_structure)} categories")
+
+            serializer = self.get_serializer(existing_file)
+            return Response(serializer.data)
+
+        except Class.DoesNotExist:
+            return Response({'error': 'Class not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            import traceback
+            print("Error during merge:", str(e))
+            print("Traceback:", traceback.format_exc())
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @extend_schema(
         description='Upload Excel file',
         request={
             'multipart/form-data': {'type': 'object', 'properties': {'file': {'type': 'string', 'format': 'binary'}}}},
@@ -274,38 +541,163 @@ class ExcelViewSet(viewsets.ModelViewSet):
 
     @extend_schema(
         description='Download Excel file',
-        responses={200: {'type': 'string', 'format': 'binary'}}
+        parameters=[
+            OpenApiParameter(
+                name='format',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description='File format to download (xlsx or csv)',
+                required=False,
+                enum=['xlsx', 'csv'],
+                default='xlsx'
+            )
+        ],
+        responses={200: OpenApiTypes.BINARY}
     )
     @action(detail=True, methods=['GET'])
     def download(self, request, pk=None):
-        excel_file = self.get_object()
-
         try:
-            writer = pd.ExcelWriter(BytesIO(), engine='xlsxwriter')
+            excel_file = self.get_object()
+            # Get the requested format (default to xlsx)
+            file_format = request.query_params.get('format', 'xlsx').lower()
 
-            for sheet_name, sheet_data in excel_file.all_sheets.items():
-                df = pd.DataFrame(sheet_data['data'])
-                df.to_excel(writer, sheet_name=sheet_name, index=False)
+            # Validate format
+            if file_format not in ['xlsx', 'csv']:
+                return Response(
+                    {'error': 'Invalid format. Must be xlsx or csv'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
-            writer.close()
-            buffer = writer.handles.handle
-            buffer.seek(0)
+            # Get the active sheet name
+            sheet_name = request.query_params.get('sheet', excel_file.active_sheet)
+            if sheet_name not in excel_file.all_sheets:
+                return Response(
+                    {'error': f'Sheet {sheet_name} not found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
 
-            response = HttpResponse(
-                buffer.getvalue(),
-                content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-            )
-            response['Content-Disposition'] = f'attachment; filename="{excel_file.file_name}"'
-            return response
+            # Get sheet data for the selected sheet
+            sheet_data = excel_file.all_sheets[sheet_name]
+
+            # Convert to DataFrame
+            df = pd.DataFrame(sheet_data.get('data', []))
+
+            # Prepare the response based on format
+            if file_format == 'csv':
+                # CSV export
+                csv_buffer = BytesIO()
+                df.to_csv(csv_buffer, index=False)
+                csv_buffer.seek(0)
+
+                response = HttpResponse(csv_buffer.getvalue(), content_type='text/csv')
+                filename = f"{os.path.splitext(excel_file.file_name)[0]}.csv"
+                response['Content-Disposition'] = f'attachment; filename="{filename}"'
+                return response
+            else:
+                # XLSX export - create a workbook with the selected sheet
+                buffer = BytesIO()
+                with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                    df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+                buffer.seek(0)
+                response = HttpResponse(
+                    buffer.getvalue(),
+                    content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                )
+                response['Content-Disposition'] = f'attachment; filename="{excel_file.file_name}"'
+                return response
 
         except Exception as e:
+            import traceback
+            print("Error downloading file:", str(e))
+            print("Traceback:", traceback.format_exc())
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['PATCH'], permission_classes=[IsAuthenticated])
+    def update_categories(self, request, pk=None):
+        try:
+            excel_file = self.get_object()  # This will use existing permission checks
+
+            # Check permissions (similar to update_data)
+            if excel_file.user.id != request.user.id:
+                # Only allow if user is a team member with appropriate access
+                has_team_access = False
+                if excel_file.class_ref and excel_file.class_ref.course:
+                    from teams.models import TeamMember
+                    team_access = TeamMember.objects.filter(
+                        team__courses__course_id=excel_file.class_ref.course.id,
+                        user=request.user,
+                        is_active=True,
+                        permissions__in=['edit', 'full']
+                    ).exists()
+                    if team_access:
+                        has_team_access = True
+                        print("Team access granted for category update")
+
+                if not has_team_access:
+                    print("Permission denied for category update: Not owner and no team access")
+                    return Response(
+                        {'error': 'You do not have permission to modify this file'},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+
+            # Process category mappings data
+            if 'all_sheets' in request.data and 'category_mappings' in request.data['all_sheets']:
+                category_mappings = request.data['all_sheets']['category_mappings']
+
+                # Update the file with the new mappings
+                if 'category_mappings' not in excel_file.all_sheets:
+                    excel_file.all_sheets['category_mappings'] = []
+
+                excel_file.all_sheets['category_mappings'] = category_mappings
+
+                # Increment update counter
+                excel_file.update_count += 1
+                print(f"Incremented update count to: {excel_file.update_count}")
+
+                excel_file.save()
+
+                print(f"Updated category mappings: {len(category_mappings)} categories")
+                for cat in category_mappings:
+                    print(f"  Category '{cat.get('name')}' ({cat.get('id')}): {len(cat.get('columns', []))} columns")
+
+                # Get updated serializer data to return
+                serializer = self.get_serializer(excel_file)
+                return Response({
+                    'message': 'Category mappings updated successfully',
+                    'file_data': serializer.data,
+                    'update_count': excel_file.update_count  # Include update_count in response
+                })
+            else:
+                return Response({'error': 'No category_mappings provided in all_sheets'},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+        except ExcelFile.DoesNotExist:
+            return Response({'error': 'File not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            import traceback
+            print("Error updating categories:", str(e))
+            print("Traceback:", traceback.format_exc())
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['PATCH'], permission_classes=[IsAuthenticated])
     def update_data(self, request, pk=None):
         try:
             excel_file = ExcelFile.objects.get(pk=pk)
+
+            # Parse JSON if needed
             sheet_data = request.data.get('sheet_data')
+            if isinstance(sheet_data, str):
+                import json
+                try:
+                    sheet_data = json.loads(sheet_data)
+                    print("Parsed sheet_data from string")
+                except json.JSONDecodeError as e:
+                    return Response(
+                        {'error': f'Invalid JSON in sheet_data: {str(e)}'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
             sheet_name = request.data.get('sheet_name', excel_file.active_sheet)
 
             # Add a simple permission check to ensure user owns the file or is in the right team
@@ -313,7 +705,7 @@ class ExcelViewSet(viewsets.ModelViewSet):
                 # Simple log to debug permission issues
                 print(f"Permission check: File owner: {excel_file.user.id}, Request user: {request.user.id}")
 
-                # Only allow if user is a team member with appropriate access (optional)
+                # Only allow if user is a team member with appropriate access
                 has_team_access = False
                 if excel_file.class_ref and excel_file.class_ref.course:
                     from teams.models import TeamMember
@@ -347,11 +739,41 @@ class ExcelViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_404_NOT_FOUND
                 )
 
+            if 'headers' in request.data:
+                new_headers = request.data.get('headers')
+                excel_file.all_sheets[sheet_name]['headers'] = new_headers
+                print(f"Updated headers explicitly: {new_headers}")
+
+            # Log data structure to debug
+            print(f"Sheet data type: {type(sheet_data)}")
+            if isinstance(sheet_data, list) and len(sheet_data) > 0:
+                print(f"First row type: {type(sheet_data[0])}")
+
             existing_headers = excel_file.all_sheets[sheet_name]['headers']
+
+            # Validate that we have a list of dictionaries/objects
+            if not isinstance(sheet_data, list):
+                return Response(
+                    {'error': 'sheet_data must be a list of objects/rows'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
             all_keys = set()
             for row in sheet_data:
-                all_keys.update(row.keys())
+                # Check each row is a dictionary
+                if not isinstance(row, dict):
+                    print(f"Invalid row type: {type(row)}, value: {row}")
+                    if isinstance(row, str):
+                        # Try to parse as JSON if it's a string
+                        try:
+                            row_dict = json.loads(row)
+                            all_keys.update(row_dict.keys())
+                        except:
+                            continue  # Skip this row if parsing fails
+                    else:
+                        continue  # Skip non-dictionary rows
+                else:
+                    all_keys.update(row.keys())
 
             new_headers = existing_headers.copy()
             for key in all_keys:
@@ -363,6 +785,16 @@ class ExcelViewSet(viewsets.ModelViewSet):
 
             formatted_data = []
             for row in sheet_data:
+                # Convert row to dict if needed
+                if not isinstance(row, dict):
+                    if isinstance(row, str):
+                        try:
+                            row = json.loads(row)
+                        except:
+                            continue  # Skip invalid rows
+                    else:
+                        continue  # Skip non-dictionary rows
+
                 formatted_row = {}
                 for key, value in row.items():
                     if value == "":
@@ -375,6 +807,10 @@ class ExcelViewSet(viewsets.ModelViewSet):
 
             excel_file.all_sheets[sheet_name]['data'] = formatted_data
 
+            # Increment the update counter
+            excel_file.update_count += 1
+            print(f"Incremented update count to: {excel_file.update_count}")
+
             excel_file.save()
             print(f"Updated Excel file with new headers: {new_headers}")
 
@@ -382,7 +818,8 @@ class ExcelViewSet(viewsets.ModelViewSet):
                 'message': f'Data updated successfully for sheet {sheet_name}',
                 'sheet_data': formatted_data,
                 'sheet_name': sheet_name,
-                'headers': new_headers
+                'headers': new_headers,
+                'update_count': excel_file.update_count  # Include update_count in response
             })
 
         except ExcelFile.DoesNotExist:

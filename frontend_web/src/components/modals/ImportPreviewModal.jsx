@@ -1,7 +1,5 @@
-import React from 'react';
-import { FiX, FiFileText, FiCheckCircle, FiInfo, FiEye } from 'react-icons/fi';
-import { BsFiletypeXlsx, BsFiletypeCsv, BsFileEarmarkSpreadsheet } from 'react-icons/bs';
-import { HiSwitchHorizontal } from 'react-icons/hi';
+import { BsFileEarmarkSpreadsheet, BsFiletypeCsv, BsFiletypeXlsx } from 'react-icons/bs';
+import { FiCheckCircle, FiEye, FiFileText, FiInfo, FiX, FiUpload } from 'react-icons/fi';
 import { MdDragIndicator } from 'react-icons/md';
 
 const ImportPreviewModal = ({ 
@@ -31,7 +29,7 @@ const ImportPreviewModal = ({
 
   return (
     <div 
-      className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm"
+      className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-4 backdrop-blur-sm"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           cancelImport();
@@ -262,15 +260,40 @@ const ImportPreviewModal = ({
                                 <div className="overflow-x-auto">
                                   <table className="min-w-full divide-y divide-gray-200">
                                     <thead>
+                                      {/* Category Headers */}
+                                      {previewData.nestedHeaders && previewData.nestedHeaders[0] && (
+                                        <tr>
+                                          <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12 border-r border-gray-200">
+                                            #
+                                          </th>
+                                          {previewData.nestedHeaders[0].map((header, idx) => (
+                                            <th 
+                                              key={idx}
+                                              colSpan={header.colspan}
+                                              className={`py-3 px-4 text-center text-sm font-bold tracking-wider border-r border-gray-200 ${
+                                                idx === 0 ? 'bg-[#333D79] text-white' : 
+                                                idx === 1 ? 'bg-[#333D79] text-white' : 
+                                                idx === 2 ? 'bg-[#333D79] text-white' : 
+                                                idx === 3 ? 'bg-[#333D79] text-white' : 'bg-gray-50 text-gray-700'
+                                              }`}
+                                            >
+                                              {header.label}
+                                            </th>
+                                          ))}
+                                        </tr>
+                                      )}
+                                      {/* Column Headers */}
                                       <tr className="bg-gray-50 border-b border-gray-200">
                                         <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12 border-r border-gray-200">
                                           #
                                         </th>
-                                        {previewData.headers.map((header, idx) => (
+                                        {previewData.headers && previewData.headers.map((header, idx) => (
                                           <th 
                                             key={idx}
-                                            className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap overflow-hidden text-ellipsis border-r border-gray-200 last:border-r-0"
-                                            style={{ maxWidth: '200px', minWidth: '150px' }}
+                                            className={`px-4 py-3 text-center text-xs font-medium uppercase tracking-wider whitespace-nowrap overflow-hidden text-ellipsis border-r border-gray-200 last:border-r-0 ${
+                                              idx === 0 ? 'text-left bg-[#333D79] text-white' : 'bg-gray-50 text-gray-500'
+                                            }`}
+                                            style={{ minWidth: '120px' }}
                                           >
                                             {header}
                                           </th>
@@ -286,10 +309,12 @@ const ImportPreviewModal = ({
                                           {row.map((cell, cellIdx) => (
                                             <td
                                               key={cellIdx}
-                                              className="px-4 py-2.5 text-sm text-gray-800 whitespace-nowrap overflow-hidden text-ellipsis border-r border-gray-200 last:border-r-0"
-                                              style={{ maxWidth: '200px', minWidth: '150px' }}
+                                              className={`px-4 py-2.5 text-sm whitespace-nowrap overflow-hidden text-ellipsis border-r border-gray-200 last:border-r-0 ${
+                                                cellIdx === 0 ? 'text-left font-medium text-amber-800 bg-amber-50' : 'text-center text-gray-800'
+                                              }`}
+                                              style={{ minWidth: '120px' }}
                                             >
-                                              {String(cell)}
+                                              {String(cell || '')}
                                             </td>
                                           ))}
                                         </tr>
@@ -408,13 +433,14 @@ const ImportPreviewModal = ({
                                 <h6 className="font-medium text-gray-800">Quizzes</h6>
                               </div>
                               <div className="text-xs text-gray-600 mb-2">
-                                Adds columns for quiz scores with auto-calculated averages
+                                Adds columns for quiz scores
                               </div>
                               <div className="flex flex-wrap gap-1">
                                 <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">Quiz 1</span>
                                 <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">Quiz 2</span>
                                 <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">Quiz 3</span>
-                                <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">Quiz Avg</span>
+                                <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">Quiz 4</span>
+                                <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">Quiz 5</span>
                               </div>
                               {customColumns.some(col => col.id.includes('quiz')) && (
                                 <div className="absolute top-2 right-2">
@@ -445,10 +471,9 @@ const ImportPreviewModal = ({
                                 Adds columns for tracking laboratory work and activities
                               </div>
                               <div className="flex flex-wrap gap-1">
-                                <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">Lab 1</span>
-                                <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">Lab 2</span>
-                                <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">Lab 3</span>
-                                <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">Lab Avg</span>
+                                <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">Lab Activity 1</span>
+                                <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">Lab Activity 2</span>
+                                <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">Lab Activity 3</span>
                               </div>
                               {customColumns.some(col => col.id.includes('lab')) && (
                                 <div className="absolute top-2 right-2">
@@ -464,7 +489,7 @@ const ImportPreviewModal = ({
                             <div 
                               onClick={() => handleAddColumnTemplate('exams')}
                               className={`border rounded-lg shadow-sm bg-white p-4 hover:border-[#333D79] cursor-pointer transition-colors relative ${
-                                customColumns.some(col => col.id.includes('exam') || col.id.includes('midterm') || col.id.includes('final')) ? 'border-[#333D79] bg-[#F8F9FF]' : ''
+                                customColumns.some(col => col.id.includes('exam') || col.id.includes('pe_') || col.id.includes('me_') || col.id.includes('pfe_') || col.id.includes('fe_')) ? 'border-[#333D79] bg-[#F8F9FF]' : ''
                               }`}
                             >
                               <div className="flex items-center mb-3">
@@ -476,14 +501,49 @@ const ImportPreviewModal = ({
                                 <h6 className="font-medium text-gray-800">Exams</h6>
                               </div>
                               <div className="text-xs text-gray-600 mb-2">
-                                Adds columns for midterm, final and other examination scores
+                                Adds columns for all examination scores
                               </div>
                               <div className="flex flex-wrap gap-1">
-                                <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">Midterm</span>
-                                <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">Final</span>
-                                <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">Total</span>
+                                <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">PE</span>
+                                <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">ME</span>
+                                <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">PFE</span>
+                                <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">FE</span>
                               </div>
-                              {customColumns.some(col => col.id.includes('exam') || col.id.includes('midterm') || col.id.includes('final')) && (
+                              {customColumns.some(col => col.id.includes('exam') || col.id.includes('pe_') || col.id.includes('me_') || col.id.includes('pfe_') || col.id.includes('fe_')) && (
+                                <div className="absolute top-2 right-2">
+                                  <div className="h-5 w-5 rounded-full bg-[#333D79] flex items-center justify-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-white" viewBox="0 0 20 20" fill="currentColor">
+                                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                    </svg>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="mb-6">
+                            <div 
+                              onClick={() => handleAddColumnTemplate('remarks')}
+                              className={`border rounded-lg shadow-sm bg-white p-4 hover:border-[#333D79] cursor-pointer transition-colors relative ${
+                                customColumns.some(col => col.id.includes('remarks')) ? 'border-[#333D79] bg-[#F8F9FF]' : ''
+                              }`}
+                              style={{ maxWidth: '300px' }}
+                            >
+                              <div className="flex items-center mb-3">
+                                <div className="h-8 w-8 rounded-full bg-[#EEF0F8] flex items-center justify-center mr-3">
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-[#333D79]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                                  </svg>
+                                </div>
+                                <h6 className="font-medium text-gray-800">Remarks</h6>
+                              </div>
+                              <div className="text-xs text-gray-600 mb-2">
+                                Adds a column for additional notes and remarks about students
+                              </div>
+                              <div className="flex flex-wrap gap-1">
+                                <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">Remarks</span>
+                              </div>
+                              {customColumns.some(col => col.id.includes('remarks')) && (
                                 <div className="absolute top-2 right-2">
                                   <div className="h-5 w-5 rounded-full bg-[#333D79] flex items-center justify-center">
                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-white" viewBox="0 0 20 20" fill="currentColor">

@@ -1,157 +1,123 @@
-import { HotTable } from '@handsontable/react';
-import 'handsontable/dist/handsontable.full.css';
-import { registerAllModules } from 'handsontable/registry';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { BsFileEarmarkSpreadsheet, BsFiletypeCsv, BsFiletypeXlsx } from 'react-icons/bs';
-import { FiCheckCircle, FiDownload, FiFileText, FiFilter, FiInfo, FiMaximize, FiMinimize, FiUpload, FiX, FiEye } from 'react-icons/fi';
-import { HiSwitchHorizontal } from 'react-icons/hi';
-import { MdDragIndicator, MdOutlineClass } from 'react-icons/md';
+import React from 'react';
+import PropTypes from 'prop-types';
+import { useEffect, useState } from 'react';
+import { BsFileEarmarkSpreadsheet } from 'react-icons/bs';
+import { FiDownload, FiEye, FiInfo, FiUpload, FiX } from 'react-icons/fi';
+import { MdOutlineClass } from 'react-icons/md';
 import { useNavigate, useParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { classService } from '../services/api';
-import DashboardLayout from './layouts/DashboardLayout';
-import ImportPreviewModal from './modals/ImportPreviewModal'
-import ExportOptionsModal from './modals/ExportOptionsModal';
-import AddColumnModal from './modals/AddColumnModal';
-import ImportProgress from './ImportProgress';
-import ExcelViewer from './ExcelViewer';
-import RecordingsSection from './RecordingSections';
-import FileDropzone from './FileDropzone';
 import { showToast } from '../utils/toast';
-
-registerAllModules();
-
-const MAX_VISIBLE_ROWS = 100; 
-const LAZY_LOAD_THRESHOLD = 50; 
-
-// Add CSS for animations
-const styleElement = document.createElement('style');
-styleElement.innerHTML = `
-  @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
-  
-  @keyframes slideUp {
-    from { transform: translateY(10px); opacity: 0; }
-    to { transform: translateY(0); opacity: 1; }
-  }
-  
-  @keyframes pulse {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.05); }
-    100% { transform: scale(1); }
-  }
-  
-  .animate-fadeIn {
-    animation: fadeIn 0.3s ease-out;
-  }
-  
-  .animate-slideUp {
-    animation: slideUp 0.4s ease-out;
-  }
-  
-  .animate-pulse-custom {
-    animation: pulse 2s infinite;
-  }
-`;
-document.head.appendChild(styleElement);
+import ExcelViewer from './ExcelViewer';
+import FileDropzone from './FileDropzone';
+import ImportProgress from './ImportProgress';
+import DashboardLayout from './layouts/DashboardLayout';
+import AddColumnModal from './modals/AddColumnModal';
+import ExportOptionsModal from './modals/ExportOptionsModal';
+import ImportPreviewModal from './modals/ImportPreviewModal';
+import MergeExcelModal from './MergeExcelModal';
+import UpdateMethodModal from './modals/UpdateMethodModal';
+import ManualUpdateModal from './modals/ManualUpdateModal';
 
 const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, fileName }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 animate-fadeIn">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-        <div className="mb-4 flex items-center">
-          <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center mr-3">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-600" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-            </svg>
+      <div className="fixed inset-0 bg-black bg-opacity-50 z-[999] flex items-center justify-center p-4 animate-fadeIn">
+        <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+          <div className="mb-4 flex items-center">
+            <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center mr-3">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-600" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-medium text-gray-900">Delete Excel File</h3>
           </div>
-          <h3 className="text-lg font-medium text-gray-900">Delete Excel File</h3>
-        </div>
-        
-        <p className="text-sm text-gray-600 mb-6">
-          Are you sure you want to delete <span className="font-medium text-gray-900">{fileName}</span>? This action cannot be undone.
-        </p>
-        
-        <div className="flex justify-end space-x-3">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
-          >
-            Delete
-          </button>
+
+          <p className="text-sm text-gray-600 mb-6">
+            Are you sure you want to delete <span className="font-medium text-gray-900">{fileName}</span>? This action cannot be undone.
+          </p>
+
+          <div className="flex justify-end space-x-3">
+            <button
+                onClick={onClose}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+                onClick={onConfirm}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
+            >
+              Delete
+            </button>
+          </div>
         </div>
       </div>
-    </div>
   );
 };
 
 const ClassDetails = ({ accessInfo }) => {
   const { id } = useParams();
   const navigate = useNavigate();
+
+  // Basic state
   const [classData, setClassData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [teamAccess, setTeamAccess] = useState(null);
+
+  // File management state - simplified to single file
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [currentFileData, setCurrentFileData] = useState(null);
+
+  // UI state
+  const [isFullScreen, setIsFullScreen] = useState(false);
   const [fileLoading, setFileLoading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [excelData, setExcelData] = useState(null);
-  const [error, setError] = useState(null);
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [fileStats, setFileStats] = useState(null);
-  const [sheets, setSheets] = useState([]);
-  const [activeSheet, setActiveSheet] = useState(0);
-  const [visibleRowCount, setVisibleRowCount] = useState(MAX_VISIBLE_ROWS);
-  const hotTableRef = useRef(null);
+
+  const [updateCount, setUpdateCount] = useState(0);
+
+  // Import/Export state
   const [showPreview, setShowPreview] = useState(false);
   const [previewInfo, setPreviewInfo] = useState(null);
-  const [importProgress, setImportProgress] = useState(0);
-  const [importStage, setImportStage] = useState('');
-  const [showExportOptions, setShowExportOptions] = useState(false);
-  const [exportFormat, setExportFormat] = useState('xlsx');
-  const [exportFileName, setExportFileName] = useState('');
-  const [exportLoading, setExportLoading] = useState(false);
   const [previewData, setPreviewData] = useState(null);
   const [previewError, setPreviewError] = useState(null);
   const [previewTab, setPreviewTab] = useState('info');
   const [previewRowsToShow, setPreviewRowsToShow] = useState(10);
+  const [importProgress, setImportProgress] = useState(0);
+  const [importStage, setImportStage] = useState('');
+
+  const [showUpdateMethodModal, setShowUpdateMethodModal] = useState(false);
+  const [showManualUpdateModal, setShowManualUpdateModal] = useState(false);
+
+  const [showExportOptions, setShowExportOptions] = useState(false);
+  const [exportFormat, setExportFormat] = useState('xlsx');
+  const [exportFileName, setExportFileName] = useState('');
+  const [exportLoading, setExportLoading] = useState(false);
   const [exportPreviewData, setExportPreviewData] = useState(null);
-  const [isSaving, setIsSaving] = useState(false);
-  const lastSavedData = useRef(null);
-  const [detectedNameColumn, setDetectedNameColumn] = useState(null);
+
+  const [showMergeModal, setShowMergeModal] = useState(false);
+  const [mergeFile, setMergeFile] = useState(null);
+  const [mergeFileData, setMergeFileData] = useState(null);
+
+  // Column management state
   const [customColumns, setCustomColumns] = useState([]);
   const [showAddColumnModal, setShowAddColumnModal] = useState(false);
   const [newColumnName, setNewColumnName] = useState('');
   const [newColumnType, setNewColumnType] = useState('text');
   const [newColumnMaxScore, setNewColumnMaxScore] = useState('');
-  const [isFullScreen, setIsFullScreen] = useState(false);
-  const [teamAccess, setTeamAccess] = useState(null);
-  const initialDataLoadRef = useRef(false);
-  const [availableFiles, setAvailableFiles] = useState([]);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [fileToDelete, setFileToDelete] = useState(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-  
-  const visibleData = useMemo(() => {
-    if (!excelData) return null;
-    
-    if (excelData.data.length <= visibleRowCount) {
-      return excelData.data;
-    }
-    
-    return excelData.data.slice(0, visibleRowCount);
-  }, [excelData, visibleRowCount]);
+  const [detectedNameColumn, setDetectedNameColumn] = useState(null);
 
+  // Delete modal state
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+
+  // Initialize team access
   useEffect(() => {
     console.log("ClassDetails received accessInfo:", accessInfo);
-    
+
     if (accessInfo) {
       setTeamAccess({
         teamId: accessInfo.teamId,
@@ -166,67 +132,75 @@ const ClassDetails = ({ accessInfo }) => {
         accessType: 'owner'
       });
     }
-    
   }, [id, accessInfo]);
 
-    useEffect(() => {
-      const fetchData = async () => {
-        try {
-          setLoading(true);
-          console.log("Fetching class data for id:", id, "User has team access:", teamAccess);
-          
-          const [classResponse, excelResponse] = await Promise.all([
-            classService.getClassById(id),
-            classService.getClassExcelFiles(id)
-          ]);
-          
-          console.log("Class data received:", classResponse.data);
-          setClassData(classResponse.data);
-          
-          if (excelResponse.data.length > 0) {
-            setAvailableFiles(excelResponse.data);
-            
-            const latestFile = excelResponse.data[0]; 
-            loadFileData(latestFile);
-          }
-        } catch (error) {
-          console.error('Error fetching data:', error);
-        } finally {
-          setLoading(false);
-        }
-      };
-
-      if (teamAccess !== null) {
-          fetchData();
-      }
-  }, [id, navigate, teamAccess]);
-
+  // Fetch class data and files
   useEffect(() => {
-    if (!excelData || excelData.data.length <= MAX_VISIBLE_ROWS) return;
-    
-    const handleScroll = (e) => {
-      const container = e.target;
-      const scrollPosition = container.scrollTop + container.clientHeight;
-      const scrollHeight = container.scrollHeight;
-      
-      if (scrollHeight - scrollPosition < LAZY_LOAD_THRESHOLD * 28) {
-        if (visibleRowCount < excelData.data.length) {
-          setVisibleRowCount(prev => Math.min(prev + LAZY_LOAD_THRESHOLD, excelData.data.length));
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      console.log("Fetching class data for id:", id, "User has team access:", teamAccess);
+
+      const [classResponse, excelResponse] = await Promise.all([
+        classService.getClassById(id),
+        classService.getClassExcelFiles(id)
+      ]);
+
+      console.log("Class data received:", classResponse.data);
+      setClassData(classResponse.data);
+
+      // Only use the latest file (first in the response)
+      if (excelResponse.data.length > 0) {
+        const latestFile = excelResponse.data[0];
+        setSelectedFile({
+          name: latestFile.file_name,
+          id: latestFile.id
+        });
+        setCurrentFileData(latestFile);
+        
+        // Initialize update count from file or localStorage
+        if (latestFile.update_count) {
+          setUpdateCount(latestFile.update_count);
+        } else {
+          // Fallback to localStorage if the backend doesn't store this
+          const storedCount = localStorage.getItem(`file_updates_${latestFile.id}`);
+          setUpdateCount(storedCount ? parseInt(storedCount) : 0);
         }
       }
-    };
-    
-    const tableContainer = document.querySelector('.excel-data-container .overflow-auto');
-    if (tableContainer) {
-      tableContainer.addEventListener('scroll', handleScroll);
-      return () => tableContainer.removeEventListener('scroll', handleScroll);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      setError(error.response?.data?.error || 'Failed to load class data');
+    } finally {
+      setLoading(false);
     }
-  }, [excelData, visibleRowCount]);
-  
-  useEffect(() => {
-    setVisibleRowCount(MAX_VISIBLE_ROWS);
-  }, [activeSheet]);
+  };
 
+  if (teamAccess !== null) {
+    fetchData();
+  }
+}, [id, navigate, teamAccess]);
+
+  const handleDeleteFile = async () => {
+    if (!currentFileData) return;
+
+    try {
+      setIsDeleting(true);
+
+      await classService.deleteExcelFile(currentFileData.id);
+      setIsDeleteModalOpen(false);
+      setSelectedFile(null);
+      setCurrentFileData(null);
+
+      showToast.success(`File deleted successfully`);
+    } catch (error) {
+      console.error('Failed to delete file:', error);
+      setError('Failed to delete file. Please try again.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Drag and drop handlers
   const handleDragOver = (e) => {
     e.preventDefault();
     setIsDragging(true);
@@ -236,791 +210,988 @@ const ClassDetails = ({ accessInfo }) => {
     setIsDragging(false);
   };
 
-    const handleDeleteFile = async () => {
-    if (!fileToDelete) return;
-    
-    try {
-      setIsDeleting(true);
-      
-      // Call API to delete the file
-      await classService.deleteExcelFile(fileToDelete.id);
-      
-      // Close modal
-      setIsDeleteModalOpen(false);
-      
-      // If the deleted file was the selected file, reset selection
-      if (selectedFile && selectedFile.id === fileToDelete.id) {
-        setSelectedFile(null);
-        setExcelData(null);
-      }
-      
-      // Update available files list
-      setAvailableFiles(prevFiles => prevFiles.filter(file => file.id !== fileToDelete.id));
-      
-      // Show success notification
-      // If you have a notification system, you can use it here
-      showToast.success(`File deleted successfully ${fileToDelete.file_name}`);
-      
-      // If there are other files, select the first one
-      if (availableFiles.length > 1) {
-        const remainingFiles = availableFiles.filter(file => file.id !== fileToDelete.id);
-        if (remainingFiles.length > 0) {
-          loadFileData(remainingFiles[0]);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to delete file:', error);
-      setError('Failed to delete file. Please try again.');
-    } finally {
-      setIsDeleting(false);
-      setFileToDelete(null);
-    }
-  };
-
-  const loadFileData = (fileObj) => {
-    console.log("Loading Excel file:", fileObj.file_name);
-    
-    const activeSheet = fileObj.active_sheet;
-    const sheetNames = fileObj.sheet_names || [];
-    const sheetData = fileObj.all_sheets[activeSheet];
-    
-    if (sheetData && sheetData.data && sheetData.data.length > 0) {
-      const headers = sheetData.headers || Object.keys(sheetData.data[0] || {});
-      const data = sheetData.data.map(row => 
-        headers.map(header => row[header])
-      );
-      
-      setExcelData({
-        headers,
-        data,
-        fileId: fileObj.id,
-        activeSheet: activeSheet,
-        availableSheets: sheetNames
-      });
-      setSelectedFile({ 
-        name: fileObj.file_name,
-        id: fileObj.id
-      });
-      console.log("Excel data set successfully with", data.length, "rows");
-    } else {
-      console.log("No data in the active sheet:", activeSheet);
-    }
-  };
-
-  const handleSwitchFile = async (fileId) => {
-    setFileLoading(true);
-    try {
-      // Find the selected file in the available files
-      const selectedFileObj = availableFiles.find(file => file.id === fileId);
-      
-      if (selectedFileObj) {
-        loadFileData(selectedFileObj);
-      } else {
-        // If the file isn't in our cache, fetch it from the server
-        const response = await classService.getExcelFile(fileId);
-        if (response.data) {
-          loadFileData(response.data);
-        }
-      }
-    } catch (error) {
-      console.error('Error switching file:', error);
-      setError('Failed to switch file');
-    } finally {
-      setFileLoading(false);
-    }
-  };
-
   const handleDrop = (e) => {
     e.preventDefault();
     setIsDragging(false);
-    
+
     const droppedFiles = Array.from(e.dataTransfer.files);
-    const validFiles = droppedFiles.filter(file => 
-      file.name.endsWith('.xlsx') || 
-      file.name.endsWith('.xls') || 
-      file.name.endsWith('.csv'));
-    
+    const validFiles = droppedFiles.filter(file => {
+      const fileExtension = file.name.split('.').pop().toLowerCase();
+      return ['xlsx', 'xls', 'csv'].includes(fileExtension);
+    });
+
     if (validFiles.length > 0) {
       handleFileUpload(validFiles[0]);
     }
   };
 
-  const handleFileInput = (e) => {
-    const selectedFiles = Array.from(e.target.files);
-    if (selectedFiles.length > 0) {
-      handleFileUpload(selectedFiles[0]);
-    }
-  };
-
-  const handleSheetChange = async (sheetName) => {
+  const handleSaveExcelChanges = async (updatedFileData) => {
   try {
-    setLoading(true);
+    console.log("Saving Excel changes:", updatedFileData);
     
-    // Update active sheet on the server
-    const response = await classService.setActiveSheet(excelData.fileId, sheetName);
-    const updatedFile = response.data;
-    const activeSheet = updatedFile.active_sheet;
-    const sheetData = updatedFile.all_sheets[activeSheet];
+    // Get the active sheet data
+    const activeSheet = updatedFileData.active_sheet;
+    const sheetData = updatedFileData.all_sheets[activeSheet].data;
     
-    if (sheetData && sheetData.data && sheetData.data.length > 0) {
-      const headers = sheetData.headers || Object.keys(sheetData.data[0] || {});
-      const data = sheetData.data.map(row => 
-        headers.map(header => row[header])
-      );
-      
-      setExcelData({
-        headers,
-        data,
-        fileId: updatedFile.id,
-        activeSheet: activeSheet,
-        availableSheets: updatedFile.sheet_names || []
-      });
-      console.log(`Switched to sheet ${activeSheet} with ${data.length} rows`);
-    } else {
-      console.log("No data in the selected sheet:", activeSheet);
-    }
-  } catch (error) {
-    console.error('Error changing sheet:', error);
-    setError(error.response?.data?.error || 'Failed to change sheet');
-  } finally {
-    setLoading(false);
-  }
-};
+    // Debug logging to see data structure
+    console.log("Sheet data type:", typeof sheetData);
+    console.log("Is array:", Array.isArray(sheetData));
+    console.log("First row sample:", sheetData[0]);
 
-  const handleDataChange = async (changes, source) => {
-  // Ignore loadData events and null changes
-  if (source === 'loadData' || !changes || changes.length === 0) return;
-  
-  // Only proceed if there are actual changes
-  const hasChanges = changes.some(([, , oldValue, newValue]) => oldValue !== newValue);
-  if (!hasChanges) return;
-
-  try {
-      setIsSaving(true);
-      const currentData = hotTableRef.current.hotInstance.getData();
-      
-      const formattedData = currentData.map(row => {
-          const rowData = {};
-          excelData.headers.forEach((header, index) => {
-              let value = row[index];
-              if (value === "") {
-                  value = null;
-              } else if (typeof value === "string" && !isNaN(value)) {
-                  value = Number(value);
-              }
-              rowData[header] = value;
-          });
-          return rowData;
-      });
-
-      const currentDataString = JSON.stringify(formattedData);
-      if (currentDataString === lastSavedData.current) {
-          setIsSaving(false);
-          return;
-      }
-
-      console.log('Sending data update:', formattedData);
-
-      await classService.updateExcelData(
-        excelData.fileId, 
-        formattedData,
-        excelData.activeSheet  // Include active sheet name
-      );
-      
-      lastSavedData.current = currentDataString;
-      
-      setExcelData(prev => ({
-          ...prev,
-          data: currentData
-      }));
-
-      setError(null);
-  } catch (error) {
-      console.error('Failed to update data:', error);
-      console.error('Error details:', error.response?.data); 
-      setError(error.response?.data?.error || 'Failed to save changes. Please try again.');
-  } finally {
-      setIsSaving(false);
-  }
-};
-
-  const safeProcessWorksheet = (worksheet) => {
-    if (!worksheet || !worksheet['!ref']) {
-      return { headers: ['No data'], data: [] };
-    }
-    
-    try {
-      const range = XLSX.utils.decode_range(worksheet['!ref']);
-      const totalRows = range.e.r - range.s.r + 1;
-      const totalCols = range.e.c - range.s.c + 1;
-      
-      setFileStats({ totalRows, totalCols });
-      
-      let headers = [];
-      let data = [];
-      
-      // First, create default headers (in case header extraction fails)
-      headers = Array(totalCols).fill().map((_, idx) => `Column ${idx + 1}`);
-      
-      // Now try to extract actual headers from first row
-      for (let c = range.s.c; c <= range.e.c; c++) {
-        const cellAddress = XLSX.utils.encode_cell({ r: range.s.r, c });
-        const cell = worksheet[cellAddress];
-        if (cell && cell.v !== undefined) {
-          // Make sure header is a string
-          headers[c - range.s.c] = String(cell.v);
-        }
-      }
-      
-      // Extract data rows (starting from the second row)
-      for (let r = range.s.r + 1; r <= range.e.r; r++) {
-        let rowData = Array(totalCols).fill('');
-        let hasData = false;
-        
-        for (let c = range.s.c; c <= range.e.c; c++) {
-          const cellAddress = XLSX.utils.encode_cell({ r, c });
-          const cell = worksheet[cellAddress];
-          
-          if (cell && cell.v !== undefined) {
-            // Convert cell to appropriate string representation
-            if (typeof cell.v === 'object') {
-              try {
-                rowData[c - range.s.c] = JSON.stringify(cell.v);
-              } catch {
-                rowData[c - range.s.c] = String(cell.v);
-              }
-            } else {
-              rowData[c - range.s.c] = cell.v;
-            }
-            hasData = true;
-          }
-        }
-        
-        // Only add rows that have at least one non-empty cell
-        if (hasData) {
-          data.push(rowData);
-        }
-        
-        // Stop if we've processed enough rows for initial display
-        if (data.length >= MAX_VISIBLE_ROWS * 10) {
-          break;
-        }
-      }
-      
-      return { headers, data };
-    } catch (err) {
-      console.error("Error processing worksheet:", err);
-      return { headers: ['Error'], data: [] };
-    }
-  };
-
-  const handleFileUpload = async (file) => {
-  if (!file) return;
-  
-  // First show preview
-  setSelectedFile(file);
-  setError(null);
-  setPreviewError(null);
-  
-  // Create preview info
-  const previewData = {
-      name: file.name,
-      size: formatFileSize(file.size),
-      type: file.type || getFileTypeFromExtension(file.name),
-      lastModified: new Date(file.lastModified).toLocaleString()
-  };
-  
-  setPreviewInfo(previewData);
-  setShowPreview(true);
-  
-  // Try to generate a data preview
-  try {
-      const reader = new FileReader();
-      
-      reader.onload = async (event) => {
-          try {
-              if (!event.target || !event.target.result) {
-                  throw new Error("Failed to read file for preview");
-              }
-              
-              // Parse the Excel file
-              const data = new Uint8Array(event.target.result);
-              const workbook = XLSX.read(data, {
-                  type: 'array',
-                  raw: true,
-                  cellDates: true,
-                  cellNF: false,
-                  cellStyles: false
-              });
-              
-              // Get sheet names
-              const sheetNames = workbook.SheetNames || [];
-              if (!sheetNames.length) {
-                  throw new Error("No sheets found in Excel file");
-              }
-              
-              // Process first sheet for preview (only first few rows)
-              const firstSheet = workbook.Sheets[sheetNames[0]];
-              
-              // Extract a limited number of rows for preview
-              const preview = extractPreviewData(firstSheet);
-              setPreviewData(preview);
-
-              // Don't upload the file here automatically
-              // We'll wait for the user to finish customizing columns
-              // and then call processSelectedFile() which will handle the upload
-              
-          } catch (error) {
-              console.error("Preview generation error:", error);
-              setPreviewError(`Couldn't generate preview: ${error.message}`);
-          }
-      };
-      
-      reader.onerror = () => {
-          setPreviewError("Error reading file for preview");
-      };
-      
-      // Read the file
-      reader.readAsArrayBuffer(file);
-      
-  } catch (error) {
-      console.error("Preview error:", error);
-      setPreviewError(`Preview error: ${error.message}`);
-  }
-};
-  
-  // Extract a limited preview of data from a worksheet
-  const extractPreviewData = (worksheet) => {
-    // If no worksheet or no reference, return empty data
-    if (!worksheet || !worksheet['!ref']) {
-      return { headers: [], data: [] };
-    }
-    
-    try {
-      // Get the range
-      const range = XLSX.utils.decode_range(worksheet['!ref']);
-      
-      // Prepare headers and data arrays
-      let headers = [];
-      let data = [];
-      
-      // Calculate how many rows to extract for preview (max 50 for preview, but initially only show 10)
-      const maxExtractRows = Math.min(50, range.e.r - range.s.r);
-      
-      // First, extract headers from first row
-      for (let c = range.s.c; c <= range.e.c; c++) {
-        const cellAddress = XLSX.utils.encode_cell({ r: range.s.r, c });
-        const cell = worksheet[cellAddress];
-        if (cell && cell.v !== undefined) {
-          // Make sure header is a string
-          headers.push(String(cell.v));
-        } else {
-          // Use default header if cell is empty
-          headers.push(`Column ${c + 1}`);
-        }
-      }
-      
-      // Extract data rows for preview (starting from the second row)
-      for (let r = range.s.r + 1; r <= range.s.r + maxExtractRows && r <= range.e.r; r++) {
-        let rowData = [];
-        
-        for (let c = range.s.c; c <= range.e.c; c++) {
-          const cellAddress = XLSX.utils.encode_cell({ r, c });
-          const cell = worksheet[cellAddress];
-          
-          if (cell && cell.v !== undefined) {
-            // Format cell value appropriately
-            if (cell.t === 'd' && cell.v instanceof Date) {
-              // Format date
-              rowData.push(cell.v.toLocaleString());
-            } else if (typeof cell.v === 'object') {
-              try {
-                rowData.push(JSON.stringify(cell.v));
-              } catch {
-                rowData.push(String(cell.v));
-              }
-            } else {
-              rowData.push(cell.v);
-            }
-          } else {
-            // Empty cell
-            rowData.push('');
-          }
-        }
-        
-        data.push(rowData);
-      }
-      
-      return {
-        headers,
-        data,
-        totalColumns: headers.length,
-        totalRows: range.e.r - range.s.r,
-        sheetName: worksheet['!Name'] || 'Sheet1'
-      };
-      
-    } catch (err) {
-      console.error("Error processing worksheet for preview:", err);
-      return { headers: [], data: [] };
-    }
-  };
-  
-  // Show more rows in the preview
-  const handleShowMoreRows = () => {
-    setPreviewRowsToShow(prev => Math.min(prev + 10, previewData.data.length));
-  };
-  
-  // Reset rows to show when changing preview
-  useEffect(() => {
-    if (previewTab === 'data') {
-      setPreviewRowsToShow(10);
-    }
-  }, [previewTab]);
-  
-  const formatFileSize = (bytes) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
-  
-  const getFileTypeFromExtension = (filename) => {
-    if (filename.endsWith('.xlsx')) return 'Excel Workbook';
-    if (filename.endsWith('.xls')) return 'Excel 97-2003 Workbook';
-    if (filename.endsWith('.csv')) return 'CSV File';
-    return 'Spreadsheet File';
-  };
-  
-  const processSelectedFile = async () => {
-  if (!selectedFile) return;
-  
-  setFileLoading(true);
-  setShowPreview(false);
-  
-  // Initialize progress tracking
-  setImportProgress(0);
-  setImportStage('Reading file...');
-  
-  // Create detailed progress updates
-  const progressStages = [
-    { stage: 'Reading file...', targetProgress: 20 },
-    { stage: 'Processing data...', targetProgress: 40 },
-    { stage: 'Analyzing columns...', targetProgress: 60 },
-    { stage: 'Preparing spreadsheet...', targetProgress: 80 },
-    { stage: 'Finalizing import...', targetProgress: 95 }
-  ];
-  
-  let currentStageIndex = 0;
-  
-  // Progress animation function
-  const animateProgress = () => {
-    const currentStage = progressStages[currentStageIndex];
-    const nextProgress = Math.min(
-      currentStage.targetProgress,
-      importProgress + Math.random() * 2
+    // Call your API to save the updated file data
+    await classService.updateExcelData(
+      updatedFileData.id,
+      sheetData,  // Just pass the actual data array
+      activeSheet // Pass the sheet name separately
     );
     
-    setImportProgress(nextProgress);
+    // Increment update counter
+    const newCount = updateCount + 1;
+    setUpdateCount(newCount);
     
-    // Move to next stage if we've reached the target for current stage
-    if (nextProgress >= currentStage.targetProgress && currentStageIndex < progressStages.length - 1) {
-      currentStageIndex++;
-      setImportStage(progressStages[currentStageIndex].stage);
+    // Store in localStorage as fallback
+    localStorage.setItem(`file_updates_${updatedFileData.id}`, newCount.toString());
+    
+    // Show success toast notification
+    showToast.success("Changes saved successfully!");
+    
+    // Update the local state with the new data
+    setCurrentFileData({
+      ...updatedFileData,
+      update_count: newCount // Add the update count to the file data
+    });
+  } catch (error) {
+    console.error('Error saving changes:', error);
+    showToast.error("Failed to save changes. Please try again.");
+  }
+};
+
+  const handleFileInput = (e) => {
+    const fileList = e.target.files;
+    if (fileList && fileList.length > 0) {
+      const file = fileList[0];
+      console.log("File selected from input:", {
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        isFile: file instanceof File
+      });
+
+      e.target.value = '';
+      handleFileUpload(file);
+    }
+  };
+
+  const handleUpdateClassRecord = () => {
+  setShowUpdateMethodModal(true);
+};
+
+  const handleSelectImportUpdate = () => {
+  setShowUpdateMethodModal(false);
+  
+  // Create a hidden file input and trigger it (same as your existing code)
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = '.xlsx,.xls,.csv';
+  fileInput.onchange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      processFileForMerge(file);
+    }
+  };
+  fileInput.click();
+};
+
+  const handleSelectManualUpdate = () => {
+  setShowUpdateMethodModal(false);
+  setShowManualUpdateModal(true);
+};
+
+  const handleManualUpdateSave = async (updatedFileData) => {
+  try {
+    // Get the active sheet
+    const activeSheet = updatedFileData.active_sheet;
+    
+    // Extract the category mappings and headers
+    const categoryMappings = updatedFileData.all_sheets.category_mappings;
+    const originalHeaders = [...updatedFileData.all_sheets[activeSheet].headers];
+    const originalData = updatedFileData.all_sheets[activeSheet].data;
+    
+    // Find all new columns - columns in category mappings but not in headers
+    const allExistingHeaders = new Set(originalHeaders);
+    const newColumns = [];
+    
+    categoryMappings.forEach(category => {
+      category.columns.forEach(column => {
+        if (!allExistingHeaders.has(column)) {
+          newColumns.push({
+            name: column,
+            categoryId: category.id
+          });
+        }
+      });
+    });
+    
+    console.log("Found new columns to add:", newColumns);
+    
+    if (newColumns.length === 0) {
+      // No new columns to add, just update categories
+      await classService.updateCategoryMappings(
+        updatedFileData.id,
+        {
+          all_sheets: {
+            category_mappings: categoryMappings
+          }
+        }
+      );
+      
+      setCurrentFileData(updatedFileData);
+      setShowManualUpdateModal(false);
+      showToast.success("Category assignments updated successfully!");
+      return;
     }
     
-    // Continue animation if not at 100%
-    if (nextProgress < 100) {
-      setTimeout(animateProgress, 100);
+    // Create a map of category -> columns 
+    const categoryToColumns = {};
+    categoryMappings.forEach(category => {
+      categoryToColumns[category.id] = [...category.columns];
+    });
+    
+    const orderedCategories = ['student', 'quiz', 'laboratory', 'exams', 'other'];
+    const customCategories = categoryMappings
+      .filter(category => !orderedCategories.includes(category.id))
+      .map(category => category.id);
+      
+    const allCategoryIds = [...orderedCategories, ...customCategories];
+    
+    // Create new headers array in proper category order
+    const newHeaders = [];
+    allCategoryIds.forEach(categoryId => {
+      if (categoryToColumns[categoryId]) {
+        categoryToColumns[categoryId].forEach(columnName => {
+          newHeaders.push(columnName);
+        });
+      }
+    });
+    
+    console.log("New ordered headers:", newHeaders);
+    
+    // Create new data with null values for new columns
+    const newData = originalData.map(row => {
+      const newRow = {};
+      
+      // Copy existing values
+      originalHeaders.forEach(header => {
+        newRow[header] = row[header];
+      });
+      
+      // Add null values for new columns
+      newColumns.forEach(col => {
+        newRow[col.name] = null;
+      });
+      
+      return newRow;
+    });
+    
+    // Update the file data with the new structure
+    const finalFileData = {
+      ...updatedFileData,
+      all_sheets: {
+        ...updatedFileData.all_sheets,
+        [activeSheet]: {
+          ...updatedFileData.all_sheets[activeSheet],
+          headers: newHeaders,
+          data: newData
+        },
+        category_mappings: categoryMappings
+      }
+    };
+    
+    // Save the data structure first
+    await classService.updateExcelData(
+      updatedFileData.id,
+      newData,
+      activeSheet,
+      newHeaders  // Pass the new headers explicitly
+    );
+    
+    // Then update the category mappings
+    await classService.updateCategoryMappings(
+      updatedFileData.id,
+      {
+        all_sheets: {
+          category_mappings: categoryMappings
+        }
+      }
+    );
+    
+    // Show success toast notification
+    showToast.success("Changes saved successfully!");
+    
+    // Update the local state with the new data
+    setCurrentFileData(finalFileData);
+    setShowManualUpdateModal(false);
+    const newCount = updateCount + 1;
+    setUpdateCount(newCount);
+
+    localStorage.setItem(`file_updates_${updatedFileData.id}`, newCount.toString());
+
+    setCurrentFileData({
+      ...finalFileData,
+      update_count: newCount
+    });
+    
+    // Reload the page to ensure data is displayed correctly
+    window.location.reload();
+  } catch (error) {
+    console.error('Error saving changes:', error);
+    showToast.error("Failed to save changes. Please try again.");
+  }
+};
+
+  React.useEffect(() => {
+    if (currentFileData && currentFileData.all_sheets) {
+      const activeSheet = currentFileData.active_sheet;
+      const sheetData = currentFileData.all_sheets[activeSheet];
+      
+      if (sheetData && sheetData.data && sheetData.headers) {
+        const previewData = {
+          headers: sheetData.headers,
+          rows: sheetData.data.slice(0, 5).map(row => 
+            sheetData.headers.map(header => row[header] || '')
+          ),
+          totalRows: sheetData.data.length,
+          totalColumns: sheetData.headers.length,
+          defaultFileName: currentFileData.file_name?.split('.')[0] || 'Export'
+        };
+        
+        setExportPreviewData(previewData);
+      }
+    }
+  }, [currentFileData]);
+
+  const processFileForMerge = async (file) => {
+    try {
+      // Process the file data
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+          
+          if (jsonData.length > 0) {
+            const headers = jsonData[0] || [];
+            const rows = jsonData.slice(1);
+            
+            // Format the file data similar to how API returns it
+            const formattedData = {
+              file_name: file.name,
+              active_sheet: firstSheetName,
+              all_sheets: {
+                [firstSheetName]: {
+                  headers: headers,
+                  data: rows
+                }
+              }
+            };
+            
+            setMergeFile(file);
+            setMergeFileData(formattedData);
+            setShowMergeModal(true);
+          }
+        } catch (error) {
+          console.error("Error processing file for merge:", error);
+          showToast.error(`Error reading file: ${error.message}`);
+        }
+      };
+      
+      reader.readAsArrayBuffer(file);
+    } catch (error) {
+      console.error("Error preparing file for merge:", error);
+      showToast.error(`Error preparing file: ${error.message}`);
+    }
+  };
+
+  const handleMergeFiles = async (mergeOptions) => {
+  if (!mergeFile || !currentFileData) return;
+  
+  setFileLoading(true);
+  setImportStage('Merging files...');
+  setImportProgress(0);
+  
+  // Animation for progress
+  const animateProgress = () => {
+    setImportProgress(prev => {
+      if (prev < 90) return prev + Math.random() * 10;
+      return prev;
+    });
+    
+    if (importProgress < 90) {
+      setTimeout(animateProgress, 200);
     }
   };
   
-  // Start progress animation
-  animateProgress();
-
+  setTimeout(animateProgress, 200);
+  
   try {
-    // Create FormData for file upload
+    // Create form data for API call
     const formData = new FormData();
-    formData.append('file', selectedFile);
+    formData.append('file', mergeFile);
     formData.append('class_id', id);
+    formData.append('merge', 'true');
+    formData.append('override_names', mergeOptions.overrideNames.toString());
     
-    // Include custom columns in the upload if there are any
-    if (customColumns.length > 0) {
-      formData.append('custom_columns', JSON.stringify(customColumns));
-      console.log("Adding custom columns to upload:", customColumns);
-    }
+    // Add category mappings
+    formData.append('category_mappings', JSON.stringify(mergeOptions.categories));
     
-    // Upload the file directly with formData to ensure custom columns are included
-    setImportStage('Uploading file with custom columns...');
+    // Call API to merge files
+    const response = await classService.mergeExcel(formData);
     
-    const response = await fetch(`http://127.0.0.1:8000/api/excel/upload/`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
-      },
-      body: formData
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
-    }
-    
-    const responseData = await response.json();
-    console.log("Upload response:", responseData);
-    
-    if (responseData) {
-      const fileId = responseData.id;
-      setAvailableFiles(prevFiles => [responseData, ...prevFiles]);
+    // Update state with new data
+     if (response.data) {
+      // Add the mappings directly to the returned data
+      response.data.column_categories = mergeOptions.categoryMappings;
       
-      // Get sheet data from the response
-      const activeSheet = responseData.active_sheet || '';
-      const sheetData = responseData.all_sheets?.[activeSheet];
-      const sheetNames = responseData.sheet_names || [];
+      setCurrentFileData(response.data);
+      setSelectedFile({
+        name: response.data.file_name,
+        id: response.data.id
+      });
       
-      if (sheetData && sheetData.data && sheetData.data.length > 0) {
-        const headers = sheetData.headers || Object.keys(sheetData.data[0] || {});
-        const data = sheetData.data.map(row => 
-          headers.map(header => row[header])
-        );
-        
-        setExcelData({
-          headers,
-          data,
-          fileId,
-          activeSheet,
-          availableSheets: sheetNames
-        });
-        
-        setSelectedFile({ 
-          name: responseData.file_name,
-          id: fileId
-        });
-      } else {
-        console.log("No data in the active sheet or sheet data structure is incorrect");
-      }
+      showToast.success("Files merged successfully!");
     }
     
-    setImportStage('Finalizing import...');
     setImportProgress(100);
     
     setTimeout(() => {
       setFileLoading(false);
       setImportProgress(0);
       setImportStage('');
-      setCustomColumns([]); 
     }, 500);
     
   } catch (error) {
-    console.error("File upload error:", error);
-    setError(error.message || 'Failed to upload file');
+    console.error("Error merging files:", error);
+    showToast.error("Failed to merge files. Please try again.");
     setFileLoading(false);
     setImportProgress(0);
     setImportStage('');
   }
 };
-  
+
+  // File upload and preview functions
+  const handleFileUpload = async (file) => {
+    if (!file) return;
+
+    console.log("handleFileUpload called with file:", {
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      lastModified: file.lastModified,
+      isFile: file instanceof File
+    });
+
+    setError(null);
+    setPreviewError(null);
+
+    // Create preview info
+    const previewData = {
+      name: file.name,
+      size: formatFileSize(file.size),
+      type: file.type || getFileTypeFromExtension(file.name),
+      lastModified: new Date(file.lastModified).toLocaleString()
+    };
+    setPreviewInfo(previewData);
+    setSelectedFile(file);
+    
+    // Generate preview data from file
+    try {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          // Parse the file
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, {
+            type: 'array',
+            cellDates: true
+          });
+          
+          // Get first sheet
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          
+          // Convert to JSON with headers
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+          
+          if (jsonData.length > 0) {
+            const headers = jsonData[0] || [];
+            const rows = jsonData.slice(1);
+            
+            // Set preview data
+            setPreviewData({
+              headers: headers,
+              data: rows,
+              totalRows: rows.length,
+              totalColumns: headers.length,
+              sheetName: firstSheetName
+            });
+            
+            // Auto-detect name column
+            const namePatterns = ['name', 'student', 'learner', 'pupil', 'full name', 'first name', 'last name'];
+            const nameColumnIndex = headers.findIndex(header => 
+              namePatterns.some(pattern => 
+                String(header).toLowerCase().includes(pattern.toLowerCase())
+              )
+            );
+            
+            if (nameColumnIndex !== -1) {
+              setDetectedNameColumn(nameColumnIndex);
+            }
+          } else {
+            setPreviewError("No data found in the file");
+          }
+        } catch (error) {
+          console.error("Error processing file for preview:", error);
+          setPreviewError(`Error reading file: ${error.message}`);
+        }
+      };
+      
+      reader.onerror = () => {
+        setPreviewError("Error reading file");
+      };
+      
+      reader.readAsArrayBuffer(file);
+    } catch (error) {
+      console.error("Error during file preview:", error);
+      setPreviewError(`Error preparing file preview: ${error.message}`);
+    }
+    
+    setShowPreview(true);
+  };
+
+  const processSelectedFile = async () => {
+    if (!selectedFile) return;
+
+    setFileLoading(true);
+    setShowPreview(false);
+
+    // Initialize progress tracking
+    setImportProgress(0);
+    setImportStage('Reading file...');
+    
+    // Set up progress animation
+    const progressStages = [
+      { stage: 'Reading file...', targetProgress: 20 },
+      { stage: 'Processing data...', targetProgress: 40 },
+      { stage: 'Analyzing columns...', targetProgress: 60 },
+      { stage: 'Preparing spreadsheet...', targetProgress: 80 },
+      { stage: 'Finalizing import...', targetProgress: 95 }
+    ];
+
+    let currentStageIndex = 0;
+    const animateProgress = () => {
+      const currentStage = progressStages[currentStageIndex];
+      const nextProgress = Math.min(
+          currentStage.targetProgress,
+          importProgress + Math.random() * 2
+      );
+
+      setImportProgress(nextProgress);
+
+      if (nextProgress >= currentStage.targetProgress && currentStageIndex < progressStages.length - 1) {
+        currentStageIndex++;
+        setImportStage(progressStages[currentStageIndex].stage);
+      }
+
+      if (nextProgress < 100) {
+        setTimeout(animateProgress, 100);
+      }
+    };
+
+    animateProgress();
+
+    try {
+      console.log("processSelectedFile - File details:", {
+        name: selectedFile.name,
+        type: selectedFile.type,
+        size: selectedFile.size,
+        lastModified: selectedFile.lastModified,
+        isFile: selectedFile instanceof File
+      });
+
+      if (!(selectedFile instanceof File)) {
+        console.error("Selected file is not a File object:", selectedFile);
+        throw new Error("Invalid file selected. Please try selecting the file again.");
+      }
+
+      // File size validation
+      const maxFileSizeMB = 10;
+      const maxFileSizeBytes = maxFileSizeMB * 1024 * 1024;
+
+      if (selectedFile.size > maxFileSizeBytes) {
+        throw new Error(`File size exceeds ${maxFileSizeMB}MB limit. Please select a smaller file.`);
+      }
+
+      // File type validation
+      const fileExtension = selectedFile.name.split('.').pop().toLowerCase();
+      const validExtensions = ['xlsx', 'xls', 'csv'];
+
+      if (!validExtensions.includes(fileExtension)) {
+        throw new Error(`File type not supported. Please select an Excel (.xlsx, .xls) or CSV file.`);
+      }
+
+      setImportStage('Processing custom columns...');
+
+      // Process custom columns
+      let validatedColumns = [];
+      if (customColumns && customColumns.length > 0) {
+        validatedColumns = customColumns.filter(col => {
+          return col && col.name && typeof col.name === 'string' &&
+              (col.type === 'text' || col.type === 'number' || col.type === 'header');
+        }).map(col => {
+          return {
+            id: col.id || `col_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            name: col.name.trim(),
+            type: col.type,
+            ...(col.maxScore && col.type === 'number' ? { maxScore: Number(col.maxScore) } : {})
+          };
+        });
+
+        console.log("Sanitized custom columns for upload:", validatedColumns);
+      }
+
+      setImportStage('Uploading file...');
+
+      // Make the API call with the real implementation
+      const response = await classService.uploadExcel(
+          selectedFile,
+          id,
+          validatedColumns.length > 0 ? validatedColumns : null
+      );
+
+      const responseData = response.data;
+      console.log("Upload response:", responseData);
+
+      if (responseData) {
+        setSelectedFile({
+          name: responseData.file_name,
+          id: responseData.id,
+        });
+        setCurrentFileData(responseData);
+      }
+
+      setImportStage('Finalizing import...');
+      setImportProgress(100);
+
+      // Show success notification
+      showToast.success("File imported successfully!");
+
+      setTimeout(() => {
+        setFileLoading(false);
+        setImportProgress(0);
+        setImportStage('');
+        setCustomColumns([]);
+      }, 500);
+
+    } catch (error) {
+      console.error("File upload error:", error);
+
+      // Handle different error scenarios
+      let errorMessage = 'Failed to upload file';
+      if (error.response) {
+        if (error.response.data) {
+          console.log("Server error details:", error.response.data);
+          if (typeof error.response.data === 'object') {
+            errorMessage = error.response.data.message || error.response.data.error || error.response.data.detail || `Server error: ${error.response.status}`;
+          } else if (typeof error.response.data === 'string') {
+            errorMessage = error.response.data;
+          }
+        }
+      } else if (error.request) {
+        errorMessage = 'No response from server. Please check your connection.';
+      } else {
+        errorMessage = error.message || 'An error occurred during file upload';
+      }
+
+      setError(errorMessage);
+      showToast.error(errorMessage);
+      
+      setFileLoading(false);
+      setImportProgress(0);
+      setImportStage('');
+    }
+  };
+
   const cancelImport = () => {
-    // Reset all states related to import
     setSelectedFile(null);
     setShowPreview(false);
     setPreviewInfo(null);
     setImportProgress(0);
   };
 
-  const handleChangeSheet = (sheetIndex) => {
-    if (!selectedFile || sheetIndex === activeSheet || sheetIndex >= sheets.length) {
-      return;
-    }
-    
-    setFileLoading(true);
-    setActiveSheet(sheetIndex);
-    
-    try {
-      const reader = new FileReader();
-      
-      reader.onload = (event) => {
-        try {
-          if (!event.target || !event.target.result) {
-            throw new Error("Failed to read file");
-          }
-          
-          // Parse the Excel file
-          const data = new Uint8Array(event.target.result);
-          const workbook = XLSX.read(data, {
-            type: 'array',
-            raw: true,
-            cellDates: true,
-            cellNF: false,
-            cellStyles: false
-          });
-          
-          // Get the selected sheet
-          const selectedSheetName = sheets[sheetIndex];
-          const selectedSheet = workbook.Sheets[selectedSheetName];
-          
-          if (!selectedSheet) {
-            throw new Error(`Sheet "${selectedSheetName}" not found`);
-          }
-          
-          // Process the sheet data
-          const parsedData = safeProcessWorksheet(selectedSheet);
-          setExcelData(parsedData);
-          setFileLoading(false);
-        } catch (error) {
-          console.error("Error processing sheet:", error);
-          setError(`Failed to process sheet: ${error.message}`);
-          setFileLoading(false);
-        }
-      };
-      
-      reader.onerror = () => {
-        setError("Error reading file");
-        setFileLoading(false);
-      };
-      
-      reader.readAsArrayBuffer(selectedFile);
-    } catch (error) {
-      console.error("Sheet change error:", error);
-      setError(`Failed to change sheet: ${error.message}`);
-      setFileLoading(false);
-    }
-  };
+const exportDirectlyFromData = () => {
+  if (!currentFileData || !currentFileData.all_sheets) {
+    showToast.error('No file data available to export');
+    return;
+  }
 
-  const handleExport = async () => {
-    if (!excelData?.fileId) return;
-    
-    // Generate a preview of the export data
-    const previewRowCount = Math.min(5, excelData.data.length);
-    const previewData = {
-      headers: excelData.headers,
-      rows: excelData.data.slice(0, previewRowCount),
-      totalRows: excelData.data.length,
-      totalColumns: excelData.headers.length
-    };
-    setExportPreviewData(previewData);
-    
-    // Show export options dialog
-    setExportFileName(selectedFile.name.split('.')[0] || 'export');
-    setShowExportOptions(true);
-  };
+  console.log('Current File Data:', currentFileData);
   
-  const processExport = () => {
-    if (!excelData || !excelData.data.length) {
+  setExportLoading(true);
+  
+  try {
+    // Get the active sheet
+    const activeSheet = currentFileData.active_sheet;
+    const sheetData = currentFileData.all_sheets[activeSheet];
+    
+    if (!sheetData || !sheetData.data || !sheetData.headers) {
+      showToast.error('Sheet data is missing');
       return;
     }
     
-    try {
-      setExportLoading(true);
-      setShowExportOptions(false);
+    // Create a worksheet with the proper column order
+    const headers = sheetData.headers;
+    const data = sheetData.data;
+    
+    // Get category mappings if they exist
+    const categoryMappings = currentFileData.all_sheets.category_mappings || [];
+    const columnToCategory = {};
+    
+    // Define colors for categories
+    const categoryColors = {
+      'quiz': { bg: '283593', font: 'FFFFFF' },         // Deep blue
+      'exams': { bg: '1B5E20', font: 'FFFFFF' },         // Deep green
+      'laboratory': { bg: '4A148C', font: 'FFFFFF' },    // Deep purple
+      'other': { bg: '3E2723', font: 'FFFFFF' },         // Deep brown
+      'default': { bg: '263238', font: 'FFFFFF' }        // Dark blue-grey
+    };
+    
+    // Create a mapping of columns to their categories
+    categoryMappings.forEach(category => {
+      category.columns.forEach(column => {
+        columnToCategory[column] = {
+          id: category.id,
+          name: category.name
+        };
+      });
+    });
+    
+    // Find category spans (which columns belong to which categories)
+    const categories = [];
+    let currentCategory = null;
+    let startIdx = -1;
+    
+    headers.forEach((header, idx) => {
+      const headerCategory = columnToCategory[header];
       
-      // Create a new workbook
-      const wb = XLSX.utils.book_new();
+      // If this header has a category and it's different from the current one
+      if (headerCategory && (!currentCategory || headerCategory.id !== currentCategory.id)) {
+        // If we were tracking a previous category, close it out
+        if (currentCategory) {
+          categories.push({
+            name: currentCategory.name,
+            id: currentCategory.id,
+            startIdx,
+            endIdx: idx - 1
+          });
+        }
+        
+        // Start tracking the new category
+        currentCategory = headerCategory;
+        startIdx = idx;
+      } 
+      // If this header has no category, close out any current category
+      else if (!headerCategory && currentCategory) {
+        categories.push({
+          name: currentCategory.name,
+          id: currentCategory.id,
+          startIdx,
+          endIdx: idx - 1
+        });
+        currentCategory = null;
+      }
+    });
+    
+    // Don't forget to add the final category if there is one
+    if (currentCategory) {
+      categories.push({
+        name: currentCategory.name,
+        id: currentCategory.id,
+        startIdx,
+        endIdx: headers.length - 1
+      });
+    }
+    
+    // Check if any column doesn't have a category, create a "Student Information" category
+    let hasCategorylessColumns = false;
+    for (let i = 0; i < headers.length; i++) {
+      if (!columnToCategory[headers[i]]) {
+        hasCategorylessColumns = true;
+        break;
+      }
+    }
+    
+    // Create an array of arrays format that preserves column order
+    const aoa = [];
+    
+    // Add category row if categories exist
+    if (categories.length > 0 || hasCategorylessColumns) {
+      const categoryRow = Array(headers.length).fill(''); // Empty row initially
       
-      // Get current data from the HotTable instance if available
-      let dataToExport = excelData.data;
-      if (hotTableRef.current && hotTableRef.current.hotInstance) {
-        const hotData = hotTableRef.current.hotInstance.getData();
-        if (Array.isArray(hotData) && hotData.length) {
-          dataToExport = hotData;
+      // Add "Student Information" category for columns without a category
+      let studentInfoEndIdx = -1;
+      for (let i = 0; i < headers.length; i++) {
+        if (!columnToCategory[headers[i]]) {
+          categoryRow[i] = i === 0 ? 'Student Information' : '';
+          studentInfoEndIdx = i;
         }
       }
       
-      // Convert data to worksheet format
-      const ws = XLSX.utils.aoa_to_sheet([excelData.headers, ...dataToExport]);
+      // If we found uncategorized columns, add them as a category
+      if (studentInfoEndIdx >= 0) {
+        categories.unshift({
+          name: 'Student Information',
+          id: 'student_info',
+          startIdx: 0,
+          endIdx: studentInfoEndIdx
+        });
+      }
       
-      // Add worksheet to workbook
-      const sheetName = sheets[activeSheet] || "Data";
-      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      // Fill in the categories
+      categories.forEach(cat => {
+        categoryRow[cat.startIdx] = cat.name;
+      });
       
-      // Generate file name with selected extension
-      const fileName = `${exportFileName || 'export'}.${exportFormat}`;
-      
-      // Use setTimeout to show loading animation
-      setTimeout(() => {
-        // Write file and trigger download
-        XLSX.writeFile(wb, fileName);
-        setExportLoading(false);
-      }, 1000);
-    } catch (error) {
-      console.error("Export error:", error);
-      setError(`Failed to export data: ${error.message}`);
-      setExportLoading(false);
+      aoa.push(categoryRow); // First row is categories
     }
-  };
+    
+    // Add header row
+    aoa.push(headers); // Next row is headers
+    
+    // Add all data rows in the correct order
+    data.forEach(row => {
+      const orderedRow = headers.map(header => row[header] ?? '');
+      aoa.push(orderedRow);
+    });
+    
+    // Convert array of arrays to worksheet
+    const worksheet = XLSX.utils.aoa_to_sheet(aoa);
+    
+    // Create workbook
+    const workbook = XLSX.utils.book_new();
+    
+    // Only apply styling for XLSX format
+    if (exportFormat !== 'csv') {
+      // Add cell styles
+      if (!worksheet['!cols']) worksheet['!cols'] = [];
+      
+      // Set column widths
+      headers.forEach((_, idx) => {
+        worksheet['!cols'][idx] = { width: 15 }; // Adjust width as needed
+      });
+      
+      // Apply cell merges and styling for categories
+      if (categories.length > 0) {
+        worksheet['!merges'] = worksheet['!merges'] || [];
+        
+        // Add merges for category headers
+        categories.forEach(cat => {
+          if (cat.endIdx > cat.startIdx) {
+            worksheet['!merges'].push({
+              s: { r: 0, c: cat.startIdx },
+              e: { r: 0, c: cat.endIdx }
+            });
+          }
+          
+          // Get the appropriate color for this category
+          const colorKey = cat.id || 'default';
+          const color = categoryColors[colorKey] || categoryColors.default;
+          
+          // Style category headers
+          const catCell = XLSX.utils.encode_cell({r: 0, c: cat.startIdx});
+          if (!worksheet[catCell]) worksheet[catCell] = { v: cat.name };
+          
+          worksheet[catCell].s = {
+            font: { bold: true, color: { rgb: color.font } },
+            fill: { fgColor: { rgb: color.bg } },
+            alignment: { horizontal: 'center', vertical: 'center' }
+          };
+        });
+        
+        // Style regular headers (row 1)
+        headers.forEach((_, idx) => {
+          const headerCell = XLSX.utils.encode_cell({r: 1, c: idx});
+          if (worksheet[headerCell]) {
+            worksheet[headerCell].s = {
+              font: { bold: true },
+              fill: { fgColor: { rgb: 'E0E0E0' } }, // Light grey
+              alignment: { horizontal: 'center' }
+            };
+          }
+        });
+      }
+    }
+    
+    XLSX.utils.book_append_sheet(workbook, worksheet, activeSheet);
+    
+    // Generate the file based on format
+    const fileType = exportFormat === 'csv' ? 'csv' : 'xlsx';
+    const fileName = `${exportFileName || 'export'}.${fileType}`;
+    
+    if (fileType === 'csv') {
+      // Export CSV (note: CSV won't preserve merged cells and styling)
+      const csvContent = XLSX.utils.sheet_to_csv(worksheet);
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', fileName);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else {
+      // For proper styling in Excel
+      const wbout = XLSX.write(workbook, { 
+        bookType: 'xlsx', 
+        bookSST: false, 
+        type: 'binary',
+      });
+      
+      // Convert binary string to ArrayBuffer
+      function s2ab(s) {
+        const buf = new ArrayBuffer(s.length);
+        const view = new Uint8Array(buf);
+        for (let i = 0; i < s.length; i++) view[i] = s.charCodeAt(i) & 0xFF;
+        return buf;
+      }
+      
+      const blob = new Blob([s2ab(wbout)], { type: 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', fileName);
+      document.body.appendChild(link);
+      link.click();
+      
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+        document.body.removeChild(link);
+      }, 100);
+    }
+    
+    showToast.success(`File "${fileName}" downloaded successfully`);
+  } catch (error) {
+    console.error('Export error:', error);
+    showToast.error('Failed to export file');
+  } finally {
+    setExportLoading(false);
+    setShowExportOptions(false);
+  }
+};
+
+  // Export functions
+ const handleExport = async () => {
+  if (!currentFileData?.id) return;
+
+  console.log('Export data:', { classData, currentFileData });
+
+  // Set default file name based on class & course with course code
+  let defaultFileName = currentFileData.file_name?.split('.')[0] || 'Export';
   
+  // Try to get course code and class name
+  if (classData) {
+    // Access course data - consider multiple possible locations
+    const course = classData.course || classData.class_ref?.course;
+    const courseCode = course?.courseCode || '';
+    const courseName = course?.name || 'Course';
+    const className = classData.name || 'Class';
+    
+    // Format: Course {CourseCode} - ClassName
+    if (courseCode) {
+      defaultFileName = `Course ${courseCode} - ${className}`;
+    } else {
+      // Fallback if no course code
+      defaultFileName = `${courseName} - ${className}`;
+    }
+  }
+  
+  setExportFileName(defaultFileName);
+  setShowExportOptions(true);
+};
+
+  const processExport = () => {
+  exportDirectlyFromData();
+};
+
   const cancelExport = () => {
     setShowExportOptions(false);
   };
 
+  // Column management functions
   const handleAddColumnTemplate = (templateType) => {
     let newColumns = [];
-    
+
     switch(templateType) {
       case 'quizzes':
         newColumns = [
-          { id: `quiz_1_${Date.now()}`, name: 'Quiz 1 (10 pts)', type: 'number', maxScore: 10 },
-          { id: `quiz_2_${Date.now()}`, name: 'Quiz 2 (10 pts)', type: 'number', maxScore: 10 },
-          { id: `quiz_3_${Date.now()}`, name: 'Quiz 3 (10 pts)', type: 'number', maxScore: 10 },
-          { id: `quiz_avg_${Date.now()}`, name: 'Quiz Average', type: 'formula', formula: 'AVERAGE' }
+          { id: `quiz_category_${Date.now()}`, name: 'Quiz', type: 'header' },
+          { id: `quiz_1_${Date.now()}`, name: 'Quiz 1', type: 'number', maxScore: 10 },
+          { id: `quiz_2_${Date.now()}`, name: 'Quiz 2', type: 'number', maxScore: 10 },
+          { id: `quiz_3_${Date.now()}`, name: 'Quiz 3', type: 'number', maxScore: 10 },
+          { id: `quiz_4_${Date.now()}`, name: 'Quiz 4', type: 'number', maxScore: 10 },
+          { id: `quiz_5_${Date.now()}`, name: 'Quiz 5', type: 'number', maxScore: 10 },
         ];
         break;
       case 'labs':
         newColumns = [
-          { id: `lab_1_${Date.now()}`, name: 'Lab 1 (20 pts)', type: 'number', maxScore: 20 },
-          { id: `lab_2_${Date.now()}`, name: 'Lab 2 (20 pts)', type: 'number', maxScore: 20 },
-          { id: `lab_3_${Date.now()}`, name: 'Lab 3 (20 pts)', type: 'number', maxScore: 20 },
-          { id: `lab_avg_${Date.now()}`, name: 'Lab Average', type: 'formula', formula: 'AVERAGE' }
+          { id: `lab_category_${Date.now()}`, name: 'Laboratory Activities', type: 'header' },
+          { id: `lab_1_${Date.now()}`, name: 'Lab 1', type: 'number', maxScore: 20 },
+          { id: `lab_2_${Date.now()}`, name: 'Lab 2', type: 'number', maxScore: 20 },
+          { id: `lab_3_${Date.now()}`, name: 'Lab 3', type: 'number', maxScore: 20 },
+          { id: `lab_4_${Date.now()}`, name: 'Lab 4', type: 'number', maxScore: 20 },
+          { id: `lab_5_${Date.now()}`, name: 'Lab 5', type: 'number', maxScore: 20 },
         ];
         break;
       case 'exams':
         newColumns = [
-          { id: `midterm_${Date.now()}`, name: 'Midterm (50 pts)', type: 'number', maxScore: 50 },
-          { id: `final_${Date.now()}`, name: 'Final (100 pts)', type: 'number', maxScore: 100 },
-          { id: `total_${Date.now()}`, name: 'Total (150 pts)', type: 'formula', formula: 'SUM' }
+          { id: `exam_category_${Date.now()}`, name: 'Exams', type: 'header' },
+          { id: `pe_${Date.now()}`, name: 'PE - Prelim Exam', type: 'number', maxScore: 50 },
+          { id: `me_${Date.now()}`, name: 'ME - Midterm Exam', type: 'number', maxScore: 50 },
+          { id: `pfe_${Date.now()}`, name: 'PFE - PreFinal Exam', type: 'number', maxScore: 50 },
+          { id: `fe_${Date.now()}`, name: 'FE - Final Exam', type: 'number', maxScore: 100 },
+        ];
+        break;
+      case 'remarks':
+        newColumns = [
+          { id: `remarks_${Date.now()}`, name: 'Remarks', type: 'text' }
         ];
         break;
       default:
         return;
     }
-    
+
     setCustomColumns(prev => [...prev, ...newColumns]);
   };
-
-  useEffect(() => {
-    // Auto-detect potential name columns when preview data is available
-    if (previewData && previewData.headers && previewData.headers.length > 0) {
-      // Look for common student name column patterns
-      const namePatterns = ['name', 'student', 'learner', 'pupil', 'full name', 'first name', 'last name'];
-      
-      // Find the first column header that matches our patterns
-      const potentialNameColumn = previewData.headers.findIndex(header => 
-        namePatterns.some(pattern => 
-          header.toLowerCase().includes(pattern.toLowerCase())
-        )
-      );
-      
-      if (potentialNameColumn !== -1) {
-        setDetectedNameColumn(potentialNameColumn);
-      }
-    }
-  }, [previewData]);
 
   const handleAddCustomColumn = () => {
     if (newColumnName.trim()) {
       let columnName = newColumnName.trim();
-      
-      // Add max score to column name if provided for number type
+
       if (newColumnType === 'number' && newColumnMaxScore) {
         columnName = `${columnName} (${newColumnMaxScore} pts)`;
       }
-      
+
       const newColumn = {
         id: `custom_${Date.now()}`,
         name: columnName,
         type: newColumnType,
         ...(newColumnType === 'number' && newColumnMaxScore ? { maxScore: parseFloat(newColumnMaxScore) } : {})
       };
-      
+
       setCustomColumns(prev => [...prev, newColumn]);
       setNewColumnName('');
       setNewColumnMaxScore('');
@@ -1028,621 +1199,518 @@ const ClassDetails = ({ accessInfo }) => {
     }
   };
 
-  // Function to handle full screen toggle
-  const toggleFullScreen = () => {
-    setIsFullScreen(!isFullScreen);
+  // Auto-detect name columns
+  useEffect(() => {
+    if (previewData && previewData.headers && previewData.headers.length > 0) {
+      const namePatterns = ['name', 'student', 'learner', 'pupil', 'full name', 'first name', 'last name'];
+
+      const potentialNameColumn = previewData.headers.findIndex(header =>
+          namePatterns.some(pattern =>
+              header.toLowerCase().includes(pattern.toLowerCase())
+          )
+      );
+
+      if (potentialNameColumn !== -1) {
+        setDetectedNameColumn(potentialNameColumn);
+      }
+    }
+  }, [previewData]);
+
+  // Utility functions
+  const formatFileSize = (bytes) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
- useEffect(() => {
-  if (excelData && !isFullScreen && !initialDataLoadRef.current) {
-    initialDataLoadRef.current = true;
-    setIsFullScreen(true);
-  }
-}, [excelData, isFullScreen]);
+  const getFileTypeFromExtension = (filename) => {
+    if (filename.endsWith('.xlsx')) return 'Excel Workbook';
+    if (filename.endsWith('.xls')) return 'Excel 97-2003 Workbook';
+    if (filename.endsWith('.csv')) return 'CSV File';
+    return 'Spreadsheet File';
+  };
 
+  // Loading states
   if (loading) {
     return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center h-[calc(100vh-5rem)]">
-          <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-[#333D79]"></div>
-        </div>
-      </DashboardLayout>
+        <DashboardLayout>
+          <div className="flex items-center justify-center h-[calc(100vh-5rem)]">
+            <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-[#333D79]"></div>
+          </div>
+        </DashboardLayout>
     );
   }
 
   if (error && !classData) {
     return (
-      <DashboardLayout>
-        <div className="flex flex-col items-center justify-center h-[calc(100vh-5rem)]">
-          <div className="bg-white rounded-lg shadow-lg p-8 max-w-lg w-full text-center">
-            <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
-              <FiX className="h-8 w-8 text-red-500" />
-            </div>
-            <h2 className="text-2xl font-bold text-gray-800 mb-2">Class Not Found</h2>
-            <p className="text-gray-600 mb-6">
-              {error.includes("404") 
-                ? "The class you're looking for doesn't exist or you don't have permission to view it."
-                : error}
-            </p>
-            <div className="flex justify-center">
-              <button 
-                onClick={() => navigate("/dashboard/courses")}
-                className="px-4 py-2 bg-[#333D79] text-white rounded-lg hover:bg-[#4A5491] transition-colors"
-              >
-                Back to Courses
-              </button>
+        <DashboardLayout>
+          <div className="flex flex-col items-center justify-center h-[calc(100vh-5rem)]">
+            <div className="bg-white rounded-lg shadow-lg p-8 max-w-lg w-full text-center">
+              <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+                <FiX className="h-8 w-8 text-red-500" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-800 mb-2">Class Not Found</h2>
+              <p className="text-gray-600 mb-6">
+                {error.includes("404")
+                    ? "The class you're looking for doesn't exist or you don't have permission to view it."
+                    : error}
+              </p>
+              <div className="flex justify-center">
+                <button
+                    onClick={() => navigate("/dashboard/courses")}
+                    className="px-4 py-2 bg-[#333D79] text-white rounded-lg hover:bg-[#4A5491] transition-colors"
+                >
+                  Back to Courses
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      </DashboardLayout>
+        </DashboardLayout>
     );
   }
 
   if (!classData) {
     return (
-      <DashboardLayout>
-        <div className="flex flex-col items-center justify-center h-[calc(100vh-5rem)]">
-          <div className="bg-white rounded-lg shadow-lg p-8 max-w-lg w-full text-center">
-            <div className="w-16 h-16 rounded-full bg-yellow-100 flex items-center justify-center mx-auto mb-4">
-              <FiInfo className="h-8 w-8 text-yellow-500" />
-            </div>
-            <h2 className="text-2xl font-bold text-gray-800 mb-2">Access Information</h2>
-            
-            {teamAccess && (
-              <div className="mb-4 p-4 bg-blue-50 rounded-lg">
-                <div className="flex items-center">
-                  <div className="h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center mr-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-medium text-blue-800">Team Access</h3>
-                    <p className="text-blue-700">
-                      You have {teamAccess.accessLevel} access through {teamAccess.teamName}
-                    </p>
-                  </div>
-                </div>
+        <DashboardLayout>
+          <div className="flex flex-col items-center justify-center h-[calc(100vh-5rem)]">
+            <div className="bg-white rounded-lg shadow-lg p-8 max-w-lg w-full text-center">
+              <div className="w-16 h-16 rounded-full bg-yellow-100 flex items-center justify-center mx-auto mb-4">
+                <FiInfo className="h-8 w-8 text-yellow-500" />
               </div>
-            )}
-            
-            <p className="text-gray-600 mb-6">
-              This class may not exist or you may not have permission to access it. If you believe this is an error, please contact your team administrator.
-            </p>
-            <div className="flex justify-center">
-              <button 
-                onClick={() => navigate("/dashboard/courses")}
-                className="px-4 py-2 bg-[#333D79] text-white rounded-lg hover:bg-[#4A5491] transition-colors"
-              >
-                Back to Courses
-              </button>
+              <h2 className="text-2xl font-bold text-gray-800 mb-2">Access Information</h2>
+
+              {teamAccess && (
+                  <div className="mb-4 p-4 bg-blue-50 rounded-lg">
+                    <div className="flex items-center">
+                      <div className="h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center mr-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-medium text-blue-800">Team Access</h3>
+                        <p className="text-blue-700">
+                          You have {teamAccess.accessLevel} access through {teamAccess.teamName}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+              )}
+
+              <p className="text-gray-600 mb-6">
+                This class may not exist or you may not have permission to access it. If you believe this is an error, please contact your team administrator.
+              </p>
+              <div className="flex justify-center">
+                <button
+                    onClick={() => navigate("/dashboard/courses")}
+                    className="px-4 py-2 bg-[#333D79] text-white rounded-lg hover:bg-[#4A5491] transition-colors"
+                >
+                  Back to Courses
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      </DashboardLayout>
+        </DashboardLayout>
     );
   }
 
   return (
-    <DashboardLayout>
-      {/* Show the full screen Excel view when in full screen mode */}
-      {isFullScreen && excelData ? (
-         <ExcelViewer 
-          isFullScreen={isFullScreen}
-          setIsFullScreen={setIsFullScreen}
-          classData={classData}
-          teamAccess={teamAccess}
-          excelData={excelData}
-          selectedFile={selectedFile}
-          fileStats={fileStats}
-          handleSheetChange={handleSheetChange} 
-          toggleFullScreen={toggleFullScreen}
-          handleExport={handleExport}
-          hotTableRef={hotTableRef}
-          visibleData={visibleData}
-          handleDataChange={handleDataChange}
-  />
-      ) : loading ? (
-        <div className="flex items-center justify-center h-[calc(100vh-5rem)]">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#333D79]"></div>
-        </div>
-      ) : (
-        <>
-          <div className="pb-6">
-            {/* Breadcrumb navigation */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-4">
-              <div className="flex items-center text-sm">
-                <a 
-                  href="/dashboard/courses" 
-                  className="text-gray-500 hover:text-[#333D79]"
-                >
-                  Courses
-                </a>
-                <span className="mx-2 text-gray-400">/</span>
-                <span className="font-medium text-[#333D79]">{classData?.name}</span>
-              </div>
-            </div>
-            
-            {/* Class header */}
-            <div className="flex justify-between items-center mb-6">
-              <div className="flex items-center">
-                <div className="h-12 w-12 rounded-lg bg-[#EEF0F8] flex items-center justify-center mr-4">
-                  <MdOutlineClass className="h-6 w-6 text-[#333D79]" />
+      <DashboardLayout>
+        {/* Full screen Excel view */}
+        {isFullScreen && currentFileData ? (
+            <ExcelViewer
+              isFullScreen={isFullScreen}
+              setIsFullScreen={setIsFullScreen}
+              classData={classData}
+              teamAccess={teamAccess}
+              fileData={currentFileData}
+              selectedFile={selectedFile}
+              onExport={handleExport}
+              onSave={handleSaveExcelChanges} // Add this
+              classId={id}
+            />
+        ) : (
+            <>
+              {/* Header section */}
+              <div className="top-0 z-30 pt-4 pb-2 px-4 -mx-4">
+                <div className="flex justify-between items-center mb-4">
+                  <div className="flex items-center">
+                    <div className="h-12 w-12 rounded-lg bg-[#EEF0F8] flex items-center justify-center mr-4">
+                      <MdOutlineClass className="h-6 w-6 text-[#333D79]" />
+                    </div>
+                    <div>
+                      <h1 className="text-2xl font-bold text-gray-800">{classData.name}</h1>
+                      <p className="text-sm text-gray-500">
+                        {currentFileData
+                            ? `Showing data from: ${selectedFile ? selectedFile.name : 'Imported file'}`
+                            : `Last updated: ${classData.lastUpdated}`
+                        }
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex space-x-3">
+                    {currentFileData ? (
+                        <>
+                          {(!teamAccess || teamAccess.accessLevel === 'edit' || teamAccess.accessLevel === 'full') && (
+                            <>
+                               <button
+                                  onClick={handleUpdateClassRecord}
+                                  className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm hover:bg-gray-50"
+                                >
+                                  <BsFileEarmarkSpreadsheet size={18} />
+                                  <span>Update Class Record</span>
+                                </button>
+
+                              <label htmlFor="add-file" className="cursor-pointer">
+                                <div className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm hover:bg-gray-50">
+                                  <FiUpload size={18} />
+                                  <span>Replace File</span>
+                                </div>
+                                <input
+                                    id="add-file"
+                                    type="file"
+                                    accept=".xlsx,.xls,.csv"
+                                    className="hidden"
+                                    onChange={handleFileInput}
+                                />
+                              </label>
+                            </>
+                          )}
+                          <button
+                              onClick={handleExport}
+                              className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm hover:bg-gray-50"
+                          >
+                            <FiDownload size={18} />
+                            <span>Export Data</span>
+                          </button>
+                        </> 
+                    ) : (
+                        !teamAccess || teamAccess.accessLevel !== 'view' ? (
+                            <label htmlFor="file-upload" className="cursor-pointer">
+                              <div className="bg-[#333D79] hover:bg-[#4A5491] text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm">
+                                <FiUpload size={18} />
+                                <span>Import Files</span>
+                              </div>
+                              <input
+                                  id="file-upload"
+                                  type="file"
+                                  accept=".xlsx,.xls,.csv"
+                                  className="hidden"
+                                  onChange={handleFileInput}
+                              />
+                            </label>
+                        ) : null
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <h1 className="text-2xl font-bold text-gray-800">{classData.name}</h1>
-                  <p className="text-sm text-gray-500">
-                    {excelData 
-                      ? `Showing data from: ${selectedFile ? selectedFile.name : 'Imported file'}`
-                      : `Last updated: ${classData.lastUpdated}`
-                    }
+
+                {/* Breadcrumb navigation */}
+                <div className="flex items-center text-sm text-gray-500 mb-2 pl-1">
+                  <a
+                      href="/dashboard/courses"
+                      className="hover:text-[#333D79] transition-colors"
+                  >
+                    Courses
+                  </a>
+                  <span className="mx-2">/</span>
+                  <span className="text-[#333D79]">{classData?.name}</span>
+                </div>
+
+                {/* File Info Bar - Modified to show update counter */}
+                  {currentFileData && (
+                    <div className="mb-4 flex items-center justify-between bg-gray-50 rounded-lg p-3 border border-gray-200">
+                      <div className="flex items-center">
+                        <div className="w-8 h-8 rounded-md bg-[#EEF0F8] flex items-center justify-center mr-3 shadow-sm">
+                          <BsFileEarmarkSpreadsheet className="text-[#333D79]" size={16} />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-gray-700">{selectedFile?.name}</span>
+                            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                              Updates: {currentFileData?.update_count || 0}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-500">
+                            {currentFileData?.uploaded_at ? new Date(currentFileData.uploaded_at).toLocaleString() : 'Recently uploaded'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Delete button */}
+                      {(!teamAccess || teamAccess.accessLevel === 'edit' || teamAccess.accessLevel === 'full') && (
+                        <button
+                            onClick={() => setIsDeleteModalOpen(true)}
+                            className="p-2 rounded-md text-gray-500 hover:text-red-500 hover:bg-red-50 transition-colors border border-gray-200"
+                            title="Delete spreadsheet"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                {error && (
+                    <div className="bg-red-50 border border-red-200 text-red-800 rounded-lg p-4 mb-4 flex justify-between items-center">
+                      <div>{error}</div>
+                      <button
+                          onClick={() => setError(null)}
+                          className="text-red-800 hover:text-red-900"
+                      >
+                        <FiX size={18} />
+                      </button>
+                    </div>
+                )}
+              </div>
+
+              <div className="pb-6 pt-2">
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8 relative overflow-hidden">
+                  <div className="absolute -top-20 -right-20 w-40 h-40 bg-blue-50 rounded-full opacity-20 blur-3xl"></div>
+                  <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-purple-50 rounded-full opacity-20 blur-3xl"></div>
+
+                  <div className="flex justify-between items-center mb-4 relative z-10">
+                    <div className="flex items-center">
+                      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-[#EEF0F8] to-[#DCE3F9] flex items-center justify-center mr-3 shadow-sm">
+                        {currentFileData ? (
+                            <BsFileEarmarkSpreadsheet className="h-5 w-5 text-[#333D79]" />
+                        ) : (
+                            <MdOutlineClass className="h-5 w-5 text-[#333D79]" />
+                        )}
+                      </div>
+                      <h2 className="text-lg font-semibold text-gray-800 relative">
+                        {currentFileData ? 'Excel Data' : 'Class Data'}
+                        <div className="absolute -top-1 -right-4 w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
+                      </h2>
+                    </div>
+                  </div>
+
+                  {fileLoading ? (
+                      <ImportProgress
+                          importProgress={importProgress}
+                          importStage={importStage}
+                      />
+                  ) : !currentFileData ? (
+                      teamAccess && teamAccess.accessLevel === 'view' ? (
+                          <div className="flex flex-col items-center justify-center py-12">
+                            <div className="bg-blue-50 rounded-full p-4 mb-4">
+                              <FiEye className="h-8 w-8 text-blue-500" />
+                            </div>
+                            <h3 className="text-lg font-medium text-gray-800 mb-2">View-Only Access</h3>
+                            <p className="text-gray-500 text-center max-w-md mb-2">
+                              You have view-only access to this class through team {teamAccess.teamName}.
+                            </p>
+                            <p className="text-sm text-gray-400 text-center max-w-md">
+                              When files are uploaded by a class manager, you&apos;ll be able to view them here.
+                            </p>
+                          </div>
+                      ) : (
+                          <FileDropzone
+                              teamAccess={teamAccess}
+                              isDragging={isDragging}
+                              handleDragOver={handleDragOver}
+                              handleDragLeave={handleDragLeave}
+                              handleDrop={handleDrop}
+                              handleFileInput={handleFileInput}
+                          />
+                      )
+                  ) : (
+                      <div className="excel-data-container">
+                        <div className="border rounded-lg shadow-sm overflow-hidden mb-4" style={{ height: 'calc(70vh - 90px)' }}>
+                          <div className="bg-white px-3 py-2 border-b border-gray-100 flex justify-between items-center sticky top-0 z-10">
+                            <div className="flex items-center">
+                              <div className="h-6 w-6 text-blue-600 flex items-center justify-center mr-2">
+                                <BsFileEarmarkSpreadsheet className="h-5 w-5" />
+                              </div>
+                              <span className="text-sm font-medium text-gray-700">{selectedFile ? selectedFile.name : 'Sample Grades.xlsx'}</span>
+                            </div>
+                            <div className="flex items-center">
+                              <button
+                                  onClick={handleExport}
+                                  className="text-gray-500 hover:text-[#333D79] p-1.5 rounded-md hover:bg-gray-50 mr-1"
+                                  title="Export Data"
+                              >
+                                <FiDownload size={16} />
+                              </button>
+                              <button
+                                  onClick={() => setIsFullScreen(true)}
+                                  className="text-gray-500 hover:text-[#333D79] p-1.5 rounded-md hover:bg-gray-50"
+                                  title="Enter Full Screen"
+                              >
+                                <FiX size={16} />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Container with fixed height for ExcelViewer */}
+                          <div className="h-[calc(70vh-130px)]">
+                            <ExcelViewer
+                              isFullScreen={false}
+                              setIsFullScreen={setIsFullScreen}
+                              classData={classData}
+                              teamAccess={teamAccess}
+                              fileData={currentFileData}
+                              selectedFile={selectedFile}
+                              onExport={handleExport}
+                              onSave={handleSaveExcelChanges} // Add this
+                              classId={id}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Add Custom Column Modal */}
+              <AddColumnModal
+                  showAddColumnModal={showAddColumnModal}
+                  setShowAddColumnModal={setShowAddColumnModal}
+                  newColumnName={newColumnName}
+                  setNewColumnName={setNewColumnName}
+                  newColumnType={newColumnType}
+                  setNewColumnType={setNewColumnType}
+                  newColumnMaxScore={newColumnMaxScore}
+                  setNewColumnMaxScore={setNewColumnMaxScore}
+                  handleAddCustomColumn={handleAddCustomColumn}
+              />
+            </>
+        )}
+
+        {/* File Import Preview Modal */}
+        <ImportPreviewModal
+            showPreview={showPreview}
+            previewInfo={previewInfo}
+            previewData={previewData}
+            previewError={previewError}
+            previewTab={previewTab}
+            setPreviewTab={setPreviewTab}
+            previewRowsToShow={previewRowsToShow}
+            cancelImport={cancelImport}
+            handleShowMoreRows={() => setPreviewRowsToShow(prev => Math.min(prev + 10, previewData?.data?.length || prev))}
+            handleDragOver={handleDragOver}
+            handleDragLeave={handleDragLeave}
+            handleDrop={handleDrop}
+            handleFileInput={handleFileInput}
+            teamAccess={teamAccess}
+            isDragging={isDragging}
+            detectedNameColumn={detectedNameColumn}
+            customColumns={customColumns}
+            setCustomColumns={setCustomColumns}
+            setShowAddColumnModal={setShowAddColumnModal}
+            handleAddColumnTemplate={handleAddColumnTemplate}
+            processSelectedFile={processSelectedFile}
+        />
+
+        {/* File Export Options Modal */}
+        <ExportOptionsModal
+          showExportOptions={showExportOptions}
+          setShowExportOptions={setShowExportOptions}
+          exportFormat={exportFormat}
+          setExportFormat={setExportFormat}
+          exportFileName={exportFileName}
+          setExportFileName={setExportFileName}
+          exportPreviewData={exportPreviewData}
+          cancelExport={cancelExport}
+          processExport={processExport}
+        />
+
+        <MergeExcelModal
+          isOpen={showMergeModal}
+          onClose={() => setShowMergeModal(false)}
+          currentFile={currentFileData}
+          newFile={mergeFileData}
+          onMerge={handleMergeFiles}
+          teamAccess={teamAccess}
+        />
+
+        <UpdateMethodModal 
+          isOpen={showUpdateMethodModal}
+          onClose={() => setShowUpdateMethodModal(false)}
+          onSelectImport={handleSelectImportUpdate}
+          onSelectManual={handleSelectManualUpdate}
+        />
+
+        <ManualUpdateModal
+          isOpen={showManualUpdateModal}
+          onClose={() => setShowManualUpdateModal(false)}
+          currentFile={currentFileData}
+          onSave={handleManualUpdateSave}
+          teamAccess={teamAccess}
+        />
+
+        {/* Loading Overlay for Export */}
+        {exportLoading && (
+            <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[1000] backdrop-blur-sm">
+              <div className="bg-white rounded-xl shadow-lg p-6 w-80 animate-fadeIn">
+                <div className="flex flex-col items-center">
+                  <div className="relative mb-3">
+                    <div className="w-16 h-16 border-4 border-[#EEF0F8] border-t-[#333D79] rounded-full animate-spin"></div>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <FiDownload className="h-6 w-6 text-[#333D79]" />
+                    </div>
+                  </div>
+                  <p className="text-gray-800 font-medium mb-2">Preparing your export</p>
+                  <p className="text-sm text-gray-500 mb-3 text-center">The file will download automatically when ready</p>
+                  <div className="w-full bg-gray-200 rounded-full h-2 mb-1">
+                    <div className="bg-[#333D79] h-2 rounded-full animate-pulse" style={{ width: '60%' }}></div>
+                  </div>
+                  <p className="text-xs text-gray-400 text-center">
+                    {exportFormat === 'xlsx' ? 'Formatting Excel workbook...' : 'Formatting CSV data...'}
                   </p>
                 </div>
               </div>
-              <div className="flex space-x-3">
-                {excelData ? (
-                  <>
-                    {(!teamAccess || teamAccess.accessLevel === 'edit' || teamAccess.accessLevel === 'full') && (
-                      <label htmlFor="add-file" className="cursor-pointer">
-                        <div className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm hover:bg-gray-50">
-                          <FiUpload size={18} />
-                          <span>Add File</span>
-                        </div>
-                        <input 
-                          id="add-file" 
-                          type="file" 
-                          accept=".xlsx,.xls,.csv" 
-                          className="hidden"
-                          onChange={handleFileInput}
-                        />
-                      </label>
-                    )}
-                    <button
-                      onClick={handleExport}
-                      className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm hover:bg-gray-50"
-                    >
-                      <FiDownload size={18} />
-                      <span>Export Data</span>
-                    </button>
-                  </>
-                ) : (
-                  !teamAccess || teamAccess.accessLevel !== 'view' ? (
-                    <label htmlFor="file-upload" className="cursor-pointer">
-                      <div className="bg-[#333D79] hover:bg-[#4A5491] text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm">
-                        <FiUpload size={18} />
-                        <span>Import Files</span>
-                      </div>
-                      <input 
-                        id="file-upload" 
-                        type="file" 
-                        accept=".xlsx,.xls,.csv" 
-                        className="hidden"
-                        onChange={handleFileInput}
-                      />
-                    </label>
-                  ) : null
-                )}
-              </div>
             </div>
-
-             {/* Enhanced File Selection Dropdown */}
-              {availableFiles.length > 1 && (
-                <div className="mb-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-center mb-2 sm:mb-0">
-                      <div className="w-8 h-8 rounded-md bg-[#EEF0F8] flex items-center justify-center mr-2 shadow-sm">
-                        <BsFileEarmarkSpreadsheet className="text-[#333D79]" size={16} />
-                      </div>
-                      <span className="text-sm font-medium text-gray-700">Current Spreadsheet</span>
-                    </div>
-                    
-                    <div className="relative group">
-                      <div className="flex items-center">
-                        <div className="relative">
-                          <select
-                            className="appearance-none w-full sm:w-72 border border-gray-300 rounded-lg text-gray-700 pl-4 pr-10 py-2.5 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-[#333D79] focus:border-[#333D79] transition-all hover:border-gray-400"
-                            value={selectedFile?.id}
-                            onChange={(e) => handleSwitchFile(e.target.value)}
-                          >
-                            {availableFiles.map(file => {
-                              // Format the date properly using uploaded_at instead of created_at
-                              const formattedDate = file.uploaded_at ? 
-                                new Date(file.uploaded_at).toLocaleDateString() : 
-                                'Unknown date';
-                              
-                              return (
-                                <option key={file.id} value={file.id}>
-                                  {file.file_name} ({formattedDate})
-                                </option>
-                              );
-                            })}
-                          </select>
-                          
-                          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[#333D79]">
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-                            </svg>
-                          </div>
-                        </div>
-                        
-                        {/* Always visible delete button */}
-                        {(!teamAccess || teamAccess.accessLevel === 'edit' || teamAccess.accessLevel === 'full') && selectedFile && (
-                          <button 
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              const currentFile = availableFiles.find(f => f.id === selectedFile.id);
-                              if (currentFile) {
-                                setFileToDelete(currentFile);
-                                setIsDeleteModalOpen(true);
-                              }
-                            }}
-                            className="ml-2 p-2 rounded-md text-gray-500 hover:text-red-500 hover:bg-red-50 transition-colors border border-gray-200"
-                            title="Delete spreadsheet"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-                        )}
-                      </div>
-                      
-                      {/* File details indicator for selected file */}
-                      {selectedFile && (
-                        <div className="hidden group-hover:block absolute top-full left-0 mt-1 w-full bg-white rounded-lg shadow-lg border border-gray-200 z-10 p-3 animate-fadeIn">
-                          <div className="flex items-start">
-                            {(() => {
-                              const currentFile = availableFiles.find(f => f.id === selectedFile.id);
-                              const fileName = currentFile?.file_name || selectedFile.name;
-                              
-                              // Determine icon based on file extension
-                              const isXlsx = fileName?.toLowerCase().endsWith('.xlsx');
-                              const isCsv = fileName?.toLowerCase().endsWith('.csv');
-                              
-                              return (
-                                <>
-                                  <div className={`flex-shrink-0 w-10 h-10 rounded-lg ${
-                                    isXlsx ? 'bg-green-100' :
-                                    isCsv ? 'bg-blue-100' : 'bg-purple-100'
-                                  } flex items-center justify-center mr-3`}>
-                                    {isXlsx ? (
-                                      <BsFiletypeXlsx size={20} className="text-green-700" />
-                                    ) : isCsv ? (
-                                      <BsFiletypeCsv size={20} className="text-blue-700" />
-                                    ) : (
-                                      <BsFileEarmarkSpreadsheet size={20} className="text-purple-700" />
-                                    )}
-                                  </div>
-                                  <div>
-                                    <p className="font-medium text-gray-800 text-sm mb-1">{fileName}</p>
-                                    <div className="flex items-center text-xs text-gray-500">
-                                      <span className="mr-2">
-                                        Uploaded: {currentFile?.uploaded_at ? 
-                                          new Date(currentFile.uploaded_at).toLocaleString() : 
-                                          'Unknown date'
-                                        }
-                                      </span>
-                                      <span className="flex items-center">
-                                        <svg className="w-3 h-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                                        </svg>
-                                        {currentFile?.active_sheet || 'Sheet1'}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </>
-                              );
-                            })()}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-800 rounded-lg p-4 mb-6 flex justify-between items-center">
-                <div>{error}</div>
-                <button 
-                  onClick={() => setError(null)}
-                  className="text-red-800 hover:text-red-900"
-                >
-                  <FiX size={18} />
-                </button>
-              </div>
-            )}
-
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8 relative overflow-hidden">
-              <div className="absolute -top-20 -right-20 w-40 h-40 bg-blue-50 rounded-full opacity-20 blur-3xl"></div>
-              <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-purple-50 rounded-full opacity-20 blur-3xl"></div>
-              
-              <div className="flex justify-between items-center mb-4 relative z-10">
-                <div className="flex items-center">
-                  <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-[#EEF0F8] to-[#DCE3F9] flex items-center justify-center mr-3 shadow-sm">
-                    {excelData ? (
-                      <BsFileEarmarkSpreadsheet className="h-5 w-5 text-[#333D79]" />
-                    ) : (
-                      <MdOutlineClass className="h-5 w-5 text-[#333D79]" />
-                    )}
-                  </div>
-                  <h2 className="text-lg font-semibold text-gray-800 relative">
-                    {excelData ? 'Excel Data' : 'Class Data'}
-                    <div className="absolute -top-1 -right-4 w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
-                  </h2>
-                </div>
-              </div>
-
-             {fileLoading ? (
-                <ImportProgress 
-                  importProgress={importProgress}
-                  importStage={importStage}
-                />
-              ) : !excelData ? (
-                teamAccess && teamAccess.accessLevel === 'view' ? (
-                  <div className="flex flex-col items-center justify-center py-12">
-                    <div className="bg-blue-50 rounded-full p-4 mb-4">
-                      <FiEye className="h-8 w-8 text-blue-500" />
-                    </div>
-                    <h3 className="text-lg font-medium text-gray-800 mb-2">View-Only Access</h3>
-                    <p className="text-gray-500 text-center max-w-md mb-2">
-                      You have view-only access to this class through team {teamAccess.teamName}.
-                    </p>
-                    <p className="text-sm text-gray-400 text-center max-w-md">
-                      When files are uploaded by a class manager, you'll be able to view them here.
-                    </p>
-                  </div>
-                ) : (
-                  <FileDropzone 
-                    teamAccess={teamAccess}
-                    isDragging={isDragging}
-                    handleDragOver={handleDragOver}
-                    handleDragLeave={handleDragLeave}
-                    handleDrop={handleDrop}
-                    handleFileInput={handleFileInput}
-                  />
-                )
-              ) : (
-                <div className="excel-data-container">
-                  {/* Sheet tabs */}
-                  {excelData && excelData.availableSheets && excelData.availableSheets.length > 1 && (
-                    <div className="mb-4 border-b overflow-x-auto">
-                      <div className="flex">
-                        {excelData.availableSheets.map((sheetName, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => handleSheetChange(sheetName)}
-                            className={`px-4 py-2 flex items-center whitespace-nowrap ${
-                              sheetName === excelData.activeSheet
-                                ? 'border-b-2 border-[#333D79] text-[#333D79] font-medium'
-                                : 'text-gray-600 hover:bg-gray-50'
-                            }`}
-                          >
-                            {sheetName === excelData.activeSheet && <HiSwitchHorizontal className="mr-1.5" size={14} />}
-                            {sheetName}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center text-sm text-gray-500">
-                      <FiFilter className="mr-2" />
-                      <span>Use filters and context menu for advanced operations</span>
-                    </div>
-                    <div className="bg-[#F5F7FB] px-3 py-1.5 rounded-md text-sm text-gray-600 font-medium">
-                      {fileStats ? 
-                        `${fileStats.totalRows.toLocaleString()} rows × ${fileStats.totalCols.toLocaleString()} columns` :
-                        `${excelData.data.length.toLocaleString()} rows × ${excelData.headers.length} columns`
-                      }
-                      {excelData.data.length > visibleRowCount && 
-                        ` (showing ${visibleRowCount.toLocaleString()} rows)`}
-                    </div>
-                  </div>
-                  
-                  <div className="excel-wrapper relative mb-4 border rounded-lg shadow-sm">
-                    <div className="bg-white px-3 py-2 border-b border-gray-100 flex justify-between items-center">
-                      <div className="flex items-center">
-                        <div className="h-8 w-8 rounded-full bg-[#EEF0F8] flex items-center justify-center mr-2">
-                          <BsFileEarmarkSpreadsheet className="h-4 w-4 text-[#333D79]" />
-                        </div>
-                        <span className="text-sm font-medium text-gray-700">{selectedFile ? selectedFile.name : 'Excel Data'}</span>
-                      </div>
-                      <div className="flex items-center">
-                        <button
-                          onClick={handleExport}
-                          className="text-gray-500 hover:text-[#333D79] p-1.5 rounded-md hover:bg-gray-50 mr-1"
-                          title="Export Data"
-                        >
-                          <FiDownload size={16} />
-                        </button>
-                        <button
-                          onClick={toggleFullScreen}
-                          className="text-gray-500 hover:text-[#333D79] p-1.5 rounded-md hover:bg-gray-50"
-                          title="Enter Full Screen"
-                        >
-                          <FiMaximize size={16} />
-                        </button>
-                      </div>
-                    </div>
-                    
-                    <div className="overflow-hidden" style={{ maxHeight: 'calc(70vh - 45px)' }}>
-                      <div className="overflow-auto excel-scroll-container" style={{ maxHeight: 'calc(70vh - 45px)', maxWidth: '100%' }}>
-                        <HotTable
-                          ref={hotTableRef}
-                          data={visibleData || []}
-                          colHeaders={excelData.headers}
-                          rowHeaders={true}
-                          height="auto"
-                          width="100%"
-                          licenseKey="non-commercial-and-evaluation"
-                          className="htCustom"
-                          stretchH="none"
-                          autoColumnSize={false}
-                          colWidths={100}
-                          readOnly={teamAccess && teamAccess.accessLevel === 'view'}
-                          manualColumnResize={!teamAccess || teamAccess.accessLevel !== 'view'}
-                          manualRowResize={!teamAccess || teamAccess.accessLevel !== 'view'}
-                          filters={true}
-                          dropdownMenu={!teamAccess || teamAccess.accessLevel !== 'view'}
-                          contextMenu={!teamAccess || teamAccess.accessLevel !== 'view'}
-                          columnSorting={true}
-                          sortIndicator={true}
-                          afterChange={teamAccess && teamAccess.accessLevel === 'view' ? undefined : handleDataChange}
-                          rowHeights={28}
-                          fixedRowsTop={1}
-                          fixedColumnsLeft={1}
-                          wordWrap={true}
-                          outsideClickDeselects={false}
-                          columnHeaderHeight={40}
-                          afterGetColHeader={(col, TH) => {
-                            TH.className = 'htCenter htMiddle font-medium text-gray-700';
-                          }}
-                          settings={{
-                            minRows: 10,
-                            minCols: excelData.headers.length,
-                            minSpareRows: 0,
-                            minSpareCols: 0,
-                            renderAllRows: false,
-                            viewportColumnRenderingOffset: 15,
-                            viewportRowRenderingOffset: 15,
-                            preventOverflow: false,
-                            fixedRowsTop: 1,
-                            fixedColumnsLeft: 1
-                          }}
-                          tableClassName="excel-table-container"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {excelData.data.length > visibleRowCount && (
-                    <div className="text-center text-sm text-gray-500 mt-2">
-                      <p>Showing {visibleRowCount.toLocaleString()} of {excelData.data.length.toLocaleString()} rows. Scroll down to load more rows.</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {isSaving && (
-              <div className="fixed bottom-4 right-4 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg shadow-lg z-50">
-                <div className="flex items-center gap-2">
-                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-[#333D79] border-t-transparent"></div>
-                  <span>Saving changes...</span>
-                </div>
-              </div>
-            )}
-          </div>
-          
-          {/* Add Custom Column Modal */}
-          <AddColumnModal 
-            showAddColumnModal={showAddColumnModal}
-            setShowAddColumnModal={setShowAddColumnModal}
-            newColumnName={newColumnName}
-            setNewColumnName={setNewColumnName}
-            newColumnType={newColumnType}
-            setNewColumnType={setNewColumnType}
-            newColumnMaxScore={newColumnMaxScore}
-            setNewColumnMaxScore={setNewColumnMaxScore}
-            handleAddCustomColumn={handleAddCustomColumn}
-          />
-        </>
-      )}
-      
-      {/* File Import Preview Modal */}
-      <ImportPreviewModal
-        showPreview={showPreview}
-        previewInfo={previewInfo}
-        previewData={previewData}
-        previewError={previewError}
-        previewTab={previewTab}
-        setPreviewTab={setPreviewTab}
-        previewRowsToShow={previewRowsToShow}
-        cancelImport={cancelImport}
-        handleShowMoreRows={handleShowMoreRows}
-        handleDragOver={handleDragOver}
-        handleDragLeave={handleDragLeave}
-        handleDrop={handleDrop}
-        handleFileInput={handleFileInput}
-        teamAccess={teamAccess}
-        isDragging={isDragging}
-        detectedNameColumn={detectedNameColumn}
-        customColumns={customColumns}
-        setCustomColumns={setCustomColumns}
-        setShowAddColumnModal={setShowAddColumnModal}
-        handleAddColumnTemplate={handleAddColumnTemplate}
-        processSelectedFile={processSelectedFile}
-      />
-      
-      {/* File Export Options Modal */}
-      <ExportOptionsModal
-        showExportOptions={showExportOptions}
-        exportFormat={exportFormat}
-        setExportFormat={setExportFormat}
-        exportFileName={exportFileName}
-        setExportFileName={setExportFileName}
-        exportPreviewData={exportPreviewData}
-        cancelExport={cancelExport}
-        processExport={processExport}
-      />
-
-      {/* Loading Overlay for Export */}
-      {exportLoading && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[1000] backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-lg p-6 w-80 animate-fadeIn">
-            <div className="flex flex-col items-center">
-              <div className="relative mb-3">
-                <div className="w-16 h-16 border-4 border-[#EEF0F8] border-t-[#333D79] rounded-full animate-spin"></div>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <FiDownload className="h-6 w-6 text-[#333D79]" />
-                </div>
-              </div>
-              <p className="text-gray-800 font-medium mb-2">Preparing your export</p>
-              <p className="text-sm text-gray-500 mb-3 text-center">The file will download automatically when ready</p>
-              <div className="w-full bg-gray-200 rounded-full h-2 mb-1">
-                <div className="bg-[#333D79] h-2 rounded-full animate-pulse" style={{ width: '60%' }}></div>
-              </div>
-              <p className="text-xs text-gray-400 text-center">
-                {exportFormat === 'xlsx' ? 'Formatting Excel workbook...' : 'Formatting CSV data...'}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-    
-      {teamAccess && teamAccess.accessLevel === 'view' && (
-        <div className="p-3 bg-blue-50 text-blue-700 rounded-lg mt-4 flex items-center gap-2">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span>You have view-only access to this data through team {teamAccess.teamName}</span>
-        </div>
-      )}
-
-      {/* Delete Confirmation Modal */}
-        <DeleteConfirmationModal
-          isOpen={isDeleteModalOpen}
-          onClose={() => {
-            setIsDeleteModalOpen(false);
-            setFileToDelete(null);
-          }}
-          onConfirm={handleDeleteFile}
-          fileName={fileToDelete?.file_name || ''}
-      />
-
-      {/* Loading Indicator for Delete Operation */}
-        {isDeleting && (
-          <div className="fixed bottom-4 right-4 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg shadow-lg z-50">
-            <div className="flex items-center gap-2">
-              <div className="animate-spin rounded-full h-4 w-4 border-2 border-red-500 border-t-transparent"></div>
-              <span>Deleting file...</span>
-            </div>
-          </div>
         )}
-    </DashboardLayout>
+
+        {teamAccess && teamAccess.accessLevel === 'view' && (
+            <div className="p-3 bg-blue-50 text-blue-700 rounded-lg mt-4 flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>You have view-only access to this data through team {teamAccess.teamName}</span>
+            </div>
+        )}
+
+        {/* Delete Confirmation Modal */}
+        <DeleteConfirmationModal
+            isOpen={isDeleteModalOpen}
+            onClose={() => setIsDeleteModalOpen(false)}
+            onConfirm={handleDeleteFile}
+            fileName={currentFileData?.file_name || ''}
+        />
+
+        {/* Loading Indicator for Delete Operation */}
+        {isDeleting && (
+            <div className="fixed bottom-4 right-4 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg shadow-lg z-50">
+              <div className="flex items-center gap-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-red-500 border-t-transparent"></div>
+                <span>Deleting file...</span>
+              </div>
+            </div>
+        )}
+      </DashboardLayout>
   );
 };
 
 export default ClassDetails;
+
+// PropTypes validation
+ClassDetails.propTypes = {
+  accessInfo: PropTypes.shape({
+    teamId: PropTypes.string,
+    teamName: PropTypes.string,
+    courseId: PropTypes.string,
+    courseName: PropTypes.string,
+    accessLevel: PropTypes.string
+  })
+};
+
+DeleteConfirmationModal.propTypes = {
+  isOpen: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
+  onConfirm: PropTypes.func.isRequired,
+  fileName: PropTypes.string
+};

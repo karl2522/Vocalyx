@@ -1,15 +1,15 @@
-import { useEffect, useState, useRef } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
+import { toast } from 'react-hot-toast';
 import { FiEdit, FiMoreVertical, FiPlus, FiSearch, FiTrash2 } from 'react-icons/fi';
 import {
     MdArchive, MdArrowForward, MdOutlineCalendarToday, MdOutlineClass,
     MdOutlinePersonOutline, MdOutlineSchool, MdOutlineWatchLater
 } from 'react-icons/md';
-import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'react-hot-toast';
+import { useNavigate, useParams } from 'react-router-dom';
+import { classService, courseService } from '../services/api';
 import DashboardLayout from "./layouts/DashboardLayout.jsx";
 import ClassModal from './modals/ClassModal';
-import { courseService, classService } from '../services/api';
 
 // Add some animation style elements
 const AnimationStyles = () => {
@@ -221,7 +221,6 @@ const CourseDetail = ({ accessInfo }) => {
     mutationFn: (classData) => classService.createClass(classData),
     onSuccess: () => {
       queryClient.invalidateQueries(['classes', id]);
-      toast.success('Class added successfully');
       setIsClassModalOpen(false);
     },
     onError: (error) => {

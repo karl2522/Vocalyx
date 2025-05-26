@@ -8,5 +8,6 @@ data class ClassCreateRequest(
     val semester: String? = null,
     val section: String? = null,
     val schedule: String? = null,
-    @SerializedName("course_id") val courseId: Int
+    @SerializedName("course_id") val courseId: Int,
+    @SerializedName("student_count") val studentCount: Int? = null
 )

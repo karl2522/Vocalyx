@@ -1,5 +1,5 @@
 import PropTypes from 'prop-types';
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { MdClose, MdOutlineClass, MdOutlineWatchLater } from 'react-icons/md';
 import { classService } from '../../services/api';
 import { showToast } from '../../utils/toast.jsx';
@@ -285,7 +285,7 @@ const ClassModal = ({ isOpen, onClose, onAddClass, onUpdateClass, courseId, cour
                                     <MdOutlineClass className="h-6 w-6 text-white" />
                                 </div>
                                 <h3 className="text-lg leading-6 font-medium text-gray-900 ml-3" id="modal-title">
-                                    {isEditMode ? 'Edit Class' : courseId ? `Add Class to ${courseName || 'Course'}` : 'Create New Class'}
+                                    {isEditMode ? 'Edit Section' : courseId ? `Add Section to ${courseName || 'Course'}` : 'Create New Section'}
                                 </h3>
                             </div>
                             <button
@@ -299,18 +299,18 @@ const ClassModal = ({ isOpen, onClose, onAddClass, onUpdateClass, courseId, cour
                         <form onSubmit={handleSubmit}>
                             <div className="mb-4">
                                 <label htmlFor="className" className="block text-sm font-medium text-gray-700 mb-1">
-                                    Class Name *
+                                    Section Name *
                                 </label>
                                 <input
                                     type="text"
                                     id="className"
                                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#333D79] focus:border-transparent"
-                                    placeholder="Enter class name (e.g. 'BSIT 1-A')"
+                                    placeholder="Enter section name (e.g. 'Section A', '1-B')"
                                     value={className}
                                     onChange={(e) => setClassName(e.target.value)}
                                     required
                                 />
-                                <p className="mt-1 text-xs text-gray-500">Include section information in the class name (e.g. "BSIT 1-A", "CS101 Section 2")</p>
+                                <p className="mt-1 text-xs text-gray-500">Specify the section identifier (e.g. &quot;Section A&quot;, &quot;1-B&quot;, &quot;Group 3&quot;)</p>
                             </div>
 
                             <div className="mb-4">
@@ -451,7 +451,7 @@ const ClassModal = ({ isOpen, onClose, onAddClass, onUpdateClass, courseId, cour
                                     disabled={loading}
                                     className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-gradient-to-r from-[#333D79] to-[#4A5491] text-base font-medium text-white hover:from-[#4A5491] hover:to-[#5d6ba9] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#333D79] sm:ml-3 sm:w-auto sm:text-sm transition-all"
                                 >
-                                    {loading ? (isEditMode ? 'Updating...' : 'Creating...') : (isEditMode ? 'Update Class' : courseId ? 'Add Class' : 'Create Class')}
+                                    {loading ? (isEditMode ? 'Updating...' : 'Creating...') : (isEditMode ? 'Update Section' : courseId ? 'Add Section' : 'Create Section')}
                                 </button>
                                 <button
                                     type="button"
