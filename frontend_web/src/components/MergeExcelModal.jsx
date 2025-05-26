@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { BsCheckCircle, BsExclamationTriangle, BsFileEarmarkSpreadsheet } from 'react-icons/bs';
-import { FiX, FiCheck, FiAlertCircle, FiArrowRight } from 'react-icons/fi';
+import { BsCheckCircle, BsExclamationTriangle, BsFileEarmarkSpreadsheet, BsArrowClockwise } from 'react-icons/bs';
+import { FiX, FiCheck, FiAlertCircle, FiArrowRight, FiColumns } from 'react-icons/fi';
 
 const MergeExcelModal = ({ 
   isOpen, 
@@ -10,7 +10,7 @@ const MergeExcelModal = ({
   onMerge,
   teamAccess
 }) => {
-  const [step, setStep] = useState('compare'); // compare, categorize, confirm
+  const [step, setStep] = useState('compare'); 
   const [matchedStudents, setMatchedStudents] = useState([]);
   const [unmatchedStudents, setUnmatchedStudents] = useState([]);
   const [overrideNames, setOverrideNames] = useState(false);
@@ -23,275 +23,353 @@ const MergeExcelModal = ({
     { id: 'other', name: 'Other Activities', columns: [] },
   ]);
   const [newCategory, setNewCategory] = useState('');
+  
+  // New states for duplicate column handling
+  const [duplicateColumns, setDuplicateColumns] = useState([]);
+  const [columnsToOverride, setColumnsToOverride] = useState([]);
+  const [newColumns, setNewColumns] = useState([]);
+
+  const [showAllMatched, setShowAllMatched] = useState(false);
+  const [showAllUnmatched, setShowAllUnmatched] = useState(false);
 
   useEffect(() => {
   if (currentFile && newFile) {
-    console.log("Starting enhanced student matching...");
-    console.log("Current file:", currentFile);
-    console.log("New file:", newFile);
+    console.log("Starting format-aware student matching...");
     
-    const matches = [];
-    const unmatched = [];
-    
-    // Get data
-    const currentData = currentFile.all_sheets[currentFile.active_sheet].data;
-    const newData = newFile.all_sheets[newFile.active_sheet].headers;
-
-    // Debug data structure
-    console.log("Current file headers:", currentFile.all_sheets[currentFile.active_sheet].headers);
-    console.log("New file headers:", newFile.all_sheets[newFile.active_sheet].headers);
-    console.log("First row of current data:", currentData[0]);
-    console.log("First row of new data:", newFile.all_sheets[newFile.active_sheet].data[0]);
-    
-    // STEP 1: Create a comprehensive map of existing student names with multiple variations
-    const studentMap = new Map();
-    
-    // Find name-related columns in both files
+    // Find duplicate columns
     const currentHeaders = currentFile.all_sheets[currentFile.active_sheet].headers;
     const newHeaders = newFile.all_sheets[newFile.active_sheet].headers;
     
-    // Create indices for name columns
-    const currentNameColumns = findNameColumns(currentHeaders);
-    const newNameColumns = findNameColumns(newHeaders);
+    console.log("Current file headers:", currentHeaders);
+    console.log("New file headers:", newHeaders);
     
-    console.log("Current file name columns:", currentNameColumns);
-    console.log("New file name columns:", newNameColumns);
+    const duplicates = newHeaders.filter(header => 
+      currentHeaders.includes(header) && 
+      !isNameOrIdColumn(header)
+    );
     
-    // Function to normalize a name for comparison
-    const normalizeName = (name) => {
-      if (!name) return '';
-      return String(name).toLowerCase().trim()
-        .replace(/\s+/g, ' ')          // Replace multiple spaces with single
-        .replace(/[^\w\s]/g, '');      // Remove punctuation
+    const truly_new = newHeaders.filter(header => 
+      !currentHeaders.includes(header) &&
+      !isNameOrIdColumn(header)
+    );
+    
+    setDuplicateColumns(duplicates);
+    setNewColumns(truly_new);
+    
+    // Get data
+    const currentData = currentFile.all_sheets[currentFile.active_sheet].data;
+    const newData = newFile.all_sheets[newFile.active_sheet].data;
+    
+    console.log("Current file students:", currentData.length);
+    console.log("New file students:", newData.length);
+    
+    // DETECT DATA FORMAT AND NORMALIZE
+    
+    // Check if data is in array format (indexed numerically) vs object format (with named properties)
+    const isArrayFormat = (data) => {
+      if (!data || data.length === 0) return false;
+      return Array.isArray(data[0]);
     };
     
-    // Create comprehensive variations of each student's name
-    currentFile.all_sheets[currentFile.active_sheet].data.forEach((row, index) => {
-      // Extract name parts
-      let fullName = '';
-      let firstName = '';
-      let lastName = '';
-      let middleName = '';
+    const normalizeRow = (row, headers, isArray) => {
+      if (!isArray) return row; // Already in object format
       
-      // Try to find name components
-      if (row["NAME OF STUDENT"]) {
-        fullName = row["NAME OF STUDENT"];
-        
-        // Try to split full name into parts
-        const nameParts = fullName.split(/\s+/);
-        if (nameParts.length >= 2) {
-          lastName = nameParts[0];
-          firstName = nameParts[nameParts.length - 1];
-          if (nameParts.length > 2) {
-            middleName = nameParts.slice(1, -1).join(' ');
-          }
+      // Convert array to object format
+      const normalized = {};
+      headers.forEach((header, index) => {
+        normalized[header] = row[index];
+      });
+      return normalized;
+    };
+    
+    const isNewFileArrayFormat = isArrayFormat(newData);
+    console.log("New file is in array format:", isNewFileArrayFormat);
+    
+    // Find name columns in both datasets
+    const namePatterns = ['name', 'student', 'learner', 'no.', 'id', 'first', 'last'];
+    
+    const findNameColumnIndices = (headers) => {
+      const indices = [];
+      headers.forEach((header, index) => {
+        const headerLower = String(header).toLowerCase();
+        if (namePatterns.some(pattern => headerLower.includes(pattern))) {
+          indices.push(index);
         }
-      } else {
-        // Check separate name fields
-        lastName = row["LAST NAME"] || '';
-        firstName = row["FIRST NAME"] || '';
-        middleName = row["MIDDLE NAME"] || '';
-        
-        // Construct full name from parts
-        fullName = [lastName, firstName].filter(Boolean).join(', ');
-      }
+      });
+      return indices;
+    };
+    
+    const currentNameIndices = findNameColumnIndices(currentHeaders);
+    const newNameIndices = findNameColumnIndices(newHeaders);
+    
+    console.log("Current name column indices:", currentNameIndices);
+    console.log("New name column indices:", newNameIndices);
+    
+    // Extract student identifiers from any row format
+    const getStudentId = (row, headers, nameIndices, isArray) => {
+      let names = [];
+      let displayName = "Unknown";
       
-      // Create name variations for matching
-      const variations = [];
-      
-      if (fullName) variations.push(normalizeName(fullName));
-      if (lastName && firstName) {
-        variations.push(normalizeName(`${lastName} ${firstName}`));
-        variations.push(normalizeName(`${firstName} ${lastName}`));
-        variations.push(normalizeName(`${lastName}, ${firstName}`));
-      }
-      if (lastName) variations.push(normalizeName(lastName));
-      if (firstName) variations.push(normalizeName(firstName));
-      
-      // Add each variation to lookup map
-      const uniqueVariations = [...new Set(variations.filter(v => v))];
-      uniqueVariations.forEach(variant => {
-        studentMap.set(variant, {
-          index,
-          row,
-          fullName: fullName || `${lastName}, ${firstName}`,
-          firstName,
-          lastName
+      if (isArray) {
+        // For array format
+        nameIndices.forEach(index => {
+          const value = row[index];
+          if (value) {
+            names.push(String(value).toLowerCase().trim());
+            if (displayName === "Unknown") displayName = String(value);
+          }
         });
+      } else {
+        // For object format
+        nameIndices.forEach(index => {
+          const header = headers[index];
+          const value = row[header];
+          if (value) {
+            names.push(String(value).toLowerCase().trim());
+            if (displayName === "Unknown") displayName = String(value);
+          }
+        });
+      }
+      
+      return { names, displayName };
+    };
+    
+    // Build current students map
+    const currentStudentMap = new Map();
+    
+    currentData.forEach((row, index) => {
+      const { names, displayName } = getStudentId(row, currentHeaders, currentNameIndices, false);
+      
+      console.log(`Current student ${index}: ${displayName}, Names:`, names);
+      
+      // Create a unique ID combining all name values
+      const composite = names.join('|');
+      if (composite) {
+        currentStudentMap.set(composite, { 
+          row, 
+          displayName,
+          nameValues: names 
+        });
+      }
+      
+      // Also add individual names as keys
+      names.forEach(name => {
+        if (name && name.length > 1) {
+          currentStudentMap.set(name, { 
+            row, 
+            displayName,
+            nameValues: names 
+          });
+        }
       });
     });
     
-    console.log("Generated student map with variations:", Array.from(studentMap.keys()));
+    console.log("Current student map size:", currentStudentMap.size);
     
-    // STEP 2: Match students from the new file against our comprehensive map
-    newFile.all_sheets[newFile.active_sheet].data.forEach((row, idx) => {
-      // Similar to above, extract name components
-      let fullName = '';
-      let firstName = '';
-      let lastName = '';
+    // Process new students
+    const matches = [];
+    const unmatched = [];
+    
+    newData.forEach((row, index) => {
+      // Extract name info from the new student
+      const { names, displayName } = getStudentId(
+        row, 
+        newHeaders, 
+        newNameIndices, 
+        isNewFileArrayFormat
+      );
       
-      // Try to find name components
-      if (row["NAME OF STUDENT"]) {
-        fullName = row["NAME OF STUDENT"];
-        
-        // Try to split full name into parts
-        const nameParts = fullName.split(/\s+/);
-        if (nameParts.length >= 2) {
-          lastName = nameParts[0];
-          firstName = nameParts[nameParts.length - 1];
-        }
-      } else {
-        // Check separate name fields
-        lastName = row["LAST NAME"] || '';
-        firstName = row["FIRST NAME"] || '';
-        
-        // Construct full name from parts
-        fullName = [lastName, firstName].filter(Boolean).join(', ');
-      }
-      
-      // Create name variations for matching
-      const variations = [];
-      
-      if (fullName) variations.push(normalizeName(fullName));
-      if (lastName && firstName) {
-        variations.push(normalizeName(`${lastName} ${firstName}`));
-        variations.push(normalizeName(`${firstName} ${lastName}`));
-        variations.push(normalizeName(`${lastName}, ${firstName}`));
-      }
-      if (lastName) variations.push(normalizeName(lastName));
-      if (firstName) variations.push(normalizeName(firstName));
-      
-      // Display name for the UI
-      const displayName = fullName || `${lastName}, ${firstName}` || "Unknown";
+      console.log(`New student ${index}: ${displayName}, Names:`, names);
       
       let matched = false;
-      let matchedInfo = null;
+      let matchInfo = null;
       
-      // Check if any of the variations match
-      for (const variant of variations.filter(Boolean)) {
-        if (studentMap.has(variant)) {
-          matchedInfo = studentMap.get(variant);
-          matched = true;
-          console.log(`Match found: "${variant}" -> "${matchedInfo.fullName}"`);
-          break;
-        }
-      }
+      // Try to match using composite ID
+      const composite = names.join('|');
+      if (composite && currentStudentMap.has(composite)) {
+        matchInfo = currentStudentMap.get(composite);
+        matched = true;
+        console.log(`  MATCH FOUND with composite: ${composite}`);
+      } 
       
-      // Last resort: Try each word in the name separately
-      if (!matched && (lastName || firstName)) {
-        const words = [lastName, firstName].filter(Boolean).join(' ').split(/\s+/);
-        for (const word of words) {
-          const normalized = normalizeName(word);
-          if (normalized.length > 2 && studentMap.has(normalized)) { // Avoid matching on very short names
-            matchedInfo = studentMap.get(normalized);
+      // Try individual names
+      if (!matched) {
+        for (const name of names) {
+          if (name && currentStudentMap.has(name)) {
+            matchInfo = currentStudentMap.get(name);
             matched = true;
-            console.log(`Partial match found on word "${word}" -> "${matchedInfo.fullName}"`);
+            console.log(`  MATCH FOUND with name: ${name}`);
             break;
           }
         }
       }
       
-      if (matched && matchedInfo) {
-        matches.push({ 
-          index: idx, 
+      // Try partial matching as last resort
+      if (!matched) {
+        for (const name of names) {
+          if (!name || name.length < 3) continue;
+          
+          for (const [key, info] of currentStudentMap.entries()) {
+            if (key.includes(name) || info.nameValues.some(val => val.includes(name))) {
+              matchInfo = info;
+              matched = true;
+              console.log(`  PARTIAL MATCH FOUND with: ${name}`);
+              break;
+            }
+          }
+          if (matched) break;
+        }
+      }
+      
+      // Handle the match result
+      const normalizedRow = normalizeRow(row, newHeaders, isNewFileArrayFormat);
+      
+      if (matched && matchInfo) {
+        matches.push({
+          index,
           name: displayName,
-          currentName: matchedInfo.fullName,
-          newData: row,
+          currentName: matchInfo.displayName,
+          newData: normalizedRow,
+          currentData: matchInfo.row,
           matchType: 'name'
         });
+        console.log(`  Added to matches: ${displayName} -> ${matchInfo.displayName}`);
       } else {
-        console.log(`No match for: "${displayName}" with variations:`, variations);
-        unmatched.push({ 
-          index: idx, 
+        unmatched.push({
+          index,
           name: displayName,
-          newData: row 
+          newData: normalizedRow
         });
+        console.log(`  Added to unmatched: ${displayName}`);
       }
     });
     
-    console.log(`Matching complete: ${matches.length} matches, ${unmatched.length} unmatched`);
+    console.log(`Final matches: ${matches.length}, Unmatched: ${unmatched.length}`);
     
     setMatchedStudents(matches);
     setUnmatchedStudents(unmatched);
     
-    // Pre-categorize columns from new file
-    categorizeMissingColumns(newFile);
+    // Pre-categorize columns
+    categorizeMissingColumns(newFile, truly_new);
   }
 }, [currentFile, newFile]);
 
-const findNameColumns = (headers) => {
-  const nameRelated = [];
-  
-  headers.forEach((header, index) => {
-    const headerStr = String(header).toLowerCase();
+  // Helper function to check if a column is a name or ID column
+  const isNameOrIdColumn = (header) => {
+    if (!header) return false;
+    const headerLower = String(header).toLowerCase();
+    return headerLower.includes('name') || 
+           headerLower.includes('student') || 
+           headerLower === 'no.' ||
+           headerLower.includes('first') ||
+           headerLower.includes('last') ||
+           headerLower.includes('middle');
+  };
+
+  const findNameColumns = (headers) => {
+    const nameRelated = [];
     
-    if (
-      headerStr.includes('name') || 
-      headerStr.includes('student') ||
-      headerStr === 'no.' ||
-      headerStr.includes('first') ||
-      headerStr.includes('last') ||
-      headerStr.includes('middle')
-    ) {
-      nameRelated.push({
-        index,
-        header,
-        type: 
-          headerStr.includes('first') ? 'first' :
-          headerStr.includes('last') ? 'last' :
-          headerStr.includes('middle') ? 'middle' :
-          headerStr.includes('full') ? 'full' : 'name'
-      });
-    }
-  });
-  
-  return nameRelated;
-};
-  
-  
-  // Categorize new columns
-  const categorizeMissingColumns = (file) => {
-  if (!file || !file.all_sheets || !currentFile || !currentFile.all_sheets) return;
-  
-  const activeSheet = file.active_sheet;
-  const headers = file.all_sheets[activeSheet].headers;
-  const currentHeaders = currentFile.all_sheets[currentFile.active_sheet].headers;
-  const newColumns = headers.filter(header => !currentHeaders.includes(header));
-  
-  // Initialize with empty columns
-  const categorized = { quiz: [], laboratory: [], exams: [], other: [] };
-  
-  // STEP 1: Load existing category mappings from current file
-  if (currentFile.all_sheets.category_mappings) {
-    console.log("Loading existing categories from current file");
-    
-    currentFile.all_sheets.category_mappings.forEach(category => {
-      const categoryId = category.id;
-      if (categorized.hasOwnProperty(categoryId)) {
-        // Only include columns that exist in the current file
-        const existingColumns = category.columns.filter(col => 
-          currentHeaders.includes(col));
-        
-        categorized[categoryId] = existingColumns;
-        console.log(`Loaded ${existingColumns.length} columns for category ${category.name}`);
+    headers.forEach((header, index) => {
+      if (isNameOrIdColumn(header)) {
+        nameRelated.push({
+          index,
+          header,
+          type: 
+            header.toLowerCase().includes('first') ? 'first' :
+            header.toLowerCase().includes('last') ? 'last' :
+            header.toLowerCase().includes('middle') ? 'middle' :
+            header.toLowerCase().includes('full') ? 'full' : 'name'
+        });
       }
     });
-  }
+    
+    return nameRelated;
+  };
   
-  // STEP 2: Place new columns in 'other' category for manual organization
-  console.log(`Added ${newColumns.length} new columns to 'other' category`);
-  categorized.other = [...categorized.other, ...newColumns];
-  
-  // STEP 3: Update the categories state
-  setCategories(prevCategories => {
-    return prevCategories.map(category => {
-      return {
-        ...category,
-        columns: categorized[category.id] || []
-      };
+  // Toggle a column's override status
+  const toggleColumnOverride = (column) => {
+    setColumnsToOverride(prev => {
+      if (prev.includes(column)) {
+        return prev.filter(col => col !== column);
+      } else {
+        return [...prev, column];
+      }
     });
-  });
-};
+  };
+  
+  // Updated to only categorize truly new columns
+  const categorizeMissingColumns = (file, newColumnsList = null) => {
+    if (!file || !file.all_sheets || !currentFile || !currentFile.all_sheets) return;
+    
+    const activeSheet = file.active_sheet;
+    const headers = file.all_sheets[activeSheet].headers;
+    const currentHeaders = currentFile.all_sheets[currentFile.active_sheet].headers;
+    
+    // Use provided new columns list or calculate it
+    const columnsToCategories = newColumnsList || 
+      headers.filter(header => !currentHeaders.includes(header));
+    
+    // Initialize with empty columns
+    const categorized = { quiz: [], laboratory: [], exams: [], other: [] };
+    
+    // STEP 1: Load existing category mappings from current file
+    if (currentFile.all_sheets.category_mappings) {
+      console.log("Loading existing categories from current file");
+      
+      currentFile.all_sheets.category_mappings.forEach(category => {
+        const categoryId = category.id;
+        if (categorized.hasOwnProperty(categoryId)) {
+          // Only include columns that exist in the current file
+          const existingColumns = category.columns.filter(col => 
+            currentHeaders.includes(col));
+          
+          categorized[categoryId] = existingColumns;
+        }
+      });
+    }
+    
+    // STEP 2: Try to auto-categorize new columns based on names
+    columnsToCategories.forEach(column => {
+      const columnLower = String(column).toLowerCase();
+      let placed = false;
+      
+      // Skip name/ID columns
+      if (isNameOrIdColumn(column)) {
+        return;
+      }
+      
+      // Auto-categorize based on column names
+      if (columnLower.includes('quiz') || columnLower.includes('test') || 
+          (columnLower.includes('html') && columnLower.includes('basic'))) {
+        categorized.quiz.push(column);
+        placed = true;
+      } else if (columnLower.includes('lab') || columnLower.includes('activity') || 
+                columnLower.includes('exercise') || columnLower.includes('homework') ||
+                (columnLower.includes('html') && columnLower.includes('advanc'))) {
+        categorized.laboratory.push(column);
+        placed = true;
+      } else if (columnLower.includes('exam') || columnLower === 'fe' || 
+                columnLower === 'me' || columnLower === 'pe' || columnLower === 'pfe') {
+        categorized.exams.push(column);
+        placed = true;
+      }
+      
+      // If not auto-categorized, put in "other"
+      if (!placed) {
+        categorized.other.push(column);
+      }
+    });
+    
+    // STEP 3: Update the categories state
+    setCategories(prevCategories => {
+      return prevCategories.map(category => {
+        return {
+          ...category,
+          columns: categorized[category.id] || []
+        };
+      });
+    });
+  };
   
   // Add a new category
   const handleAddCategory = () => {
@@ -303,12 +381,12 @@ const findNameColumns = (headers) => {
   };
 
   const handleDragOver = (e) => {
-    e.preventDefault(); // This is essential to allow dropping
+    e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
-    };
+  };
 
-        const handleDrop = (e, categoryId) => {
+  const handleDrop = (e, categoryId) => {
     e.preventDefault();
     e.stopPropagation();
     
@@ -317,78 +395,82 @@ const findNameColumns = (headers) => {
     
     if (!columnName) return;
     
-    console.log(`Dropping column "${columnName}" into category "${categoryId}"`);
     moveColumnToCategory(columnName, categoryId);
- };
+  };
   
   // Move a column to a category
   const moveColumnToCategory = (column, targetCategoryId) => {
-  // First, remove column from its current category
-  const updatedCategories = categories.map(category => ({
-    ...category,
-    columns: category.columns.filter(col => col !== column)
-  }));
+    // First, remove column from its current category
+    const updatedCategories = categories.map(category => ({
+      ...category,
+      columns: category.columns.filter(col => col !== column)
+    }));
+    
+    // Then add to the target category
+    const targetIndex = updatedCategories.findIndex(cat => cat.id === targetCategoryId);
+    if (targetIndex !== -1) {
+      updatedCategories[targetIndex].columns.push(column);
+    }
+    
+    setCategories(updatedCategories);
+  };
   
-  // Then add to the target category
-  const targetIndex = updatedCategories.findIndex(cat => cat.id === targetCategoryId);
-  if (targetIndex !== -1) {
-    updatedCategories[targetIndex].columns.push(column);
-  }
-  
-  setCategories(updatedCategories);
-  
-  // Visual feedback that column was moved
-  console.log(`Moved column "${column}" to category "${targetCategoryId}"`);
-};
-  
-    const handleDragStart = (e, column) => {
+  const handleDragStart = (e, column) => {
     e.dataTransfer.setData('column', column);
     setIsDragging(true);
- };
-
-    const handleDragEnd = () => {
-      setIsDragging(false);
   };
 
-    const handleMerge = () => {
+  const handleDragEnd = () => {
+    setIsDragging(false);
+  };
+
+  // Toggle all column overrides
+  const toggleAllColumnOverrides = (shouldOverride) => {
+    if (shouldOverride) {
+      setColumnsToOverride([...duplicateColumns]);
+    } else {
+      setColumnsToOverride([]);
+    }
+  };
+
+  const handleMerge = () => {
     const headers = newFile.all_sheets[newFile.active_sheet].headers;
     
-    // Create a direct name-to-category mapping that includes both:
-    // 1. Existing categorizations for columns that were already in the file
-    // 2. New categorizations from this merge operation
+    // Create a direct name-to-category mapping that combines existing and new
     const columnCategories = {};
     
     // First, add any existing category mappings from the current file
     if (currentFile && currentFile.all_sheets.category_mappings) {
-        currentFile.all_sheets.category_mappings.forEach(category => {
+      currentFile.all_sheets.category_mappings.forEach(category => {
         category.columns.forEach(columnName => {
-            // Only include columns that still exist in the current file
-            if (currentFile.all_sheets[currentFile.active_sheet].headers.includes(columnName)) {
+          // Only include columns that still exist in the current file
+          if (currentFile.all_sheets[currentFile.active_sheet].headers.includes(columnName)) {
             columnCategories[columnName] = category.id;
-            }
+          }
         });
-        });
+      });
     }
     
-    // Then add new category mappings, which will override any existing ones
+    // Then add new category mappings
     categories.forEach(category => {
-        category.columns.forEach(columnName => {
+      category.columns.forEach(columnName => {
         columnCategories[columnName] = category.id;
-        });
+      });
     });
     
     console.log("Sending combined category mappings:", columnCategories);
     
     onMerge({
-        overrideNames,
-        categories,
-        categoryMappings: columnCategories, 
-        matchedStudents,
-        unmatchedStudents
+      overrideNames,
+      columnsToOverride, // Send the list of columns to override
+      categories,
+      categoryMappings: columnCategories, 
+      matchedStudents,
+      unmatchedStudents
     });
     
     onClose();
-    };
+  };
 
   if (!isOpen) return null;
 
@@ -417,7 +499,7 @@ const findNameColumns = (headers) => {
               <div className={`h-10 w-10 rounded-full flex items-center justify-center ${step === 'compare' ? 'bg-[#333D79] text-white' : 'bg-gray-100 text-gray-500'} mb-2`}>
                 <span className="font-medium">1</span>
               </div>
-              <span className={`text-xs ${step === 'compare' ? 'text-[#333D79] font-medium' : 'text-gray-500'}`}>Compare Students</span>
+              <span className={`text-xs ${step === 'compare' ? 'text-[#333D79] font-medium' : 'text-gray-500'}`}>Compare Data</span>
             </div>
             
             <div className={`flex-1 h-1 mx-2 ${step === 'compare' ? 'bg-gray-200' : 'bg-[#333D79]'}`}></div>
@@ -443,6 +525,70 @@ const findNameColumns = (headers) => {
         <div className="flex-1 overflow-auto p-6">
           {step === 'compare' && (
             <div>
+              {/* Duplicate Columns Section */}
+              {duplicateColumns.length > 0 && (
+                <div className="mb-6">
+                  <h4 className="text-lg font-medium text-gray-800 mb-2">Duplicate Columns</h4>
+                  <p className="text-sm text-gray-600 mb-3">
+                    These columns already exist in your current file. Select which ones to override with new data.
+                  </p>
+                  
+                  <div className="bg-blue-50 rounded-lg border border-blue-200 p-4 mb-4">
+                    <div className="flex justify-between mb-3">
+                      <span className="text-sm font-medium text-blue-800">Column Override Options</span>
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => toggleAllColumnOverrides(true)}
+                          className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200"
+                        >
+                          Select All
+                        </button>
+                        <button
+                          onClick={() => toggleAllColumnOverrides(false)}
+                          className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200"
+                        >
+                          Deselect All
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {duplicateColumns.map((column, idx) => (
+                        <div 
+                          key={idx} 
+                          className={`flex items-center justify-between rounded-lg p-2 ${
+                            columnsToOverride.includes(column) ? 'bg-blue-100' : 'bg-white border border-gray-200'
+                          }`}
+                        >
+                          <div className="flex items-center">
+                            <FiColumns className="mr-2 text-blue-600" size={16} />
+                            <span className="text-sm">{column}</span>
+                          </div>
+                          <button
+                            onClick={() => toggleColumnOverride(column)}
+                            className={`flex items-center text-xs px-2 py-1 rounded ${
+                              columnsToOverride.includes(column) 
+                                ? 'bg-blue-600 text-white' 
+                                : 'bg-gray-100 text-gray-700'
+                            }`}
+                          >
+                            {columnsToOverride.includes(column) ? (
+                              <>
+                                <BsArrowClockwise className="mr-1" size={10} />
+                                Override
+                              </>
+                            ) : (
+                              <>Keep Existing</>
+                            )}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Student Comparison */}
               <div className="mb-6">
                 <h4 className="text-lg font-medium text-gray-800 mb-2">Student Comparison</h4>
                 <p className="text-sm text-gray-600">
@@ -465,24 +611,93 @@ const findNameColumns = (headers) => {
               
               {/* Matched Students */}
               <div className="border rounded-lg shadow-sm mb-6">
-                <div className="bg-green-50 text-green-800 p-4 rounded-t-lg border-b border-green-100 flex items-center">
-                  <BsCheckCircle className="h-5 w-5 mr-2" />
-                  <span className="font-medium">Matched Students ({matchedStudents.length})</span>
+                <div className="bg-green-50 text-green-800 p-4 rounded-t-lg border-b border-green-100 flex justify-between items-center">
+                  <div className="flex items-center">
+                    <BsCheckCircle className="h-5 w-5 mr-2" />
+                    <span className="font-medium">Matched Students ({matchedStudents.length})</span>
+                  </div>
+                  {matchedStudents.length > 5 && (
+                    <button 
+                      onClick={() => setShowAllMatched(!showAllMatched)}
+                      className="text-xs bg-green-100 hover:bg-green-200 text-green-700 px-3 py-1 rounded-full transition-colors"
+                    >
+                      {showAllMatched ? 'Show Less' : 'Show All'}
+                    </button>
+                  )}
                 </div>
-                <div className="p-4 bg-white rounded-b-lg max-h-48 overflow-y-auto">
+                <div className="p-4 bg-white rounded-b-lg max-h-[300px] overflow-y-auto">
                   {matchedStudents.length === 0 ? (
                     <p className="text-sm text-gray-500">No matched students found</p>
                   ) : (
                     <ul className="divide-y divide-gray-100">
-                      {matchedStudents.slice(0, 5).map((student, idx) => (
-                        <li key={idx} className="py-2 flex items-center justify-between">
-                          <span className="text-sm font-medium">{student.name}</span>
-                          <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">Matched</span>
-                        </li>
-                      ))}
-                      {matchedStudents.length > 5 && (
-                        <li className="py-2 text-center text-sm text-gray-500">
-                          + {matchedStudents.length - 5} more students
+                     {(showAllMatched ? matchedStudents : matchedStudents.slice(0, 5)).map((student, idx) => {
+                        // Improved name display - combine first and last name when possible
+                        let displayName = student.name;
+                        let currentName = student.currentName;
+                        
+                        // First approach: Check common name fields
+                        const getFormattedName = (data) => {
+                          if (!data) return null;
+                          
+                          // Try NAME OF STUDENT field first
+                          if (data["NAME OF STUDENT"]) {
+                            return data["NAME OF STUDENT"];
+                          }
+                          
+                          // Try Last name, First name combination
+                          const lastName = data["LAST NAME"] || '';
+                          const firstName = data["FIRST NAME"] || data["Unnamed: 2"] || '';
+                          
+                          if (lastName || firstName) {
+                            return [lastName, firstName].filter(Boolean).join(', ');
+                          }
+                          
+                          // Try direct index access if the data might be array-format
+                          if (data[1] && typeof data[1] === 'string') {
+                            return data[1]; // Likely the NAME OF STUDENT column
+                          }
+                          
+                          // Return original if no better option found
+                          return null;
+                        };
+                        
+                        // For new data (imported file)
+                        const betterDisplayName = getFormattedName(student.newData);
+                        if (betterDisplayName) displayName = betterDisplayName;
+                        
+                        // For current data (existing file)
+                        const betterCurrentName = getFormattedName(student.currentData);
+                        if (betterCurrentName) currentName = betterCurrentName;
+                        
+                        // Debug output to help diagnose issues
+                        console.log(`Student ${idx}:`, { 
+                          original: student.name,
+                          displayName, 
+                          currentName, 
+                          newData: student.newData,
+                          currentData: student.currentData
+                        });
+                        
+                        return (
+                          <li key={idx} className="py-3 flex items-center justify-between">
+                            <div className="flex flex-col">
+                              <span className="text-sm font-medium">{displayName}</span>
+                              {displayName !== currentName && (
+                                <span className="text-xs text-gray-500">→ {currentName}</span>
+                              )}
+                            </div>
+                            <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">Matched</span>
+                          </li>
+                        );
+                      })}
+                      {!showAllMatched && matchedStudents.length > 5 && (
+                        <li className="py-3 text-center">
+                          <button 
+                            onClick={() => setShowAllMatched(true)}
+                            className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                          >
+                            + {matchedStudents.length - 5} more students
+                          </button>
                         </li>
                       )}
                     </ul>
@@ -490,26 +705,56 @@ const findNameColumns = (headers) => {
                 </div>
               </div>
               
-              {/* Unmatched Students */}
+             {/* Unmatched Students */}
               <div className="border rounded-lg shadow-sm">
-                <div className="bg-yellow-50 text-yellow-800 p-4 rounded-t-lg border-b border-yellow-100 flex items-center">
-                  <BsExclamationTriangle className="h-5 w-5 mr-2" />
-                  <span className="font-medium">New Students ({unmatchedStudents.length})</span>
+                <div className="bg-yellow-50 text-yellow-800 p-4 rounded-t-lg border-b border-yellow-100 flex justify-between items-center">
+                  <div className="flex items-center">
+                    <BsExclamationTriangle className="h-5 w-5 mr-2" />
+                    <span className="font-medium">New Students ({unmatchedStudents.length})</span>
+                  </div>
+                  {unmatchedStudents.length > 5 && (
+                    <button 
+                      onClick={() => setShowAllUnmatched(!showAllUnmatched)}
+                      className="text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-700 px-3 py-1 rounded-full transition-colors"
+                    >
+                      {showAllUnmatched ? 'Show Less' : 'Show All'}
+                    </button>
+                  )}
                 </div>
-                <div className="p-4 bg-white rounded-b-lg max-h-48 overflow-y-auto">
+                <div className="p-4 bg-white rounded-b-lg max-h-[300px] overflow-y-auto">
                   {unmatchedStudents.length === 0 ? (
                     <p className="text-sm text-gray-500">No new students found</p>
                   ) : (
                     <ul className="divide-y divide-gray-100">
-                      {unmatchedStudents.slice(0, 5).map((student, idx) => (
-                        <li key={idx} className="py-2 flex items-center justify-between">
-                          <span className="text-sm font-medium">{student.name}</span>
-                          <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">New</span>
-                        </li>
-                      ))}
-                      {unmatchedStudents.length > 5 && (
-                        <li className="py-2 text-center text-sm text-gray-500">
-                          + {unmatchedStudents.length - 5} more students
+                      {(showAllUnmatched ? unmatchedStudents : unmatchedStudents.slice(0, 5)).map((student, idx) => {
+                        // Improved name display
+                        let displayName = student.name;
+                        
+                        // If the name is just a number, try to build a better name
+                        if (/^\d+$/.test(displayName)) {
+                          const rowData = student.newData || {};
+                          const firstName = rowData["FIRST NAME"] || rowData["First Name"] || '';
+                          const lastName = rowData["LAST NAME"] || rowData["Last Name"] || '';
+                          if (firstName || lastName) {
+                            displayName = [lastName, firstName].filter(Boolean).join(', ');
+                          }
+                        }
+                        
+                        return (
+                          <li key={idx} className="py-3 flex items-center justify-between">
+                            <span className="text-sm font-medium">{displayName}</span>
+                            <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">New</span>
+                          </li>
+                        );
+                      })}
+                      {!showAllUnmatched && unmatchedStudents.length > 5 && (
+                        <li className="py-3 text-center">
+                          <button 
+                            onClick={() => setShowAllUnmatched(true)}
+                            className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                          >
+                            + {unmatchedStudents.length - 5} more students
+                          </button>
                         </li>
                       )}
                     </ul>
@@ -524,7 +769,7 @@ const findNameColumns = (headers) => {
               <div className="mb-6">
                 <h4 className="text-lg font-medium text-gray-800 mb-2">Categorize New Columns</h4>
                 <p className="text-sm text-gray-600">
-                  Organize the columns from your new file into categories. Drag columns between categories to organize them.
+                  Organize the new columns from your file into categories. Drag columns between categories to organize them.
                 </p>
                 
                 <div className="flex items-center space-x-3 mt-4">
@@ -547,80 +792,91 @@ const findNameColumns = (headers) => {
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 {categories.map(category => (
-                    <div 
+                  <div 
                     key={category.id} 
                     className="border rounded-lg shadow-sm"
                     onDragOver={handleDragOver}
                     onDrop={(e) => handleDrop(e, category.id)}
-                    >
+                  >
                     <div className="bg-[#333D79] text-white p-3 rounded-t-lg flex items-center justify-between">
-                        <span className="font-medium">{category.name}</span>
-                        <span className="text-xs bg-white bg-opacity-20 px-2 py-1 rounded-full">
+                      <span className="font-medium">{category.name}</span>
+                      <span className="text-xs bg-white bg-opacity-20 px-2 py-1 rounded-full">
                         {category.columns.length} columns
-                        </span>
+                      </span>
                     </div>
                     <div 
-                        className={`p-4 bg-white rounded-b-lg min-h-[100px] ${
+                      className={`p-4 bg-white rounded-b-lg min-h-[100px] ${
                         isDragging ? 'border-2 border-dashed border-blue-300 bg-blue-50' : ''
-                        }`}
-                        onDragOver={handleDragOver}
-                        onDrop={(e) => handleDrop(e, category.id)}
+                      }`}
+                      onDragOver={handleDragOver}
+                      onDrop={(e) => handleDrop(e, category.id)}
                     >
-                        {category.columns.length === 0 ? (
+                      {category.columns.length === 0 ? (
                         <p className="text-sm text-gray-400 text-center py-4">Drag columns here</p>
-                        ) : (
+                      ) : (
                         <div className="flex flex-wrap gap-2">
-                            {category.columns.map((column, idx) => (
+                          {category.columns.map((column, idx) => (
                             <div key={idx} 
-                                className="px-3 py-1.5 bg-[#EEF0F8] text-[#333D79] text-sm rounded-lg flex items-center gap-2"
-                                draggable
-                                onDragStart={(e) => {
+                              className="px-3 py-1.5 bg-[#EEF0F8] text-[#333D79] text-sm rounded-lg flex items-center gap-2"
+                              draggable
+                              onDragStart={(e) => {
                                 e.dataTransfer.setData('column', column);
-                                }}
+                                setIsDragging(true);
+                              }}
+                              onDragEnd={handleDragEnd}
                             >
-                                {column}
-                                <button
+                              {column}
+                              <button
                                 onClick={() => moveColumnToCategory(column, 'other')}
                                 className="text-[#333D79] hover:text-red-600"
-                                >
+                              >
                                 <FiX size={14} />
-                                </button>
+                              </button>
                             </div>
-                            ))}
+                          ))}
                         </div>
-                        )}
+                      )}
                     </div>
-                    </div>
+                  </div>
                 ))}
-                </div>
+              </div>
               
               <div className="mb-6">
                 <h5 className="text-base font-medium text-gray-700 mb-2">Uncategorized Columns</h5>
                 <div 
-                    className="border rounded-lg shadow-sm"
-                    onDragOver={handleDragOver}
-                    onDrop={(e) => handleDrop(e, 'other')} // Default drop to "other" category
+                  className="border rounded-lg shadow-sm"
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDrop(e, 'other')} // Default drop to "other" category
                 >
-                    <div className="p-4 bg-white rounded-lg">
+                  <div className="p-4 bg-white rounded-lg">
                     <div className="flex flex-wrap gap-2">
-                        {newFile && 
+                      {newFile && 
                         newFile.all_sheets[newFile.active_sheet].headers
-                            .filter(header => !categories.some(cat => cat.columns.includes(header)))
-                            .map((column, idx) => (
+                          .filter(header => 
+                            !categories.some(cat => cat.columns.includes(header)) &&
+                            !isNameOrIdColumn(header)
+                          )
+                          .map((column, idx) => (
                             <div key={idx} 
-                                className="px-3 py-1.5 bg-gray-100 text-gray-700 text-sm rounded-lg flex items-center gap-2 cursor-move"
-                                draggable
-                                onDragStart={(e) => handleDragStart(e, column)}
-                                onDragEnd={handleDragEnd}
+                              className="px-3 py-1.5 bg-gray-100 text-gray-700 text-sm rounded-lg flex items-center gap-2 cursor-move"
+                              draggable
+                              onDragStart={(e) => handleDragStart(e, column)}
+                              onDragEnd={handleDragEnd}
                             >
-                                {column}
+                              {column}
                             </div>
-                            ))
-                        }
+                          ))
+                      }
+                      {(!newFile || newFile.all_sheets[newFile.active_sheet].headers.filter(header => 
+                        !categories.some(cat => cat.columns.includes(header)) &&
+                        !isNameOrIdColumn(header)
+                      ).length === 0) && (
+                        <p className="text-sm text-gray-400 p-2">No uncategorized columns</p>
+                      )}
                     </div>
-                    </div>
+                  </div>
                 </div>
-                </div>
+              </div>
             </div>
           )}
           
@@ -638,7 +894,7 @@ const findNameColumns = (headers) => {
                   <h5 className="font-medium text-gray-800">Merge Summary</h5>
                 </div>
                 <div className="p-5 bg-white rounded-b-lg">
-                  <div className="grid grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                       <h6 className="text-sm font-medium text-gray-700 mb-2">Students</h6>
                       <ul className="space-y-2 text-sm">
@@ -655,6 +911,27 @@ const findNameColumns = (headers) => {
                           <span>{overrideNames ? 'Will override existing names' : 'Will keep existing names'}</span>
                         </li>
                       </ul>
+                      
+                      {/* New section for duplicate columns */}
+                      {duplicateColumns.length > 0 && (
+                        <>
+                          <h6 className="text-sm font-medium text-gray-700 mt-4 mb-2">Column Updates</h6>
+                          <ul className="space-y-2 text-sm">
+                            <li className="flex items-center">
+                              <div className="w-2 h-2 rounded-full bg-purple-500 mr-2"></div>
+                              <span>{columnsToOverride.length} columns to override</span>
+                            </li>
+                            <li className="flex items-center">
+                              <div className="w-2 h-2 rounded-full bg-gray-400 mr-2"></div>
+                              <span>{duplicateColumns.length - columnsToOverride.length} columns to keep unchanged</span>
+                            </li>
+                            <li className="flex items-center">
+                              <div className="w-2 h-2 rounded-full bg-indigo-500 mr-2"></div>
+                              <span>{newColumns.length} new columns to add</span>
+                            </li>
+                          </ul>
+                        </>
+                      )}
                     </div>
                     <div>
                       <h6 className="text-sm font-medium text-gray-700 mb-2">Columns by Category</h6>

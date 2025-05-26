@@ -9,6 +9,7 @@ class ExcelFile(models.Model):
     uploaded_at = models.DateTimeField(auto_now_add=True)
     all_sheets = models.JSONField(default=dict)
     active_sheet = models.CharField(max_length=255, default='Sheet1')
+    update_count = models.IntegerField(default=0)  # New field to track updates
 
     class Meta:
         db_table = 'excel_files'

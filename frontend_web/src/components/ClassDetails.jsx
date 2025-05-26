@@ -1,3 +1,4 @@
+import React from 'react';
 import PropTypes from 'prop-types';
 import { useEffect, useState } from 'react';
 import { BsFileEarmarkSpreadsheet } from 'react-icons/bs';
@@ -15,12 +16,14 @@ import AddColumnModal from './modals/AddColumnModal';
 import ExportOptionsModal from './modals/ExportOptionsModal';
 import ImportPreviewModal from './modals/ImportPreviewModal';
 import MergeExcelModal from './MergeExcelModal';
+import UpdateMethodModal from './modals/UpdateMethodModal';
+import ManualUpdateModal from './modals/ManualUpdateModal';
 
 const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, fileName }) => {
   if (!isOpen) return null;
 
   return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 animate-fadeIn">
+      <div className="fixed inset-0 bg-black bg-opacity-50 z-[999] flex items-center justify-center p-4 animate-fadeIn">
         <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
           <div className="mb-4 flex items-center">
             <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center mr-3">
@@ -73,6 +76,8 @@ const ClassDetails = ({ accessInfo }) => {
   const [fileLoading, setFileLoading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
+  const [updateCount, setUpdateCount] = useState(0);
+
   // Import/Export state
   const [showPreview, setShowPreview] = useState(false);
   const [previewInfo, setPreviewInfo] = useState(null);
@@ -82,6 +87,9 @@ const ClassDetails = ({ accessInfo }) => {
   const [previewRowsToShow, setPreviewRowsToShow] = useState(10);
   const [importProgress, setImportProgress] = useState(0);
   const [importStage, setImportStage] = useState('');
+
+  const [showUpdateMethodModal, setShowUpdateMethodModal] = useState(false);
+  const [showManualUpdateModal, setShowManualUpdateModal] = useState(false);
 
   const [showExportOptions, setShowExportOptions] = useState(false);
   const [exportFormat, setExportFormat] = useState('xlsx');
@@ -105,6 +113,7 @@ const ClassDetails = ({ accessInfo }) => {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+
   // Initialize team access
   useEffect(() => {
     console.log("ClassDetails received accessInfo:", accessInfo);
@@ -127,40 +136,49 @@ const ClassDetails = ({ accessInfo }) => {
 
   // Fetch class data and files
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        console.log("Fetching class data for id:", id, "User has team access:", teamAccess);
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      console.log("Fetching class data for id:", id, "User has team access:", teamAccess);
 
-        const [classResponse, excelResponse] = await Promise.all([
-          classService.getClassById(id),
-          classService.getClassExcelFiles(id)
-        ]);
+      const [classResponse, excelResponse] = await Promise.all([
+        classService.getClassById(id),
+        classService.getClassExcelFiles(id)
+      ]);
 
-        console.log("Class data received:", classResponse.data);
-        setClassData(classResponse.data);
+      console.log("Class data received:", classResponse.data);
+      setClassData(classResponse.data);
 
-        // Only use the latest file (first in the response)
-        if (excelResponse.data.length > 0) {
-          const latestFile = excelResponse.data[0];
-          setSelectedFile({
-            name: latestFile.file_name,
-            id: latestFile.id
-          });
-          setCurrentFileData(latestFile);
+      // Only use the latest file (first in the response)
+      if (excelResponse.data.length > 0) {
+        const latestFile = excelResponse.data[0];
+        setSelectedFile({
+          name: latestFile.file_name,
+          id: latestFile.id
+        });
+        setCurrentFileData(latestFile);
+        
+        // Initialize update count from file or localStorage
+        if (latestFile.update_count) {
+          setUpdateCount(latestFile.update_count);
+        } else {
+          // Fallback to localStorage if the backend doesn't store this
+          const storedCount = localStorage.getItem(`file_updates_${latestFile.id}`);
+          setUpdateCount(storedCount ? parseInt(storedCount) : 0);
         }
-      } catch (error) {
-        console.error('Error fetching data:', error);
-        setError(error.response?.data?.error || 'Failed to load class data');
-      } finally {
-        setLoading(false);
       }
-    };
-
-    if (teamAccess !== null) {
-      fetchData();
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      setError(error.response?.data?.error || 'Failed to load class data');
+    } finally {
+      setLoading(false);
     }
-  }, [id, navigate, teamAccess]);
+  };
+
+  if (teamAccess !== null) {
+    fetchData();
+  }
+}, [id, navigate, teamAccess]);
 
   const handleDeleteFile = async () => {
     if (!currentFileData) return;
@@ -208,22 +226,45 @@ const ClassDetails = ({ accessInfo }) => {
   };
 
   const handleSaveExcelChanges = async (updatedFileData) => {
-    try {
-      // Call your API to save the updated file data
-      await classService.updateExcelData(updatedFileData.id, {
-        sheet_data: updatedFileData.all_sheets
-      });
-      
-      // Show success toast notification
-      showToast.success("Changes saved successfully!");
-      
-      // Update the local state with the new data
-      setCurrentFileData(updatedFileData);
-    } catch (error) {
-      console.error('Error saving changes:', error);
-      showToast.error("Failed to save changes. Please try again.");
-    }
-  };
+  try {
+    console.log("Saving Excel changes:", updatedFileData);
+    
+    // Get the active sheet data
+    const activeSheet = updatedFileData.active_sheet;
+    const sheetData = updatedFileData.all_sheets[activeSheet].data;
+    
+    // Debug logging to see data structure
+    console.log("Sheet data type:", typeof sheetData);
+    console.log("Is array:", Array.isArray(sheetData));
+    console.log("First row sample:", sheetData[0]);
+
+    // Call your API to save the updated file data
+    await classService.updateExcelData(
+      updatedFileData.id,
+      sheetData,  // Just pass the actual data array
+      activeSheet // Pass the sheet name separately
+    );
+    
+    // Increment update counter
+    const newCount = updateCount + 1;
+    setUpdateCount(newCount);
+    
+    // Store in localStorage as fallback
+    localStorage.setItem(`file_updates_${updatedFileData.id}`, newCount.toString());
+    
+    // Show success toast notification
+    showToast.success("Changes saved successfully!");
+    
+    // Update the local state with the new data
+    setCurrentFileData({
+      ...updatedFileData,
+      update_count: newCount // Add the update count to the file data
+    });
+  } catch (error) {
+    console.error('Error saving changes:', error);
+    showToast.error("Failed to save changes. Please try again.");
+  }
+};
 
   const handleFileInput = (e) => {
     const fileList = e.target.files;
@@ -242,18 +283,192 @@ const ClassDetails = ({ accessInfo }) => {
   };
 
   const handleUpdateClassRecord = () => {
-    // Create a hidden file input and trigger it
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.accept = '.xlsx,.xls,.csv';
-    fileInput.onchange = (e) => {
-      if (e.target.files && e.target.files[0]) {
-        const file = e.target.files[0];
-        processFileForMerge(file);
+  setShowUpdateMethodModal(true);
+};
+
+  const handleSelectImportUpdate = () => {
+  setShowUpdateMethodModal(false);
+  
+  // Create a hidden file input and trigger it (same as your existing code)
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = '.xlsx,.xls,.csv';
+  fileInput.onchange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      processFileForMerge(file);
+    }
+  };
+  fileInput.click();
+};
+
+  const handleSelectManualUpdate = () => {
+  setShowUpdateMethodModal(false);
+  setShowManualUpdateModal(true);
+};
+
+  const handleManualUpdateSave = async (updatedFileData) => {
+  try {
+    // Get the active sheet
+    const activeSheet = updatedFileData.active_sheet;
+    
+    // Extract the category mappings and headers
+    const categoryMappings = updatedFileData.all_sheets.category_mappings;
+    const originalHeaders = [...updatedFileData.all_sheets[activeSheet].headers];
+    const originalData = updatedFileData.all_sheets[activeSheet].data;
+    
+    // Find all new columns - columns in category mappings but not in headers
+    const allExistingHeaders = new Set(originalHeaders);
+    const newColumns = [];
+    
+    categoryMappings.forEach(category => {
+      category.columns.forEach(column => {
+        if (!allExistingHeaders.has(column)) {
+          newColumns.push({
+            name: column,
+            categoryId: category.id
+          });
+        }
+      });
+    });
+    
+    console.log("Found new columns to add:", newColumns);
+    
+    if (newColumns.length === 0) {
+      // No new columns to add, just update categories
+      await classService.updateCategoryMappings(
+        updatedFileData.id,
+        {
+          all_sheets: {
+            category_mappings: categoryMappings
+          }
+        }
+      );
+      
+      setCurrentFileData(updatedFileData);
+      setShowManualUpdateModal(false);
+      showToast.success("Category assignments updated successfully!");
+      return;
+    }
+    
+    // Create a map of category -> columns 
+    const categoryToColumns = {};
+    categoryMappings.forEach(category => {
+      categoryToColumns[category.id] = [...category.columns];
+    });
+    
+    const orderedCategories = ['student', 'quiz', 'laboratory', 'exams', 'other'];
+    const customCategories = categoryMappings
+      .filter(category => !orderedCategories.includes(category.id))
+      .map(category => category.id);
+      
+    const allCategoryIds = [...orderedCategories, ...customCategories];
+    
+    // Create new headers array in proper category order
+    const newHeaders = [];
+    allCategoryIds.forEach(categoryId => {
+      if (categoryToColumns[categoryId]) {
+        categoryToColumns[categoryId].forEach(columnName => {
+          newHeaders.push(columnName);
+        });
+      }
+    });
+    
+    console.log("New ordered headers:", newHeaders);
+    
+    // Create new data with null values for new columns
+    const newData = originalData.map(row => {
+      const newRow = {};
+      
+      // Copy existing values
+      originalHeaders.forEach(header => {
+        newRow[header] = row[header];
+      });
+      
+      // Add null values for new columns
+      newColumns.forEach(col => {
+        newRow[col.name] = null;
+      });
+      
+      return newRow;
+    });
+    
+    // Update the file data with the new structure
+    const finalFileData = {
+      ...updatedFileData,
+      all_sheets: {
+        ...updatedFileData.all_sheets,
+        [activeSheet]: {
+          ...updatedFileData.all_sheets[activeSheet],
+          headers: newHeaders,
+          data: newData
+        },
+        category_mappings: categoryMappings
       }
     };
-    fileInput.click();
-  };
+    
+    // Save the data structure first
+    await classService.updateExcelData(
+      updatedFileData.id,
+      newData,
+      activeSheet,
+      newHeaders  // Pass the new headers explicitly
+    );
+    
+    // Then update the category mappings
+    await classService.updateCategoryMappings(
+      updatedFileData.id,
+      {
+        all_sheets: {
+          category_mappings: categoryMappings
+        }
+      }
+    );
+    
+    // Show success toast notification
+    showToast.success("Changes saved successfully!");
+    
+    // Update the local state with the new data
+    setCurrentFileData(finalFileData);
+    setShowManualUpdateModal(false);
+    const newCount = updateCount + 1;
+    setUpdateCount(newCount);
+
+    localStorage.setItem(`file_updates_${updatedFileData.id}`, newCount.toString());
+
+    setCurrentFileData({
+      ...finalFileData,
+      update_count: newCount
+    });
+    
+    // Reload the page to ensure data is displayed correctly
+    window.location.reload();
+  } catch (error) {
+    console.error('Error saving changes:', error);
+    showToast.error("Failed to save changes. Please try again.");
+  }
+};
+
+  React.useEffect(() => {
+    if (currentFileData && currentFileData.all_sheets) {
+      const activeSheet = currentFileData.active_sheet;
+      const sheetData = currentFileData.all_sheets[activeSheet];
+      
+      if (sheetData && sheetData.data && sheetData.headers) {
+        const previewData = {
+          headers: sheetData.headers,
+          rows: sheetData.data.slice(0, 5).map(row => 
+            sheetData.headers.map(header => row[header] || '')
+          ),
+          totalRows: sheetData.data.length,
+          totalColumns: sheetData.headers.length,
+          defaultFileName: currentFileData.file_name?.split('.')[0] || 'Export'
+        };
+        
+        setExportPreviewData(previewData);
+      }
+    }
+  }, [currentFileData]);
 
   const processFileForMerge = async (file) => {
     try {
@@ -616,25 +831,301 @@ const ClassDetails = ({ accessInfo }) => {
     setImportProgress(0);
   };
 
-  // Export functions
-  const handleExport = async () => {
-    if (!currentFileData?.id) return;
+const exportDirectlyFromData = () => {
+  if (!currentFileData || !currentFileData.all_sheets) {
+    showToast.error('No file data available to export');
+    return;
+  }
 
-    // Let ExcelViewer handle the export logic
-    setExportFileName(selectedFile.name.split('.')[0] || 'export');
-    setShowExportOptions(true);
-  };
+  console.log('Current File Data:', currentFileData);
+  
+  setExportLoading(true);
+  
+  try {
+    // Get the active sheet
+    const activeSheet = currentFileData.active_sheet;
+    const sheetData = currentFileData.all_sheets[activeSheet];
+    
+    if (!sheetData || !sheetData.data || !sheetData.headers) {
+      showToast.error('Sheet data is missing');
+      return;
+    }
+    
+    // Create a worksheet with the proper column order
+    const headers = sheetData.headers;
+    const data = sheetData.data;
+    
+    // Get category mappings if they exist
+    const categoryMappings = currentFileData.all_sheets.category_mappings || [];
+    const columnToCategory = {};
+    
+    // Define colors for categories
+    const categoryColors = {
+      'quiz': { bg: '283593', font: 'FFFFFF' },         // Deep blue
+      'exams': { bg: '1B5E20', font: 'FFFFFF' },         // Deep green
+      'laboratory': { bg: '4A148C', font: 'FFFFFF' },    // Deep purple
+      'other': { bg: '3E2723', font: 'FFFFFF' },         // Deep brown
+      'default': { bg: '263238', font: 'FFFFFF' }        // Dark blue-grey
+    };
+    
+    // Create a mapping of columns to their categories
+    categoryMappings.forEach(category => {
+      category.columns.forEach(column => {
+        columnToCategory[column] = {
+          id: category.id,
+          name: category.name
+        };
+      });
+    });
+    
+    // Find category spans (which columns belong to which categories)
+    const categories = [];
+    let currentCategory = null;
+    let startIdx = -1;
+    
+    headers.forEach((header, idx) => {
+      const headerCategory = columnToCategory[header];
+      
+      // If this header has a category and it's different from the current one
+      if (headerCategory && (!currentCategory || headerCategory.id !== currentCategory.id)) {
+        // If we were tracking a previous category, close it out
+        if (currentCategory) {
+          categories.push({
+            name: currentCategory.name,
+            id: currentCategory.id,
+            startIdx,
+            endIdx: idx - 1
+          });
+        }
+        
+        // Start tracking the new category
+        currentCategory = headerCategory;
+        startIdx = idx;
+      } 
+      // If this header has no category, close out any current category
+      else if (!headerCategory && currentCategory) {
+        categories.push({
+          name: currentCategory.name,
+          id: currentCategory.id,
+          startIdx,
+          endIdx: idx - 1
+        });
+        currentCategory = null;
+      }
+    });
+    
+    // Don't forget to add the final category if there is one
+    if (currentCategory) {
+      categories.push({
+        name: currentCategory.name,
+        id: currentCategory.id,
+        startIdx,
+        endIdx: headers.length - 1
+      });
+    }
+    
+    // Check if any column doesn't have a category, create a "Student Information" category
+    let hasCategorylessColumns = false;
+    for (let i = 0; i < headers.length; i++) {
+      if (!columnToCategory[headers[i]]) {
+        hasCategorylessColumns = true;
+        break;
+      }
+    }
+    
+    // Create an array of arrays format that preserves column order
+    const aoa = [];
+    
+    // Add category row if categories exist
+    if (categories.length > 0 || hasCategorylessColumns) {
+      const categoryRow = Array(headers.length).fill(''); // Empty row initially
+      
+      // Add "Student Information" category for columns without a category
+      let studentInfoEndIdx = -1;
+      for (let i = 0; i < headers.length; i++) {
+        if (!columnToCategory[headers[i]]) {
+          categoryRow[i] = i === 0 ? 'Student Information' : '';
+          studentInfoEndIdx = i;
+        }
+      }
+      
+      // If we found uncategorized columns, add them as a category
+      if (studentInfoEndIdx >= 0) {
+        categories.unshift({
+          name: 'Student Information',
+          id: 'student_info',
+          startIdx: 0,
+          endIdx: studentInfoEndIdx
+        });
+      }
+      
+      // Fill in the categories
+      categories.forEach(cat => {
+        categoryRow[cat.startIdx] = cat.name;
+      });
+      
+      aoa.push(categoryRow); // First row is categories
+    }
+    
+    // Add header row
+    aoa.push(headers); // Next row is headers
+    
+    // Add all data rows in the correct order
+    data.forEach(row => {
+      const orderedRow = headers.map(header => row[header] ?? '');
+      aoa.push(orderedRow);
+    });
+    
+    // Convert array of arrays to worksheet
+    const worksheet = XLSX.utils.aoa_to_sheet(aoa);
+    
+    // Create workbook
+    const workbook = XLSX.utils.book_new();
+    
+    // Only apply styling for XLSX format
+    if (exportFormat !== 'csv') {
+      // Add cell styles
+      if (!worksheet['!cols']) worksheet['!cols'] = [];
+      
+      // Set column widths
+      headers.forEach((_, idx) => {
+        worksheet['!cols'][idx] = { width: 15 }; // Adjust width as needed
+      });
+      
+      // Apply cell merges and styling for categories
+      if (categories.length > 0) {
+        worksheet['!merges'] = worksheet['!merges'] || [];
+        
+        // Add merges for category headers
+        categories.forEach(cat => {
+          if (cat.endIdx > cat.startIdx) {
+            worksheet['!merges'].push({
+              s: { r: 0, c: cat.startIdx },
+              e: { r: 0, c: cat.endIdx }
+            });
+          }
+          
+          // Get the appropriate color for this category
+          const colorKey = cat.id || 'default';
+          const color = categoryColors[colorKey] || categoryColors.default;
+          
+          // Style category headers
+          const catCell = XLSX.utils.encode_cell({r: 0, c: cat.startIdx});
+          if (!worksheet[catCell]) worksheet[catCell] = { v: cat.name };
+          
+          worksheet[catCell].s = {
+            font: { bold: true, color: { rgb: color.font } },
+            fill: { fgColor: { rgb: color.bg } },
+            alignment: { horizontal: 'center', vertical: 'center' }
+          };
+        });
+        
+        // Style regular headers (row 1)
+        headers.forEach((_, idx) => {
+          const headerCell = XLSX.utils.encode_cell({r: 1, c: idx});
+          if (worksheet[headerCell]) {
+            worksheet[headerCell].s = {
+              font: { bold: true },
+              fill: { fgColor: { rgb: 'E0E0E0' } }, // Light grey
+              alignment: { horizontal: 'center' }
+            };
+          }
+        });
+      }
+    }
+    
+    XLSX.utils.book_append_sheet(workbook, worksheet, activeSheet);
+    
+    // Generate the file based on format
+    const fileType = exportFormat === 'csv' ? 'csv' : 'xlsx';
+    const fileName = `${exportFileName || 'export'}.${fileType}`;
+    
+    if (fileType === 'csv') {
+      // Export CSV (note: CSV won't preserve merged cells and styling)
+      const csvContent = XLSX.utils.sheet_to_csv(worksheet);
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', fileName);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else {
+      // For proper styling in Excel
+      const wbout = XLSX.write(workbook, { 
+        bookType: 'xlsx', 
+        bookSST: false, 
+        type: 'binary',
+      });
+      
+      // Convert binary string to ArrayBuffer
+      function s2ab(s) {
+        const buf = new ArrayBuffer(s.length);
+        const view = new Uint8Array(buf);
+        for (let i = 0; i < s.length; i++) view[i] = s.charCodeAt(i) & 0xFF;
+        return buf;
+      }
+      
+      const blob = new Blob([s2ab(wbout)], { type: 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', fileName);
+      document.body.appendChild(link);
+      link.click();
+      
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+        document.body.removeChild(link);
+      }, 100);
+    }
+    
+    showToast.success(`File "${fileName}" downloaded successfully`);
+  } catch (error) {
+    console.error('Export error:', error);
+    showToast.error('Failed to export file');
+  } finally {
+    setExportLoading(false);
+    setShowExportOptions(false);
+  }
+};
+
+  // Export functions
+ const handleExport = async () => {
+  if (!currentFileData?.id) return;
+
+  console.log('Export data:', { classData, currentFileData });
+
+  // Set default file name based on class & course with course code
+  let defaultFileName = currentFileData.file_name?.split('.')[0] || 'Export';
+  
+  // Try to get course code and class name
+  if (classData) {
+    // Access course data - consider multiple possible locations
+    const course = classData.course || classData.class_ref?.course;
+    const courseCode = course?.courseCode || '';
+    const courseName = course?.name || 'Course';
+    const className = classData.name || 'Class';
+    
+    // Format: Course {CourseCode} - ClassName
+    if (courseCode) {
+      defaultFileName = `Course ${courseCode} - ${className}`;
+    } else {
+      // Fallback if no course code
+      defaultFileName = `${courseName} - ${className}`;
+    }
+  }
+  
+  setExportFileName(defaultFileName);
+  setShowExportOptions(true);
+};
 
   const processExport = () => {
-    // Export logic will be handled by ExcelViewer
-    setExportLoading(true);
-    setShowExportOptions(false);
-
-    // Simulate export process
-    setTimeout(() => {
-      setExportLoading(false);
-    }, 2000);
-  };
+  exportDirectlyFromData();
+};
 
   const cancelExport = () => {
     setShowExportOptions(false);
@@ -927,35 +1418,40 @@ const ClassDetails = ({ accessInfo }) => {
                   <span className="text-[#333D79]">{classData?.name}</span>
                 </div>
 
-                {/* File Info Bar - Simplified to show current file only */}
-                {currentFileData && (
-                  <div className="mb-4 flex items-center justify-between bg-gray-50 rounded-lg p-3 border border-gray-200">
-                    <div className="flex items-center">
-                      <div className="w-8 h-8 rounded-md bg-[#EEF0F8] flex items-center justify-center mr-3 shadow-sm">
-                        <BsFileEarmarkSpreadsheet className="text-[#333D79]" size={16} />
+                {/* File Info Bar - Modified to show update counter */}
+                  {currentFileData && (
+                    <div className="mb-4 flex items-center justify-between bg-gray-50 rounded-lg p-3 border border-gray-200">
+                      <div className="flex items-center">
+                        <div className="w-8 h-8 rounded-md bg-[#EEF0F8] flex items-center justify-center mr-3 shadow-sm">
+                          <BsFileEarmarkSpreadsheet className="text-[#333D79]" size={16} />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-gray-700">{selectedFile?.name}</span>
+                            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                              Updates: {currentFileData?.update_count || 0}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-500">
+                            {currentFileData?.uploaded_at ? new Date(currentFileData.uploaded_at).toLocaleString() : 'Recently uploaded'}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <span className="text-sm font-medium text-gray-700">{selectedFile?.name}</span>
-                        <p className="text-xs text-gray-500">
-                          {currentFileData?.uploaded_at ? new Date(currentFileData.uploaded_at).toLocaleString() : 'Recently uploaded'}
-                        </p>
-                      </div>
-                    </div>
 
-                    {/* Delete button */}
-                    {(!teamAccess || teamAccess.accessLevel === 'edit' || teamAccess.accessLevel === 'full') && (
-                      <button
-                          onClick={() => setIsDeleteModalOpen(true)}
-                          className="p-2 rounded-md text-gray-500 hover:text-red-500 hover:bg-red-50 transition-colors border border-gray-200"
-                          title="Delete spreadsheet"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    )}
-                  </div>
-                )}
+                      {/* Delete button */}
+                      {(!teamAccess || teamAccess.accessLevel === 'edit' || teamAccess.accessLevel === 'full') && (
+                        <button
+                            onClick={() => setIsDeleteModalOpen(true)}
+                            className="p-2 rounded-md text-gray-500 hover:text-red-500 hover:bg-red-50 transition-colors border border-gray-200"
+                            title="Delete spreadsheet"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                 {error && (
                     <div className="bg-red-50 border border-red-200 text-red-800 rounded-lg p-4 mb-4 flex justify-between items-center">
@@ -1110,14 +1606,15 @@ const ClassDetails = ({ accessInfo }) => {
 
         {/* File Export Options Modal */}
         <ExportOptionsModal
-            showExportOptions={showExportOptions}
-            exportFormat={exportFormat}
-            setExportFormat={setExportFormat}
-            exportFileName={exportFileName}
-            setExportFileName={setExportFileName}
-            exportPreviewData={exportPreviewData}
-            cancelExport={cancelExport}
-            processExport={processExport}
+          showExportOptions={showExportOptions}
+          setShowExportOptions={setShowExportOptions}
+          exportFormat={exportFormat}
+          setExportFormat={setExportFormat}
+          exportFileName={exportFileName}
+          setExportFileName={setExportFileName}
+          exportPreviewData={exportPreviewData}
+          cancelExport={cancelExport}
+          processExport={processExport}
         />
 
         <MergeExcelModal
@@ -1126,6 +1623,21 @@ const ClassDetails = ({ accessInfo }) => {
           currentFile={currentFileData}
           newFile={mergeFileData}
           onMerge={handleMergeFiles}
+          teamAccess={teamAccess}
+        />
+
+        <UpdateMethodModal 
+          isOpen={showUpdateMethodModal}
+          onClose={() => setShowUpdateMethodModal(false)}
+          onSelectImport={handleSelectImportUpdate}
+          onSelectManual={handleSelectManualUpdate}
+        />
+
+        <ManualUpdateModal
+          isOpen={showManualUpdateModal}
+          onClose={() => setShowManualUpdateModal(false)}
+          currentFile={currentFileData}
+          onSave={handleManualUpdateSave}
           teamAccess={teamAccess}
         />
 

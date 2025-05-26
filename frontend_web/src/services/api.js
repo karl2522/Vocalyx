@@ -178,12 +178,24 @@ export const refreshToken = async (refreshTokenStr) => {
     }
 };
 
+
 export const classService = {
     getClasses: () => api.get('/classes/'),
     createClass: (classData) => api.post('/classes/', classData),
     getClass: (id) => api.get(`/classes/${id}/`),
     updateClass: (id, classData) => api.patch(`/classes/${id}/`, classData),
     deleteClass: (id) => api.delete(`/classes/${id}/`),
+    updateCategoryMappings: (fileId, updatedData) => {
+        return api.patch(
+            `/excel/${fileId}/update_categories/`, 
+            updatedData,
+            {
+            headers: {
+                'Content-Type': 'application/json',
+            }
+            }
+        );
+    },
     mergeExcel: (formData) => {
         return api.post('/excel/merge/', formData, {
             headers: {
@@ -203,17 +215,24 @@ export const classService = {
      deleteExcelFile: (fileId) => {
         return api.delete(`/excel/${fileId}/`);
     },
-     updateExcelData: (fileId, data, sheetName) => {
+    updateExcelData: (fileId, data, sheetName, headers = null) => {
+        const payload = {
+            sheet_data: data,
+            sheet_name: sheetName
+        };
+        
+        // If headers are provided, include them
+        if (headers) {
+            payload.headers = headers;
+        }
+        
         return api.patch(
             `/excel/${fileId}/update_data/`, 
-            { 
-                sheet_data: data,
-                sheet_name: sheetName 
-            },
+            payload,
             {
-                headers: {
-                    'Content-Type': 'application/json',
-                }
+            headers: {
+                'Content-Type': 'application/json',
+            }
             }
         );
     },
@@ -386,9 +405,11 @@ export const classService = {
             throw error;
         });
     },
-    downloadExcel: (fileId) => {
-        return api.get(`/excel/${fileId}/download/`);
-    },
+       downloadExcel: (fileId, format = 'xlsx') => {
+        return api.get(`/excel//${fileId}/download/?format=${format}`, {
+            responseType: 'arraybuffer'
+        });
+    }
 };
 
 export const courseService = {
@@ -398,6 +419,8 @@ export const courseService = {
     updateCourse: (id, courseData) => api.patch(`/courses/${id}/`, courseData),
     deleteCourse: (id) => api.delete(`/courses/${id}/`),
     getCourseClasses: (courseId) => api.get(`/classes/?course_id=${courseId}`),
+    getAllClasses: () => api.get('/classes/'),
+    getTeamDetails: () => api.get('/teams/'),
 };
 
 export const userService = {

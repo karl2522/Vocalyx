@@ -57,6 +57,8 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
     exams: [],
     other: []
   };
+
+  const customCategories = {};
   
   const headers = sheetData.headers;
   
@@ -64,17 +66,58 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
   if (fileData.column_categories) {
     console.log("Using column_categories from fileData:", fileData.column_categories);
     
-    // Using column_categories mapping
+    // First pass: Find all unique categories to identify custom ones
+    const uniqueCategories = new Set();
+    
+    for (const header in fileData.column_categories) {
+      const category = fileData.column_categories[header];
+      if (category && !categories.hasOwnProperty(category) && category !== 'student') {
+        uniqueCategories.add(category);
+      }
+    }
+    
+    // Create custom categories
+    uniqueCategories.forEach(categoryId => {
+      console.log(`Found custom category: ${categoryId}`);
+      
+      // Try to find category name from category_mappings if available
+      let categoryName = categoryId.replace(/_/g, ' ');
+      
+      if (fileData.all_sheets.category_mappings) {
+        const categoryInfo = fileData.all_sheets.category_mappings.find(c => c.id === categoryId);
+        if (categoryInfo && categoryInfo.name) {
+          categoryName = categoryInfo.name;
+        }
+      }
+      
+      customCategories[categoryId] = {
+        name: categoryName,
+        columns: []
+      };
+    });
+    
+    // Second pass: Map columns to categories
     headers.forEach((header, index) => {
-      // Check if this header has a category mapping
       const category = fileData.column_categories[header];
       
-      if (category && categories.hasOwnProperty(category)) {
-        // Add to mapped category
-        console.log(`Mapping column ${header} to category ${category}`);
-        categories[category].push(index);
+      if (category) {
+        // Standard categories
+        if (categories.hasOwnProperty(category)) {
+          console.log(`Mapping column ${header} to standard category ${category}`);
+          categories[category].push(index);
+        } 
+        // Custom categories
+        else if (customCategories.hasOwnProperty(category)) {
+          console.log(`Mapping column ${header} to custom category ${category}`);
+          customCategories[category].columns.push(index);
+        }
+        // Fallback
+        else {
+          console.log(`Unknown category ${category}, mapping ${header} to other`);
+          categories.other.push(index);
+        }
       } 
-      // Handle student columns separately
+      // Handle student columns
       else if (
         header.toString().toLowerCase().includes('name') || 
         header.toString().toLowerCase().includes('student') ||
@@ -88,41 +131,19 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
       }
     });
     
-    console.log("Final category mappings:", categories);
-    return categories;
-  }
-  
-  // Check for category_mappings in all_sheets (from backend)
-  if (fileData.all_sheets.category_mappings) {
-    console.log("Using category_mappings from all_sheets:", fileData.all_sheets.category_mappings);
-    
-    // Map each column to its category
-    const categoryMappings = {};
-    fileData.all_sheets.category_mappings.forEach(category => {
-      category.columns.forEach(column => {
-        categoryMappings[column] = category.id;
-      });
+    // Create the result with both standard and custom categories
+    const result = { ...categories };
+    Object.keys(customCategories).forEach(catId => {
+      result[catId] = customCategories[catId].columns;
     });
     
-    // Now apply the mappings
-    headers.forEach((header, index) => {
-      const category = categoryMappings[header];
-      if (category && categories.hasOwnProperty(category)) {
-        console.log(`Mapping column ${header} to category ${category}`);
-        categories[category].push(index);
-      } else if (
-        header.toString().toLowerCase().includes('name') || 
-        header.toString().toLowerCase().includes('student') ||
-        header.toString().toLowerCase().includes('no.')
-      ) {
-        categories.student.push(index);
-      } else {
-        categories.other.push(index);
-      }
+    result._categoryNames = {};
+    Object.keys(customCategories).forEach(catId => {
+      result._categoryNames[catId] = customCategories[catId].name;
     });
     
-    console.log("Final category mappings from all_sheets:", categories);
-    return categories;
+    console.log("Final category mappings with custom categories:", result);
+    return result;
   }
   
   // If no mappings found, fall back to auto-categorization
@@ -183,129 +204,174 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
 
   // Generate nested headers based on categories
   const generateNestedHeaders = () => {
-    if (!fileData || !fileData.all_sheets || !categoryMapping) {
-      return [[], []];
-    }
+  if (!fileData || !fileData.all_sheets || !categoryMapping) {
+    return [[], []];
+  }
 
-    const activeSheet = fileData.active_sheet;
-    const sheetData = fileData.all_sheets[activeSheet];
-    const headers = sheetData.headers || [];
-    
-    const topRow = [];
-    const bottomRow = [];
-    
-    // Add student info columns first (no category header)
-    categoryMapping.student.forEach(idx => {
-      topRow.push({ label: '', colspan: 1 });
-      bottomRow.push(headers[idx] || '');
-    });
-    
-    // Add laboratory columns if any exist
-    if (categoryMapping.laboratory.length > 0) {
-      topRow.push({ label: 'LABORATORY WORKS', colspan: categoryMapping.laboratory.length });
-      categoryMapping.laboratory.forEach(idx => {
-        bottomRow.push(headers[idx] || '');
-      });
+  const activeSheet = fileData.active_sheet;
+  const sheetData = fileData.all_sheets[activeSheet];
+  const headers = sheetData.headers || [];
+  
+  const topRow = [];
+  const bottomRow = [];
+  
+  // Create a mapping from column index to actual header name
+  const indexToHeader = {};
+  headers.forEach((header, idx) => {
+    indexToHeader[idx] = header;
+  });
+  
+  // Add student info columns first (no category header)
+  categoryMapping.student.forEach(idx => {
+    topRow.push({ label: '', colspan: 1 });
+    bottomRow.push(headers[idx] || '');
+  });
+  
+  // Add standard categories with header verification
+  const standardCategories = [
+    { id: 'laboratory', label: 'LABORATORY WORKS' },
+    { id: 'quiz', label: 'QUIZ' },
+    { id: 'exams', label: 'MAJOR EXAMS' },
+    { id: 'other', label: 'OTHER ACTIVITIES' }
+  ];
+  
+  standardCategories.forEach(category => {
+    if (categoryMapping[category.id] && categoryMapping[category.id].length > 0) {
+      // Map indices to actual header names to ensure correct order
+      const categoryHeaders = categoryMapping[category.id]
+        .map(idx => ({
+          index: idx,
+          header: headers[idx] || ''
+        }))
+        .filter(item => item.header); // Filter out any empty headers
+      
+      if (categoryHeaders.length > 0) {
+        topRow.push({ 
+          label: category.label, 
+          colspan: categoryHeaders.length 
+        });
+        
+        categoryHeaders.forEach(item => {
+          bottomRow.push(item.header);
+        });
+      }
     }
-    
-    // Add quiz columns if any exist
-    if (categoryMapping.quiz.length > 0) {
-      topRow.push({ label: 'QUIZ', colspan: categoryMapping.quiz.length });
-      categoryMapping.quiz.forEach(idx => {
-        bottomRow.push(headers[idx] || '');
-      });
+  });
+  
+  // Add custom categories with similar header verification
+  const customCategoryIds = Object.keys(categoryMapping).filter(key => 
+    !['student', 'laboratory', 'quiz', 'exams', 'other', '_categoryNames'].includes(key)
+  );
+  
+  customCategoryIds.forEach(categoryId => {
+    if (categoryMapping[categoryId] && categoryMapping[categoryId].length > 0) {
+      // Map indices to actual header names to ensure correct order
+      const categoryHeaders = categoryMapping[categoryId]
+        .map(idx => ({
+          index: idx,
+          header: headers[idx] || ''
+        }))
+        .filter(item => item.header);
+        
+      if (categoryHeaders.length > 0) {
+        // Get custom category name
+        const categoryName = categoryMapping._categoryNames && categoryMapping._categoryNames[categoryId]
+          ? categoryMapping._categoryNames[categoryId].toUpperCase()
+          : categoryId.replace(/_/g, ' ').toUpperCase();
+        
+        topRow.push({ 
+          label: categoryName, 
+          colspan: categoryHeaders.length 
+        });
+        
+        categoryHeaders.forEach(item => {
+          bottomRow.push(item.header);
+        });
+      }
     }
-    
-    // Add exam columns if any exist
-    if (categoryMapping.exams.length > 0) {
-      topRow.push({ label: 'MAJOR EXAMS', colspan: categoryMapping.exams.length });
-      categoryMapping.exams.forEach(idx => {
-        bottomRow.push(headers[idx] || '');
-      });
-    }
-    
-    // Add other columns if any exist
-    if (categoryMapping.other.length > 0) {
-      topRow.push({ label: 'OTHER ACTIVITIES', colspan: categoryMapping.other.length });
-      categoryMapping.other.forEach(idx => {
-        bottomRow.push(headers[idx] || '');
-      });
-    }
-    
-    return [topRow, bottomRow];
-  };
+  });
+  
+  return [topRow, bottomRow];
+};
+
 
   // Process data for Handsontable
   const processData = () => {
-    if (!fileData || !fileData.all_sheets) {
-      return [];
-    }
+  if (!fileData || !fileData.all_sheets) {
+    return [];
+  }
 
-    const activeSheet = fileData.active_sheet;
-    const sheetData = fileData.all_sheets[activeSheet];
-    
-    if (!sheetData || !sheetData.data) {
-      return [];
-    }
+  const activeSheet = fileData.active_sheet;
+  const sheetData = fileData.all_sheets[activeSheet];
+  
+  if (!sheetData || !sheetData.data) {
+    return [];
+  }
 
-    // Handle array data differently from object data
-    if (Array.isArray(sheetData.data[0])) {
-      // Data is already in array format
-      return sheetData.data;
-    } else {
-      // Convert object to array in the order of headers
-      return sheetData.data.map(row => {
-        return sheetData.headers.map(header => row[header] || '');
+  const headers = sheetData.headers || [];
+  
+  // Handle array data differently from object data
+  if (Array.isArray(sheetData.data[0])) {
+    // Data is already in array format
+    return sheetData.data;
+  } else {
+    // Convert object to array in the order of headers
+    return sheetData.data.map(row => {
+      // Explicitly map each header to ensure consistent ordering
+      return headers.map(header => {
+        // Ensure null values remain null
+        return row[header] === undefined || row[header] === "" ? null : row[header];
       });
-    }
-  };
+    });
+  }
+};
 
   const handleSave = async () => {
-    if (!hasChanges || !hotInstanceRef.current || !fileData) return;
+  if (!hasChanges || !hotInstanceRef.current || !fileData) return;
+  
+  setIsSaving(true);
+  
+  try {
+    // Get the current data from Handsontable
+    const currentData = hotInstanceRef.current.getData();
+    const headers = fileData.all_sheets[fileData.active_sheet].headers;
     
-    setIsSaving(true);
-    
-    try {
-      // Get the current data from Handsontable
-      const currentData = hotInstanceRef.current.getData();
-      const headers = fileData.all_sheets[fileData.active_sheet].headers;
-      
-      // Convert the 2D array back to the format expected by the server
-      const updatedData = currentData.map(row => {
-        const recordObj = {};
-        headers.forEach((header, index) => {
-          recordObj[header] = row[index];
-        });
-        return recordObj;
+    // Convert the 2D array back to the format expected by the server
+    const updatedData = currentData.map(row => {
+      const recordObj = {};
+      headers.forEach((header, index) => {
+        recordObj[header] = row[index];
       });
-      
-      // Create a copy of the file data with updated values
-      const updatedFileData = {
-        ...fileData,
-        all_sheets: {
-          ...fileData.all_sheets,
-          [fileData.active_sheet]: {
-            ...fileData.all_sheets[fileData.active_sheet],
-            data: updatedData
-          }
+      return recordObj;
+    });
+    
+    // Create a copy of the file data with updated values
+    const updatedFileData = {
+      ...fileData,
+      all_sheets: {
+        ...fileData.all_sheets,
+        [fileData.active_sheet]: {
+          ...fileData.all_sheets[fileData.active_sheet],
+          data: updatedData
         }
-      };
-      
-      // Call the onSave callback with the updated data
-      if (onSave) {
-        await onSave(updatedFileData);
-        setHasChanges(false);
-        
-        // Show a success message (you can use a toast notification library here)
-        console.log('Changes saved successfully!');
       }
-    } catch (error) {
-      console.error('Error saving changes:', error);
-      // Show error message
-    } finally {
-      setIsSaving(false);
+    };
+    
+    // Call the onSave callback with the updated data
+    if (onSave) {
+      await onSave(updatedFileData);
+      setHasChanges(false);
+      
+      // Show a success message
+      console.log('Changes saved successfully!');
     }
-  };
+  } catch (error) {
+    console.error('Error saving changes:', error);
+    // Show error message
+  } finally {
+    setIsSaving(false);
+  }
+};
 
   // Load Handsontable
   useEffect(() => {
