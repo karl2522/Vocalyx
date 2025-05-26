@@ -99,9 +99,8 @@ fun ExcelImportScreen(
             // Progress indicator
             LinearProgressIndicator(
                 progress = when(currentStep) {
-                    ImportStep.FILE_INFO -> 0.33f
-                    ImportStep.PREVIEW_DATA -> 0.66f
-                    ImportStep.MAP_COLUMNS -> 1f
+                    ImportStep.FILE_INFO -> 0.5f
+                    ImportStep.PREVIEW_DATA -> 1.0f
                     else -> 0f
                 },
                 modifier = Modifier
@@ -114,7 +113,6 @@ fun ExcelImportScreen(
                 text = when(currentStep) {
                     ImportStep.FILE_INFO -> "Step 1: File Information"
                     ImportStep.PREVIEW_DATA -> "Step 2: Preview Data"
-                    ImportStep.MAP_COLUMNS -> "Step 3: Map Columns"
                     else -> "Import Excel"
                 },
                 style = MaterialTheme.typography.titleLarge,
@@ -130,22 +128,6 @@ fun ExcelImportScreen(
                     )
                     ImportStep.PREVIEW_DATA -> PreviewDataStep(
                         previewData = importState.previewData
-                    )
-                    ImportStep.MAP_COLUMNS -> MapColumnsStep(
-                        allColumns = importState.allColumns,
-                        selectedTemplate = importState.selectedTemplate,
-                        columnMappings = importState.columnMappings,
-                        customColumns = importState.customColumns,
-                        onSelectTemplate = viewModel::selectTemplate,
-                        onMapColumn = viewModel::mapColumn,
-                        onAddCustomColumn = viewModel::addCustomColumn,
-                        onDeleteCustomColumn = viewModel::deleteCustomColumn,
-                        onDeleteFile = {
-                            viewModel.deleteFile()
-                            // Return to File Info step after deleting
-                            viewModel.previousStep()
-                            viewModel.previousStep()
-                        }
                     )
                     else -> Box { /* Handle fallback case */ }
                 }
@@ -175,7 +157,7 @@ fun ExcelImportScreen(
                 
                 Button(
                     onClick = { 
-                        if (currentStep == ImportStep.MAP_COLUMNS) {
+                        if (currentStep == ImportStep.PREVIEW_DATA) {
                             viewModel.importFile()
                             onImportComplete()
                         } else {
@@ -186,17 +168,16 @@ fun ExcelImportScreen(
                     enabled = when(currentStep) {
                         ImportStep.FILE_INFO -> importState.fileName.isNotEmpty()
                         ImportStep.PREVIEW_DATA -> true
-                        ImportStep.MAP_COLUMNS -> true
                         else -> false
                     }
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            if (currentStep == ImportStep.MAP_COLUMNS) "Import" else "Next"
+                            if (currentStep == ImportStep.PREVIEW_DATA) "Import" else "Next"
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Icon(
-                            if (currentStep == ImportStep.MAP_COLUMNS) 
+                            if (currentStep == ImportStep.PREVIEW_DATA) 
                                 Icons.Default.Check
                             else 
                                 Icons.Default.ArrowForward,
@@ -207,8 +188,8 @@ fun ExcelImportScreen(
                 }
             }
             
-            // Skip column mapping option
-            if (currentStep == ImportStep.MAP_COLUMNS) {
+            // Skip column mapping option - for testing purposes
+            if (currentStep == ImportStep.PREVIEW_DATA) {
                 OutlinedButton(
                     onClick = { 
                         viewModel.skipColumnMapping()
@@ -218,7 +199,7 @@ fun ExcelImportScreen(
                         .fillMaxWidth()
                         .padding(top = 8.dp)
                 ) {
-                    Text("Skip Column Mapping")
+                    Text("Import Data")
                 }
             }
         }

@@ -153,17 +153,22 @@ fun FileInfoStep(
 /**
  * Step 2: Preview Data
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PreviewDataStep(
     previewData: List<List<String>>
 ) {
+    // State for the currently selected column index
+    var selectedColumnIndex by remember { mutableStateOf(0) }
+    var showColumnSelector by remember { mutableStateOf(false) }
+    
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
         Text(
-            "Preview of the first 10 rows:",
+            "Preview Data by Column:",
             style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Medium,
+            fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(bottom = 8.dp)
         )
         
@@ -181,117 +186,121 @@ fun PreviewDataStep(
                 )
             }
         } else {
-            // Table preview - limit to half the screen height
-            Box(
+            // Column selector dropdown
+            val headers = previewData.firstOrNull() ?: emptyList()
+            
+            // Dropdown selector for columns
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 300.dp)
-                    .horizontalScroll(rememberScrollState())
+                    .padding(bottom = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    // Table header
-                    Row(
+                Text(
+                    "Selected Column: ",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(end = 8.dp)
+                )
+                
+                ExposedDropdownMenuBox(
+                    expanded = showColumnSelector,
+                    onExpandedChange = { showColumnSelector = it },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    OutlinedTextField(
+                        readOnly = true,
+                        value = headers.getOrNull(selectedColumnIndex)?.ifEmpty { "Column ${selectedColumnIndex + 1}" } 
+                               ?: "Column ${selectedColumnIndex + 1}",
+                        onValueChange = { },
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .background(Color(0xFF333D79))
+                            .menuAnchor()
+                            .fillMaxWidth(),
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showColumnSelector) },
+                        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(
+                            focusedBorderColor = Color(0xFF333D79),
+                            unfocusedBorderColor = Color(0xFFDDDDDD)
+                        ),
+                        singleLine = true
+                    )
+                    
+                    ExposedDropdownMenu(
+                        expanded = showColumnSelector,
+                        onDismissRequest = { showColumnSelector = false },
+                        modifier = Modifier.heightIn(max = 250.dp)
                     ) {
-                        previewData.firstOrNull()?.forEachIndexed { index, header ->
-                            Text(
-                                text = header.ifEmpty { "Column ${index + 1}" },
-                                modifier = Modifier
-                                    .padding(8.dp)
-                                    .width(120.dp),
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                overflow = TextOverflow.Ellipsis,
-                                maxLines = 1
+                        headers.forEachIndexed { index, header ->
+                            DropdownMenuItem(
+                                text = { Text(header.ifEmpty { "Column ${index + 1}" }) },
+                                onClick = {
+                                    selectedColumnIndex = index
+                                    showColumnSelector = false
+                                }
                             )
                         }
                     }
+                }
+            }
+            
+            // Column preview
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 300.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F7FA)),
+                border = BorderStroke(1.dp, Color(0xFFEEEEEE))
+            ) {
+                Column {
+                    // Column header
+                    Surface(
+                        color = Color(0xFF333D79),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = headers.getOrNull(selectedColumnIndex)?.ifEmpty { "Column ${selectedColumnIndex + 1}" } 
+                                  ?: "Column ${selectedColumnIndex + 1}",
+                            modifier = Modifier.padding(12.dp),
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
                     
-                    // Table content (limited to 10 rows)
-                    val dataRows = if (previewData.size > 1) previewData.subList(1, minOf(11, previewData.size)) else emptyList()
+                    // Column data preview
+                    val dataRows = if (previewData.size > 1) previewData.subList(1, minOf(15, previewData.size)) else emptyList()
                     
                     LazyColumn(
-                        modifier = Modifier.heightIn(max = 270.dp)
+                        modifier = Modifier.heightIn(max = 250.dp)
                     ) {
                         items(dataRows) { row ->
+                            val cellValue = row.getOrNull(selectedColumnIndex) ?: ""
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .background(Color(0xFFF5F7FA))
+                                    .padding(horizontal = 12.dp, vertical = 8.dp)
                             ) {
-                                row.forEachIndexed { index, cell ->
-                                    Text(
-                                        text = cell,
-                                        modifier = Modifier
-                                            .padding(8.dp)
-                                            .width(120.dp),
-                                        overflow = TextOverflow.Ellipsis,
-                                        maxLines = 1
-                                    )
-                                }
+                                Text(
+                                    text = cellValue,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    overflow = TextOverflow.Ellipsis,
+                                    maxLines = 1
+                                )
                             }
                             Divider(color = Color(0xFFEEEEEE))
                         }
                     }
                 }
             }
-            
-            // Key fields highlight section
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = Color(0xFFEEF2FF)
-                )
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        "Key Fields Detected:",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF333D79)
-                    )
-                    
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    // Detect key fields from the preview data
-                    val keyFields = findKeyFields(previewData)
-                    
-                    if (keyFields.isEmpty()) {
-                        Text(
-                            "No key fields detected. You can map columns manually in the next step.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFF666666)
-                        )
-                    } else {
-                        keyFields.forEach { (field, value) ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "$field:",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium,
-                                    color = Color(0xFF333D79),
-                                    modifier = Modifier.width(120.dp)
-                                )
-                                
-                                Text(
-                                    text = value,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Color(0xFF666666)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
+        }
+        
+        // Note: Providing help text below the column preview
+        if (previewData.isNotEmpty()) {
+            Text(
+                "Tip: Use the dropdown to preview different columns from your Excel file.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF666666),
+                modifier = Modifier.padding(top = 12.dp)
+            )
         }
     }
 }

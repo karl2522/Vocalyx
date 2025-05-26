@@ -52,6 +52,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.vocalyxapk.models.ClassItem
 import com.example.vocalyxapk.viewmodel.ClassCreationState
@@ -1342,6 +1343,7 @@ fun AddClassDialog(
                 Text(
                     "New Class",
                     style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
                     color = Color(0xFF333D79)
                 )
                 Text(
@@ -1360,12 +1362,13 @@ fun AddClassDialog(
                 Text(
                     text = "Class Name *",
                     style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
                 OutlinedTextField(
                     value = className,
                     onValueChange = onClassNameChange,
-                    placeholder = { Text("Enter class name (e.g. 'BSIT 1-A')") },
+                    placeholder = { Text("Enter class name (e.g. 'BSIT 1-A')", fontSize = 12.sp) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     isError = className.isBlank() && classCreationState !is ClassCreationState.Idle,
@@ -1385,12 +1388,13 @@ fun AddClassDialog(
                 Text(
                     text = "Number of Students *",
                     style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
                 OutlinedTextField(
                     value = studentCount,
                     onValueChange = { studentCount = it },
-                    placeholder = { Text("e.g. 30") },
+                    placeholder = { Text("e.g. 30", fontSize = 12.sp) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -1408,7 +1412,7 @@ fun AddClassDialog(
                 Text(
                     text = "Schedule *",
                     style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
+                    fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
 
@@ -1449,6 +1453,7 @@ fun AddClassDialog(
                 // Common day patterns dropdown
                 Text(
                     text = "Common Patterns:",
+                    fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0xFF666666),
                     modifier = Modifier.padding(bottom = 4.dp, top = 8.dp)
@@ -1537,6 +1542,7 @@ fun AddClassDialog(
                         Text(
                             text = "Start Time:",
                             style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold,
                             color = Color(0xFF666666),
                             modifier = Modifier.padding(bottom = 4.dp)
                         )
@@ -1587,6 +1593,7 @@ fun AddClassDialog(
                         Text(
                             text = "End Time:",
                             style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold,
                             color = Color(0xFF666666),
                             modifier = Modifier.padding(bottom = 4.dp)
                         )
