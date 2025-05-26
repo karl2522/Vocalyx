@@ -152,9 +152,16 @@ class ExcelViewModel : ViewModel() {
         }
     }
 
-    fun selectExcelFile(excelFile: ExcelFileItem) {
-        selectedExcelFile = excelFile
-        selectedSheetName = excelFile.sheet_names.firstOrNull()
+    fun selectExcelFile(excelFileId: Int) {
+        // Find the Excel file with the given ID from the current state
+        val files = when (excelUIState) {
+            is ExcelUIState.Success -> (excelUIState as ExcelUIState.Success).excelFiles
+            else -> emptyList()
+        }
+        
+        // Set the selected file and its first sheet
+        selectedExcelFile = files.find { it.id == excelFileId }
+        selectedSheetName = selectedExcelFile?.sheet_names?.firstOrNull()
     }
 
     fun selectSheet(sheetName: String) {
@@ -183,10 +190,26 @@ class ExcelViewModel : ViewModel() {
         
         return rows
     }
-
+    
+    // Get sheet data as a map for mobile-friendly UI
+    fun getSelectedSheetDataAsMap(): Map<String, Any> {
+        val file = selectedExcelFile ?: return mapOf("headers" to emptyList<String>(), "data" to emptyList<Map<String, String>>())
+        val sheet = selectedSheetName ?: return mapOf("headers" to emptyList<String>(), "data" to emptyList<Map<String, String>>())
+        val sheetContent = file.all_sheets[sheet] ?: return mapOf("headers" to emptyList<String>(), "data" to emptyList<Map<String, String>>())
+        
+        return mapOf(
+            "headers" to sheetContent.headers,
+            "data" to sheetContent.data
+        )
+    }
+    
+    // Get column names from the selected sheet
     fun getColumnNames(): List<String> {
-        val sheetData = getSelectedSheetData()
-        return if (sheetData.isNotEmpty()) sheetData[0] else emptyList()
+        val file = selectedExcelFile ?: return emptyList()
+        val sheet = selectedSheetName ?: return emptyList()
+        val sheetContent = file.all_sheets[sheet] ?: return emptyList()
+        
+        return sheetContent.headers
     }
 
     fun addColumnToExcelFile(columnName: String) {
