@@ -1,5 +1,6 @@
 import os
 
+import Levenshtein
 from drf_spectacular.types import OpenApiTypes
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -8,6 +9,9 @@ from rest_framework.permissions import IsAuthenticated, BasePermission
 import pandas as pd
 from django.http import HttpResponse
 from io import BytesIO
+
+from unidecode import unidecode
+
 from .models import ExcelFile
 from .serializers import ExcelFileSerializer
 from drf_spectacular.utils import extend_schema, OpenApiParameter
@@ -275,6 +279,68 @@ class ExcelViewSet(viewsets.ModelViewSet):
             print("Traceback:", traceback.format_exc())
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+    def normalize_name(self, name):
+        """Normalize a name by removing accents, extra spaces, and converting to lowercase."""
+        if name is None:
+            return ""
+
+        # Convert to string if not already
+        name = str(name).strip()
+
+        # Remove accents and convert to lowercase
+        normalized = unidecode(name).lower()
+
+        # Remove extra spaces
+        normalized = " ".join(normalized.split())
+
+        return normalized
+
+    def find_best_match(self, name, existing_names, threshold=0.85):
+        """Find best matching name from existing names using Levenshtein distance."""
+        if not name:
+            return None
+
+        name = self.normalize_name(name)
+
+        # Quick exact match first (most efficient)
+        if name in existing_names:
+            return existing_names[name]
+
+        # Try reversing "Last, First" to "First Last"
+        if "," in name:
+            parts = name.split(",")
+            if len(parts) == 2:
+                reversed_name = f"{parts[1].strip()} {parts[0].strip()}"
+                if reversed_name in existing_names:
+                    return existing_names[reversed_name]
+
+        # Fuzzy matching using Levenshtein distance
+        best_match = None
+        best_score = 0
+
+        for existing_name, original in existing_names.items():
+            # Skip very short names for fuzzy matching to avoid false positives
+            if len(name) < 3 or len(existing_name) < 3:
+                continue
+
+            # Calculate similarity ratio
+            similarity = Levenshtein.ratio(name, existing_name)
+
+            # If names are very similar or exact match for first/last names
+            name_parts = set(name.split())
+            existing_parts = set(existing_name.split())
+            common_parts = name_parts.intersection(existing_parts)
+
+            # Boost score if there are common parts (first/last name matches)
+            if common_parts:
+                similarity += 0.1 * len(common_parts) / max(len(name_parts), len(existing_parts))
+
+            if similarity > best_score and similarity >= threshold:
+                best_score = similarity
+                best_match = original
+
+        return best_match
+
     @extend_schema(
         description='Merge Excel file with existing file',
         request={
@@ -285,7 +351,8 @@ class ExcelViewSet(viewsets.ModelViewSet):
                     'class_id': {'type': 'integer'},
                     'merge': {'type': 'boolean'},
                     'override_names': {'type': 'boolean'},
-                    'category_mappings': {'type': 'string'}  # JSON string of category mappings
+                    'category_mappings': {'type': 'string'},  # JSON string of category mappings
+                    'matching_threshold': {'type': 'number'}  # Added threshold parameter
                 }
             }
         },
@@ -309,6 +376,13 @@ class ExcelViewSet(viewsets.ModelViewSet):
             return Response({'error': 'class_id is required'}, status=status.HTTP_400_BAD_REQUEST)
 
         override_names = request.data.get('override_names', 'false').lower() == 'true'
+
+        # Get optional matching threshold (default to 0.85 - 85% similarity)
+        try:
+            matching_threshold = float(request.data.get('matching_threshold', 0.85))
+            matching_threshold = max(0.5, min(1.0, matching_threshold))  # Ensure between 0.5 and 1.0
+        except (ValueError, TypeError):
+            matching_threshold = 0.85
 
         try:
             # Check permissions for the class
@@ -386,12 +460,18 @@ class ExcelViewSet(viewsets.ModelViewSet):
             existing_name_col = find_name_column(existing_data['headers'])
             new_name_col = find_name_column(new_data['headers'])
 
-            # Build lookup dictionaries for quick access
+            # Build lookup dictionaries for quick access with normalized names
             existing_lookup = {}
+            existing_lookup_normalized = {}
+
             for record in existing_data['data']:
                 if existing_name_col and existing_name_col in record:
-                    name = str(record[existing_name_col]).strip().lower()
-                    existing_lookup[name] = record
+                    # Store both raw and normalized versions
+                    raw_name = str(record[existing_name_col])
+                    normalized_name = self.normalize_name(raw_name)
+
+                    existing_lookup[raw_name] = record
+                    existing_lookup_normalized[normalized_name] = record
 
             # Start with existing data
             merged_data = existing_data.copy()
@@ -409,15 +489,21 @@ class ExcelViewSet(viewsets.ModelViewSet):
             # Update existing records and add new ones
             added_count = 0
             updated_count = 0
+            fuzzy_matched_count = 0
+
+            # For detailed logging of matches
+            match_results = []
 
             for record in new_data['data']:
                 if not new_name_col or new_name_col not in record:
                     continue
 
-                name = str(record[new_name_col]).strip().lower()
-                if name in existing_lookup:
-                    # Update existing record
-                    existing_record = existing_lookup[name]
+                # Get original name
+                original_name = str(record[new_name_col])
+
+                # Try exact match first
+                if original_name in existing_lookup:
+                    existing_record = existing_lookup[original_name]
                     if override_names and new_name_col and existing_name_col:
                         existing_record[existing_name_col] = record[new_name_col]
 
@@ -427,14 +513,52 @@ class ExcelViewSet(viewsets.ModelViewSet):
                             existing_record[key] = value
 
                     updated_count += 1
+                    match_results.append(f"Exact match: '{original_name}'")
                 else:
-                    # Add new record
-                    new_record = {key: None for key in merged_data['headers']}
-                    for key, value in record.items():
-                        new_record[key] = value
+                    # Try fuzzy matching
+                    normalized_name = self.normalize_name(original_name)
 
-                    merged_data['data'].append(new_record)
-                    added_count += 1
+                    # Try direct normalized match first
+                    if normalized_name in existing_lookup_normalized:
+                        existing_record = existing_lookup_normalized[normalized_name]
+                        if override_names and new_name_col and existing_name_col:
+                            existing_record[existing_name_col] = record[new_name_col]
+
+                        # Add all new columns from new record
+                        for key, value in record.items():
+                            if key != new_name_col or key not in existing_record:
+                                existing_record[key] = value
+
+                        updated_count += 1
+                        fuzzy_matched_count += 1
+                        match_results.append(
+                            f"Normalized match: '{original_name}' -> '{existing_record[existing_name_col]}'")
+                    else:
+                        # Try Levenshtein-based fuzzy matching
+                        best_match = self.find_best_match(original_name, existing_lookup_normalized,
+                                                          threshold=matching_threshold)
+
+                        if best_match:
+                            if override_names and new_name_col and existing_name_col:
+                                best_match[existing_name_col] = record[new_name_col]
+
+                            # Add all new columns from new record
+                            for key, value in record.items():
+                                if key != new_name_col or key not in best_match:
+                                    best_match[key] = value
+
+                            updated_count += 1
+                            fuzzy_matched_count += 1
+                            match_results.append(f"Fuzzy match: '{original_name}' -> '{best_match[existing_name_col]}'")
+                        else:
+                            # Add new record
+                            new_record = {key: None for key in merged_data['headers']}
+                            for key, value in record.items():
+                                new_record[key] = value
+
+                            merged_data['data'].append(new_record)
+                            added_count += 1
+                            match_results.append(f"No match, added new record: '{original_name}'")
 
             # Get existing category mappings if they exist
             existing_mappings = {}
@@ -520,16 +644,26 @@ class ExcelViewSet(viewsets.ModelViewSet):
                 print("Warning: No category structure to save")
 
             existing_file.update_count += 1
-            # Log the updated counter - ADD THIS LINE
+            # Log the updated counter
             print(f"Incremented update count to: {existing_file.update_count}")
 
             existing_file.save()
 
-            print(f"Merge complete: {updated_count} records updated, {added_count} records added")
+            print(
+                f"Merge complete: {updated_count} records updated ({fuzzy_matched_count} fuzzy matched), {added_count} records added")
             print(f"Category mappings preserved: {len(category_structure)} categories")
+            print(f"Sample of matches: {match_results[:10]}")
 
             serializer = self.get_serializer(existing_file)
-            return Response(serializer.data)
+            return Response({
+                **serializer.data,
+                'match_stats': {
+                    'updated': updated_count,
+                    'fuzzy_matched': fuzzy_matched_count,
+                    'added': added_count,
+                    'match_samples': match_results[:10]
+                }
+            })
 
         except Class.DoesNotExist:
             return Response({'error': 'Class not found'}, status=status.HTTP_404_NOT_FOUND)
