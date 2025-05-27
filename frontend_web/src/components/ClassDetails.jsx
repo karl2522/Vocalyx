@@ -18,6 +18,7 @@ import ImportPreviewModal from './modals/ImportPreviewModal';
 import MergeExcelModal from './MergeExcelModal';
 import UpdateMethodModal from './modals/UpdateMethodModal';
 import ManualUpdateModal from './modals/ManualUpdateModal';
+import { formatRelativeTime, getFullDateTime } from '../utils/dateUtils';
 
 const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, fileName }) => {
   if (!isOpen) return null;
@@ -1432,9 +1433,9 @@ const exportDirectlyFromData = () => {
                               Updates: {currentFileData?.update_count || 0}
                             </span>
                           </div>
-                          <p className="text-xs text-gray-500">
-                            {currentFileData?.uploaded_at ? new Date(currentFileData.uploaded_at).toLocaleString() : 'Recently uploaded'}
-                          </p>
+                         <p className="text-xs text-gray-500" title={currentFileData?.uploaded_at ? getFullDateTime(currentFileData.uploaded_at) : 'No upload date available'}>
+                          {currentFileData?.uploaded_at ? formatRelativeTime(currentFileData.uploaded_at) : 'Recently uploaded'}
+                        </p>
                         </div>
                       </div>
 
