@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'react-hot-toast';
-import { FiEdit, FiMoreVertical, FiPlus, FiSearch, FiTrash2 } from 'react-icons/fi';
+import { FiEdit, FiFilter, FiMoreVertical, FiPlus, FiSearch, FiTrash2 } from 'react-icons/fi';
 import {
     MdArchive, MdArrowForward, MdOutlineCalendarToday, MdOutlineClass,
     MdOutlinePersonOutline, MdOutlineSchool, MdOutlineWatchLater
@@ -125,6 +125,22 @@ const AnimationStyles = () => {
         );
         animation: shimmer 2s infinite;
       }
+
+      /* Status badge animations */
+      .status-badge {
+        animation: fadeInUp 0.3s ease-out;
+      }
+
+      @keyframes fadeInUp {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
     `}</style>
   );
 };
@@ -144,6 +160,10 @@ const CourseDetail = ({ accessInfo }) => {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [classToDelete, setClassToDelete] = useState(null);
   const [sortBy, setSortBy] = useState('date');
+  
+  // New filter states
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [showStatusFilterDropdown, setShowStatusFilterDropdown] = useState(false);
 
   // Initialize teamAccess when accessInfo changes
   useEffect(() => {
@@ -265,6 +285,7 @@ const CourseDetail = ({ accessInfo }) => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setActiveClassDropdown(null);
+        setShowStatusFilterDropdown(false);
       }
     };
     
@@ -315,7 +336,7 @@ const CourseDetail = ({ accessInfo }) => {
             setIsClassModalOpen(false);
         }
     });
-};
+  };
 
   const handleUpdateClass = (updatedClass) => {
     updateClassMutation.mutate({
@@ -342,12 +363,69 @@ const CourseDetail = ({ accessInfo }) => {
     setActiveClassDropdown(null);
   };
 
+  // Enhanced filtering logic
   const filteredClasses = sortClasses(
-    classes.filter(classItem => 
-      classItem.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      classItem.description?.toLowerCase().includes(searchTerm.toLowerCase())
-    )
+    classes.filter(classItem => {
+      // Search filter
+      const matchesSearch = classItem.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                           classItem.description?.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      // Status filter
+      const matchesStatus = statusFilter === 'all' || classItem.status === statusFilter;
+      
+      return matchesSearch && matchesStatus;
+    })
   );
+
+  // Get status badge configuration
+  const getStatusConfig = (status) => {
+    switch (status) {
+      case 'active':
+        return {
+          text: 'Active',
+          bg: 'bg-green-100',
+          textColor: 'text-green-700',
+          dotColor: 'bg-green-500',
+          borderColor: 'border-green-200'
+        };
+      case 'completed':
+        return {
+          text: 'Completed',
+          bg: 'bg-blue-100',
+          textColor: 'text-blue-700',
+          dotColor: 'bg-blue-500',
+          borderColor: 'border-blue-200'
+        };
+      case 'archived':
+        return {
+          text: 'Archived',
+          bg: 'bg-gray-100',
+          textColor: 'text-gray-700',
+          dotColor: 'bg-gray-500',
+          borderColor: 'border-gray-200'
+        };
+      default:
+        return {
+          text: 'Active',
+          bg: 'bg-green-100',
+          textColor: 'text-green-700',
+          dotColor: 'bg-green-500',
+          borderColor: 'border-green-200'
+        };
+    }
+  };
+
+  // Get filter counts
+  const getFilterCounts = () => {
+    return {
+      all: classes.length,
+      active: classes.filter(c => c.status === 'active' || !c.status).length,
+      completed: classes.filter(c => c.status === 'completed').length,
+      archived: classes.filter(c => c.status === 'archived').length
+    };
+  };
+
+  const filterCounts = getFilterCounts();
 
   // Determine if we're in a loading state
   const isLoading = isLoadingCourse || isLoadingClasses;
@@ -456,7 +534,7 @@ const CourseDetail = ({ accessInfo }) => {
             <div className="flex items-center">
               <h2 className="text-2xl font-bold text-gray-800 mr-3">Classes</h2>
               <div className="px-2.5 py-1 bg-[#f0f4ff] text-[#333D79] rounded-md text-sm">
-                {classes.length} total
+                {filteredClasses.length} of {classes.length}
               </div>
             </div>
             {(!teamAccess || teamAccess.accessLevel !== 'view') && (
@@ -490,22 +568,87 @@ const CourseDetail = ({ accessInfo }) => {
             currentClass={currentClass}
           />
           
-         {/* Search and Sort */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-6">
-            <div className="flex flex-col md:flex-row md:items-center gap-4">
+          {/* Enhanced Search and Filters */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-6">
+            <div className="flex flex-col space-y-4 md:flex-row md:space-y-0 md:space-x-4 md:items-center">
               <div className="relative flex-1">
-                <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                 <input
                   type="text"
-                  placeholder="Search classes by name..."
+                  placeholder="Search classes by name or description..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#333D79] focus:border-transparent bg-gray-50"
+                  className="w-full pl-12 pr-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#333D79] focus:border-transparent bg-gray-50"
                 />
               </div>
               
-              <div className="flex items-center">
-                <span className="text-sm text-gray-500 mr-2">Sort by:</span>
+              <div className="flex gap-3">
+                {/* Status Filter */}
+                <div className="relative">
+                  <button
+                    onClick={() => {
+                      setShowStatusFilterDropdown(!showStatusFilterDropdown);
+                    }}
+                    className="flex items-center space-x-2 px-5 py-3 border border-gray-200 rounded-xl hover:bg-[#F0F2F8] transition-all shadow-sm"
+                  >
+                    <FiFilter size={18} className="text-[#4A5491]" />
+                    <span className="text-gray-700 font-medium">
+                      {statusFilter === 'all' ? 'All Classes' : statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)}
+                    </span>
+                    {statusFilter !== 'all' && (
+                      <span className="ml-1 px-2 py-0.5 bg-[#333D79] text-white text-xs rounded-full">
+                        {filteredClasses.length}
+                      </span>
+                    )}
+                  </button>
+                  
+                  {showStatusFilterDropdown && (
+                    <div className="absolute right-0 mt-2 w-52 bg-white rounded-xl shadow-lg z-50 py-2 border border-gray-100 overflow-hidden">
+                      <button
+                        onClick={() => { setStatusFilter('all'); setShowStatusFilterDropdown(false); }}
+                        className="block w-full text-left px-5 py-2.5 text-sm text-gray-700 hover:bg-[#F0F2F8] flex items-center justify-between"
+                      >
+                        <div className="flex items-center">
+                          <span className="w-3 h-3 rounded-full bg-gray-400 mr-3"></span>
+                          All Classes
+                        </div>
+                        <span className="text-xs text-gray-500">{filterCounts.all}</span>
+                      </button>
+                      <button
+                        onClick={() => { setStatusFilter('active'); setShowStatusFilterDropdown(false); }}
+                        className="block w-full text-left px-5 py-2.5 text-sm text-gray-700 hover:bg-[#F0F2F8] flex items-center justify-between"
+                      >
+                        <div className="flex items-center">
+                          <span className="w-3 h-3 rounded-full bg-green-500 mr-3"></span>
+                          Active
+                        </div>
+                        <span className="text-xs text-gray-500">{filterCounts.active}</span>
+                      </button>
+                      <button
+                        onClick={() => { setStatusFilter('completed'); setShowStatusFilterDropdown(false); }}
+                        className="block w-full text-left px-5 py-2.5 text-sm text-gray-700 hover:bg-[#F0F2F8] flex items-center justify-between"
+                      >
+                        <div className="flex items-center">
+                          <span className="w-3 h-3 rounded-full bg-blue-500 mr-3"></span>
+                          Completed
+                        </div>
+                        <span className="text-xs text-gray-500">{filterCounts.completed}</span>
+                      </button>
+                      <button
+                        onClick={() => { setStatusFilter('archived'); setShowStatusFilterDropdown(false); }}
+                        className="block w-full text-left px-5 py-2.5 text-sm text-gray-700 hover:bg-[#F0F2F8] flex items-center justify-between"
+                      >
+                        <div className="flex items-center">
+                          <span className="w-3 h-3 rounded-full bg-gray-600 mr-3"></span>
+                          Archived
+                        </div>
+                        <span className="text-xs text-gray-500">{filterCounts.archived}</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Sort Options */}
                 <div className="inline-flex rounded-md shadow-sm" role="group">
                   <button
                     type="button"
@@ -534,10 +677,13 @@ const CourseDetail = ({ accessInfo }) => {
             </div>
           </div>
           
-          {/* Classes */}
-            {filteredClasses.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                {filteredClasses.map((classItem) => (
+          {/* Classes Grid */}
+          {filteredClasses.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {filteredClasses.map((classItem) => {
+                const statusConfig = getStatusConfig(classItem.status);
+                
+                return (
                   <div 
                     key={classItem.id} 
                     className="class-card bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"
@@ -545,14 +691,19 @@ const CourseDetail = ({ accessInfo }) => {
                     <div className="border-b border-gray-100 bg-gradient-to-r from-[#f8f9ff] to-[#f0f4ff]">
                       <div className="flex items-center justify-between p-4">
                         <div 
-                          className="flex items-center space-x-3 cursor-pointer"
+                          className="flex items-center space-x-3 cursor-pointer flex-1"
                           onClick={() => navigate(`/dashboard/class/${classItem.id}`)}
                         >
                           <div className="w-10 h-10 rounded-lg bg-[#333D79] bg-opacity-10 flex items-center justify-center">
                             <MdOutlineClass className="text-[#333D79]" size={20} />
                           </div>
-                          <div>
+                          <div className="flex-1">
                             <h3 className="font-medium text-gray-900">{classItem.name}</h3>
+                            {/* Status Badge */}
+                            <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium mt-1 status-badge ${statusConfig.bg} ${statusConfig.textColor} ${statusConfig.borderColor} border`}>
+                              <div className={`w-2 h-2 rounded-full mr-1.5 ${statusConfig.dotColor}`}></div>
+                              {statusConfig.text}
+                            </div>
                           </div>
                         </div>
                         
@@ -597,124 +748,147 @@ const CourseDetail = ({ accessInfo }) => {
                       </div>
                     </div>
                   </div>
-                ))}
-                
-                {/* Fixed position dropdown menu - outside the loop but inside the main container */}
-                {activeClassDropdown !== null && dropdownPosition && (
-                  <div 
-                    className="fixed bg-white rounded-md shadow-lg z-50 py-1 border border-gray-100 w-48"
-                    style={{ 
-                      top: `${dropdownPosition.top}px`, 
-                      right: `${dropdownPosition.right}px` 
+                );
+              })}
+              
+              {/* Fixed position dropdown menu - outside the loop but inside the main container */}
+              {activeClassDropdown !== null && dropdownPosition && (
+                <div 
+                  className="fixed bg-white rounded-md shadow-lg z-50 py-1 border border-gray-100 w-48"
+                  style={{ 
+                    top: `${dropdownPosition.top}px`, 
+                    right: `${dropdownPosition.right}px` 
+                  }}
+                >
+                  <button 
+                    className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const classItem = filteredClasses.find(c => c.id === activeClassDropdown);
+                      handleEditClass(classItem);
                     }}
                   >
+                    <FiEdit className="mr-2" size={14} />
+                    Edit Class
+                  </button>
+                  
+                  {filteredClasses.find(c => c.id === activeClassDropdown)?.status !== 'completed' && (
                     <button 
                       className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
                       onClick={(e) => {
                         e.stopPropagation();
-                        const classItem = filteredClasses.find(c => c.id === activeClassDropdown);
-                        handleEditClass(classItem);
+                        handleUpdateClassStatus(activeClassDropdown, 'completed');
                       }}
                     >
-                      <FiEdit className="mr-2" size={14} />
-                      Edit Class
+                      <MdOutlineClass className="mr-2" size={14} />
+                      Mark as Completed
                     </button>
-                    
-                    {filteredClasses.find(c => c.id === activeClassDropdown)?.status !== 'completed' && (
-                      <button 
-                        className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleUpdateClassStatus(activeClassDropdown, 'completed');
-                        }}
-                      >
-                        <MdOutlineClass className="mr-2" size={14} />
-                        Mark as Completed
-                      </button>
-                    )}
-                    
-                    {filteredClasses.find(c => c.id === activeClassDropdown)?.status !== 'archived' && (
-                      <button 
-                        className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleUpdateClassStatus(activeClassDropdown, 'archived');
-                        }}
-                      >
-                        <MdArchive className="mr-2" size={14} />
-                        Archive Class
-                      </button>
-                    )}
-                    
-                    {filteredClasses.find(c => c.id === activeClassDropdown)?.status !== 'active' && (
-                      <button 
-                        className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleUpdateClassStatus(activeClassDropdown, 'active');
-                        }}
-                      >
-                        <MdOutlineClass className="mr-2" size={14} />
-                        Set as Active
-                      </button>
-                    )}
-                    
-                    <div className="border-t border-gray-100 my-1"></div>
-                    
+                  )}
+                  
+                  {filteredClasses.find(c => c.id === activeClassDropdown)?.status !== 'archived' && (
                     <button 
-                      className="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left"
+                      className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleDeleteClass(activeClassDropdown);
+                        handleUpdateClassStatus(activeClassDropdown, 'archived');
                       }}
                     >
-                      <FiTrash2 className="mr-2" size={14} />
-                      Delete Class
+                      <MdArchive className="mr-2" size={14} />
+                      Archive Class
+                    </button>
+                  )}
+                  
+                  {filteredClasses.find(c => c.id === activeClassDropdown)?.status !== 'active' && (
+                    <button 
+                      className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleUpdateClassStatus(activeClassDropdown, 'active');
+                      }}
+                    >
+                      <MdOutlineClass className="mr-2" size={14} />
+                      Set as Active
+                    </button>
+                  )}
+                  
+                  <div className="border-t border-gray-100 my-1"></div>
+                  
+                  <button 
+                    className="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteClass(activeClassDropdown);
+                    }}
+                  >
+                    <FiTrash2 className="mr-2" size={14} />
+                    Delete Class
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="empty-state-animation bg-white rounded-xl shadow-sm border border-gray-100 p-10 text-center relative overflow-hidden">
+              <div className="absolute -top-20 -right-20 w-64 h-64 bg-[#333D79] opacity-5 rounded-full blur-3xl"></div>
+              <div className="absolute -bottom-32 -left-32 w-64 h-64 bg-[#6B77B7] opacity-5 rounded-full blur-3xl"></div>
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent animate-pulse opacity-30"></div>
+              
+              <div className="relative z-10 max-w-lg mx-auto">
+                <div className="flex justify-center mb-6">
+                  <div className="relative">
+                    <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-[#333D79] to-[#4A5491] flex items-center justify-center floating shadow-lg">
+                      <MdOutlineClass className="text-white" size={40} />
+                    </div>
+                    <div className="absolute -bottom-2 -right-2 w-10 h-10 rounded-full bg-white shadow-md flex items-center justify-center">
+                      <FiPlus className="text-[#333D79]" size={20} />
+                    </div>
+                  </div>
+                </div>
+                
+                <h3 className="text-2xl font-bold text-gray-900 mb-3">
+                  {searchTerm || statusFilter !== 'all' 
+                    ? `No classes found` 
+                    : 'No classes in this course yet'
+                  }
+                </h3>
+                <p className="text-gray-600 mb-8 mx-auto">
+                  {searchTerm || statusFilter !== 'all' 
+                    ? `Try adjusting your search or filter criteria to find what you're looking for.`
+                    : 'Create your first class to start managing your course content, schedule sessions, track attendance and monitor student progress.'
+                  }
+                </p>
+                
+                {(!teamAccess || teamAccess.accessLevel !== 'view') && (
+                  <div className="inline-flex space-x-3">
+                    {searchTerm || statusFilter !== 'all' ? (
+                      <button 
+                        onClick={() => {
+                          setSearchTerm('');
+                          setStatusFilter('all');
+                        }}
+                        className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-3.5 rounded-xl transition-all shadow-md hover:shadow-lg transform hover:scale-105 inline-flex items-center"
+                      >
+                        <span className="font-medium">Clear Filters</span>
+                      </button>
+                    ) : null}
+                    
+                    <button 
+                      onClick={() => {
+                        setIsEditClassMode(false);
+                        setCurrentClass(null);
+                        setIsClassModalOpen(true);
+                      }}
+                      className="bg-gradient-to-r from-[#333D79] to-[#4A5491] hover:from-[#4A5491] hover:to-[#5d6ba9] text-white px-6 py-3.5 rounded-xl transition-all shadow-md hover:shadow-lg transform hover:scale-105 inline-flex items-center"
+                    >
+                      <FiPlus size={18} className="mr-2" />
+                      <span className="font-medium">
+                        {searchTerm || statusFilter !== 'all' ? 'Add New Class' : 'Create First Class'}
+                      </span>
                     </button>
                   </div>
                 )}
               </div>
-            ) : (
-              <div className="empty-state-animation bg-white rounded-xl shadow-sm border border-gray-100 p-10 text-center relative overflow-hidden">
-                <div className="absolute -top-20 -right-20 w-64 h-64 bg-[#333D79] opacity-5 rounded-full blur-3xl"></div>
-                <div className="absolute -bottom-32 -left-32 w-64 h-64 bg-[#6B77B7] opacity-5 rounded-full blur-3xl"></div>
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent animate-pulse opacity-30"></div>
-                
-                <div className="relative z-10 max-w-lg mx-auto">
-                  <div className="flex justify-center mb-6">
-                    <div className="relative">
-                      <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-[#333D79] to-[#4A5491] flex items-center justify-center floating shadow-lg">
-                        <MdOutlineClass className="text-white" size={40} />
-                      </div>
-                      <div className="absolute -bottom-2 -right-2 w-10 h-10 rounded-full bg-white shadow-md flex items-center justify-center">
-                        <FiPlus className="text-[#333D79]" size={20} />
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <h3 className="text-2xl font-bold text-gray-900 mb-3">No classes in this course yet</h3>
-                  <p className="text-gray-600 mb-8 mx-auto">
-                    Create your first class to start managing your course content, schedule sessions, track attendance and monitor student progress.
-                  </p>
-                  
-                  {(!teamAccess || teamAccess.accessLevel !== 'view') && (
-                    <div className="inline-flex space-x-3">
-                      <button 
-                        onClick={() => {
-                          setIsEditClassMode(false);
-                          setCurrentClass(null);
-                          setIsClassModalOpen(true);
-                        }}
-                        className="bg-gradient-to-r from-[#333D79] to-[#4A5491] hover:from-[#4A5491] hover:to-[#5d6ba9] text-white px-6 py-3.5 rounded-xl transition-all shadow-md hover:shadow-lg transform hover:scale-105 inline-flex items-center"
-                      >
-                        <FiPlus size={18} className="mr-2" />
-                        <span className="font-medium">Create First Class</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
+            </div>
+          )}
         </div>
       </div>
 

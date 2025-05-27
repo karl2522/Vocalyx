@@ -17,16 +17,30 @@ import datetime
 
 # Create a custom permission class to check team permissions
 class HasTeamEditPermission(BasePermission):
+    """
+    Custom permission to check team permissions for Excel file operations.
+    """
 
     def has_permission(self, request, view):
-        # Allow GET requests for any authenticated user
+        """Check general permission for the view."""
+        # Allow authenticated users to access GET requests
         if request.method in ['GET', 'HEAD', 'OPTIONS']:
-            return True
+            return request.user and request.user.is_authenticated
 
         # For modifying requests, check if user has proper permissions
         class_id = view.kwargs.get('pk') or request.data.get('class_id')
+
+        # For DELETE operations, we need to get the class_id from the object
+        if request.method == 'DELETE' and 'pk' in view.kwargs:
+            try:
+                excel_file = ExcelFile.objects.get(pk=view.kwargs['pk'])
+                class_id = excel_file.class_ref.id if excel_file.class_ref else None
+            except ExcelFile.DoesNotExist:
+                return False
+
         if not class_id:
-            return False
+            # If no class_id, check if this is an object-level operation
+            return request.user and request.user.is_authenticated
 
         try:
             from classes.models import Class
@@ -34,11 +48,12 @@ class HasTeamEditPermission(BasePermission):
 
             # If user is the owner, they have full permissions
             if class_obj.user == request.user:
+                print(f"Permission granted: User {request.user.id} is owner of class {class_id}")
                 return True
 
             # If there's a course associated with this class, check team permissions
             if class_obj.course:
-                from teams.models import TeamCourse, TeamMember
+                from teams.models import TeamMember
 
                 team_member = TeamMember.objects.filter(
                     team__courses__course_id=class_obj.course.id,
@@ -48,19 +63,34 @@ class HasTeamEditPermission(BasePermission):
 
                 # Only allow edit/delete if user has edit or full permissions
                 if team_member and team_member.permissions in ['edit', 'full']:
+                    print(
+                        f"Permission granted: User {request.user.id} has team access ({team_member.permissions}) to class {class_id}")
                     return True
+                elif team_member:
+                    print(
+                        f"Permission denied: User {request.user.id} has insufficient team permissions ({team_member.permissions}) for class {class_id}")
+                else:
+                    print(f"Permission denied: User {request.user.id} is not a team member for class {class_id}")
 
+            print(f"Permission denied: User {request.user.id} has no access to class {class_id}")
             return False
+
         except Class.DoesNotExist:
+            print(f"Permission denied: Class {class_id} does not exist")
             return False
 
     def has_object_permission(self, request, view, obj):
-        # For object-level permissions (for existing objects)
+        """Check object-level permissions."""
+        # Allow authenticated users to access GET requests
         if request.method in ['GET', 'HEAD', 'OPTIONS']:
-            return True
+            return request.user and request.user.is_authenticated
+
+        print(f"Checking object permission for user {request.user.id} on ExcelFile {obj.id}")
+        print(f"File owner: {obj.user.id}, Request user: {request.user.id}")
 
         # If user is the owner, they have full permissions
         if obj.user == request.user:
+            print(f"Permission granted: User {request.user.id} owns ExcelFile {obj.id}")
             return True
 
         # Check if user has proper team permissions for this file's class
@@ -75,8 +105,16 @@ class HasTeamEditPermission(BasePermission):
 
             # Only allow edit/delete if user has edit or full permissions
             if team_member and team_member.permissions in ['edit', 'full']:
+                print(
+                    f"Permission granted: User {request.user.id} has team access ({team_member.permissions}) to ExcelFile {obj.id}")
                 return True
+            elif team_member:
+                print(
+                    f"Permission denied: User {request.user.id} has insufficient team permissions ({team_member.permissions}) for ExcelFile {obj.id}")
+            else:
+                print(f"Permission denied: User {request.user.id} is not a team member for ExcelFile {obj.id}")
 
+        print(f"Permission denied: User {request.user.id} has no access to ExcelFile {obj.id}")
         return False
 
 
@@ -112,6 +150,85 @@ class ExcelViewSet(viewsets.ModelViewSet):
                 pass
 
         return user_files
+
+    def destroy(self, request, *args, **kwargs):
+        """Enhanced delete method with better error handling and logging."""
+        try:
+            instance = self.get_object()
+            print(f"Delete request for ExcelFile {instance.id} by user {request.user.id}")
+
+            # Additional permission check with detailed logging
+            if instance.user != request.user:
+                print(f"User {request.user.id} is not the owner of ExcelFile {instance.id}")
+
+                # Check team permissions
+                has_team_access = False
+                if instance.class_ref and instance.class_ref.course:
+                    from teams.models import TeamMember
+                    team_member = TeamMember.objects.filter(
+                        team__courses__course_id=instance.class_ref.course.id,
+                        user=request.user,
+                        is_active=True
+                    ).first()
+
+                    if team_member:
+                        print(f"Team member found with permissions: {team_member.permissions}")
+                        if team_member.permissions in ['edit', 'full']:
+                            has_team_access = True
+                            print("Team access granted for delete operation")
+                        else:
+                            print(f"Insufficient team permissions: {team_member.permissions}")
+                    else:
+                        print("No team membership found")
+
+                if not has_team_access:
+                    print("Delete operation denied - insufficient permissions")
+                    return Response(
+                        {
+                            'error': 'You do not have permission to delete this file',
+                            'detail': 'Only file owners or team members with edit/full permissions can delete files'
+                        },
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+
+            # Log successful delete
+            file_name = instance.file_name
+            class_name = instance.class_ref.name if instance.class_ref else "Unknown"
+
+            # Perform the delete
+            self.perform_destroy(instance)
+
+            print(f"Successfully deleted ExcelFile '{file_name}' from class '{class_name}' by user {request.user.id}")
+
+            return Response(
+                {
+                    'message': f'File "{file_name}" has been successfully deleted',
+                    'deleted_file': {
+                        'id': kwargs.get('pk'),
+                        'name': file_name,
+                        'class': class_name
+                    }
+                },
+                status=status.HTTP_200_OK
+            )
+
+        except ExcelFile.DoesNotExist:
+            print(f"Delete failed: ExcelFile with id {kwargs.get('pk')} not found")
+            return Response(
+                {'error': 'File not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            import traceback
+            print(f"Delete operation failed with error: {str(e)}")
+            print("Traceback:", traceback.format_exc())
+            return Response(
+                {
+                    'error': 'An error occurred while deleting the file',
+                    'detail': str(e)
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     @action(detail=True, methods=['PATCH'], permission_classes=[IsAuthenticated])
     def set_active_sheet(self, request, pk=None):

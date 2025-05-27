@@ -490,102 +490,109 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
   };
 
   // Initialize Handsontable when data is ready (enhanced with search)
-  useEffect(() => {
-    if (isHandsontableLoaded && hotTableRef.current && window.Handsontable && fileData && categoryMapping) {
-      if (hotInstanceRef.current) {
-        hotInstanceRef.current.destroy();
-      }
-
-      addCustomStyles();
-
-      const tableData = processData();
-      const nestedHeaders = generateNestedHeaders();
-      const fixedColumns = categoryMapping.student.length || 1;
-      
-      const colWidths = Array.isArray(fileData.all_sheets[fileData.active_sheet].headers) 
-        ? fileData.all_sheets[fileData.active_sheet].headers.map((_, idx) => {
-            if (categoryMapping.student.includes(idx)) {
-              return 180;
-            }
-            return 90;
-          })
-        : [];
-
-      const settings = {
-        data: tableData,
-        colHeaders: true,
-        rowHeaders: false,
-        width: '100%',
-        height: '100%',
-        licenseKey: 'non-commercial-and-evaluation',
-        stretchH: 'none',
-        autoColumnSize: false,
-        manualColumnResize: true,
-        manualRowResize: false,
-        contextMenu: ['copy', 'cut', 'paste', '---------', 'undo', 'redo'],
-        filters: true,
-        dropdownMenu: true,
-        fixedColumnsLeft: fixedColumns,
-        colWidths: colWidths.length ? colWidths : [180, 90, 90, 90, 90, 90],
-        rowHeights: 30,
-        nestedHeaders: nestedHeaders,
-        search: {
-          query: searchTerm,
-          callback: function(instance, row, col, data, testResult) {
-            // Custom search highlighting
-          }
-        },
-        cells: function(row, col) {
-          const cellProperties = {};
-
-          if (categoryMapping.student.includes(col)) {
-            cellProperties.className = 'name-cell';
-          } else {
-            cellProperties.className = 'grade-cell';
-          }
-
-          return cellProperties;
-        },
-        afterChange: function(changes, source) {
-          if (source !== 'loadData') {
-            setHasChanges(true);
-            setSaveStatus(null);
-          }
-        },
-        beforeChange: function(changes, source) {
-          // Store undo data
-          if (source !== 'loadData') {
-            setUndoStack(prev => [...prev.slice(-9), changes]);
-          }
-        }
-      };
-
-      try {
-        hotInstanceRef.current = new window.Handsontable(hotTableRef.current, settings);
-
-        setTimeout(() => {
-          if (hotInstanceRef.current) {
-            hotInstanceRef.current.render();
-          }
-        }, 100);
-      } catch (error) {
-        console.error('Error initializing Handsontable:', error);
-      }
+  // Initialize Handsontable when data is ready (enhanced with search)
+useEffect(() => {
+  if (isHandsontableLoaded && hotTableRef.current && window.Handsontable && fileData && categoryMapping) {
+    if (hotInstanceRef.current) {
+      hotInstanceRef.current.destroy();
     }
 
-    return () => {
-      if (hotInstanceRef.current) {
-        try {
-          if (hotInstanceRef.current.isDestroyed !== true) {
-            hotInstanceRef.current.destroy();
+    addCustomStyles();
+
+    const tableData = processData();
+    const nestedHeaders = generateNestedHeaders();
+    
+    // Fix 1: Add safety check for categoryMapping.student
+    const fixedColumns = categoryMapping?.student?.length || 1;
+    
+    // Fix 2: Add proper safety checks for nested object access
+    const colWidths = Array.isArray(fileData?.all_sheets?.[fileData?.active_sheet]?.headers) 
+      ? fileData.all_sheets[fileData.active_sheet].headers.map((_, idx) => {
+          // Fix 3: Add safety check for categoryMapping.student before using includes
+          if (categoryMapping?.student?.includes(idx)) {
+            return 180;
           }
-          hotInstanceRef.current = null;
-        } catch (error) {
-          console.error('Error destroying Handsontable:', error);
+          return 90;
+        })
+      : [];
+
+    const settings = {
+      data: tableData,
+      colHeaders: true,
+      rowHeaders: false,
+      width: '100%',
+      height: '100%',
+      licenseKey: 'non-commercial-and-evaluation',
+      stretchH: 'none',
+      autoColumnSize: false,
+      manualColumnResize: true,
+      manualRowResize: false,
+      contextMenu: ['copy', 'cut', 'paste', '---------', 'undo', 'redo'],
+      filters: true,
+      dropdownMenu: true,
+      fixedColumnsLeft: fixedColumns,
+      colWidths: colWidths.length ? colWidths : [180, 90, 90, 90, 90, 90],
+      rowHeights: 30,
+      nestedHeaders: nestedHeaders,
+      search: {
+        query: searchTerm,
+        callback: function(instance, row, col, data, testResult) {
+          // Custom search highlighting
+        }
+      },
+      cells: function(row, col) {
+        const cellProperties = {};
+
+        // Fix 4: Add safety check here too
+        if (categoryMapping?.student?.includes(col)) {
+          cellProperties.className = 'name-cell';
+        } else {
+          cellProperties.className = 'grade-cell';
+        }
+
+        return cellProperties;
+      },
+      afterChange: function(changes, source) {
+        if (source !== 'loadData') {
+          setHasChanges(true);
+          setSaveStatus(null);
+        }
+      },
+      beforeChange: function(changes, source) {
+        // Store undo data
+        if (source !== 'loadData') {
+          setUndoStack(prev => [...prev.slice(-9), changes]);
         }
       }
     };
-  }, [isHandsontableLoaded, fileData, categoryMapping, searchTerm]);
+
+    try {
+      hotInstanceRef.current = new window.Handsontable(hotTableRef.current, settings);
+
+      setTimeout(() => {
+        if (hotInstanceRef.current) {
+          hotInstanceRef.current.render();
+        }
+      }, 100);
+    } catch (error) {
+      console.error('Error initializing Handsontable:', error);
+    }
+  }
+
+  return () => {
+    if (hotInstanceRef.current) {
+      try {
+        if (hotInstanceRef.current.isDestroyed !== true) {
+          hotInstanceRef.current.destroy();
+        }
+        hotInstanceRef.current = null;
+      } catch (error) {
+        console.error('Error destroying Handsontable:', error);
+      }
+    }
+  };
+}, [isHandsontableLoaded, fileData, categoryMapping, searchTerm]);
+
 
   // Enhanced search functionality
   useEffect(() => {
