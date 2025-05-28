@@ -26,9 +26,9 @@ const toastAnimationStyles = `
   }
   
   @keyframes pulse-subtle {
-    0% { box-shadow: 0 0 0 0 rgba(51, 61, 121, 0.4); }
-    70% { box-shadow: 0 0 0 10px rgba(51, 61, 121, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(51, 61, 121, 0); }
+    0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
   }
   
   .toast-enter {
@@ -118,6 +118,7 @@ const createToast = (message, title = null, type = 'info', options = {}) => {
   
   const toastConfig = toastTypes[type] || toastTypes.info;
   const mergedOptions = { ...defaultOptions, ...options };
+  const isSingleLine = !title && typeof message === 'string' && message.length < 100;
   
   return toast.custom((t) => (
     <div 
@@ -130,11 +131,11 @@ const createToast = (message, title = null, type = 'info', options = {}) => {
         zIndex: 9999
       }}
     >
-      <div className={`${toastConfig.bgColor} flex-1 flex items-start p-4`}>
+      <div className={`${toastConfig.bgColor} flex-1 flex ${isSingleLine ? 'items-center' : 'items-start'} p-4`}>
         <div className={`flex-shrink-0 ${toastConfig.iconBg} h-10 w-10 rounded-full flex items-center justify-center mr-3 toast-icon-pulse`}>
           {toastConfig.icon}
         </div>
-        <div className={`flex-1 ${toastConfig.textColor}`}>
+        <div className={`flex-1 ${toastConfig.textColor} ${isSingleLine ? 'flex items-center' : ''}`}>
           {title && <p className="font-medium text-sm">{title}</p>}
           <p className={`text-sm ${title ? 'mt-1 opacity-90' : ''}`}>{message}</p>
         </div>
@@ -144,13 +145,25 @@ const createToast = (message, title = null, type = 'info', options = {}) => {
             type === 'notification' 
               ? 'text-gray-400 hover:text-gray-500' 
               : 'text-white text-opacity-70 hover:text-opacity-100'
-          } transition-colors focus:outline-none`}
+          } transition-colors focus:outline-none ${isSingleLine ? 'self-center' : ''}`}
         >
           <FiX size={18} />
         </button>
       </div>
     </div>
   ), mergedOptions);
+};
+
+// Common success messages
+const successMessages = {
+  created: (item) => `${item} created successfully!`,
+  updated: (item) => `${item} updated successfully!`,
+  deleted: (item) => `${item} deleted successfully!`,
+  saved: () => "Changes saved successfully!",
+  imported: () => "File imported successfully!",
+  exported: (fileName) => `File "${fileName}" downloaded successfully!`,
+  copied: (item) => `${item || 'Text'} copied to clipboard!`,
+  joined: (item) => `You have joined the ${item} successfully!`
 };
 
 // Export toast functions with predefined types
@@ -166,6 +179,31 @@ export const showToast = {
   
   notification: (message, title = null, options = {}) => 
     createToast(message, title, 'notification', options),
+  
+  // Common success actions
+  created: (item, options = {}) => 
+    createToast(successMessages.created(item), null, 'success', options),
+    
+  updated: (item, options = {}) => 
+    createToast(successMessages.updated(item), null, 'success', options),
+    
+  deleted: (item, options = {}) => 
+    createToast(successMessages.deleted(item), null, 'success', options),
+    
+  saved: (options = {}) => 
+    createToast(successMessages.saved(), null, 'success', options),
+    
+  imported: (options = {}) => 
+    createToast(successMessages.imported(), null, 'success', options),
+    
+  exported: (fileName, options = {}) => 
+    createToast(successMessages.exported(fileName), null, 'success', options),
+    
+  copied: (item = null, options = {}) => 
+    createToast(successMessages.copied(item), null, 'success', options),
+    
+  joined: (item, options = {}) => 
+    createToast(successMessages.joined(item), null, 'success', options),
   
   // Custom toast with more control
   custom: (message, title = null, options = {}) => {

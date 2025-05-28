@@ -1,12 +1,14 @@
-import React from 'react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import PropTypes from 'prop-types';
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { BsFileEarmarkSpreadsheet } from 'react-icons/bs';
 import { FiDownload, FiEye, FiInfo, FiUpload, FiX } from 'react-icons/fi';
 import { MdOutlineClass } from 'react-icons/md';
 import { useNavigate, useParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { classService } from '../services/api';
+import { formatRelativeTime, getFullDateTime } from '../utils/dateUtils';
 import { showToast } from '../utils/toast';
 import ExcelViewer from './ExcelViewer';
 import FileDropzone from './FileDropzone';
@@ -15,12 +17,7 @@ import DashboardLayout from './layouts/DashboardLayout';
 import AddColumnModal from './modals/AddColumnModal';
 import ExportOptionsModal from './modals/ExportOptionsModal';
 import ImportPreviewModal from './modals/ImportPreviewModal';
-import MergeExcelModal from './MergeExcelModal';
-import UpdateMethodModal from './modals/UpdateMethodModal';
-import ManualUpdateModal from './modals/ManualUpdateModal';
-import { formatRelativeTime, getFullDateTime } from '../utils/dateUtils';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import UpdateFileModal from './modals/UpdateFileModal';
 
 const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, fileName }) => {
   if (!isOpen) return null;
@@ -93,16 +90,13 @@ const ClassDetails = ({ accessInfo }) => {
 
   const [showUpdateMethodModal, setShowUpdateMethodModal] = useState(false);
   const [showManualUpdateModal, setShowManualUpdateModal] = useState(false);
+  const [showUpdateFileModal, setShowUpdateFileModal] = useState(false);
 
   const [showExportOptions, setShowExportOptions] = useState(false);
   const [exportFormat, setExportFormat] = useState('xlsx');
   const [exportFileName, setExportFileName] = useState('');
   const [exportLoading, setExportLoading] = useState(false);
   const [exportPreviewData, setExportPreviewData] = useState(null);
-
-  const [showMergeModal, setShowMergeModal] = useState(false);
-  const [mergeFile, setMergeFile] = useState(null);
-  const [mergeFileData, setMergeFileData] = useState(null);
 
   // Column management state
   const [customColumns, setCustomColumns] = useState([]);
@@ -188,13 +182,13 @@ const ClassDetails = ({ accessInfo }) => {
 
     try {
       setIsDeleting(true);
+      setIsDeleteModalOpen(false); // Close the modal immediately when deletion starts
 
       await classService.deleteExcelFile(currentFileData.id);
-      setIsDeleteModalOpen(false);
       setSelectedFile(null);
       setCurrentFileData(null);
 
-      showToast.success(`File deleted successfully`);
+      showToast.deleted('File');
     } catch (error) {
       console.error('Failed to delete file:', error);
       setError('Failed to delete file. Please try again.');
@@ -256,7 +250,7 @@ const ClassDetails = ({ accessInfo }) => {
     localStorage.setItem(`file_updates_${updatedFileData.id}`, newCount.toString());
     
     // Show success toast notification
-    showToast.success("Changes saved successfully!");
+    showToast.saved();
     
     // Update the local state with the new data
     setCurrentFileData({
@@ -286,59 +280,151 @@ const ClassDetails = ({ accessInfo }) => {
   };
 
   const handleUpdateClassRecord = () => {
-  setShowUpdateMethodModal(true);
-};
+    setShowUpdateFileModal(true);
+  };
 
   const handleSelectImportUpdate = () => {
-  setShowUpdateMethodModal(false);
-  
-  // Create a hidden file input and trigger it (same as your existing code)
-  const fileInput = document.createElement('input');
-  fileInput.type = 'file';
-  fileInput.accept = '.xlsx,.xls,.csv';
-  fileInput.onchange = (e) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      processFileForMerge(file);
-    }
+    setShowUpdateMethodModal(false);
+    setShowUpdateFileModal(true);
   };
-  fileInput.click();
-};
 
   const handleSelectManualUpdate = () => {
-  setShowUpdateMethodModal(false);
-  setShowManualUpdateModal(true);
-};
+    setShowUpdateMethodModal(false);
+    setShowManualUpdateModal(true);
+  };
+
+  const handleFileUpdateSave = async (updateData) => {
+    try {
+      console.log("File update data received:", updateData);
+      
+      // This will be implemented to handle the category-based file merge
+      // For now, just close the modal and show a placeholder message
+      setShowUpdateFileModal(false);
+      
+      showToast.updated(`File uploaded to ${updateData.category} category`);
+      
+      // TODO: Implement actual file processing and merge logic
+      // This should:
+      // 1. Process the uploaded file
+      // 2. Extract columns matching the selected category
+      // 3. Merge with existing data
+      // 4. Update the spreadsheet
+      
+    } catch (error) {
+      console.error('Error updating with file:', error);
+      showToast.error("Failed to update with file. Please try again.");
+    }
+  };
 
   const handleManualUpdateSave = async (updatedFileData) => {
-  try {
-    // Get the active sheet
-    const activeSheet = updatedFileData.active_sheet;
-    
-    // Extract the category mappings and headers
-    const categoryMappings = updatedFileData.all_sheets.category_mappings;
-    const originalHeaders = [...updatedFileData.all_sheets[activeSheet].headers];
-    const originalData = updatedFileData.all_sheets[activeSheet].data;
-    
-    // Find all new columns - columns in category mappings but not in headers
-    const allExistingHeaders = new Set(originalHeaders);
-    const newColumns = [];
-    
-    categoryMappings.forEach(category => {
-      category.columns.forEach(column => {
-        if (!allExistingHeaders.has(column)) {
-          newColumns.push({
-            name: column,
-            categoryId: category.id
+    try {
+      // Get the active sheet
+      const activeSheet = updatedFileData.active_sheet;
+      
+      // Extract the category mappings and headers
+      const categoryMappings = updatedFileData.all_sheets.category_mappings;
+      const originalHeaders = [...updatedFileData.all_sheets[activeSheet].headers];
+      const originalData = updatedFileData.all_sheets[activeSheet].data;
+      
+      // Find all new columns - columns in category mappings but not in headers
+      const allExistingHeaders = new Set(originalHeaders);
+      const newColumns = [];
+      
+      categoryMappings.forEach(category => {
+        category.columns.forEach(column => {
+          if (!allExistingHeaders.has(column)) {
+            newColumns.push({
+              name: column,
+              categoryId: category.id
+            });
+          }
+        });
+      });
+      
+      console.log("Found new columns to add:", newColumns);
+      
+      if (newColumns.length === 0) {
+        // No new columns to add, just update categories
+        await classService.updateCategoryMappings(
+          updatedFileData.id,
+          {
+            all_sheets: {
+              category_mappings: categoryMappings
+            }
+          }
+        );
+        
+        setCurrentFileData(updatedFileData);
+        setShowManualUpdateModal(false);
+        showToast.updated('Category assignments');
+        return;
+      }
+      
+      // Create a map of category -> columns 
+      const categoryToColumns = {};
+      categoryMappings.forEach(category => {
+        categoryToColumns[category.id] = [...category.columns];
+      });
+      
+      const orderedCategories = ['student', 'quiz', 'laboratory', 'exams', 'other'];
+      const customCategories = categoryMappings
+        .filter(category => !orderedCategories.includes(category.id))
+        .map(category => category.id);
+        
+      const allCategoryIds = [...orderedCategories, ...customCategories];
+      
+      // Create new headers array in proper category order
+      const newHeaders = [];
+      allCategoryIds.forEach(categoryId => {
+        if (categoryToColumns[categoryId]) {
+          categoryToColumns[categoryId].forEach(columnName => {
+            newHeaders.push(columnName);
           });
         }
       });
-    });
-    
-    console.log("Found new columns to add:", newColumns);
-    
-    if (newColumns.length === 0) {
-      // No new columns to add, just update categories
+      
+      console.log("New ordered headers:", newHeaders);
+      
+      // Create new data with null values for new columns
+      const newData = originalData.map(row => {
+        const newRow = {};
+        
+        // Copy existing values
+        originalHeaders.forEach(header => {
+          newRow[header] = row[header];
+        });
+        
+        // Add null values for new columns
+        newColumns.forEach(col => {
+          newRow[col.name] = null;
+        });
+        
+        return newRow;
+      });
+      
+      // Update the file data with the new structure
+      const finalFileData = {
+        ...updatedFileData,
+        all_sheets: {
+          ...updatedFileData.all_sheets,
+          [activeSheet]: {
+            ...updatedFileData.all_sheets[activeSheet],
+            headers: newHeaders,
+            data: newData
+          },
+          category_mappings: categoryMappings
+        }
+      };
+      
+      // Save the data structure first
+      await classService.updateExcelData(
+        updatedFileData.id,
+        newData,
+        activeSheet,
+        newHeaders  // Pass the new headers explicitly
+      );
+      
+      // Then update the category mappings
       await classService.updateCategoryMappings(
         updatedFileData.id,
         {
@@ -348,109 +434,29 @@ const ClassDetails = ({ accessInfo }) => {
         }
       );
       
-      setCurrentFileData(updatedFileData);
+      // Show success toast notification
+      showToast.saved();
+      
+      // Update the local state with the new data
+      setCurrentFileData(finalFileData);
       setShowManualUpdateModal(false);
-      showToast.success("Category assignments updated successfully!");
-      return;
+      const newCount = updateCount + 1;
+      setUpdateCount(newCount);
+
+      localStorage.setItem(`file_updates_${updatedFileData.id}`, newCount.toString());
+
+      setCurrentFileData({
+        ...finalFileData,
+        update_count: newCount
+      });
+      
+      // Reload the page to ensure data is displayed correctly
+      window.location.reload();
+    } catch (error) {
+      console.error('Error saving changes:', error);
+      showToast.error("Failed to save changes. Please try again.");
     }
-    
-    // Create a map of category -> columns 
-    const categoryToColumns = {};
-    categoryMappings.forEach(category => {
-      categoryToColumns[category.id] = [...category.columns];
-    });
-    
-    const orderedCategories = ['student', 'quiz', 'laboratory', 'exams', 'other'];
-    const customCategories = categoryMappings
-      .filter(category => !orderedCategories.includes(category.id))
-      .map(category => category.id);
-      
-    const allCategoryIds = [...orderedCategories, ...customCategories];
-    
-    // Create new headers array in proper category order
-    const newHeaders = [];
-    allCategoryIds.forEach(categoryId => {
-      if (categoryToColumns[categoryId]) {
-        categoryToColumns[categoryId].forEach(columnName => {
-          newHeaders.push(columnName);
-        });
-      }
-    });
-    
-    console.log("New ordered headers:", newHeaders);
-    
-    // Create new data with null values for new columns
-    const newData = originalData.map(row => {
-      const newRow = {};
-      
-      // Copy existing values
-      originalHeaders.forEach(header => {
-        newRow[header] = row[header];
-      });
-      
-      // Add null values for new columns
-      newColumns.forEach(col => {
-        newRow[col.name] = null;
-      });
-      
-      return newRow;
-    });
-    
-    // Update the file data with the new structure
-    const finalFileData = {
-      ...updatedFileData,
-      all_sheets: {
-        ...updatedFileData.all_sheets,
-        [activeSheet]: {
-          ...updatedFileData.all_sheets[activeSheet],
-          headers: newHeaders,
-          data: newData
-        },
-        category_mappings: categoryMappings
-      }
-    };
-    
-    // Save the data structure first
-    await classService.updateExcelData(
-      updatedFileData.id,
-      newData,
-      activeSheet,
-      newHeaders  // Pass the new headers explicitly
-    );
-    
-    // Then update the category mappings
-    await classService.updateCategoryMappings(
-      updatedFileData.id,
-      {
-        all_sheets: {
-          category_mappings: categoryMappings
-        }
-      }
-    );
-    
-    // Show success toast notification
-    showToast.success("Changes saved successfully!");
-    
-    // Update the local state with the new data
-    setCurrentFileData(finalFileData);
-    setShowManualUpdateModal(false);
-    const newCount = updateCount + 1;
-    setUpdateCount(newCount);
-
-    localStorage.setItem(`file_updates_${updatedFileData.id}`, newCount.toString());
-
-    setCurrentFileData({
-      ...finalFileData,
-      update_count: newCount
-    });
-    
-    // Reload the page to ensure data is displayed correctly
-    window.location.reload();
-  } catch (error) {
-    console.error('Error saving changes:', error);
-    showToast.error("Failed to save changes. Please try again.");
-  }
-};
+  };
 
   React.useEffect(() => {
     if (currentFileData && currentFileData.all_sheets) {
@@ -472,207 +478,6 @@ const ClassDetails = ({ accessInfo }) => {
       }
     }
   }, [currentFileData]);
-
-  const processFileForMerge = async (file) => {
-    try {
-      // Process the file data
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const data = new Uint8Array(e.target.result);
-          const workbook = XLSX.read(data, { type: 'array', cellDates: true });
-          const firstSheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[firstSheetName];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-          
-          if (jsonData.length > 0) {
-            const headers = jsonData[0] || [];
-            const rows = jsonData.slice(1);
-            
-            // Format the file data similar to how API returns it
-            const formattedData = {
-              file_name: file.name,
-              active_sheet: firstSheetName,
-              all_sheets: {
-                [firstSheetName]: {
-                  headers: headers,
-                  data: rows
-                }
-              }
-            };
-            
-            setMergeFile(file);
-            setMergeFileData(formattedData);
-            setShowMergeModal(true);
-          }
-        } catch (error) {
-          console.error("Error processing file for merge:", error);
-          showToast.error(`Error reading file: ${error.message}`);
-        }
-      };
-      
-      reader.readAsArrayBuffer(file);
-    } catch (error) {
-      console.error("Error preparing file for merge:", error);
-      showToast.error(`Error preparing file: ${error.message}`);
-    }
-  };
-
-  const handleMergeFiles = async (mergeOptions) => {
-  if (!mergeFile || !currentFileData) return;
-  
-  setFileLoading(true);
-  setImportStage('Merging files...');
-  setImportProgress(0);
-  
-  // Animation for progress
-  const animateProgress = () => {
-    setImportProgress(prev => {
-      if (prev < 90) return prev + Math.random() * 10;
-      return prev;
-    });
-    
-    if (importProgress < 90) {
-      setTimeout(animateProgress, 200);
-    }
-  };
-  
-  setTimeout(animateProgress, 200);
-  
-  try {
-    // Create form data for API call
-    const formData = new FormData();
-    formData.append('file', mergeFile);
-    formData.append('class_id', id);
-    formData.append('merge', 'true');
-    formData.append('override_names', mergeOptions.overrideNames.toString());
-    
-    // Add category mappings
-    formData.append('category_mappings', JSON.stringify(mergeOptions.categories));
-    
-    // Call API to merge files
-    const response = await classService.mergeExcel(formData);
-    
-    // Update state with new data
-     if (response.data) {
-      // Add the mappings directly to the returned data
-      response.data.column_categories = mergeOptions.categoryMappings;
-      
-      setCurrentFileData(response.data);
-      setSelectedFile({
-        name: response.data.file_name,
-        id: response.data.id
-      });
-      
-      showToast.success("Files merged successfully!");
-    }
-    
-    setImportProgress(100);
-    
-    setTimeout(() => {
-      setFileLoading(false);
-      setImportProgress(0);
-      setImportStage('');
-    }, 500);
-    
-  } catch (error) {
-    console.error("Error merging files:", error);
-    showToast.error("Failed to merge files. Please try again.");
-    setFileLoading(false);
-    setImportProgress(0);
-    setImportStage('');
-  }
-};
-
-  // File upload and preview functions
-  const handleFileUpload = async (file) => {
-    if (!file) return;
-
-    console.log("handleFileUpload called with file:", {
-      name: file.name,
-      type: file.type,
-      size: file.size,
-      lastModified: file.lastModified,
-      isFile: file instanceof File
-    });
-
-    setError(null);
-    setPreviewError(null);
-
-    // Create preview info
-    const previewData = {
-      name: file.name,
-      size: formatFileSize(file.size),
-      type: file.type || getFileTypeFromExtension(file.name),
-      lastModified: new Date(file.lastModified).toLocaleString()
-    };
-    setPreviewInfo(previewData);
-    setSelectedFile(file);
-    
-    // Generate preview data from file
-    try {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          // Parse the file
-          const data = new Uint8Array(e.target.result);
-          const workbook = XLSX.read(data, {
-            type: 'array',
-            cellDates: true
-          });
-          
-          // Get first sheet
-          const firstSheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[firstSheetName];
-          
-          // Convert to JSON with headers
-          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-          
-          if (jsonData.length > 0) {
-            const headers = jsonData[0] || [];
-            const rows = jsonData.slice(1);
-            
-            // Set preview data
-            setPreviewData({
-              headers: headers,
-              data: rows,
-              totalRows: rows.length,
-              totalColumns: headers.length,
-              sheetName: firstSheetName
-            });
-            
-            // Auto-detect name column
-            const namePatterns = ['name', 'student', 'learner', 'pupil', 'full name', 'first name', 'last name'];
-            const nameColumnIndex = headers.findIndex(header => 
-              namePatterns.some(pattern => 
-                String(header).toLowerCase().includes(pattern.toLowerCase())
-              )
-            );
-            
-            if (nameColumnIndex !== -1) {
-              setDetectedNameColumn(nameColumnIndex);
-            }
-          } else {
-            setPreviewError("No data found in the file");
-          }
-        } catch (error) {
-          console.error("Error processing file for preview:", error);
-          setPreviewError(`Error reading file: ${error.message}`);
-        }
-      };
-      
-      reader.onerror = () => {
-        setPreviewError("Error reading file");
-      };
-      
-      reader.readAsArrayBuffer(file);
-    } catch (error) {
-      console.error("Error during file preview:", error);
-      setPreviewError(`Error preparing file preview: ${error.message}`);
-    }
-    
-    setShowPreview(true);
-  };
 
   const processSelectedFile = async () => {
     if (!selectedFile) return;
@@ -765,13 +570,136 @@ const ClassDetails = ({ accessInfo }) => {
         console.log("Sanitized custom columns for upload:", validatedColumns);
       }
 
+      setImportStage('Analyzing columns and creating categories...');
+
+      // Create category mappings for the imported data
+      let categoryMappings = [];
+      
+      // If we have preview data, automatically categorize the imported columns
+      if (previewData && previewData.headers) {
+        const importedHeaders = previewData.headers;
+        
+        // Enhanced Auto-detect name column - specifically look for "No. Last Name, First Name" pattern
+        const specificNamePatterns = [
+          'no. last name, first name',
+          'no. lastname, firstname', 
+          'number last name first name',
+          'no lastname firstname',
+          'student no. last name, first name',
+          'student number last name first name'
+        ];
+        
+        const generalNamePatterns = ['name', 'student', 'learner', 'pupil', 'full name', 'first name', 'last name', 'no.'];
+        
+        // Find columns that should be categorized as "Student Info"
+        const studentInfoColumns = [];
+        
+        importedHeaders.forEach(header => {
+          const headerLower = String(header).toLowerCase().trim();
+          
+          // Check for specific patterns first
+          const isSpecificMatch = specificNamePatterns.some(pattern => 
+            headerLower.includes(pattern.toLowerCase())
+          );
+          
+          // Check for general patterns
+          const isGeneralMatch = generalNamePatterns.some(pattern => 
+            headerLower.includes(pattern.toLowerCase())
+          );
+          
+          // Add to student info if it matches any pattern
+          if (isSpecificMatch || isGeneralMatch) {
+            studentInfoColumns.push(header);
+            console.log(`Detected student info column: "${header}" (${isSpecificMatch ? 'specific' : 'general'} match)`);
+          }
+        });
+        
+        // If no specific student columns found, use first few columns as student info
+        if (studentInfoColumns.length === 0 && importedHeaders.length > 0) {
+          // Take first 3 columns as student info by default
+          const defaultStudentColumns = importedHeaders.slice(0, Math.min(3, importedHeaders.length));
+          studentInfoColumns.push(...defaultStudentColumns);
+          console.log(`No student columns detected, using first columns as Student Info: ${defaultStudentColumns}`);
+        }
+        
+        // Create "Student Info" category for detected columns
+        if (studentInfoColumns.length > 0) {
+          categoryMappings.push({
+            id: 'student',
+            name: 'Student Info',
+            columns: [...studentInfoColumns] // All detected student columns
+          });
+          console.log(`Created Student Info category with ${studentInfoColumns.length} columns:`, studentInfoColumns);
+        }
+        
+        // Add remaining imported columns to "Other Activities" category if any
+        const remainingColumns = importedHeaders.filter(header => 
+          !studentInfoColumns.includes(header)
+        );
+        
+        if (remainingColumns.length > 0) {
+          categoryMappings.push({
+            id: 'other',
+            name: 'Other Activities',
+            columns: [...remainingColumns]
+          });
+          console.log(`Created Other Activities category with ${remainingColumns.length} columns:`, remainingColumns);
+        }
+      }
+      
+      // Add categories for the default quiz/lab/exam columns
+      if (validatedColumns.length > 0) {
+        // Group custom columns by category
+        const quizColumns = validatedColumns
+          .filter(col => col.name.toLowerCase().includes('quiz') && col.type !== 'header')
+          .map(col => col.name);
+          
+        const labColumns = validatedColumns
+          .filter(col => col.name.toLowerCase().includes('lab') && col.type !== 'header')
+          .map(col => col.name);
+          
+        const examColumns = validatedColumns
+          .filter(col => (col.name.toLowerCase().includes('exam') || col.name.includes('PE -') || col.name.includes('ME -') || col.name.includes('PFE -') || col.name.includes('FE -')) && col.type !== 'header')
+          .map(col => col.name);
+        
+        // Add quiz category if we have quiz columns
+        if (quizColumns.length > 0) {
+          categoryMappings.push({
+            id: 'quiz',
+            name: 'Quiz',
+            columns: quizColumns
+          });
+        }
+        
+        // Add laboratory category if we have lab columns
+        if (labColumns.length > 0) {
+          categoryMappings.push({
+            id: 'laboratory',
+            name: 'Laboratory Activities',
+            columns: labColumns
+          });
+        }
+        
+        // Add exam category if we have exam columns
+        if (examColumns.length > 0) {
+          categoryMappings.push({
+            id: 'exams',
+            name: 'Exams',
+            columns: examColumns
+          });
+        }
+      }
+      
+      console.log("Auto-generated category mappings:", categoryMappings);
+
       setImportStage('Uploading file...');
 
-      // Make the API call with the real implementation
+      // Make the API call with the real implementation, including category mappings
       const response = await classService.uploadExcel(
           selectedFile,
           id,
-          validatedColumns.length > 0 ? validatedColumns : null
+          validatedColumns.length > 0 ? validatedColumns : null,
+          categoryMappings.length > 0 ? categoryMappings : null // Pass category mappings
       );
 
       const responseData = response.data;
@@ -789,7 +717,7 @@ const ClassDetails = ({ accessInfo }) => {
       setImportProgress(100);
 
       // Show success notification
-      showToast.success("File imported successfully!");
+      showToast.imported();
 
       setTimeout(() => {
         setFileLoading(false);
@@ -923,7 +851,7 @@ const exportDirectlyFromData = () => {
           // Save the PDF file
           doc.save(`${exportFileName || 'export'}.pdf`);
           
-          showToast.success(`File "${exportFileName || 'export'}.pdf" downloaded successfully`);
+          showToast.exported(`${exportFileName || 'export'}.pdf`);
           setExportLoading(false);
           setShowExportOptions(false);
           
@@ -1169,7 +1097,7 @@ const exportDirectlyFromData = () => {
       }, 100);
     }
     
-    showToast.success(`File "${fileName}" downloaded successfully`);
+    showToast.exported(fileName);
   } catch (error) {
     console.error('Export error:', error);
     showToast.error('Failed to export file');
@@ -1318,6 +1246,148 @@ const exportDirectlyFromData = () => {
     return 'Spreadsheet File';
   };
 
+  // Add back the handleFileUpload function
+  const handleFileUpload = async (file) => {
+    if (!file) return;
+
+    console.log("handleFileUpload called with file:", {
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      lastModified: file.lastModified,
+      isFile: file instanceof File
+    });
+
+    setError(null);
+    setPreviewError(null);
+
+    // Create preview info
+    const previewData = {
+      name: file.name,
+      size: formatFileSize(file.size),
+      type: file.type || getFileTypeFromExtension(file.name),
+      lastModified: new Date(file.lastModified).toLocaleString()
+    };
+    setPreviewInfo(previewData);
+    setSelectedFile(file);
+    
+    // Generate preview data from file
+    try {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          // Parse the file
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, {
+            type: 'array',
+            cellDates: true
+          });
+          
+          // Get first sheet
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          
+          // Convert to JSON with headers
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+          
+          if (jsonData.length > 0) {
+            const headers = jsonData[0] || [];
+            const rows = jsonData.slice(1);
+            
+            // Set preview data
+            setPreviewData({
+              headers: headers,
+              data: rows,
+              totalRows: rows.length,
+              totalColumns: headers.length,
+              sheetName: firstSheetName
+            });
+            
+            // Enhanced Auto-detect name column - specifically look for "No. Last Name, First Name" pattern
+            // This pattern is commonly used in educational institutions where student records
+            // include both student numbers and formatted names in a single column
+            const specificNamePatterns = [
+              'no. last name, first name',
+              'no. lastname, firstname', 
+              'number last name first name',
+              'no lastname firstname',
+              'student no. last name, first name',
+              'student number last name first name'
+            ];
+            
+            const generalNamePatterns = ['name', 'student', 'learner', 'pupil', 'full name', 'first name', 'last name', 'no.'];
+            
+            // First try to find the specific pattern
+            let nameColumnIndex = headers.findIndex(header => 
+              specificNamePatterns.some(pattern => 
+                String(header).toLowerCase().includes(pattern.toLowerCase())
+              )
+            );
+            
+            // If not found, try general patterns
+            if (nameColumnIndex === -1) {
+              nameColumnIndex = headers.findIndex(header => 
+                generalNamePatterns.some(pattern => 
+                  String(header).toLowerCase().includes(pattern.toLowerCase())
+                )
+              );
+            }
+            
+            if (nameColumnIndex !== -1) {
+              setDetectedNameColumn(nameColumnIndex);
+            }
+            
+            // Automatically add default category columns for imported data
+            const defaultColumns = [
+              // Quiz category
+              { id: `quiz_category_${Date.now()}`, name: 'Quiz', type: 'header' },
+              { id: `quiz_1_${Date.now()}`, name: 'Quiz 1', type: 'number', maxScore: 10 },
+              { id: `quiz_2_${Date.now()}`, name: 'Quiz 2', type: 'number', maxScore: 10 },
+              { id: `quiz_3_${Date.now()}`, name: 'Quiz 3', type: 'number', maxScore: 10 },
+              { id: `quiz_4_${Date.now()}`, name: 'Quiz 4', type: 'number', maxScore: 10 },
+              { id: `quiz_5_${Date.now()}`, name: 'Quiz 5', type: 'number', maxScore: 10 },
+              
+              // Lab category
+              { id: `lab_category_${Date.now()}`, name: 'Laboratory Activities', type: 'header' },
+              { id: `lab_1_${Date.now()}`, name: 'Lab 1', type: 'number', maxScore: 20 },
+              { id: `lab_2_${Date.now()}`, name: 'Lab 2', type: 'number', maxScore: 20 },
+              { id: `lab_3_${Date.now()}`, name: 'Lab 3', type: 'number', maxScore: 20 },
+              { id: `lab_4_${Date.now()}`, name: 'Lab 4', type: 'number', maxScore: 20 },
+              { id: `lab_5_${Date.now()}`, name: 'Lab 5', type: 'number', maxScore: 20 },
+              
+              // Exam category
+              { id: `exam_category_${Date.now()}`, name: 'Exams', type: 'header' },
+              { id: `pe_${Date.now()}`, name: 'PE - Prelim Exam', type: 'number', maxScore: 50 },
+              { id: `me_${Date.now()}`, name: 'ME - Midterm Exam', type: 'number', maxScore: 50 },
+              { id: `pfe_${Date.now()}`, name: 'PFE - PreFinal Exam', type: 'number', maxScore: 50 },
+              { id: `fe_${Date.now()}`, name: 'FE - Final Exam', type: 'number', maxScore: 100 },
+            ];
+            
+            console.log("Auto-adding default category columns:", defaultColumns);
+            setCustomColumns(defaultColumns);
+            
+          } else {
+            setPreviewError("No data found in the file");
+          }
+        } catch (error) {
+          console.error("Error processing file for preview:", error);
+          setPreviewError(`Error reading file: ${error.message}`);
+        }
+      };
+      
+      reader.onerror = () => {
+        setPreviewError("Error reading file");
+      };
+      
+      reader.readAsArrayBuffer(file);
+    } catch (error) {
+      console.error("Error during file preview:", error);
+      setPreviewError(`Error preparing file preview: ${error.message}`);
+    }
+    
+    setShowPreview(true);
+  };
+
   // Loading states
   if (loading) {
     return (
@@ -1421,79 +1491,67 @@ const exportDirectlyFromData = () => {
             <>
               {/* Header section */}
               <div className="top-0 z-30 pt-4 pb-2 px-4 -mx-4">
-                <div className="flex justify-between items-center mb-4">
-                  <div className="flex items-center">
-                    <div className="h-12 w-12 rounded-lg bg-[#EEF0F8] flex items-center justify-center mr-4">
-                      <MdOutlineClass className="h-6 w-6 text-[#333D79]" />
+                <div className="flex flex-col gap-3 sm:gap-4 mb-4">
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
+                    <div className="flex items-center">
+                      <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-lg bg-[#EEF0F8] flex items-center justify-center mr-3 sm:mr-4">
+                        <MdOutlineClass className="h-5 w-5 sm:h-6 sm:w-6 text-[#333D79]" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h1 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-800 truncate">{classData.name}</h1>
+                        <p className="text-xs sm:text-sm text-gray-500">
+                          {currentFileData
+                              ? `Showing data from: ${selectedFile ? selectedFile.name : 'Imported file'}`
+                              : `Last updated: ${classData.lastUpdated}`
+                          }
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h1 className="text-2xl font-bold text-gray-800">{classData.name}</h1>
-                      <p className="text-sm text-gray-500">
-                        {currentFileData
-                            ? `Showing data from: ${selectedFile ? selectedFile.name : 'Imported file'}`
-                            : `Last updated: ${classData.lastUpdated}`
-                        }
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex space-x-3">
-                    {currentFileData ? (
-                        <>
-                          {(!teamAccess || teamAccess.accessLevel === 'edit' || teamAccess.accessLevel === 'full') && (
-                            <>
-                               <button
-                                  onClick={handleUpdateClassRecord}
-                                  className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm hover:bg-gray-50"
-                                >
-                                  <BsFileEarmarkSpreadsheet size={18} />
-                                  <span>Update Class Record</span>
-                                </button>
-
-                              <label htmlFor="add-file" className="cursor-pointer">
-                                <div className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm hover:bg-gray-50">
-                                  <FiUpload size={18} />
-                                  <span>Replace File</span>
+                    <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                      {currentFileData ? (
+                          <>
+                            {(!teamAccess || teamAccess.accessLevel === 'edit' || teamAccess.accessLevel === 'full') && (
+                              <>
+                                 <button
+                                    onClick={handleUpdateClassRecord}
+                                    className="bg-[#EEF0F8] text-[#333D79] hover:bg-[#DCE3F9] px-3 py-2 rounded-lg flex items-center justify-center gap-2 transition-colors shadow-sm font-medium text-sm w-full sm:w-auto"
+                                  >
+                                    <BsFileEarmarkSpreadsheet size={16} />
+                                    <span className="whitespace-nowrap">Update Class Record</span>
+                                  </button>
+                              </>
+                            )}
+                            <button
+                                onClick={handleExport}
+                                className="bg-[#333D79] text-white hover:bg-[#4A5491] px-3 py-2 rounded-lg flex items-center justify-center gap-2 transition-colors shadow-sm font-medium text-sm w-full sm:w-auto"
+                            >
+                              <FiDownload size={16} />
+                              <span className="whitespace-nowrap">Export Data</span>
+                            </button>
+                          </> 
+                      ) : (
+                          !teamAccess || teamAccess.accessLevel !== 'view' ? (
+                              <label htmlFor="file-upload" className="cursor-pointer w-full sm:w-auto">
+                                <div className="bg-[#333D79] hover:bg-[#4A5491] text-white px-3 py-2 rounded-lg flex items-center justify-center gap-2 transition-colors shadow-sm font-medium text-sm w-full">
+                                  <FiUpload size={16} />
+                                  <span className="whitespace-nowrap">Import Files</span>
                                 </div>
                                 <input
-                                    id="add-file"
+                                    id="file-upload"
                                     type="file"
                                     accept=".xlsx,.xls,.csv"
                                     className="hidden"
                                     onChange={handleFileInput}
                                 />
                               </label>
-                            </>
-                          )}
-                          <button
-                              onClick={handleExport}
-                              className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm hover:bg-gray-50"
-                          >
-                            <FiDownload size={18} />
-                            <span>Export Data to Excel or PDF</span>
-                          </button>
-                        </> 
-                    ) : (
-                        !teamAccess || teamAccess.accessLevel !== 'view' ? (
-                            <label htmlFor="file-upload" className="cursor-pointer">
-                              <div className="bg-[#333D79] hover:bg-[#4A5491] text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm">
-                                <FiUpload size={18} />
-                                <span>Import Files</span>
-                              </div>
-                              <input
-                                  id="file-upload"
-                                  type="file"
-                                  accept=".xlsx,.xls,.csv"
-                                  className="hidden"
-                                  onChange={handleFileInput}
-                              />
-                            </label>
-                        ) : null
-                    )}
+                          ) : null
+                      )}
+                    </div>
                   </div>
                 </div>
 
                 {/* Breadcrumb navigation */}
-                <div className="flex items-center text-sm text-gray-500 mb-2 pl-1">
+                <div className="flex items-center text-xs sm:text-sm text-gray-500 mb-2 pl-1">
                   <a
                       href="/dashboard/courses"
                       className="hover:text-[#333D79] transition-colors"
@@ -1501,20 +1559,20 @@ const exportDirectlyFromData = () => {
                     Courses
                   </a>
                   <span className="mx-2">/</span>
-                  <span className="text-[#333D79]">{classData?.name}</span>
+                  <span className="text-[#333D79] truncate">{classData?.name}</span>
                 </div>
 
                 {/* File Info Bar - Modified to show update counter */}
                   {currentFileData && (
-                    <div className="mb-4 flex items-center justify-between bg-gray-50 rounded-lg p-3 border border-gray-200">
+                    <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between bg-gray-50 rounded-lg p-3 border border-gray-200 gap-3 sm:gap-0">
                       <div className="flex items-center">
                         <div className="w-8 h-8 rounded-md bg-[#EEF0F8] flex items-center justify-center mr-3 shadow-sm">
                           <BsFileEarmarkSpreadsheet className="text-[#333D79]" size={16} />
                         </div>
                         <div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
                             <span className="text-sm font-medium text-gray-700">{selectedFile?.name}</span>
-                            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full w-fit">
                               Updates: {currentFileData?.update_count || 0}
                             </span>
                           </div>
@@ -1528,7 +1586,7 @@ const exportDirectlyFromData = () => {
                       {(!teamAccess || teamAccess.accessLevel === 'edit' || teamAccess.accessLevel === 'full') && (
                         <button
                             onClick={() => setIsDeleteModalOpen(true)}
-                            className="p-2 rounded-md text-gray-500 hover:text-red-500 hover:bg-red-50 transition-colors border border-gray-200"
+                            className="p-2 rounded-md text-gray-500 hover:text-red-500 hover:bg-red-50 transition-colors border border-gray-200 self-start sm:self-auto"
                             title="Delete spreadsheet"
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1568,7 +1626,6 @@ const exportDirectlyFromData = () => {
                       </div>
                       <h2 className="text-lg font-semibold text-gray-800 relative">
                         {currentFileData ? 'Excel Data' : 'Class Data'}
-                        <div className="absolute -top-1 -right-4 w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
                       </h2>
                     </div>
                   </div>
@@ -1605,17 +1662,17 @@ const exportDirectlyFromData = () => {
                   ) : (
                       <div className="excel-data-container">
                         <div className="border rounded-lg shadow-sm overflow-hidden mb-4" style={{ height: 'calc(70vh - 90px)' }}>
-                          <div className="bg-white px-3 py-2 border-b border-gray-100 flex justify-between items-center sticky top-0 z-10">
+                          <div className="bg-white px-3 py-2 border-b border-gray-100 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-0 sticky top-0 z-10">
                             <div className="flex items-center">
                               <div className="h-6 w-6 text-blue-600 flex items-center justify-center mr-2">
                                 <BsFileEarmarkSpreadsheet className="h-5 w-5" />
                               </div>
-                              <span className="text-sm font-medium text-gray-700">{selectedFile ? selectedFile.name : 'Sample Grades.xlsx'}</span>
+                              <span className="text-xs sm:text-sm font-medium text-gray-700 truncate">{selectedFile ? selectedFile.name : 'Sample Grades.xlsx'}</span>
                             </div>
-                            <div className="flex items-center">
+                            <div className="flex items-center gap-1">
                               <button
                                   onClick={handleExport}
-                                  className="text-gray-500 hover:text-[#333D79] p-1.5 rounded-md hover:bg-gray-50 mr-1"
+                                  className="text-gray-500 hover:text-[#333D79] p-1.5 rounded-md hover:bg-gray-50"
                                   title="Export Data"
                               >
                                 <FiDownload size={16} />
@@ -1703,27 +1760,11 @@ const exportDirectlyFromData = () => {
           processExport={processExport}
         />
 
-        <MergeExcelModal
-          isOpen={showMergeModal}
-          onClose={() => setShowMergeModal(false)}
+        <UpdateFileModal
+          isOpen={showUpdateFileModal}
+          onClose={() => setShowUpdateFileModal(false)}
           currentFile={currentFileData}
-          newFile={mergeFileData}
-          onMerge={handleMergeFiles}
-          teamAccess={teamAccess}
-        />
-
-        <UpdateMethodModal 
-          isOpen={showUpdateMethodModal}
-          onClose={() => setShowUpdateMethodModal(false)}
-          onSelectImport={handleSelectImportUpdate}
-          onSelectManual={handleSelectManualUpdate}
-        />
-
-        <ManualUpdateModal
-          isOpen={showManualUpdateModal}
-          onClose={() => setShowManualUpdateModal(false)}
-          currentFile={currentFileData}
-          onSave={handleManualUpdateSave}
+          onSave={handleFileUpdateSave}
           teamAccess={teamAccess}
         />
 
@@ -1768,12 +1809,25 @@ const exportDirectlyFromData = () => {
             fileName={currentFileData?.file_name || ''}
         />
 
-        {/* Loading Indicator for Delete Operation */}
+        {/* Loading Indicator for Delete Operation - Centered on screen */}
         {isDeleting && (
-            <div className="fixed bottom-4 right-4 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg shadow-lg z-50">
-              <div className="flex items-center gap-2">
-                <div className="animate-spin rounded-full h-4 w-4 border-2 border-red-500 border-t-transparent"></div>
-                <span>Deleting file...</span>
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1000] backdrop-blur-sm">
+              <div className="bg-white rounded-xl shadow-lg p-6 max-w-sm w-full animate-fadeIn">
+                <div className="flex flex-col items-center">
+                  <div className="relative mb-4">
+                    <div className="w-16 h-16 border-4 border-red-100 border-t-red-500 rounded-full animate-spin"></div>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </div>
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Deleting File</h3>
+                  <p className="text-gray-500 text-center mb-2">Please wait while we delete the file...</p>
+                  <div className="w-full bg-gray-200 rounded-full h-2 mb-1">
+                    <div className="bg-red-500 h-2 rounded-full animate-pulse" style={{ width: '60%' }}></div>
+                  </div>
+                </div>
               </div>
             </div>
         )}

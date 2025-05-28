@@ -1,13 +1,61 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { toast } from 'react-hot-toast';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import PropTypes from 'prop-types';
+import { useEffect, useMemo, useState } from 'react';
 import { FiBook, FiEdit, FiFilter, FiMoreVertical, FiPlus, FiSearch, FiTrash2, FiUsers } from 'react-icons/fi';
 import { MdArchive, MdOutlineSchool } from 'react-icons/md';
 import { useNavigate } from 'react-router-dom';
 import { courseService } from '../services/api';
 import { commonHeaderAnimations } from '../utils/animation.js';
+import { showToast } from '../utils/toast.jsx';
 import DashboardLayout from "./layouts/DashboardLayout.jsx";
 import CourseModal from './modals/CourseModal';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+
+// Delete Confirmation Modal Component
+const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, courseName }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-[999] flex items-center justify-center p-4 animate-fadeIn backdrop-blur-sm">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+        <div className="mb-4 flex items-center">
+          <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center mr-3">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-600" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-medium text-gray-900">Delete Course</h3>
+        </div>
+
+        <p className="text-sm text-gray-600 mb-6">
+          Are you sure you want to delete <span className="font-medium text-gray-900">{courseName}</span>? This action cannot be undone.
+        </p>
+
+        <div className="flex justify-end space-x-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// PropTypes validation
+DeleteConfirmationModal.propTypes = {
+  isOpen: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
+  onConfirm: PropTypes.func.isRequired,
+  courseName: PropTypes.string
+};
 
 // Animation styles component - optimized to prevent flickering
 const CoursesStyles = () => {
@@ -45,16 +93,15 @@ const Courses = () => {
   const [isEditMode, setIsEditMode] = useState(false);
   const [currentCourse, setCurrentCourse] = useState(null);
   const [activeDropdown, setActiveDropdown] = useState(null);
-  const [dropdownPosition, setDropdownPosition] = useState(null);
-  const [dropdownCourse, setDropdownCourse] = useState(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [courseToDelete, setCourseToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [updatingStatusId, setUpdatingStatusId] = useState(null);
   
   // Replace useState and useEffect with useQuery
   const { 
     data: courses = [], 
-    isLoading, 
-    error 
+    isLoading
   } = useQuery({
     queryKey: ['courses'],
     queryFn: async () => {
@@ -65,10 +112,10 @@ const Courses = () => {
     onError: (error) => {
       console.error('Error fetching courses:', error);
       if (error.response?.status === 401) {
-        toast.error('Session expired. Please login again.');
+        showToast.error('Session expired. Please login again.');
         navigate('/login');
       } else {
-        toast.error('Failed to load courses');
+        showToast.error('Failed to load courses');
       }
     }
   });
@@ -76,56 +123,66 @@ const Courses = () => {
   // Setup mutations for adding, updating, and deleting courses
   const addCourseMutation = useMutation({
     mutationFn: (courseData) => courseService.createCourse(courseData),
-    onSuccess: (response) => {
+    onSuccess: () => {
       queryClient.invalidateQueries(['courses']);
-      toast.success('Course added successfully');
+      showToast.created('Course');
     },
     onError: (error) => {
       console.error('Error adding course:', error);
-      toast.error('Failed to add course');
+      showToast.error('Failed to add course');
     }
   });
   
   const updateCourseMutation = useMutation({
     mutationFn: ({ id, courseData }) => courseService.updateCourse(id, courseData),
-    onSuccess: (response) => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries(['courses']);
-      toast.success('Course updated successfully');
+      if (variables.courseData.status) {
+        showToast.updated(`Course status to ${variables.courseData.status}`);
+      } else {
+        showToast.updated('Course');
+      }
+      setUpdatingStatusId(null);
     },
     onError: (error) => {
       console.error('Error updating course:', error);
-      toast.error('Failed to update course');
+      showToast.error('Failed to update course');
+      setUpdatingStatusId(null);
     }
   });
   
- const deleteCourseMutation = useMutation({
-  mutationFn: (id) => courseService.deleteCourse(id),
-  onSuccess: () => {
-    queryClient.invalidateQueries(['courses']);
-    toast.success('Course deleted successfully');
-  },
-  onError: (error) => {
-    console.error('Error deleting course:', error);
-    
-    if (error.response?.status === 404) {
-      toast.error('Course not found or you do not have permission to delete it.');
-    } else if (error.response?.status === 403) {
-      toast.error('You do not have permission to delete this course.');
-    } else {
-      toast.error('Failed to delete course');
+  const deleteCourseMutation = useMutation({
+    mutationFn: (id) => courseService.deleteCourse(id),
+    onMutate: () => {
+      setIsDeleting(true);
+      setIsDeleteModalOpen(false); // Close the modal immediately when deletion starts
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['courses']);
+      showToast.deleted('Course');
+      setIsDeleting(false);
+      setCourseToDelete(null);
+    },
+    onError: (error) => {
+      console.error('Error deleting course:', error);
+      
+      if (error.response?.status === 404) {
+        showToast.error('Course not found or you do not have permission to delete it.');
+      } else if (error.response?.status === 403) {
+        showToast.error('You do not have permission to delete this course.');
+      } else {
+        showToast.error('Failed to delete course');
+      }
+      
+      setIsDeleting(false);
+      setCourseToDelete(null);
     }
-    
-    setIsDeleteModalOpen(false);
-    setCourseToDelete(null);
-  }
-});
+  });
 
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (activeDropdown && !event.target.closest('.dropdown-trigger')) {
         setActiveDropdown(null);
-        setDropdownPosition(null);
-        setDropdownCourse(null);
       }
     };
     
@@ -137,8 +194,6 @@ const Courses = () => {
     const handleScroll = () => {
       if (activeDropdown) {
         setActiveDropdown(null);
-        setDropdownPosition(null);
-        setDropdownCourse(null);
       }
     };
     
@@ -165,41 +220,30 @@ const Courses = () => {
   };
 
   const handleUpdateStatus = async (courseId, newStatus) => {
-    try {
-      updateCourseMutation.mutate({
-        id: courseId, 
-        courseData: { status: newStatus }
-      });
-      setActiveDropdown(null);
-    } catch (error) {
-      console.error(`Error updating course status:`, error);
-    }
+    setUpdatingStatusId(courseId);
+    setActiveDropdown(null);
+    updateCourseMutation.mutate({
+      id: courseId, 
+      courseData: { status: newStatus }
+    });
   };
   
-  const handleDeleteCourse = (courseId) => {
-  setCourseToDelete(courseId);
-  setIsDeleteModalOpen(true);
-  setActiveDropdown(null);
-};
+  const handleDeleteCourse = (course) => {
+    setCourseToDelete(course);
+    setIsDeleteModalOpen(true);
+    setActiveDropdown(null);
+  };
 
   const confirmDeleteCourse = () => {
-  deleteCourseMutation.mutate(courseToDelete);
-  setIsDeleteModalOpen(false);
-  setCourseToDelete(null);
-};
+    deleteCourseMutation.mutate(courseToDelete.id);
+  };
 
-  const toggleDropdown = (courseId, event) => {
+  const toggleDropdown = (courseId) => {
     if (activeDropdown === courseId) {
       setActiveDropdown(null);
-      setDropdownPosition(null);
-      setDropdownCourse(null);
       return;
     }
     
-    // Get the position of the click
-    const rect = event.currentTarget.getBoundingClientRect();
-    setDropdownPosition({ x: rect.left + rect.width, y: rect.top });
-    setDropdownCourse(courses.find(course => course.id === courseId));
     setActiveDropdown(courseId);
   };
 
@@ -457,6 +501,7 @@ const Courses = () => {
                           }}
                           className="p-2 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-600"
                           title="Edit Course"
+                          disabled={updatingStatusId === course.id || isDeleting}
                         >
                           <FiEdit size={14} />
                         </button>
@@ -464,25 +509,33 @@ const Courses = () => {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleDeleteCourse(course.id);
+                            handleDeleteCourse(course);
                           }}
                           className="p-2 rounded-md bg-red-50 hover:bg-red-100 text-red-500"
                           title="Delete Course"
+                          disabled={updatingStatusId === course.id || isDeleting}
                         >
                           <FiTrash2 size={14} />
                         </button>
                         
                         <div className="relative dropdown-trigger">
-                          <button
-                            className="p-2 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-600"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleDropdown(course.id, e);
-                            }}
-                            title="More Options"
-                          >
-                            <FiMoreVertical size={14} />
-                          </button>
+                          {updatingStatusId === course.id ? (
+                            <div className="p-2 rounded-md bg-gray-100 flex items-center justify-center">
+                              <div className="animate-spin rounded-full h-4 w-4 border-2 border-[#333D79] border-t-transparent"></div>
+                            </div>
+                          ) : (
+                            <button
+                              className="p-2 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-600"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleDropdown(course.id);
+                              }}
+                              title="More Options"
+                              disabled={isDeleting}
+                            >
+                              <FiMoreVertical size={14} />
+                            </button>
+                          )}
                           
                           {activeDropdown === course.id && (
                             <div 
@@ -612,40 +665,38 @@ const Courses = () => {
             )}
           </>
         )}
-      </div>
 
-      {/* Delete Confirmation Modal */}
-        {isDeleteModalOpen && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full mx-4 animate-fade-in-up">
-              <div className="flex items-center justify-center mb-4">
-                <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
-                  <FiTrash2 className="text-red-500" size={24} />
+        {/* Delete Confirmation Modal */}
+        <DeleteConfirmationModal
+          isOpen={isDeleteModalOpen}
+          onClose={() => setIsDeleteModalOpen(false)}
+          onConfirm={confirmDeleteCourse}
+          courseName={courseToDelete?.name || ''}
+        />
+        
+        {/* Loading Indicator for Delete Operation - Centered on screen */}
+        {isDeleting && (
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[1000] backdrop-blur-sm">
+            <div className="bg-white rounded-xl shadow-lg p-6 max-w-sm w-full animate-fadeIn">
+              <div className="flex flex-col items-center">
+                <div className="relative mb-4">
+                  <div className="w-16 h-16 border-4 border-red-100 border-t-red-500 rounded-full animate-spin"></div>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </div>
                 </div>
-              </div>
-              
-              <h3 className="text-xl font-semibold text-center mb-2">Delete Course</h3>
-              <p className="text-gray-600 text-center mb-6">
-                Are you sure you want to delete this course? This action cannot be undone.
-              </p>
-              
-              <div className="flex justify-center space-x-3">
-                <button
-                  onClick={() => setIsDeleteModalOpen(false)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={confirmDeleteCourse}
-                  className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-                >
-                  Delete
-                </button>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Deleting Course</h3>
+                <p className="text-gray-500 text-center mb-2">Please wait while we delete the course...</p>
+                <div className="w-full bg-gray-200 rounded-full h-2 mb-1">
+                  <div className="bg-red-500 h-2 rounded-full animate-pulse" style={{ width: '60%' }}></div>
+                </div>
               </div>
             </div>
           </div>
         )}
+      </div>
     </DashboardLayout>
   );
 };

@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import DashboardLayout from './layouts/DashboardLayout.jsx';
-import { teamService } from '../services/api.js';
-import { showToast } from '../utils/toast.jsx';
-import CreateTeamModal from './modals/CreateTeamModa.jsx';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { FiPlus } from 'react-icons/fi';
 import { Link } from 'react-router-dom';
+import { teamService } from '../services/api.js';
+import { showToast } from '../utils/toast.jsx';
+import DashboardLayout from './layouts/DashboardLayout.jsx';
+import CreateTeamModal from './modals/CreateTeamModa.jsx';
 
 const YourTeams = () => {
   const [teams, setTeams] = useState([]);
@@ -107,7 +107,7 @@ const YourTeams = () => {
       const response = await teamService.createTeam(teamData);
       setTeams([...teams, response.data]);
       setShowCreateModal(false);
-      showToast.success(`Team "${teamData.name}" created successfully!`);
+      showToast.created('Team');
     } catch (error) {
       console.error('Error creating team:', error);
       showToast.error(error.response?.data?.detail || 'Failed to create team');

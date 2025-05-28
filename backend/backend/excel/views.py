@@ -417,6 +417,36 @@ class ExcelViewSet(viewsets.ModelViewSet):
             for sheet_name, df in new_excel.items():
                 print(f"Processing sheet: {sheet_name}, shape: {df.shape}")
 
+                # Remove columns that are completely empty or have unnamed/null column names
+                # This fixes the issue with extra blank columns appearing
+                original_columns = df.columns.tolist()
+                
+                # Filter out columns that are:
+                # 1. Completely empty (all NaN/null values)
+                # 2. Have unnamed/generic column names like 'Unnamed: X'
+                # 3. Have null/empty column names
+                columns_to_keep = []
+                for col in original_columns:
+                    col_str = str(col).strip()
+                    
+                    # Skip columns with generic/unnamed headers
+                    if (col_str.startswith('Unnamed:') or 
+                        col_str in ['', 'nan', 'NaN', 'None'] or 
+                        col_str.lower() == 'null'):
+                        print(f"Removing column with generic/empty name: '{col_str}'")
+                        continue
+                    
+                    # Skip columns that are completely empty
+                    if df[col].isna().all() or (df[col] == '').all():
+                        print(f"Removing completely empty column: '{col_str}'")
+                        continue
+                        
+                    columns_to_keep.append(col)
+                
+                # Keep only the valid columns
+                df = df[columns_to_keep]
+                print(f"Filtered columns from {len(original_columns)} to {len(columns_to_keep)}")
+
                 df = df.replace({pd.NA: None})
                 df = df.fillna("")
 
@@ -437,6 +467,16 @@ class ExcelViewSet(viewsets.ModelViewSet):
                     records.append(cleaned_record)
 
                 headers = df.columns.tolist()
+
+                # Add custom columns if provided
+                if custom_columns and sheet_name == list(new_excel.keys())[0]:  # Apply to first sheet only
+                    # Filter out header-type columns for adding to data
+                    custom_column_headers = [col['name'] for col in custom_columns if col.get('type') != 'header']
+                    headers.extend(custom_column_headers)
+
+                    for record in records:
+                        for header in custom_column_headers:
+                            record[header] = None
 
                 all_sheets_data[sheet_name] = {
                     'headers': headers,
@@ -706,6 +746,30 @@ class ExcelViewSet(viewsets.ModelViewSet):
                 print("Error parsing custom columns:", str(e))
                 # Continue processing even if custom columns parsing fails
 
+        # Process category mappings if provided
+        category_mappings = []
+        if 'category_mappings' in request.data:
+            try:
+                import json
+                category_mappings_str = request.data.get('category_mappings')
+                print(f"Raw category mappings from request: {category_mappings_str[:100] if category_mappings_str else 'None'}...")
+                
+                if category_mappings_str:
+                    category_mappings_data = json.loads(category_mappings_str)
+                    print(f"Parsed category mappings - type: {type(category_mappings_data)}")
+                    
+                    # Handle array format with 'id', 'name', and 'columns' properties
+                    if isinstance(category_mappings_data, list):
+                        category_mappings = category_mappings_data
+                        print(f"Processed {len(category_mappings)} category mappings from array format")
+                    else:
+                        print("Category mappings data is not in expected array format")
+            except Exception as e:
+                print("Error parsing category mappings:", str(e))
+                import traceback
+                print("Traceback:", traceback.format_exc())
+                # Continue processing even if category mappings parsing fails
+
         try:
             from classes.models import Class
             class_obj = Class.objects.get(id=class_id)
@@ -734,6 +798,36 @@ class ExcelViewSet(viewsets.ModelViewSet):
             for sheet_name, df in excel_data.items():
                 print(f"Processing sheet: {sheet_name}, shape: {df.shape}")
 
+                # Remove columns that are completely empty or have unnamed/null column names
+                # This fixes the issue with extra blank columns appearing
+                original_columns = df.columns.tolist()
+                
+                # Filter out columns that are:
+                # 1. Completely empty (all NaN/null values)
+                # 2. Have unnamed/generic column names like 'Unnamed: X'
+                # 3. Have null/empty column names
+                columns_to_keep = []
+                for col in original_columns:
+                    col_str = str(col).strip()
+                    
+                    # Skip columns with generic/unnamed headers
+                    if (col_str.startswith('Unnamed:') or 
+                        col_str in ['', 'nan', 'NaN', 'None'] or 
+                        col_str.lower() == 'null'):
+                        print(f"Removing column with generic/empty name: '{col_str}'")
+                        continue
+                    
+                    # Skip columns that are completely empty
+                    if df[col].isna().all() or (df[col] == '').all():
+                        print(f"Removing completely empty column: '{col_str}'")
+                        continue
+                        
+                    columns_to_keep.append(col)
+                
+                # Keep only the valid columns
+                df = df[columns_to_keep]
+                print(f"Filtered columns from {len(original_columns)} to {len(columns_to_keep)}")
+
                 df = df.replace({pd.NA: None})
                 df = df.fillna("")
 
@@ -757,8 +851,8 @@ class ExcelViewSet(viewsets.ModelViewSet):
 
                 # Add custom columns if provided
                 if custom_columns and sheet_name == list(excel_data.keys())[0]:  # Apply to first sheet only
-                    # Add custom column headers
-                    custom_column_headers = [col['name'] for col in custom_columns]
+                    # Filter out header-type columns for adding to data
+                    custom_column_headers = [col['name'] for col in custom_columns if col.get('type') != 'header']
                     headers.extend(custom_column_headers)
 
                     for record in records:
@@ -769,6 +863,13 @@ class ExcelViewSet(viewsets.ModelViewSet):
                     'headers': headers,
                     'data': records
                 }
+
+            # Add category mappings to the data structure if provided
+            if category_mappings:
+                all_sheets_data['category_mappings'] = category_mappings
+                print(f"Added category mappings to file data: {len(category_mappings)} categories")
+                for cat in category_mappings:
+                    print(f"  Category '{cat.get('name')}' ({cat.get('id')}): {len(cat.get('columns', []))} columns")
 
             first_sheet_name = list(all_sheets_data.keys())[0] if all_sheets_data else 'Sheet1'
 
@@ -786,6 +887,8 @@ class ExcelViewSet(viewsets.ModelViewSet):
 
         except Exception as e:
             print(f"Error during upload: {str(e)}")
+            import traceback
+            print("Traceback:", traceback.format_exc())
             if 'excel_file' in locals():
                 excel_file.delete()
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)

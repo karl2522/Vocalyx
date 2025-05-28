@@ -363,7 +363,7 @@ export const classService = {
         });
         */
     },
-    uploadExcel:(file, classId, customColumns = null) => {
+    uploadExcel:(file, classId, customColumns = null, categoryMappings = null) => {
         // Validate file
         if (!(file instanceof File)) {
             console.error("Not a valid File object:", file);
@@ -386,6 +386,16 @@ export const classService = {
                 formData.append('custom_columns', columnsJson);
             } catch (err) {
                 console.error("Error stringifying custom columns:", err);
+            }
+        }
+        
+        // Include category mappings if provided
+        if (categoryMappings && categoryMappings.length > 0) {
+            try {
+                const categoryJson = JSON.stringify(categoryMappings);
+                formData.append('category_mappings', categoryJson);
+            } catch (err) {
+                console.error("Error stringifying category mappings:", err);
             }
         }
         
