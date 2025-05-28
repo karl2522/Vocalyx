@@ -18,6 +18,9 @@ import ImportPreviewModal from './modals/ImportPreviewModal';
 import MergeExcelModal from './MergeExcelModal';
 import UpdateMethodModal from './modals/UpdateMethodModal';
 import ManualUpdateModal from './modals/ManualUpdateModal';
+import { formatRelativeTime, getFullDateTime } from '../utils/dateUtils';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, fileName }) => {
   if (!isOpen) return null;
@@ -851,7 +854,90 @@ const exportDirectlyFromData = () => {
       return;
     }
     
-    // Create a worksheet with the proper column order
+    // For PDF export - SIMPLE, NO CATEGORIES
+    if (exportFormat === 'pdf') {
+        try {
+          // Create a new PDF document
+          const doc = new jsPDF({
+            orientation: sheetData.headers.length > 10 ? 'landscape' : 'portrait',
+            unit: 'mm',
+            format: 'a4'
+          });
+          
+          // Add title and info
+          doc.setFontSize(16);
+          doc.text(exportFileName || 'Export', 14, 15);
+          
+          doc.setFontSize(11);
+          doc.text(`Class: ${classData?.name || 'N/A'}`, 14, 22);
+          
+          doc.setFontSize(9);
+          doc.setTextColor(100, 100, 100);
+          const today = new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString();
+          doc.text(`Generated on: ${today}`, 14, 28);
+          doc.setTextColor(0, 0, 0);
+          
+          // Prepare data for the table - SIMPLE VERSION
+          const headers = sheetData.headers;
+          
+          // Format data rows
+          const tableData = sheetData.data.map(row => {
+            return headers.map(header => {
+              const value = row[header];
+              return value !== null && value !== undefined ? String(value) : '';
+            });
+          });
+          
+          // Generate the table - SIMPLE VERSION, NO CATEGORIES
+          autoTable(doc, {
+            head: [headers], // Only column headers, no category row
+            body: tableData,
+            startY: 35,
+            theme: 'grid',
+            styles: {
+              fontSize: 8,
+              cellPadding: 2,
+            },
+            headStyles: {
+              fillColor: [51, 61, 121],
+              textColor: [255, 255, 255],
+              fontStyle: 'bold',
+              halign: 'center',
+            },
+            alternateRowStyles: {
+              fillColor: [245, 247, 250]
+            },
+            didDrawPage: function(data) {
+              // Add page number at the bottom
+              const pageCount = doc.internal.getNumberOfPages();
+              doc.setFontSize(8);
+              doc.setTextColor(150);
+              doc.text(
+                `Page ${data.pageNumber} of ${pageCount}`,
+                data.settings.margin.left, 
+                doc.internal.pageSize.height - 10
+              );
+            }
+          });
+          
+          // Save the PDF file
+          doc.save(`${exportFileName || 'export'}.pdf`);
+          
+          showToast.success(`File "${exportFileName || 'export'}.pdf" downloaded successfully`);
+          setExportLoading(false);
+          setShowExportOptions(false);
+          
+          return; // Return early to avoid executing the rest of the function
+        } catch (error) {
+          console.error('Error generating PDF:', error);
+          showToast.error('Failed to generate PDF. Please try again.');
+          setExportLoading(false);
+          setShowExportOptions(false);
+          return;
+        }
+    }
+    
+    // For EXCEL/CSV export - WITH CATEGORIES (your existing code)
     const headers = sheetData.headers;
     const data = sheetData.data;
     
@@ -936,7 +1022,7 @@ const exportDirectlyFromData = () => {
     // Create an array of arrays format that preserves column order
     const aoa = [];
     
-    // Add category row if categories exist
+    // Add category row if categories exist (ONLY FOR EXCEL/CSV)
     if (categories.length > 0 || hasCategorylessColumns) {
       const categoryRow = Array(headers.length).fill(''); // Empty row initially
       
@@ -1383,7 +1469,7 @@ const exportDirectlyFromData = () => {
                               className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm hover:bg-gray-50"
                           >
                             <FiDownload size={18} />
-                            <span>Export Data</span>
+                            <span>Export Data to Excel or PDF</span>
                           </button>
                         </> 
                     ) : (
@@ -1432,9 +1518,9 @@ const exportDirectlyFromData = () => {
                               Updates: {currentFileData?.update_count || 0}
                             </span>
                           </div>
-                          <p className="text-xs text-gray-500">
-                            {currentFileData?.uploaded_at ? new Date(currentFileData.uploaded_at).toLocaleString() : 'Recently uploaded'}
-                          </p>
+                         <p className="text-xs text-gray-500" title={currentFileData?.uploaded_at ? getFullDateTime(currentFileData.uploaded_at) : 'No upload date available'}>
+                          {currentFileData?.uploaded_at ? formatRelativeTime(currentFileData.uploaded_at) : 'Recently uploaded'}
+                        </p>
                         </div>
                       </div>
 

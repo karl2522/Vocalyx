@@ -1,6 +1,6 @@
 import React from 'react';
 import { FiX, FiDownload, FiFileText, FiInfo } from 'react-icons/fi';
-import { BsFiletypeXlsx, BsFiletypeCsv } from 'react-icons/bs';
+import { BsFiletypeXlsx, BsFiletypeCsv, BsFiletypePdf } from 'react-icons/bs';
 
 const ExportOptionsModal = ({
   showExportOptions,
@@ -84,16 +84,16 @@ const ExportOptionsModal = ({
                   </p>
                 </div>
                 
-                {/* Format Selector - Enhanced styling */}
+                {/* Format Selector - Enhanced styling with PDF option */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-3">
                     Format
                   </label>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-3 gap-2">
                     <button
                       type="button"
                       onClick={() => setExportFormat('xlsx')}
-                      className={`p-4 rounded-lg border transition-all ${
+                      className={`p-3 rounded-lg border transition-all ${
                         exportFormat === 'xlsx' 
                           ? 'bg-[#EEF0F8] border-[#333D79] ring-2 ring-[#EEF0F8] shadow-sm transform scale-[1.02]' 
                           : 'border-gray-200 hover:bg-gray-50 bg-white'
@@ -101,15 +101,16 @@ const ExportOptionsModal = ({
                       aria-pressed={exportFormat === 'xlsx'}
                     >
                       <div className="flex flex-col items-center">
-                        <BsFiletypeXlsx className={`h-10 w-10 mb-2 ${exportFormat === 'xlsx' ? 'text-[#217346]' : 'text-gray-400'}`} />
-                        <span className={`text-sm ${exportFormat === 'xlsx' ? 'font-medium text-[#333D79]' : 'text-gray-600'}`}>Excel (.xlsx)</span>
-                        <span className="text-xs text-gray-500 mt-1">Full features & formatting</span>
+                        <BsFiletypeXlsx className={`h-8 w-8 mb-2 ${exportFormat === 'xlsx' ? 'text-[#217346]' : 'text-gray-400'}`} />
+                        <span className={`text-sm ${exportFormat === 'xlsx' ? 'font-medium text-[#333D79]' : 'text-gray-600'}`}>Excel</span>
+                        <span className="text-xs text-gray-500 mt-1">Full formatting</span>
                       </div>
                     </button>
+                    
                     <button
                       type="button"
                       onClick={() => setExportFormat('csv')}
-                      className={`p-4 rounded-lg border transition-all ${
+                      className={`p-3 rounded-lg border transition-all ${
                         exportFormat === 'csv' 
                           ? 'bg-[#EEF0F8] border-[#333D79] ring-2 ring-[#EEF0F8] shadow-sm transform scale-[1.02]' 
                           : 'border-gray-200 hover:bg-gray-50 bg-white'
@@ -117,11 +118,51 @@ const ExportOptionsModal = ({
                       aria-pressed={exportFormat === 'csv'}
                     >
                       <div className="flex flex-col items-center">
-                        <BsFiletypeCsv className={`h-10 w-10 mb-2 ${exportFormat === 'csv' ? 'text-[#333D79]' : 'text-gray-400'}`} />
-                        <span className={`text-sm ${exportFormat === 'csv' ? 'font-medium text-[#333D79]' : 'text-gray-600'}`}>CSV (.csv)</span>
-                        <span className="text-xs text-gray-500 mt-1">Simple format, universal</span>
+                        <BsFiletypeCsv className={`h-8 w-8 mb-2 ${exportFormat === 'csv' ? 'text-[#333D79]' : 'text-gray-400'}`} />
+                        <span className={`text-sm ${exportFormat === 'csv' ? 'font-medium text-[#333D79]' : 'text-gray-600'}`}>CSV</span>
+                        <span className="text-xs text-gray-500 mt-1">Universal</span>
                       </div>
                     </button>
+                    
+                    {/* New PDF option */}
+                    <button
+                      type="button"
+                      onClick={() => setExportFormat('pdf')}
+                      className={`p-3 rounded-lg border transition-all ${
+                        exportFormat === 'pdf' 
+                          ? 'bg-[#EEF0F8] border-[#333D79] ring-2 ring-[#EEF0F8] shadow-sm transform scale-[1.02]' 
+                          : 'border-gray-200 hover:bg-gray-50 bg-white'
+                      }`}
+                      aria-pressed={exportFormat === 'pdf'}
+                    >
+                      <div className="flex flex-col items-center">
+                        <BsFiletypePdf className={`h-8 w-8 mb-2 ${exportFormat === 'pdf' ? 'text-[#e74c3c]' : 'text-gray-400'}`} />
+                        <span className={`text-sm ${exportFormat === 'pdf' ? 'font-medium text-[#333D79]' : 'text-gray-600'}`}>PDF</span>
+                        <span className="text-xs text-gray-500 mt-1">Print-ready</span>
+                      </div>
+                    </button>
+                  </div>
+                  
+                  {/* Format-specific information */}
+                  <div className="mt-3 p-2 rounded-lg bg-blue-50 border border-blue-100">
+                    {exportFormat === 'xlsx' && (
+                      <div className="text-xs text-blue-700 flex items-start">
+                        <FiInfo className="h-3.5 w-3.5 mt-0.5 mr-1 flex-shrink-0" />
+                        <span>Excel format preserves all formatting and categories. Best for further editing.</span>
+                      </div>
+                    )}
+                    {exportFormat === 'csv' && (
+                      <div className="text-xs text-blue-700 flex items-start">
+                        <FiInfo className="h-3.5 w-3.5 mt-0.5 mr-1 flex-shrink-0" />
+                        <span>CSV format is compatible with all spreadsheet applications, but loses formatting.</span>
+                      </div>
+                    )}
+                    {exportFormat === 'pdf' && (
+                      <div className="text-xs text-blue-700 flex items-start">
+                        <FiInfo className="h-3.5 w-3.5 mt-0.5 mr-1 flex-shrink-0" />
+                        <span>PDF format is perfect for printing and sharing. Creates a professional document with category headers.</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

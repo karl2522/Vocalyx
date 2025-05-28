@@ -185,25 +185,78 @@ const ClassModal = ({ isOpen, onClose, onAddClass, onUpdateClass, courseId, cour
             return false;
         }
         
-        // Check if end time is after start time
-        const startHour = parseInt(startTime.split(':')[0]);
-        const endHour = parseInt(endTime.split(':')[0]);
-        const startPeriod = startTime.includes('PM') ? 'PM' : 'AM';
-        const endPeriod = endTime.includes('PM') ? 'PM' : 'AM';
-        
-        if (startPeriod === 'PM' && endPeriod === 'AM') {
-            showToast.error('End time must be after start time');
-            return false;
-        } else if (startPeriod === endPeriod) {
-            if (startHour > endHour || 
-                (startHour === endHour && 
-                 parseInt(startTime.split(':')[1]) >= parseInt(endTime.split(':')[1]))) {
-                showToast.error('End time must be after start time');
-                return false;
+        // Enhanced time validation with proper 12-hour format handling
+        const parseTime = (timeString) => {
+            const [time, period] = timeString.split(' ');
+            const [hours, minutes] = time.split(':').map(Number);
+            
+            // Convert to 24-hour format for accurate comparison
+            let hour24 = hours;
+            if (period === 'AM') {
+                if (hours === 12) hour24 = 0; // 12:XX AM becomes 0:XX
+            } else if (period === 'PM') {
+                if (hours !== 12) hour24 = hours + 12; // 1:XX PM becomes 13:XX, but 12:XX PM stays 12:XX
             }
+            
+            return hour24 * 60 + minutes; // Convert to total minutes for easy comparison
+        };
+        
+        const startMinutes = parseTime(startTime);
+        const endMinutes = parseTime(endTime);
+        
+        if (endMinutes <= startMinutes) {
+            // More user-friendly error message with the actual times
+            showToast.error(`End time (${endTime}) must be after start time (${startTime})`);
+            return false;
+        }
+        
+        // Optional: Check for reasonable class duration (e.g., at least 30 minutes, max 8 hours)
+        const durationMinutes = endMinutes - startMinutes;
+        if (durationMinutes < 30) {
+            showToast.error('Class duration must be at least 30 minutes');
+            return false;
+        }
+        if (durationMinutes > 480) { // 8 hours
+            showToast.error('Class duration cannot exceed 8 hours');
+            return false;
         }
         
         return true;
+    };
+
+    const getTimeDuration = () => {
+        if (!startTime || !endTime) return null;
+        
+        const parseTime = (timeString) => {
+            const [time, period] = timeString.split(' ');
+            const [hours, minutes] = time.split(':').map(Number);
+            
+            let hour24 = hours;
+            if (period === 'AM') {
+                if (hours === 12) hour24 = 0;
+            } else if (period === 'PM') {
+                if (hours !== 12) hour24 = hours + 12;
+            }
+            
+            return hour24 * 60 + minutes;
+        };
+        
+        const startMinutes = parseTime(startTime);
+        const endMinutes = parseTime(endTime);
+        const durationMinutes = endMinutes - startMinutes;
+        
+        if (durationMinutes <= 0) return null;
+        
+        const hours = Math.floor(durationMinutes / 60);
+        const minutes = durationMinutes % 60;
+        
+        if (hours === 0) {
+            return `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+        } else if (minutes === 0) {
+            return `${hours} hour${hours !== 1 ? 's' : ''}`;
+        } else {
+            return `${hours} hour${hours !== 1 ? 's' : ''} ${minutes} minute${minutes !== 1 ? 's' : ''}`;
+        }
     };
 
     const handleSubmit = async (e) => {
@@ -386,7 +439,7 @@ const ClassModal = ({ isOpen, onClose, onAddClass, onUpdateClass, courseId, cour
                                     </div>
                                 </div>
                                 
-                                {/* Time selection */}
+                                {/* Time selection with duration display */}
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-sm text-gray-600 mb-1">
@@ -426,6 +479,36 @@ const ClassModal = ({ isOpen, onClose, onAddClass, onUpdateClass, courseId, cour
                                     </div>
                                 </div>
                             </div>
+
+                            {/* Duration display with visual feedback */}
+                            {startTime && endTime && (
+                                <div className="mt-2">
+                                    {(() => {
+                                        const duration = getTimeDuration();
+                                        if (duration) {
+                                            return (
+                                                <div className="flex items-center p-2 bg-green-50 border border-green-200 rounded-md">
+                                                    <MdOutlineWatchLater className="h-4 w-4 text-green-600 mr-2" />
+                                                    <span className="text-sm text-green-700">
+                                                        <strong>Duration:</strong> {duration}
+                                                    </span>
+                                                </div>
+                                            );
+                                        } else {
+                                            return (
+                                                <div className="flex items-center p-2 bg-red-50 border border-red-200 rounded-md">
+                                                    <div className="h-4 w-4 rounded-full bg-red-500 mr-2 flex items-center justify-center">
+                                                        <span className="text-white text-xs">!</span>
+                                                    </div>
+                                                    <span className="text-sm text-red-700">
+                                                        End time must be after start time
+                                                    </span>
+                                                </div>
+                                            );
+                                        }
+                                    })()}
+                                </div>
+                            )}
 
                             {isEditMode && (
                                 <div className="mb-4">

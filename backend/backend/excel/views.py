@@ -1,5 +1,6 @@
 import os
 
+import Levenshtein
 from drf_spectacular.types import OpenApiTypes
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -8,6 +9,9 @@ from rest_framework.permissions import IsAuthenticated, BasePermission
 import pandas as pd
 from django.http import HttpResponse
 from io import BytesIO
+
+from unidecode import unidecode
+
 from .models import ExcelFile
 from .serializers import ExcelFileSerializer
 from drf_spectacular.utils import extend_schema, OpenApiParameter
@@ -17,16 +21,30 @@ import datetime
 
 # Create a custom permission class to check team permissions
 class HasTeamEditPermission(BasePermission):
+    """
+    Custom permission to check team permissions for Excel file operations.
+    """
 
     def has_permission(self, request, view):
-        # Allow GET requests for any authenticated user
+        """Check general permission for the view."""
+        # Allow authenticated users to access GET requests
         if request.method in ['GET', 'HEAD', 'OPTIONS']:
-            return True
+            return request.user and request.user.is_authenticated
 
         # For modifying requests, check if user has proper permissions
         class_id = view.kwargs.get('pk') or request.data.get('class_id')
+
+        # For DELETE operations, we need to get the class_id from the object
+        if request.method == 'DELETE' and 'pk' in view.kwargs:
+            try:
+                excel_file = ExcelFile.objects.get(pk=view.kwargs['pk'])
+                class_id = excel_file.class_ref.id if excel_file.class_ref else None
+            except ExcelFile.DoesNotExist:
+                return False
+
         if not class_id:
-            return False
+            # If no class_id, check if this is an object-level operation
+            return request.user and request.user.is_authenticated
 
         try:
             from classes.models import Class
@@ -34,11 +52,12 @@ class HasTeamEditPermission(BasePermission):
 
             # If user is the owner, they have full permissions
             if class_obj.user == request.user:
+                print(f"Permission granted: User {request.user.id} is owner of class {class_id}")
                 return True
 
             # If there's a course associated with this class, check team permissions
             if class_obj.course:
-                from teams.models import TeamCourse, TeamMember
+                from teams.models import TeamMember
 
                 team_member = TeamMember.objects.filter(
                     team__courses__course_id=class_obj.course.id,
@@ -48,19 +67,34 @@ class HasTeamEditPermission(BasePermission):
 
                 # Only allow edit/delete if user has edit or full permissions
                 if team_member and team_member.permissions in ['edit', 'full']:
+                    print(
+                        f"Permission granted: User {request.user.id} has team access ({team_member.permissions}) to class {class_id}")
                     return True
+                elif team_member:
+                    print(
+                        f"Permission denied: User {request.user.id} has insufficient team permissions ({team_member.permissions}) for class {class_id}")
+                else:
+                    print(f"Permission denied: User {request.user.id} is not a team member for class {class_id}")
 
+            print(f"Permission denied: User {request.user.id} has no access to class {class_id}")
             return False
+
         except Class.DoesNotExist:
+            print(f"Permission denied: Class {class_id} does not exist")
             return False
 
     def has_object_permission(self, request, view, obj):
-        # For object-level permissions (for existing objects)
+        """Check object-level permissions."""
+        # Allow authenticated users to access GET requests
         if request.method in ['GET', 'HEAD', 'OPTIONS']:
-            return True
+            return request.user and request.user.is_authenticated
+
+        print(f"Checking object permission for user {request.user.id} on ExcelFile {obj.id}")
+        print(f"File owner: {obj.user.id}, Request user: {request.user.id}")
 
         # If user is the owner, they have full permissions
         if obj.user == request.user:
+            print(f"Permission granted: User {request.user.id} owns ExcelFile {obj.id}")
             return True
 
         # Check if user has proper team permissions for this file's class
@@ -75,8 +109,16 @@ class HasTeamEditPermission(BasePermission):
 
             # Only allow edit/delete if user has edit or full permissions
             if team_member and team_member.permissions in ['edit', 'full']:
+                print(
+                    f"Permission granted: User {request.user.id} has team access ({team_member.permissions}) to ExcelFile {obj.id}")
                 return True
+            elif team_member:
+                print(
+                    f"Permission denied: User {request.user.id} has insufficient team permissions ({team_member.permissions}) for ExcelFile {obj.id}")
+            else:
+                print(f"Permission denied: User {request.user.id} is not a team member for ExcelFile {obj.id}")
 
+        print(f"Permission denied: User {request.user.id} has no access to ExcelFile {obj.id}")
         return False
 
 
@@ -112,6 +154,85 @@ class ExcelViewSet(viewsets.ModelViewSet):
                 pass
 
         return user_files
+
+    def destroy(self, request, *args, **kwargs):
+        """Enhanced delete method with better error handling and logging."""
+        try:
+            instance = self.get_object()
+            print(f"Delete request for ExcelFile {instance.id} by user {request.user.id}")
+
+            # Additional permission check with detailed logging
+            if instance.user != request.user:
+                print(f"User {request.user.id} is not the owner of ExcelFile {instance.id}")
+
+                # Check team permissions
+                has_team_access = False
+                if instance.class_ref and instance.class_ref.course:
+                    from teams.models import TeamMember
+                    team_member = TeamMember.objects.filter(
+                        team__courses__course_id=instance.class_ref.course.id,
+                        user=request.user,
+                        is_active=True
+                    ).first()
+
+                    if team_member:
+                        print(f"Team member found with permissions: {team_member.permissions}")
+                        if team_member.permissions in ['edit', 'full']:
+                            has_team_access = True
+                            print("Team access granted for delete operation")
+                        else:
+                            print(f"Insufficient team permissions: {team_member.permissions}")
+                    else:
+                        print("No team membership found")
+
+                if not has_team_access:
+                    print("Delete operation denied - insufficient permissions")
+                    return Response(
+                        {
+                            'error': 'You do not have permission to delete this file',
+                            'detail': 'Only file owners or team members with edit/full permissions can delete files'
+                        },
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+
+            # Log successful delete
+            file_name = instance.file_name
+            class_name = instance.class_ref.name if instance.class_ref else "Unknown"
+
+            # Perform the delete
+            self.perform_destroy(instance)
+
+            print(f"Successfully deleted ExcelFile '{file_name}' from class '{class_name}' by user {request.user.id}")
+
+            return Response(
+                {
+                    'message': f'File "{file_name}" has been successfully deleted',
+                    'deleted_file': {
+                        'id': kwargs.get('pk'),
+                        'name': file_name,
+                        'class': class_name
+                    }
+                },
+                status=status.HTTP_200_OK
+            )
+
+        except ExcelFile.DoesNotExist:
+            print(f"Delete failed: ExcelFile with id {kwargs.get('pk')} not found")
+            return Response(
+                {'error': 'File not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            import traceback
+            print(f"Delete operation failed with error: {str(e)}")
+            print("Traceback:", traceback.format_exc())
+            return Response(
+                {
+                    'error': 'An error occurred while deleting the file',
+                    'detail': str(e)
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     @action(detail=True, methods=['PATCH'], permission_classes=[IsAuthenticated])
     def set_active_sheet(self, request, pk=None):
@@ -158,6 +279,68 @@ class ExcelViewSet(viewsets.ModelViewSet):
             print("Traceback:", traceback.format_exc())
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+    def normalize_name(self, name):
+        """Normalize a name by removing accents, extra spaces, and converting to lowercase."""
+        if name is None:
+            return ""
+
+        # Convert to string if not already
+        name = str(name).strip()
+
+        # Remove accents and convert to lowercase
+        normalized = unidecode(name).lower()
+
+        # Remove extra spaces
+        normalized = " ".join(normalized.split())
+
+        return normalized
+
+    def find_best_match(self, name, existing_names, threshold=0.85):
+        """Find best matching name from existing names using Levenshtein distance."""
+        if not name:
+            return None
+
+        name = self.normalize_name(name)
+
+        # Quick exact match first (most efficient)
+        if name in existing_names:
+            return existing_names[name]
+
+        # Try reversing "Last, First" to "First Last"
+        if "," in name:
+            parts = name.split(",")
+            if len(parts) == 2:
+                reversed_name = f"{parts[1].strip()} {parts[0].strip()}"
+                if reversed_name in existing_names:
+                    return existing_names[reversed_name]
+
+        # Fuzzy matching using Levenshtein distance
+        best_match = None
+        best_score = 0
+
+        for existing_name, original in existing_names.items():
+            # Skip very short names for fuzzy matching to avoid false positives
+            if len(name) < 3 or len(existing_name) < 3:
+                continue
+
+            # Calculate similarity ratio
+            similarity = Levenshtein.ratio(name, existing_name)
+
+            # If names are very similar or exact match for first/last names
+            name_parts = set(name.split())
+            existing_parts = set(existing_name.split())
+            common_parts = name_parts.intersection(existing_parts)
+
+            # Boost score if there are common parts (first/last name matches)
+            if common_parts:
+                similarity += 0.1 * len(common_parts) / max(len(name_parts), len(existing_parts))
+
+            if similarity > best_score and similarity >= threshold:
+                best_score = similarity
+                best_match = original
+
+        return best_match
+
     @extend_schema(
         description='Merge Excel file with existing file',
         request={
@@ -168,7 +351,8 @@ class ExcelViewSet(viewsets.ModelViewSet):
                     'class_id': {'type': 'integer'},
                     'merge': {'type': 'boolean'},
                     'override_names': {'type': 'boolean'},
-                    'category_mappings': {'type': 'string'}  # JSON string of category mappings
+                    'category_mappings': {'type': 'string'},  # JSON string of category mappings
+                    'matching_threshold': {'type': 'number'}  # Added threshold parameter
                 }
             }
         },
@@ -192,6 +376,13 @@ class ExcelViewSet(viewsets.ModelViewSet):
             return Response({'error': 'class_id is required'}, status=status.HTTP_400_BAD_REQUEST)
 
         override_names = request.data.get('override_names', 'false').lower() == 'true'
+
+        # Get optional matching threshold (default to 0.85 - 85% similarity)
+        try:
+            matching_threshold = float(request.data.get('matching_threshold', 0.85))
+            matching_threshold = max(0.5, min(1.0, matching_threshold))  # Ensure between 0.5 and 1.0
+        except (ValueError, TypeError):
+            matching_threshold = 0.85
 
         try:
             # Check permissions for the class
@@ -269,12 +460,18 @@ class ExcelViewSet(viewsets.ModelViewSet):
             existing_name_col = find_name_column(existing_data['headers'])
             new_name_col = find_name_column(new_data['headers'])
 
-            # Build lookup dictionaries for quick access
+            # Build lookup dictionaries for quick access with normalized names
             existing_lookup = {}
+            existing_lookup_normalized = {}
+
             for record in existing_data['data']:
                 if existing_name_col and existing_name_col in record:
-                    name = str(record[existing_name_col]).strip().lower()
-                    existing_lookup[name] = record
+                    # Store both raw and normalized versions
+                    raw_name = str(record[existing_name_col])
+                    normalized_name = self.normalize_name(raw_name)
+
+                    existing_lookup[raw_name] = record
+                    existing_lookup_normalized[normalized_name] = record
 
             # Start with existing data
             merged_data = existing_data.copy()
@@ -292,15 +489,21 @@ class ExcelViewSet(viewsets.ModelViewSet):
             # Update existing records and add new ones
             added_count = 0
             updated_count = 0
+            fuzzy_matched_count = 0
+
+            # For detailed logging of matches
+            match_results = []
 
             for record in new_data['data']:
                 if not new_name_col or new_name_col not in record:
                     continue
 
-                name = str(record[new_name_col]).strip().lower()
-                if name in existing_lookup:
-                    # Update existing record
-                    existing_record = existing_lookup[name]
+                # Get original name
+                original_name = str(record[new_name_col])
+
+                # Try exact match first
+                if original_name in existing_lookup:
+                    existing_record = existing_lookup[original_name]
                     if override_names and new_name_col and existing_name_col:
                         existing_record[existing_name_col] = record[new_name_col]
 
@@ -310,14 +513,52 @@ class ExcelViewSet(viewsets.ModelViewSet):
                             existing_record[key] = value
 
                     updated_count += 1
+                    match_results.append(f"Exact match: '{original_name}'")
                 else:
-                    # Add new record
-                    new_record = {key: None for key in merged_data['headers']}
-                    for key, value in record.items():
-                        new_record[key] = value
+                    # Try fuzzy matching
+                    normalized_name = self.normalize_name(original_name)
 
-                    merged_data['data'].append(new_record)
-                    added_count += 1
+                    # Try direct normalized match first
+                    if normalized_name in existing_lookup_normalized:
+                        existing_record = existing_lookup_normalized[normalized_name]
+                        if override_names and new_name_col and existing_name_col:
+                            existing_record[existing_name_col] = record[new_name_col]
+
+                        # Add all new columns from new record
+                        for key, value in record.items():
+                            if key != new_name_col or key not in existing_record:
+                                existing_record[key] = value
+
+                        updated_count += 1
+                        fuzzy_matched_count += 1
+                        match_results.append(
+                            f"Normalized match: '{original_name}' -> '{existing_record[existing_name_col]}'")
+                    else:
+                        # Try Levenshtein-based fuzzy matching
+                        best_match = self.find_best_match(original_name, existing_lookup_normalized,
+                                                          threshold=matching_threshold)
+
+                        if best_match:
+                            if override_names and new_name_col and existing_name_col:
+                                best_match[existing_name_col] = record[new_name_col]
+
+                            # Add all new columns from new record
+                            for key, value in record.items():
+                                if key != new_name_col or key not in best_match:
+                                    best_match[key] = value
+
+                            updated_count += 1
+                            fuzzy_matched_count += 1
+                            match_results.append(f"Fuzzy match: '{original_name}' -> '{best_match[existing_name_col]}'")
+                        else:
+                            # Add new record
+                            new_record = {key: None for key in merged_data['headers']}
+                            for key, value in record.items():
+                                new_record[key] = value
+
+                            merged_data['data'].append(new_record)
+                            added_count += 1
+                            match_results.append(f"No match, added new record: '{original_name}'")
 
             # Get existing category mappings if they exist
             existing_mappings = {}
@@ -403,16 +644,26 @@ class ExcelViewSet(viewsets.ModelViewSet):
                 print("Warning: No category structure to save")
 
             existing_file.update_count += 1
-            # Log the updated counter - ADD THIS LINE
+            # Log the updated counter
             print(f"Incremented update count to: {existing_file.update_count}")
 
             existing_file.save()
 
-            print(f"Merge complete: {updated_count} records updated, {added_count} records added")
+            print(
+                f"Merge complete: {updated_count} records updated ({fuzzy_matched_count} fuzzy matched), {added_count} records added")
             print(f"Category mappings preserved: {len(category_structure)} categories")
+            print(f"Sample of matches: {match_results[:10]}")
 
             serializer = self.get_serializer(existing_file)
-            return Response(serializer.data)
+            return Response({
+                **serializer.data,
+                'match_stats': {
+                    'updated': updated_count,
+                    'fuzzy_matched': fuzzy_matched_count,
+                    'added': added_count,
+                    'match_samples': match_results[:10]
+                }
+            })
 
         except Class.DoesNotExist:
             return Response({'error': 'Class not found'}, status=status.HTTP_404_NOT_FOUND)
