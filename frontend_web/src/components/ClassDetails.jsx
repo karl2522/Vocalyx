@@ -283,178 +283,96 @@ const ClassDetails = ({ accessInfo }) => {
     setShowUpdateFileModal(true);
   };
 
-  const handleSelectImportUpdate = () => {
-    setShowUpdateMethodModal(false);
-    setShowUpdateFileModal(true);
-  };
-
-  const handleSelectManualUpdate = () => {
-    setShowUpdateMethodModal(false);
-    setShowManualUpdateModal(true);
-  };
-
-  const handleFileUpdateSave = async (updateData) => {
+  const handleFileUpdateSave = async (mergeResult) => {
     try {
-      console.log("File update data received:", updateData);
+      console.log("File update data received:", mergeResult);
       
-      // This will be implemented to handle the category-based file merge
-      // For now, just close the modal and show a placeholder message
+      // Close the modal first
       setShowUpdateFileModal(false);
       
-      showToast.updated(`File uploaded to ${updateData.category} category`);
-      
-      // TODO: Implement actual file processing and merge logic
-      // This should:
-      // 1. Process the uploaded file
-      // 2. Extract columns matching the selected category
-      // 3. Merge with existing data
-      // 4. Update the spreadsheet
-      
-    } catch (error) {
-      console.error('Error updating with file:', error);
-      showToast.error("Failed to update with file. Please try again.");
-    }
-  };
-
-  const handleManualUpdateSave = async (updatedFileData) => {
-    try {
-      // Get the active sheet
-      const activeSheet = updatedFileData.active_sheet;
-      
-      // Extract the category mappings and headers
-      const categoryMappings = updatedFileData.all_sheets.category_mappings;
-      const originalHeaders = [...updatedFileData.all_sheets[activeSheet].headers];
-      const originalData = updatedFileData.all_sheets[activeSheet].data;
-      
-      // Find all new columns - columns in category mappings but not in headers
-      const allExistingHeaders = new Set(originalHeaders);
-      const newColumns = [];
-      
-      categoryMappings.forEach(category => {
-        category.columns.forEach(column => {
-          if (!allExistingHeaders.has(column)) {
-            newColumns.push({
-              name: column,
-              categoryId: category.id
-            });
-          }
+      // Check if this is the enhanced merge result (from execute_merge)
+      if (mergeResult && mergeResult.id && mergeResult.all_sheets) {
+        console.log("Processing enhanced merge result:", mergeResult);
+        
+        // Update the current file data with the merged result
+        setCurrentFileData(mergeResult);
+        
+        // Update the selected file info
+        setSelectedFile({
+          name: mergeResult.file_name,
+          id: mergeResult.id
         });
-      });
-      
-      console.log("Found new columns to add:", newColumns);
-      
-      if (newColumns.length === 0) {
-        // No new columns to add, just update categories
-        await classService.updateCategoryMappings(
-          updatedFileData.id,
-          {
-            all_sheets: {
-              category_mappings: categoryMappings
+        
+        // Update the update count if provided
+        if (mergeResult.update_count) {
+          setUpdateCount(mergeResult.update_count);
+          localStorage.setItem(`file_updates_${mergeResult.id}`, mergeResult.update_count.toString());
+        }
+        
+        // Show detailed success message with merge statistics
+        if (mergeResult.merge_results) {
+          const stats = mergeResult.merge_results;
+          const messages = [];
+          
+          if (stats.exact_matches_processed > 0) {
+            messages.push(`${stats.exact_matches_processed} exact matches updated`);
+          }
+          if (stats.new_students_added > 0) {
+            messages.push(`${stats.new_students_added} new students added`);
+          }
+          if (stats.conflicts_resolved > 0) {
+            messages.push(`${stats.conflicts_resolved} conflicts resolved`);
+          }
+          if (stats.new_columns_added > 0) {
+            messages.push(`${stats.new_columns_added} new columns added`);
+          }
+          
+          const summaryMessage = messages.length > 0 
+            ? `Successfully merged: ${messages.join(', ')}`
+            : 'File merged successfully';
+            
+          showToast.updated(summaryMessage);
+          
+          console.log("Merge statistics:", stats);
+        } else {
+          showToast.updated(`File merged with ${mergeResult.category || 'selected'} category`);
+        }
+        
+      } 
+      // Handle basic merge result (fallback for simple cases)
+      else if (mergeResult && mergeResult.file && mergeResult.category) {
+        console.log("Processing basic merge request:", mergeResult);
+        
+        // For basic merges, we need to refresh the data
+        // Re-fetch the latest file data
+        try {
+          const excelResponse = await classService.getClassExcelFiles(id);
+          if (excelResponse.data.length > 0) {
+            const latestFile = excelResponse.data[0];
+            setCurrentFileData(latestFile);
+            setSelectedFile({
+              name: latestFile.file_name,
+              id: latestFile.id
+            });
+            
+            if (latestFile.update_count) {
+              setUpdateCount(latestFile.update_count);
+              localStorage.setItem(`file_updates_${latestFile.id}`, latestFile.update_count.toString());
             }
           }
-        );
+        } catch (fetchError) {
+          console.error('Error refreshing file data:', fetchError);
+        }
         
-        setCurrentFileData(updatedFileData);
-        setShowManualUpdateModal(false);
-        showToast.updated('Category assignments');
-        return;
+        showToast.updated(`File uploaded to ${mergeResult.category} category`);
       }
       
-      // Create a map of category -> columns 
-      const categoryToColumns = {};
-      categoryMappings.forEach(category => {
-        categoryToColumns[category.id] = [...category.columns];
-      });
+      // If there's an ExcelGradeViewer component visible, it should automatically
+      // re-render with the updated currentFileData due to React's state management
       
-      const orderedCategories = ['student', 'quiz', 'laboratory', 'exams', 'other'];
-      const customCategories = categoryMappings
-        .filter(category => !orderedCategories.includes(category.id))
-        .map(category => category.id);
-        
-      const allCategoryIds = [...orderedCategories, ...customCategories];
-      
-      // Create new headers array in proper category order
-      const newHeaders = [];
-      allCategoryIds.forEach(categoryId => {
-        if (categoryToColumns[categoryId]) {
-          categoryToColumns[categoryId].forEach(columnName => {
-            newHeaders.push(columnName);
-          });
-        }
-      });
-      
-      console.log("New ordered headers:", newHeaders);
-      
-      // Create new data with null values for new columns
-      const newData = originalData.map(row => {
-        const newRow = {};
-        
-        // Copy existing values
-        originalHeaders.forEach(header => {
-          newRow[header] = row[header];
-        });
-        
-        // Add null values for new columns
-        newColumns.forEach(col => {
-          newRow[col.name] = null;
-        });
-        
-        return newRow;
-      });
-      
-      // Update the file data with the new structure
-      const finalFileData = {
-        ...updatedFileData,
-        all_sheets: {
-          ...updatedFileData.all_sheets,
-          [activeSheet]: {
-            ...updatedFileData.all_sheets[activeSheet],
-            headers: newHeaders,
-            data: newData
-          },
-          category_mappings: categoryMappings
-        }
-      };
-      
-      // Save the data structure first
-      await classService.updateExcelData(
-        updatedFileData.id,
-        newData,
-        activeSheet,
-        newHeaders  // Pass the new headers explicitly
-      );
-      
-      // Then update the category mappings
-      await classService.updateCategoryMappings(
-        updatedFileData.id,
-        {
-          all_sheets: {
-            category_mappings: categoryMappings
-          }
-        }
-      );
-      
-      // Show success toast notification
-      showToast.saved();
-      
-      // Update the local state with the new data
-      setCurrentFileData(finalFileData);
-      setShowManualUpdateModal(false);
-      const newCount = updateCount + 1;
-      setUpdateCount(newCount);
-
-      localStorage.setItem(`file_updates_${updatedFileData.id}`, newCount.toString());
-
-      setCurrentFileData({
-        ...finalFileData,
-        update_count: newCount
-      });
-      
-      // Reload the page to ensure data is displayed correctly
-      window.location.reload();
     } catch (error) {
-      console.error('Error saving changes:', error);
-      showToast.error("Failed to save changes. Please try again.");
+      console.error('Error processing file update:', error);
+      showToast.error("Failed to process file merge. Please try again.");
     }
   };
 

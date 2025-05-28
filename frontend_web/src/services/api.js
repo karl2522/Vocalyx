@@ -190,20 +190,64 @@ export const classService = {
             `/excel/${fileId}/update_categories/`, 
             updatedData,
             {
-            headers: {
-                'Content-Type': 'application/json',
-            }
+                headers: {
+                    'Content-Type': 'application/json',
+                }
             }
         );
     },
-    mergeExcel: (formData) => {
-        return api.post('/excel/merge/', formData, {
+    
+    // 🆕 NEW: Preview merge conflicts before actual merge
+    previewMerge: (file, classId, matchingThreshold = 0.85, columnMapping = null) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('class_id', String(classId));
+        formData.append('matching_threshold', String(matchingThreshold));
+        
+        if (columnMapping) {
+            formData.append('column_mapping', JSON.stringify(columnMapping));
+        }
+        
+        return api.post('/excel/preview_merge/', formData, {
             headers: {
-            'Content-Type': 'multipart/form-data',
+                'Content-Type': 'multipart/form-data',
             },
         });
     },
-     getClassById: (id) => {
+    
+    // 🆕 NEW: Execute merge with conflict resolutions
+    executeMerge: (file, classId, conflictResolutions = {}, bulkActions = {}, columnMapping = null, categoryMappings = null) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('class_id', String(classId));
+        formData.append('conflict_resolutions', JSON.stringify(conflictResolutions));
+        formData.append('bulk_actions', JSON.stringify(bulkActions));
+        
+        if (columnMapping) {
+            formData.append('column_mapping', JSON.stringify(columnMapping));
+        }
+        
+        if (categoryMappings) {
+            formData.append('category_mappings', JSON.stringify(categoryMappings));
+        }
+        
+        return api.post('/excel/execute_merge/', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
+    },
+    
+    // 🔄 UPDATED: Basic merge (kept for backward compatibility)
+    mergeExcel: (formData) => {
+        return api.post('/excel/merge/', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
+    },
+    
+    getClassById: (id) => {
         return api.get(`/classes/${id}/`);
     },
     getClassExcelFiles: (classId) => {
@@ -212,7 +256,7 @@ export const classService = {
     getExcelFile: (fileId) => {
         return api.get(`/excel/${fileId}/`);
     },
-     deleteExcelFile: (fileId) => {
+    deleteExcelFile: (fileId) => {
         return api.delete(`/excel/${fileId}/`);
     },
     updateExcelData: (fileId, data, sheetName, headers = null) => {
@@ -221,7 +265,6 @@ export const classService = {
             sheet_name: sheetName
         };
         
-        // If headers are provided, include them
         if (headers) {
             payload.headers = headers;
         }
@@ -230,13 +273,13 @@ export const classService = {
             `/excel/${fileId}/update_data/`, 
             payload,
             {
-            headers: {
-                'Content-Type': 'application/json',
-            }
+                headers: {
+                    'Content-Type': 'application/json',
+                }
             }
         );
     },
-     setActiveSheet: (fileId, sheetName) => {
+    setActiveSheet: (fileId, sheetName) => {
         return api.patch(
             `/excel/${fileId}/set_active_sheet/`,
             { sheet_name: sheetName },
@@ -247,176 +290,54 @@ export const classService = {
             }
         );
     },
-    uploadExcelWithColumns: (formData) => {
-        console.log("MOCK: uploadExcelWithColumns called");
+    
+    // 🗑️ CLEANED: Removed mock data, now uses real API
+    uploadExcelWithColumns: (file, classId, customColumns = null, categoryMappings = null) => {
+        const formData = new FormData();
+        formData.append('file', file, file.name);
+        formData.append('class_id', String(classId));
         
-        // Try to extract file from FormData
-        const file = formData.get('file');
-        
-        if (file && file instanceof File) {
-            // Use the same mock implementation as uploadExcel
-            return new Promise((resolve) => {
-                console.log("MOCK: Processing file locally instead of sending to backend");
-                
-                // Create a FileReader to read the file locally
-                const reader = new FileReader();
-                
-                reader.onload = (event) => {
-                    try {
-                        // Parse Excel file
-                        const data = new Uint8Array(event.target.result);
-                        const workbook = XLSX.read(data, {
-                            type: 'array',
-                            cellDates: true
-                        });
-                        
-                        // Get sheet names
-                        const sheetNames = workbook.SheetNames || [];
-                        if (!sheetNames.length) {
-                            throw new Error("No sheets found");
-                        }
-                        
-                        // Process first sheet as active sheet
-                        const activeSheet = sheetNames[0];
-                        const worksheet = workbook.Sheets[activeSheet];
-                        
-                        // Convert to JSON
-                        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-                        
-                        // Extract headers and data
-                        const headers = jsonData[0] || [];
-                        const rows = jsonData.slice(1);
-                        
-                        // Format data for response
-                        const formattedData = rows.map(row => {
-                            const rowObj = {};
-                            headers.forEach((header, index) => {
-                                rowObj[header] = row[index] || null;
-                            });
-                            return rowObj;
-                        });
-                        
-                        // Create mock response
-                        const mockResponse = {
-                            id: `mock_${Date.now()}`,
-                            file_name: file.name,
-                            active_sheet: activeSheet,
-                            sheet_names: sheetNames,
-                            all_sheets: {
-                                [activeSheet]: {
-                                    headers: headers,
-                                    data: formattedData
-                                }
-                            },
-                            uploaded_at: new Date().toISOString()
-                        };
-                        
-                        console.log("MOCK: Created response:", mockResponse);
-                        
-                        // Simulate network delay
-                        setTimeout(() => {
-                            resolve({ data: mockResponse });
-                        }, 1000);
-                        
-                    } catch (error) {
-                        console.error("MOCK: Error processing file:", error);
-                        // Still resolve with error for testing
-                        resolve({ 
-                            data: {
-                                id: `mock_error_${Date.now()}`,
-                                file_name: file.name,
-                                error: error.message
-                            } 
-                        });
-                    }
-                };
-                
-                reader.onerror = () => {
-                    console.error("MOCK: Error reading file");
-                    resolve({ 
-                        data: {
-                            id: `mock_error_${Date.now()}`,
-                            file_name: file.name,
-                            error: "Error reading file"
-                        } 
-                    });
-                };
-                
-                // Read the file
-                reader.readAsArrayBuffer(file);
-            });
-        } else {
-            console.error("MOCK: No file found in FormData");
-            return Promise.resolve({
-                data: {
-                    id: `mock_error_${Date.now()}`,
-                    error: "No file found in FormData"
-                }
-            });
+        if (customColumns && customColumns.length > 0) {
+            formData.append('custom_columns', JSON.stringify(customColumns));
         }
         
-        /* ORIGINAL IMPLEMENTATION - COMMENTED OUT
+        if (categoryMappings && categoryMappings.length > 0) {
+            formData.append('category_mappings', JSON.stringify(categoryMappings));
+        }
+        
         return api.post('/excel/upload/', formData, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },
         });
-        */
     },
-    uploadExcel:(file, classId, customColumns = null, categoryMappings = null) => {
-        // Validate file
+    
+    uploadExcel: (file, classId, customColumns = null, categoryMappings = null) => {
         if (!(file instanceof File)) {
-            console.error("Not a valid File object:", file);
             return Promise.reject(new Error("Invalid file object"));
         }
         
-        // Create a fresh FormData object
         const formData = new FormData();
-        
-        // Add file first - make sure it has the correct filename
         formData.append('file', file, file.name);
-        
-        // Add class_id as a string
         formData.append('class_id', String(classId));
         
-        // Include custom columns if provided
         if (customColumns && customColumns.length > 0) {
-            try {
-                const columnsJson = JSON.stringify(customColumns);
-                formData.append('custom_columns', columnsJson);
-            } catch (err) {
-                console.error("Error stringifying custom columns:", err);
-            }
+            formData.append('custom_columns', JSON.stringify(customColumns));
         }
         
-        // Include category mappings if provided
         if (categoryMappings && categoryMappings.length > 0) {
-            try {
-                const categoryJson = JSON.stringify(categoryMappings);
-                formData.append('category_mappings', categoryJson);
-            } catch (err) {
-                console.error("Error stringifying category mappings:", err);
-            }
-        }
-        
-        // Log form data for debugging
-        console.log("FormData entries:");
-        for (let pair of formData.entries()) {
-            console.log(pair[0] + ': ' + (pair[0] === 'file' ? pair[1].name : pair[1]));
+            formData.append('category_mappings', JSON.stringify(categoryMappings));
         }
         
         return api.post('/excel/upload/', formData, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },
-        }).catch(error => {
-            console.error("API uploadExcel error:", error.message);
-            console.error("Response data:", error.response?.data);
-            throw error;
         });
     },
-       downloadExcel: (fileId, format = 'xlsx') => {
-        return api.get(`/excel//${fileId}/download/?format=${format}`, {
+    
+    downloadExcel: (fileId, format = 'xlsx') => {
+        return api.get(`/excel/${fileId}/download/?format=${format}`, {
             responseType: 'arraybuffer'
         });
     }

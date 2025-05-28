@@ -285,17 +285,19 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
     if (fileData.all_sheets.category_mappings) {
       console.log("=== USING STORED CATEGORY MAPPINGS ===");
       console.log("Stored category_mappings:", fileData.all_sheets.category_mappings);
+
+      const assignedColumns = new Set();
       
       // Process stored category mappings
       fileData.all_sheets.category_mappings.forEach((category, categoryIndex) => {
-        const categoryId = category.id;
-        const categoryName = category.name;
-        const categoryColumns = category.columns || [];
+      const categoryId = category.id;
+      const categoryName = category.name;
+      const categoryColumns = category.columns || [];
 
-        console.log(`[${categoryIndex}] Processing stored category '${categoryName}' (${categoryId})`);
-        console.log(`  Category columns:`, categoryColumns);
-        
-        if (categoryId in categories) {
+      console.log(`[${categoryIndex}] Processing stored category '${categoryName}' (${categoryId})`);
+      console.log(`  Category columns:`, categoryColumns);
+      
+      if (categoryId in categories) {
           // Standard category - map column names to indices
           categoryColumns.forEach((columnName, colIndex) => {
             const columnIndex = headers.indexOf(columnName);
@@ -303,9 +305,9 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
             if (columnIndex !== -1) {
               console.log(`    ✅ Found at index ${columnIndex} -> adding to '${categoryId}'`);
               categories[categoryId].push(columnIndex);
+              assignedColumns.add(columnIndex); // Track this column as assigned
             } else {
               console.log(`    ❌ Column '${columnName}' not found in headers`);
-              console.log(`    Available headers:`, headers);
             }
           });
         } else {
@@ -318,6 +320,7 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
               console.log(`  [${colIndex}] Custom category: looking for '${columnName}'`);
               if (columnIndex !== -1) {
                 console.log(`    ✅ Found at index ${columnIndex}`);
+                assignedColumns.add(columnIndex); // Track this column as assigned
                 return columnIndex;
               } else {
                 console.log(`    ❌ Not found`);
@@ -326,6 +329,49 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
             }).filter(idx => idx !== null)
           };
           console.log(`  Custom category '${categoryName}' mapped to indices:`, customCategories[categoryId].columns);
+        }
+      });
+      
+      // 🆕 HANDLE UNMAPPED COLUMNS (like "Quiz 6")
+      console.log("=== PROCESSING UNMAPPED COLUMNS ===");
+      headers.forEach((header, index) => {
+        if (!assignedColumns.has(index)) {
+          console.log(`🔍 Found unmapped column '${header}' at index ${index}`);
+          
+          // Try to auto-categorize unmapped columns based on name patterns
+          const headerLower = header.toString().toLowerCase();
+          
+          let categorized = false;
+          
+          // Enhanced Quiz patterns
+          if (headerLower.includes('quiz')) {
+            console.log(`  📝 Auto-assigning '${header}' to quiz category`);
+            categories.quiz.push(index);
+            categorized = true;
+          }
+          // Enhanced Lab patterns
+          else if (headerLower.includes('lab') || headerLower.includes('laboratory')) {
+            console.log(`  🧪 Auto-assigning '${header}' to laboratory category`);
+            categories.laboratory.push(index);
+            categorized = true;
+          }
+          // Enhanced Exam patterns
+          else if (headerLower.includes('exam') || headerLower.includes('prelim') || headerLower.includes('midterm') || headerLower.includes('final')) {
+            console.log(`  📋 Auto-assigning '${header}' to exams category`);
+            categories.exams.push(index);
+            categorized = true;
+          }
+          // Student info patterns
+          else if (headerLower.includes('name') || headerLower.includes('student') || headerLower.includes('no.')) {
+            console.log(`  👤 Auto-assigning '${header}' to student category`);
+            categories.student.push(index);
+            categorized = true;
+          }
+          
+          if (!categorized) {
+            console.log(`  ❓ Auto-assigning '${header}' to other category`);
+            categories.other.push(index);
+          }
         }
       });
       
@@ -607,9 +653,9 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
   };
 
   // Initialize Handsontable when data is ready - FIXED VERSION
-  useEffect(() => {
+    useEffect(() => {
     if (isHandsontableLoaded && hotTableRef.current && window.Handsontable && fileData && categoryMapping) {
-      // Destroy existing instance
+      // Destroy existing instance safely
       if (hotInstanceRef.current) {
         try {
           if (!hotInstanceRef.current.isDestroyed) {
@@ -619,6 +665,12 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
           console.log('Instance already destroyed:', error);
         }
         hotInstanceRef.current = null;
+      }
+
+      // Add safety check for DOM element
+      if (!hotTableRef.current) {
+        console.warn("Table ref not available, skipping initialization");
+        return;
       }
 
       addCustomStyles();
@@ -632,8 +684,11 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
 
       // Safety checks
       const fixedColumns = categoryMapping?.student?.length || 1;
-      const colWidths = Array.isArray(fileData?.all_sheets?.[fileData?.active_sheet]?.headers)
-          ? fileData.all_sheets[fileData.active_sheet].headers.map((_, idx) => {
+      const activeSheet = fileData?.active_sheet;
+      const headers = fileData?.all_sheets?.[activeSheet]?.headers;
+      
+      const colWidths = Array.isArray(headers)
+          ? headers.map((_, idx) => {
             if (categoryMapping?.student?.includes(idx)) {
               return 180;
             }
@@ -658,7 +713,6 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
         fixedColumnsLeft: fixedColumns,
         colWidths: colWidths.length ? colWidths : Array(tableData[0]?.length || 10).fill(90).map((w, i) => i < fixedColumns ? 180 : w),
         rowHeights: 30,
-        // Apply nested headers directly in settings
         nestedHeaders: nestedHeaders,
         search: {
           query: searchTerm
@@ -676,33 +730,57 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
           console.log("=== HANDSONTABLE INITIALIZED SUCCESSFULLY ===");
           console.log("Headers should now be properly aligned");
 
-          // Inspect the final DOM structure
+          // Safe DOM inspection with proper checks
           setTimeout(() => {
-            const headerTable = this.rootElement.querySelector('.handsontable thead');
-            if (headerTable) {
+            try {
+              // Check if rootElement exists and is still valid
+              if (!this.rootElement) {
+                console.warn("Root element not available yet");
+                return;
+              }
+
+              const headerTable = this.rootElement.querySelector('.handsontable thead');
+              if (!headerTable) {
+                console.warn("Header table not found in DOM");
+                return;
+              }
+
               const rows = headerTable.querySelectorAll('tr');
+              if (!rows || rows.length === 0) {
+                console.warn("No header rows found");
+                return;
+              }
+
               console.log(`Final header structure: ${rows.length} rows`);
 
+              // Safely check first row (categories)
               if (rows[0]) {
                 const categoryHeaders = rows[0].querySelectorAll('th');
                 console.log(`=== FINAL CATEGORY HEADERS (${categoryHeaders.length}) ===`);
                 categoryHeaders.forEach((th, index) => {
-                  const colspan = th.getAttribute('colspan') || '1';
-                  const text = th.textContent.trim();
-                  console.log(`[${index}] "${text}" (colspan: ${colspan})`);
+                  if (th) {
+                    const colspan = th.getAttribute('colspan') || '1';
+                    const text = th.textContent ? th.textContent.trim() : '';
+                    console.log(`[${index}] "${text}" (colspan: ${colspan})`);
+                  }
                 });
               }
 
+              // Safely check second row (column headers)
               if (rows[1]) {
                 const columnHeaders = rows[1].querySelectorAll('th');
                 console.log(`=== FINAL COLUMN HEADERS (${columnHeaders.length}) ===`);
                 columnHeaders.forEach((th, index) => {
-                  const text = th.textContent.trim();
-                  console.log(`[${index}] "${text}"`);
+                  if (th) {
+                    const text = th.textContent ? th.textContent.trim() : '';
+                    console.log(`[${index}] "${text}"`);
+                  }
                 });
               }
+            } catch (error) {
+              console.error("Error during DOM inspection:", error);
             }
-          }, 100);
+          }, 250);
         },
         afterChange: function(changes, source) {
           if (source !== 'loadData') {
