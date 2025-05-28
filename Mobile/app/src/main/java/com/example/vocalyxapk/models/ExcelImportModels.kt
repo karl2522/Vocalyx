@@ -3,7 +3,8 @@ package com.example.vocalyxapk.models
 
 enum class ImportStep {
     FILE_INFO,
-    PREVIEW_DATA
+    PREVIEW_DATA,
+    MAP_COLUMNS
 }
 
 

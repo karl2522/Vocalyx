@@ -9,6 +9,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
@@ -28,20 +29,20 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.vocalyxapk.FileViewerActivity
+import com.example.vocalyxapk.FileTableData
 import com.example.vocalyxapk.MyClassesActivity
-import com.example.vocalyxapk.composables.CourseCard
 import com.example.vocalyxapk.data.ImportedClass
 import com.example.vocalyxapk.models.CourseItem
 import com.example.vocalyxapk.viewmodel.*
-import kotlinx.coroutines.launch
 import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ClassesTab(modifier: Modifier = Modifier) {
+fun CoursesTab(modifier: Modifier = Modifier) {
     var searchQuery by remember { mutableStateOf("") }
     val context = LocalContext.current
     val application = context.applicationContext as Application
@@ -122,10 +123,10 @@ fun ClassesTab(modifier: Modifier = Modifier) {
     // Fetch courses when the tab is displayed
     LaunchedEffect(Unit) {
         try {
-            android.util.Log.d("ClassesTab", "Attempting to fetch courses")
+            android.util.Log.d("CoursesTab", "Attempting to fetch courses")
             classViewModel.fetchCourses()
         } catch (e: Exception) {
-            android.util.Log.e("ClassesTab", "Error fetching courses", e)
+            android.util.Log.e("CoursesTab", "Error fetching courses", e)
             android.widget.Toast.makeText(
                 context,
                 "Error loading courses: ${e.message}",
@@ -310,7 +311,7 @@ fun ClassesTab(modifier: Modifier = Modifier) {
 
                             // Course Name
                             Text(
-                                text = "Course Name *",
+                                text = "Course Name",
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.bodyMedium,
                                 modifier = Modifier.padding(bottom = 4.dp)
@@ -1036,92 +1037,119 @@ private fun showEditCourseDialog(
 
 @Composable
 fun ImportedClassCard(classData: ImportedClass) {
+    val context = LocalContext.current
+    
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .height(100.dp) // Compact height like the CourseCard
+            .clickable {
+                // Navigate to view the imported class data
+                val intent = Intent(context, FileViewerActivity::class.java).apply {
+                    putExtra("file_table_data", FileTableData(
+                        fileData = classData.fileData,
+                        fileName = classData.name,
+                        section = classData.section
+                    ))
+                }
+                context.startActivity(intent)
+            },
         colors = CardDefaults.cardColors(
             containerColor = Color.White
         ),
         elevation = CardDefaults.cardElevation(
             defaultElevation = 2.dp
-        )
+        ),
+        shape = RoundedCornerShape(12.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.SpaceBetween
             ) {
-                // Title and section
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = classData.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Color(0xFF333D79),
-                        fontWeight = FontWeight.Bold
-                    )
-                    
-                    Text(
-                        text = "Section: ${classData.section}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFF666666)
-                    )
-                }
-                
-                // Imported badge
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFFE3F2FD) // Light blue background
-                    ),
-                    shape = RoundedCornerShape(16.dp)
+                // Top row with class icon and imported badge
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    // Class icon
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .background(
+                                color = Color(0xFFEEF0F8),
+                                shape = RoundedCornerShape(6.dp)
+                            ),
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             Icons.Rounded.InsertDriveFile,
                             contentDescription = null,
-                            tint = Color(0xFF2196F3),
-                            modifier = Modifier.size(16.dp)
+                            tint = Color(0xFF333D79),
+                            modifier = Modifier.size(14.dp)
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
+                    }
+                    
+                    // Imported badge - smaller and more subtle
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                color = Color(0xFF2196F3).copy(alpha = 0.1f),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
                         Text(
                             text = "Imported",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFF0D47A1)
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF2196F3)
                         )
                     }
                 }
-            }
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            // Show file data summary
-            if (classData.fileData.isNotEmpty()) {
+                
+                // Class name - The main highlight
                 Text(
-                    text = "Imported Data Summary:",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF333D79)
+                    text = classData.name,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = Color(0xFF333D79),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(vertical = 2.dp)
                 )
                 
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                Text(
-                    text = "${classData.fileData.size} rows of data",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF666666)
-                )
-                
-                // Show column count if there's at least one row
-                if (classData.fileData.isNotEmpty() && classData.fileData[0].isNotEmpty()) {
+                // Bottom row with section and student count
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Section
                     Text(
-                        text = "${classData.fileData[0].size} columns",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFF666666)
+                        text = "Section ${classData.section}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF666666),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
+                    
+                    // Students count
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Group,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = Color(0xFF666666)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "${maxOf(0, classData.fileData.size - 1)} students", // Subtract 1 for header row
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF666666)
+                        )
+                    }
                 }
             }
         }

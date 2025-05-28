@@ -25,6 +25,7 @@
         android:usesCleartextTraffic="true"
         tools:targetApi="31">
 
+
         <activity
             android:name="com.microsoft.identity.client.BrowserTabActivity"
             android:exported="true">

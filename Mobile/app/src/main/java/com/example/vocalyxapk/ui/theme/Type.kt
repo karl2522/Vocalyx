@@ -2,32 +2,18 @@ package com.example.vocalyxapk.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.googlefonts.Font
-import androidx.compose.ui.text.googlefonts.GoogleFont
 import androidx.compose.ui.unit.sp
+import com.example.vocalyxapk.R
 
-// Configure Google Fonts provider
-private val provider = GoogleFont.Provider(
-    providerAuthority = "com.google.android.gms.fonts",
-    providerPackage = "com.google.android.gms",
-    certificates = listOf(
-        listOf(
-            // Let the system use the default certificates
-            byteArrayOf()
-        )
-    )
-)
-
-// Define DM Sans font
-private val DMSansFont = GoogleFont("DM Sans")
-
-// Create the font family with different weights
+// Create the DM Sans font family using local font files
 val DMSans = FontFamily(
-    Font(googleFont = DMSansFont, fontProvider = provider, weight = FontWeight.Normal),
-    Font(googleFont = DMSansFont, fontProvider = provider, weight = FontWeight.Medium),
-    Font(googleFont = DMSansFont, fontProvider = provider, weight = FontWeight.Bold)
+    Font(R.font.dmsansregular, FontWeight.Normal),
+    Font(R.font.dmsansmedium, FontWeight.Medium),
+    Font(R.font.dmsanssemibold, FontWeight.SemiBold),
+    Font(R.font.dmsansbold, FontWeight.Bold)
 )
 
 // Typography with DM Sans applied to all text styles
@@ -81,7 +67,7 @@ val Typography = Typography(
     // Titles
     titleLarge = TextStyle(
         fontFamily = DMSans,
-        fontWeight = FontWeight.Normal,
+        fontWeight = FontWeight.Medium,
         fontSize = 22.sp,
         lineHeight = 28.sp,
         letterSpacing = 0.sp

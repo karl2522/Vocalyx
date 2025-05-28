@@ -1,17 +1,20 @@
 package com.example.vocalyxapk
 
 import android.content.Intent
+import com.example.vocalyxapk.composables.ExcelImportModal
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
@@ -132,6 +135,7 @@ fun StudentsScreen(
     var excelFileToDelete by remember { mutableStateOf<Int?>(null) }
 
     var showBatchDialog by remember { mutableStateOf(false) }
+    var showImportModal by remember { mutableStateOf(false) }
     
     // Fetch Excel files when the screen is first displayed
     LaunchedEffect(classId) {
@@ -180,7 +184,7 @@ fun StudentsScreen(
                 title = { Text(className) },
                 navigationIcon = {
                     IconButton(onClick = onBackPressed) {
-                        Icon(Icons.Rounded.ArrowBack, contentDescription = "Back")
+                        Icon(imageVector = Icons.Rounded.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
@@ -195,12 +199,12 @@ fun StudentsScreen(
                             context.startActivity(intent)
                         }
                     ) {
-                        Icon(Icons.Default.Visibility, contentDescription = "Mobile-friendly view")
+                        Icon(imageVector = Icons.Default.Visibility, contentDescription = "Mobile-friendly view")
                     }
                     
                     // Refresh button
                     IconButton(onClick = { excelViewModel.fetchExcelFiles(classId) }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                        Icon(imageVector = Icons.Default.Refresh, contentDescription = "Refresh")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -276,7 +280,7 @@ fun StudentsScreen(
                                                 onClick = { excelViewModel.selectExcelFile(excelFile.id) },
                                                 label = { Text(excelFile.file_name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                                 leadingIcon = if (selectedExcelFile?.id == excelFile.id) {
-                                                    { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                                    { Icon(imageVector = Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
                                                 } else null,
                                             )
 
@@ -303,14 +307,7 @@ fun StudentsScreen(
                                     
                                     // Import new file button
                                     Button(
-                                        onClick = {
-                                            // Launch the import wizard activity
-                                            val intent = Intent(context, ExcelImportActivity::class.java).apply {
-                                                putExtra("CLASS_ID", classId)
-                                                putExtra("CLASS_NAME", className)
-                                            }
-                                            context.startActivity(intent)
-                                        },
+                                        onClick = { showImportModal = true },
                                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF333D79)),
                                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                                         modifier = Modifier.height(32.dp)
@@ -327,49 +324,155 @@ fun StudentsScreen(
                             }
                         }
                         
-                        // Display selected file with fixed height for the table
+                        // Display selected file as card preview
                         if (selectedExcelFile != null) {
-                            // Add a spacer to push content down
                             Spacer(modifier = Modifier.height(8.dp))
                             
-                            // Title for student records table
-                            Text(
-                                text = "Student Records",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                            )
-                            
-                            // Make the container for Excel data explicitly tall
-                            Box(
+                            // Excel File Preview Card
+                            Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(350.dp) // Fixed height to ensure enough space for multiple rows
-                                    .padding(horizontal = 16.dp)
+                                    .padding(horizontal = 16.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = Color.White
+                                ),
+                                elevation = CardDefaults.cardElevation(4.dp),
+                                shape = RoundedCornerShape(12.dp)
                             ) {
-                                ExcelDataDisplay(
-                                    excelFile = selectedExcelFile,
-                                    sheetData = excelViewModel.getSelectedSheetData(),
-                                    selectedSheetName = excelViewModel.selectedSheetName,
-                                    onSelectSheet = { excelViewModel.selectSheet(it) },
-                                    onDelete = { excelId ->
-                                        // Show confirmation dialog
-                                        coroutineScope.launch {
-                                            val result = snackbarHostState.showSnackbar(
-                                                message = "Delete this Excel file?",
-                                                actionLabel = "Delete",
-                                                duration = SnackbarDuration.Long
+                                Column(
+                                    modifier = Modifier.padding(20.dp)
+                                ) {
+                                    // Header with file icon and title
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(48.dp)
+                                                .background(
+                                                    Color(0xFF333D79).copy(alpha = 0.1f),
+                                                    shape = RoundedCornerShape(12.dp)
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                Icons.Default.List,
+                                                contentDescription = null,
+                                                tint = Color(0xFF333D79),
+                                                modifier = Modifier.size(24.dp)
                                             )
-                                            if (result == SnackbarResult.ActionPerformed) {
-                                                // User confirmed deletion
-                                                excelViewModel.deleteExcelFile(excelId, classId)
+                                        }
+                                        
+                                        Spacer(modifier = Modifier.width(16.dp))
+                                        
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = selectedExcelFile.file_name,
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF333D79),
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = "Imported Excel File",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color(0xFF666666)
+                                            )
+                                        }
+                                    }
+                                    
+                                    Spacer(modifier = Modifier.height(20.dp))
+                                    
+                                    // File statistics
+                                    val sheetData = excelViewModel.getSelectedSheetData()
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                    ) {
+                                        // Rows count
+                                        Card(
+                                            modifier = Modifier.weight(1f),
+                                            colors = CardDefaults.cardColors(
+                                                containerColor = Color(0xFFF0F9FF)
+                                            ),
+                                            shape = RoundedCornerShape(8.dp)
+                                        ) {
+                                            Column(
+                                                modifier = Modifier.padding(16.dp),
+                                                horizontalAlignment = Alignment.CenterHorizontally
+                                            ) {
+                                                Text(
+                                                    text = "${sheetData?.size ?: 0}",
+                                                    style = MaterialTheme.typography.titleLarge,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFF333D79)
+                                                )
+                                                Text(
+                                                    text = "Rows",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = Color(0xFF666666)
+                                                )
+                                            }
+                                        }
+                                        
+                                        // Columns count
+                                        Card(
+                                            modifier = Modifier.weight(1f),
+                                            colors = CardDefaults.cardColors(
+                                                containerColor = Color(0xFFF0FDF4)
+                                            ),
+                                            shape = RoundedCornerShape(8.dp)
+                                        ) {
+                                            Column(
+                                                modifier = Modifier.padding(16.dp),
+                                                horizontalAlignment = Alignment.CenterHorizontally
+                                            ) {
+                                                Text(
+                                                    text = "${sheetData?.firstOrNull()?.size ?: 0}",
+                                                    style = MaterialTheme.typography.titleLarge,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFF16A34A)
+                                                )
+                                                Text(
+                                                    text = "Columns",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = Color(0xFF666666)
+                                                )
                                             }
                                         }
                                     }
-                                )
+                                    
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    
+                                    // Action button to view full data
+                                    Button(
+                                        onClick = {
+                                            val intent = Intent(context, FriendlyStudentsActivity::class.java).apply {
+                                                putExtra("CLASS_ID", classId)
+                                                putExtra("CLASS_NAME", className)
+                                                putExtra("CLASS_SECTION", classSection)
+                                            }
+                                            context.startActivity(intent)
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = Color(0xFF333D79)
+                                        ),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Visibility,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("View Full Data")
+                                    }
+                                }
                             }
                             
-                            // Add spacer between student records and recordings section
                             Spacer(modifier = Modifier.height(16.dp))
                         } else if (excelFiles.isNotEmpty()) {
                             // Select a file message
@@ -590,7 +693,7 @@ fun StudentsScreen(
                             onClick = { excelViewModel.fetchExcelFiles(classId) },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF333D79))
                         ) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Retry")
+                            Icon(imageVector = Icons.Default.Refresh, contentDescription = "Retry")
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Retry")
                         }
@@ -604,13 +707,7 @@ fun StudentsScreen(
                             .padding(16.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        ImportExcelCard(onImportClick = {
-                            val intent = Intent(context, ExcelImportActivity::class.java).apply {
-                                putExtra("CLASS_ID", classId)
-                                putExtra("CLASS_NAME", className)
-                            }
-                            context.startActivity(intent)
-                        })
+                        ImportExcelCard(onImportClick = { showImportModal = true })
                     }
                 }
             }
@@ -659,6 +756,18 @@ fun StudentsScreen(
         BatchRecordingDialog(
             excelViewModel = excelViewModel,
             onDismiss = { showBatchDialog = false }
+        )
+    }
+    
+    if (showImportModal) {
+        ExcelImportModal(
+            classId = classId,
+            className = className,
+            onDismiss = { showImportModal = false },
+            onImportComplete = {
+                showImportModal = false
+                excelViewModel.fetchExcelFiles(classId)
+            }
         )
     }
 }
