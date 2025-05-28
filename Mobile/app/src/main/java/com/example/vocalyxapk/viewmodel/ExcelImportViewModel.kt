@@ -56,9 +56,8 @@ class ExcelImportViewModel(application: Application) : AndroidViewModel(applicat
                 // Read preview data
                 val previewData = readPreviewData(tempFile!!)
                 
-                // Update state and advance to preview step
+                // Update state
                 _importState.value = _importState.value.copy(
-                    currentStep = ImportStep.PREVIEW_DATA,
                     fileName = fileName,
                     fileUri = uri.toString(),
                     previewData = previewData,
@@ -78,8 +77,7 @@ class ExcelImportViewModel(application: Application) : AndroidViewModel(applicat
         val currentStep = _importState.value.currentStep
         val nextStep = when (currentStep) {
             ImportStep.FILE_INFO -> ImportStep.PREVIEW_DATA
-            ImportStep.PREVIEW_DATA -> ImportStep.MAP_COLUMNS
-            ImportStep.MAP_COLUMNS -> return // Already at last step
+            ImportStep.PREVIEW_DATA -> return // Already at last step
         }
         
         _importState.value = _importState.value.copy(currentStep = nextStep)
@@ -93,7 +91,6 @@ class ExcelImportViewModel(application: Application) : AndroidViewModel(applicat
         val previousStep = when (currentStep) {
             ImportStep.FILE_INFO -> return // Already at first step
             ImportStep.PREVIEW_DATA -> ImportStep.FILE_INFO
-            ImportStep.MAP_COLUMNS -> ImportStep.PREVIEW_DATA
         }
         
         _importState.value = _importState.value.copy(currentStep = previousStep)

@@ -590,7 +590,7 @@ const Dashboard = () => {
                   <span>Create Team</span>
                 </Link>
                 <Link 
-                  to="/dashboard/team"
+                  to="/dashboard/team/join" 
                   className="px-5 py-2.5 border border-[#333D79]/20 text-[#333D79] rounded-lg hover:bg-[#333D79]/5 transition-colors flex items-center justify-center gap-2"
                 >
                   <span>Join Existing Team</span>
