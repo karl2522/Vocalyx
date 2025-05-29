@@ -1,11 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import DashboardLayout from './layouts/DashboardLayout';
-import { teamService } from '../services/api';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { courseService, teamService } from '../services/api';
 import { showToast } from '../utils/toast';
+import DashboardLayout from './layouts/DashboardLayout';
 import AddCoursesModal from './modals/AddCourseModal';
-import { Link } from 'react-router-dom';
-import { courseService } from '../services/api';
 
 const TeamDetail = ({ userIsOwner }) => {
   const { id } = useParams();
@@ -146,7 +144,7 @@ const TeamDetail = ({ userIsOwner }) => {
   try {
     await teamService.removeMember(team.id, memberId);
     setTeamMembers(teamMembers.filter(m => m.id !== memberId));
-    showToast.success('Member removed from team');
+    showToast.deleted('Team member');
   } catch (error) {
     console.error('Error removing member:', error);
     showToast.error('Failed to remove member');
@@ -162,11 +160,7 @@ const TeamDetail = ({ userIsOwner }) => {
       member.id === memberId ? { ...member, permissions: newPermission } : member
     ));
     
-    showToast.success(`Member permissions updated to ${
-      newPermission === 'full' ? 'Full Access' : 
-      newPermission === 'edit' ? 'Can Edit' : 
-      'View Only'
-    }`);
+    showToast.updated('Member permissions');
   } catch (error) {
     console.error('Error updating member permissions:', error);
     showToast.error('Failed to update member permissions');
@@ -195,7 +189,7 @@ const TeamDetail = ({ userIsOwner }) => {
       setTeamCourses(response.data.courses || []);
       
       setShowAddCoursesModal(false);
-      showToast.success(`${selectedCoursesToAdd.length} course${selectedCoursesToAdd.length !== 1 ? 's' : ''} added to team successfully!`);
+      showToast.success(`${selectedCoursesToAdd.length} course${selectedCoursesToAdd.length !== 1 ? 's' : ''} added to team`);
       setSelectedCoursesToAdd([]);
     } catch (error) {
       console.error('Error adding courses:', error);
@@ -210,7 +204,7 @@ const TeamDetail = ({ userIsOwner }) => {
     
     try {
       await teamService.addMember(team.id, email);
-      showToast.success('Invitation sent!');
+      showToast.success('Invitation sent successfully!');
       
       // Refresh team members
       const response = await teamService.getTeamById(id);
@@ -331,7 +325,7 @@ const TeamDetail = ({ userIsOwner }) => {
                           onClick={() => {
                             navigator.clipboard.writeText(team.code)
                               .then(() => {
-                                showToast.success('Team code copied!', 'Copied');
+                                showToast.copied('Team code');
                               })
                               .catch(err => {
                                 console.error('Failed to copy: ', err);

@@ -1,25 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.VOCALYXAPK" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:fontFamily">@font/dmsansregular</item>
-        <item name="android:textAppearance">@style/TextAppearance.Vocalyx</item>
-    </style>
-
-    <style name="TextAppearance.Vocalyx" parent="android:TextAppearance">
-        <item name="android:fontFamily">@font/dmsansregular</item>
-    </style>
-
-    <style name="TextAppearance.Vocalyx.Bold" parent="TextAppearance.Vocalyx">
-        <item name="android:fontFamily">@font/dmsansbold</item>
-        <item name="android:textStyle">bold</item>
-    </style>
-
-    <style name="TextAppearance.Vocalyx.Medium" parent="TextAppearance.Vocalyx">
-        <item name="android:fontFamily">@font/dmsansmedium</item>
-    </style>
-
-    <style name="TextAppearance.Vocalyx.SemiBold" parent="TextAppearance.Vocalyx">
-        <item name="android:fontFamily">@font/dmsanssemibold</item>
-    </style>
+    <style name="Theme.VOCALYXAPK" parent="android:Theme.Material.Light.NoActionBar" />
 </resources>

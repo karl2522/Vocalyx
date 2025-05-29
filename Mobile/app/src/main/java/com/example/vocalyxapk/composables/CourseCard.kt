@@ -82,72 +82,110 @@ fun CourseCard(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .height(120.dp)
+            .height(160.dp)
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color.White
+            containerColor = when(courseData.status) {
+                "active" -> Color(0xFFE8F5E9)  // Light green for active
+                "completed" -> Color(0xFFE3F2FD)  // Light blue for completed
+                "archived" -> Color(0xFFF5F5F5)  // Light grey for archived
+                else -> Color.White
+            }
         )
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(12.dp),
+                    .padding(16.dp),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
-                // Top row with course code and status badge
+                // Top row with course code and status
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Course code
+                    // Course code and status
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = courseData.courseCode,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF333D79)
+                        )
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        // Status badge
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .background(
+                                    color = when(courseData.status) {
+                                        "active" -> Color(0xFF4CAF50).copy(alpha = 0.2f)
+                                        "completed" -> Color(0xFF2196F3).copy(alpha = 0.2f)
+                                        "archived" -> Color(0xFF9E9E9E).copy(alpha = 0.2f)
+                                        else -> Color(0xFF333D79).copy(alpha = 0.2f)
+                                    },
+                                    shape = RoundedCornerShape(50)
+                                )
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .background(
+                                        color = when(courseData.status) {
+                                            "active" -> Color(0xFF4CAF50)
+                                            "completed" -> Color(0xFF2196F3)
+                                            "archived" -> Color(0xFF9E9E9E)
+                                            else -> Color(0xFF333D79)
+                                        },
+                                        shape = CircleShape
+                                    )
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = courseData.status?.replaceFirstChar { it.uppercase() } ?: "Active",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = when(courseData.status) {
+                                    "active" -> Color(0xFF1B5E20)
+                                    "completed" -> Color(0xFF0D47A1)
+                                    "archived" -> Color(0xFF616161)
+                                    else -> Color(0xFF333D79)
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // Course title and description
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
                     Text(
-                        text = courseData.courseCode,
-                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                        color = Color(0xFF666666)
+                        text = courseData.name,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF333D79),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
 
-                    // Status badge - smaller and more subtle
-                    Box(
-                        modifier = Modifier
-                            .background(
-                                color = when(courseData.status) {
-                                    "active" -> Color(0xFF4CAF50).copy(alpha = 0.1f)
-                                    "completed" -> Color(0xFF2196F3).copy(alpha = 0.1f)
-                                    "archived" -> Color(0xFF9E9E9E).copy(alpha = 0.1f)
-                                    else -> Color(0xFF333D79).copy(alpha = 0.1f)
-                                },
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
+                    if (!courseData.description.isNullOrBlank()) {
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = courseData.status?.replaceFirstChar { it.uppercase() } ?: "Active",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = when(courseData.status) {
-                                "active" -> Color(0xFF4CAF50)
-                                "completed" -> Color(0xFF2196F3)
-                                "archived" -> Color(0xFF9E9E9E)
-                                else -> Color(0xFF333D79)
-                            }
+                            text = courseData.description,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFF666666),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
 
-                // Course title - The main highlight
-                Text(
-                    text = courseData.name,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = Color(0xFF333D79),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(vertical = 4.dp)
-                )
-
-                // Bottom row with semester and class count
+                // Bottom row with semester/academic year and class count
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -158,16 +196,14 @@ fun CourseCard(
                         Icon(
                             Icons.Default.Event,
                             contentDescription = null,
-                            modifier = Modifier.size(14.dp),
+                            modifier = Modifier.size(16.dp),
                             tint = Color(0xFF666666)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = courseData.semester,
+                            text = "${courseData.semester}${if (!courseData.academic_year.isNullOrBlank()) " • ${courseData.academic_year}" else ""}",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFF666666),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            color = Color(0xFF666666)
                         )
                     }
 
@@ -176,7 +212,7 @@ fun CourseCard(
                         Icon(
                             Icons.Default.Group,
                             contentDescription = null,
-                            modifier = Modifier.size(14.dp),
+                            modifier = Modifier.size(16.dp),
                             tint = Color(0xFF666666)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
@@ -189,23 +225,18 @@ fun CourseCard(
                 }
             }
 
-            // Three dots menu - positioned in top right corner
-            Box(
+            // Three dots menu
+            IconButton(
+                onClick = { showMenu = true },
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(4.dp)
             ) {
-                IconButton(
-                    onClick = { showMenu = !showMenu },
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Icon(
-                        Icons.Default.MoreVert,
-                        contentDescription = "More options",
-                        tint = Color(0xFF666666),
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+                Icon(
+                    Icons.Default.MoreVert,
+                    contentDescription = "More options",
+                    tint = Color(0xFF333D79)
+                )
 
                 DropdownMenu(
                     expanded = showMenu,
