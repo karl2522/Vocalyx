@@ -1784,7 +1784,7 @@ class ExcelViewSet(viewsets.ModelViewSet):
             print("Error updating categories:", str(e))
             print("Traceback:", traceback.format_exc())
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
+    #updated
     @action(detail=True, methods=['PATCH'], permission_classes=[IsAuthenticated])
     def update_data(self, request, pk=None):
         try:
