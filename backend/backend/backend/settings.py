@@ -36,7 +36,7 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*', '10.0.191.212', '192.168.1.10', '.herokuapp.com', "192.168.113.197"]
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*', '10.0.191.212', '192.168.1.10', '.herokuapp.com', "192.168.254.100"]
 
 FIREBASE_SERVICE_ACCOUNT_PATH = os.path.join(BASE_DIR.parent, 'firebase-service-account.json')
 
@@ -150,8 +150,8 @@ CORS_ALLOWED_ORIGINS = [
     "http://10.0.191.212:8080",
     "http://10.0.191.212",
     "https://vocalyx-frontend.vercel.app",
-    "http://192.168.113.197:8000",
-    "http://192.168.113.197"
+    "http://192.168.254.100:8000",
+    "http://192.168.254.100"
 ]
 
 CORS_ALLOW_CREDENTIALS = True

@@ -58,11 +58,10 @@ fun ExcelImportModal(
         }
     }
     
-    val steps = listOf("File Info", "Preview Data", "Map Columns")
+    val steps = listOf("File Info", "Preview Data")
     val currentStepIndex = when (importState.currentStep) {
         ImportStep.FILE_INFO -> 0
         ImportStep.PREVIEW_DATA -> 1
-        ImportStep.MAP_COLUMNS -> 2
     }
     
     AlertDialog(
@@ -184,17 +183,6 @@ fun ExcelImportModal(
                             onNext = { viewModel.nextStep() }
                         )
                     }
-                    ImportStep.MAP_COLUMNS -> {
-                        ImportStep(
-                            allColumns = importState.allColumns,
-                            columnMappings = importState.columnMappings,
-                            onMapColumn = { field, column -> viewModel.mapColumn(field, column) },
-                            onImport = { 
-                                viewModel.importFile()
-                                onImportComplete()
-                            }
-                        )
-                    }
                 }
             }
         },
@@ -233,27 +221,30 @@ fun ExcelImportModal(
                     }
                     ImportStep.PREVIEW_DATA -> {
                         Button(
-                            onClick = { viewModel.nextStep() },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF333D79)),
-                            modifier = Modifier.height(48.dp)
-                        ) {
-                            Text("Continue")
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Icon(imageVector = Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
-                        }
-                    }
-                    ImportStep.MAP_COLUMNS -> {
-                        Button(
                             onClick = { 
-                                viewModel.importFile()
-                                onImportComplete()
+                                viewModel.importFile { success ->
+                                    if (success) {
+                                        onImportComplete()
+                                    }
+                                }
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF333D79)),
-                            modifier = Modifier.height(48.dp)
+                            modifier = Modifier.height(48.dp),
+                            enabled = !importState.isImporting
                         ) {
-                            Icon(imageVector = Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Import File")
+                            if (importState.isImporting) {
+                                CircularProgressIndicator(
+                                    color = Color.White,
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Importing...")
+                            } else {
+                                Icon(imageVector = Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Import File")
+                            }
                         }
                     }
                 }
@@ -582,153 +573,6 @@ private fun PreviewStep(
                                     color = Color(0xFF6B7280)
                                 )
                             }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ImportStep(
-    allColumns: List<String>,
-    columnMappings: Map<String, String>,
-    onMapColumn: (field: String, column: String) -> Unit,
-    onImport: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
-    ) {
-        Text(
-            "Map Columns",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFF333D79)
-        )
-        
-        Text(
-            "Match your Excel columns to the required fields",
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color(0xFF666666),
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
-        
-        // Required mappings
-        val requiredFields = listOf("Student ID", "Student Name")
-        
-        requiredFields.forEach { field ->
-            var expanded by remember { mutableStateOf(false) }
-            
-            Column(modifier = Modifier.padding(bottom = 12.dp)) {
-                Text(
-                    "$field *",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = Color(0xFF333333),
-                    modifier = Modifier.padding(bottom = 4.dp)
-                )
-                
-                ExposedDropdownMenuBox(
-                    expanded = expanded,
-                    onExpandedChange = { expanded = it }
-                ) {
-                    OutlinedTextField(
-                        value = columnMappings[field] ?: "Select column",
-                        onValueChange = { },
-                        readOnly = true,
-                        trailingIcon = {
-                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .menuAnchor(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color(0xFF333D79)
-                        )
-                    )
-                    
-                    ExposedDropdownMenu(
-                        expanded = expanded,
-                        onDismissRequest = { expanded = false }
-                    ) {
-                        allColumns.forEach { column ->
-                            DropdownMenuItem(
-                                text = { Text(column) },
-                                onClick = {
-                                    onMapColumn(field, column)
-                                    expanded = false
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Optional mappings
-        val optionalFields = listOf("Score", "Grade", "Date")
-        
-        Text(
-            "Optional Fields",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Medium,
-            color = Color(0xFF666666),
-            modifier = Modifier.padding(vertical = 8.dp)
-        )
-        
-        optionalFields.forEach { field ->
-            var expanded by remember { mutableStateOf(false) }
-            
-            Column(modifier = Modifier.padding(bottom = 12.dp)) {
-                Text(
-                    field,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF666666),
-                    modifier = Modifier.padding(bottom = 4.dp)
-                )
-                
-                ExposedDropdownMenuBox(
-                    expanded = expanded,
-                    onExpandedChange = { expanded = it }
-                ) {
-                    OutlinedTextField(
-                        value = columnMappings[field] ?: "Not mapped",
-                        onValueChange = { },
-                        readOnly = true,
-                        trailingIcon = {
-                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .menuAnchor(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color(0xFF333D79)
-                        )
-                    )
-                    
-                    ExposedDropdownMenu(
-                        expanded = expanded,
-                        onDismissRequest = { expanded = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Not mapped") },
-                            onClick = {
-                                onMapColumn(field, "")
-                                expanded = false
-                            }
-                        )
-                        allColumns.forEach { column ->
-                            DropdownMenuItem(
-                                text = { Text(column) },
-                                onClick = {
-                                    onMapColumn(field, column)
-                                    expanded = false
-                                }
-                            )
                         }
                     }
                 }

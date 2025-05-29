@@ -3,8 +3,7 @@ package com.example.vocalyxapk.models
 
 enum class ImportStep {
     FILE_INFO,
-    PREVIEW_DATA,
-    MAP_COLUMNS
+    PREVIEW_DATA
 }
 
 
@@ -20,9 +19,9 @@ data class ExcelImportState(
     val fileUri: String = "",
     val previewData: List<List<String>> = emptyList(),
     val allColumns: List<String> = emptyList(),
-    val selectedTemplate: ImportTemplate? = null,
-    val columnMappings: Map<String, String> = emptyMap(),
-    val customColumns: List<String> = emptyList()
+    val isImporting: Boolean = false,
+    val importSuccess: Boolean = false,
+    val importError: String? = null
 )
 
 

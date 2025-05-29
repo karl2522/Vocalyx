@@ -832,3 +832,107 @@ class ExcelViewSet(viewsets.ModelViewSet):
                 {'error': str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+    @extend_schema(
+        description='Get student names from Excel file',
+        responses={200: {
+            'type': 'object',
+            'properties': {
+                'students': {
+                    'type': 'array',
+                    'items': {
+                        'type': 'object',
+                        'properties': {
+                            'first_name': {'type': 'string'},
+                            'last_name': {'type': 'string'},
+                            'full_name': {'type': 'string'}
+                        }
+                    }
+                },
+                'detected_columns': {
+                    'type': 'object',
+                    'properties': {
+                        'first_name_column': {'type': 'string'},
+                        'last_name_column': {'type': 'string'}
+                    }
+                },
+                'total_count': {'type': 'integer'}
+            }
+        }}
+    )
+    @action(detail=True, methods=['GET'])
+    def student_names(self, request, pk=None):
+        try:
+            excel_file = self.get_object()
+            
+            # Get the active sheet data
+            sheet_name = excel_file.active_sheet
+            if sheet_name not in excel_file.all_sheets:
+                return Response(
+                    {'error': f'Sheet {sheet_name} not found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            sheet_data = excel_file.all_sheets[sheet_name]
+            headers = sheet_data.get('headers', [])
+            data = sheet_data.get('data', [])
+
+            # Auto-detect name columns
+            first_name_patterns = [
+                'first name', 'firstname', 'first_name', 'fname', 'given name', 'givenname',
+                'name_first', 'student_first', 'first', 'prenom', 'nombre'
+            ]
+            last_name_patterns = [
+                'last name', 'lastname', 'last_name', 'lname', 'surname', 'family name',
+                'familyname', 'name_last', 'student_last', 'last', 'apellido', 'nom'
+            ]
+            
+            first_name_col = None
+            last_name_col = None
+            
+            for header in headers:
+                if not first_name_col and any(pattern in header.lower() for pattern in first_name_patterns):
+                    first_name_col = header
+                if not last_name_col and any(pattern in header.lower() for pattern in last_name_patterns):
+                    last_name_col = header
+                    
+                if first_name_col and last_name_col:
+                    break
+
+            # Extract student names
+            students = []
+            for record in data:
+                first_name = record.get(first_name_col, '').strip() if first_name_col else ''
+                last_name = record.get(last_name_col, '').strip() if last_name_col else ''
+                
+                if first_name or last_name:
+                    full_name = ''
+                    if first_name and last_name:
+                        full_name = f"{first_name} {last_name}"
+                    elif first_name:
+                        full_name = first_name
+                    elif last_name:
+                        full_name = last_name
+                    
+                    students.append({
+                        'first_name': first_name,
+                        'last_name': last_name,
+                        'full_name': full_name
+                    })
+
+            return Response({
+                'students': students,
+                'detected_columns': {
+                    'first_name_column': first_name_col,
+                    'last_name_column': last_name_col
+                },
+                'total_count': len(students)
+            })
+
+        except ExcelFile.DoesNotExist:
+            return Response({'error': 'File not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            import traceback
+            print("Error getting student names:", str(e))
+            print("Traceback:", traceback.format_exc())
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)

@@ -2,6 +2,7 @@ package com.example.vocalyxapk
 
 import android.content.Intent
 import com.example.vocalyxapk.composables.ExcelImportModal
+import com.example.vocalyxapk.composables.CategorySelectionDialog
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
@@ -55,6 +57,8 @@ import com.example.vocalyxapk.viewmodel.ExcelViewModel
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
+import com.example.vocalyxapk.composables.RecordingCategory
+import com.example.vocalyxapk.composables.VoiceRecordingInterface
 
 class MyStudentsActivity : ComponentActivity() {
     
@@ -136,6 +140,9 @@ fun StudentsScreen(
 
     var showBatchDialog by remember { mutableStateOf(false) }
     var showImportModal by remember { mutableStateOf(false) }
+    var showCategoryDialog by remember { mutableStateOf(false) }
+    var showVoiceRecording by remember { mutableStateOf(false) }
+    var selectedColumnName by remember { mutableStateOf<String?>(null) }
     
     // Fetch Excel files when the screen is first displayed
     LaunchedEffect(classId) {
@@ -188,20 +195,6 @@ fun StudentsScreen(
                     }
                 },
                 actions = {
-                    // Eye icon for mobile-friendly view
-                    IconButton(
-                        onClick = {
-                            val intent = Intent(context, FriendlyStudentsActivity::class.java).apply {
-                                putExtra("CLASS_ID", classId)
-                                putExtra("CLASS_NAME", className)
-                                putExtra("CLASS_SECTION", classSection)
-                            }
-                            context.startActivity(intent)
-                        }
-                    ) {
-                        Icon(imageVector = Icons.Default.Visibility, contentDescription = "Mobile-friendly view")
-                    }
-                    
                     // Refresh button
                     IconButton(onClick = { excelViewModel.fetchExcelFiles(classId) }) {
                         Icon(imageVector = Icons.Default.Refresh, contentDescription = "Refresh")
@@ -449,12 +442,17 @@ fun StudentsScreen(
                                     // Action button to view full data
                                     Button(
                                         onClick = {
-                                            val intent = Intent(context, FriendlyStudentsActivity::class.java).apply {
-                                                putExtra("CLASS_ID", classId)
-                                                putExtra("CLASS_NAME", className)
-                                                putExtra("CLASS_SECTION", classSection)
+                                            // Ensure the selected Excel file is maintained
+                                            if (selectedExcelFile != null) {
+                                                val intent = Intent(context, StudentListActivity::class.java).apply {
+                                                    putExtra("CLASS_ID", classId)
+                                                    putExtra("CLASS_NAME", className)
+                                                    putExtra("CLASS_SECTION", classSection)
+                                                    // Pass the selected Excel file ID to ensure it's selected in the target activity
+                                                    putExtra("SELECTED_EXCEL_FILE_ID", selectedExcelFile.id)
+                                                }
+                                                context.startActivity(intent)
                                             }
-                                            context.startActivity(intent)
                                         },
                                         modifier = Modifier.fillMaxWidth(),
                                         colors = ButtonDefaults.buttonColors(
@@ -463,12 +461,12 @@ fun StudentsScreen(
                                         shape = RoundedCornerShape(8.dp)
                                     ) {
                                         Icon(
-                                            Icons.Default.Visibility,
+                                            Icons.Default.List,
                                             contentDescription = null,
                                             modifier = Modifier.size(18.dp)
                                         )
                                         Spacer(modifier = Modifier.width(8.dp))
-                                        Text("View Full Data")
+                                        Text("View Student List")
                                     }
                                 }
                             }
@@ -492,179 +490,80 @@ fun StudentsScreen(
                         }
                         
                         // Class Recordings section
-                        Column(
+                        Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 16.dp)
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color.White
+                            ),
+                            elevation = CardDefaults.cardElevation(4.dp),
+                            shape = RoundedCornerShape(12.dp)
                         ) {
-                            // Section title
-                            Text(
-                                "Class  Recordings",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                /*color = Color(0xFF333D79),*/
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                            )
-
-                            // Class Recordings section
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 8.dp)
+                                    .padding(16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                // Section title
-                                /*Text(
-                                    "Class Recordings",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF333D79),
-                                    modifier = Modifier.padding(bottom = 8.dp)
-                                )*/
-
-                                // Recordings container
-                                Card(
+                                // Header content
+                                Column(
                                     modifier = Modifier.fillMaxWidth(),
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = Color(0xFFF5F7FA)
-                                    )
+                                    horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(16.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally
-                                    ) {
-                                        // State for showing the recording dialog
-                                        var showRecordingDialog by remember { mutableStateOf(false) }
+                                    Text(
+                                        text = "Class Recordings",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF333D79),
+                                        textAlign = TextAlign.Center
+                                    )
+                                    
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    
+                                    Text(
+                                        text = if (selectedExcelFile != null)
+                                            "Record grades using voice commands"
+                                        else
+                                            "Select an Excel file first",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color(0xFF666666),
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
 
-                                        // Voice recording illustration
-                                        Box(
-                                            modifier = Modifier
-                                                .size(80.dp)
-                                                .dashedBorder(
-                                                    color = Color(0xFF9E9E9E),
-                                                    strokeWidth = 2.dp,
-                                                    cornerRadius = 12.dp,
-                                                    dashWidth = 8.dp,
-                                                    dashGap = 4.dp
-                                                ),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Mic,
-                                                    contentDescription = "Record with voice",
-                                                    modifier = Modifier.size(32.dp),
-                                                    tint = if (selectedExcelFile != null) Color(0xFF333D79) else Color(0xFF9E9E9E)
-                                                )
-                                                Spacer(modifier = Modifier.height(4.dp))
-                                                Text(
-                                                    "Voice Input",
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = if (selectedExcelFile != null) Color(0xFF333D79) else Color(0xFF9E9E9E)
-                                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                // Start Recording button
+                                Button(
+                                    onClick = {
+                                        if (selectedExcelFile != null) {
+                                            showCategoryDialog = true
+                                        } else {
+                                            coroutineScope.launch {
+                                                snackbarHostState.showSnackbar("Please select an Excel file first")
                                             }
                                         }
-
-                                        Spacer(modifier = Modifier.height(16.dp))
-
-                                        // Choose recording mode text
-                                        Text(
-                                            text = if (selectedExcelFile != null)
-                                                "Choose your recording mode:"
-                                            else
-                                                "Select an Excel file first",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = Color(0xFF666666),
-                                            modifier = Modifier.padding(bottom = 8.dp)
-                                        )
-
-                                        // Side-by-side recording options
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                        ) {
-                                            // Single entry button
-                                            FilledTonalButton(
-                                                onClick = {
-                                                    if (selectedExcelFile != null) {
-                                                        showRecordingDialog = true
-                                                    } else {
-                                                        coroutineScope.launch {
-                                                            snackbarHostState.showSnackbar("Please select an Excel file first")
-                                                        }
-                                                    }
-                                                },
-                                                colors = ButtonDefaults.filledTonalButtonColors(
-                                                    containerColor = Color(0xFFE8F5E9),
-                                                    contentColor = Color(0xFF1B5E20)
-                                                ),
-                                                modifier = Modifier.weight(1f)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Mic,
-                                                    contentDescription = "Record Single",
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                                Spacer(modifier = Modifier.width(8.dp))
-                                                Text(
-                                                    "Single Entry",
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                            }
-
-                                            Spacer(modifier = Modifier.width(12.dp))
-
-                                            // Batch recording button - more prominent
-                                            Button(
-                                                onClick = {
-                                                    if (selectedExcelFile != null) {
-                                                        showBatchDialog = true
-                                                    } else {
-                                                        coroutineScope.launch {
-                                                            snackbarHostState.showSnackbar("Please select an Excel file first")
-                                                        }
-                                                    }
-                                                },
-                                                colors = ButtonDefaults.buttonColors(
-                                                    containerColor = Color(0xFF333D79)
-                                                ),
-                                                modifier = Modifier.weight(1f)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.List,
-                                                    contentDescription = "Batch Recording",
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                                Spacer(modifier = Modifier.width(8.dp))
-                                                Text(
-                                                    "Batch Mode",
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                            }
-                                        }
-
-                                        // Add explanatory text
-                                        Text(
-                                            text = "Use Batch Mode to record multiple student entries at once",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = Color(0xFF666666),
-                                            textAlign = TextAlign.Center,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(top = 8.dp)
-                                        )
-
-                                        // Show dialog when activated
-                                        if (showRecordingDialog) {
-                                            VoiceRecordingDialog(
-                                                excelViewModel = excelViewModel,
-                                                onDismiss = { showRecordingDialog = false }
-                                            )
-                                        }
-                                    }
+                                    },
+                                    enabled = selectedExcelFile != null,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFF333D79),
+                                        disabledContainerColor = Color(0xFF9E9E9E)
+                                    ),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Mic,
+                                        contentDescription = "Start Recording",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        "Start Recording",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium
+                                    )
                                 }
                             }
                         }
@@ -767,6 +666,33 @@ fun StudentsScreen(
             onImportComplete = {
                 showImportModal = false
                 excelViewModel.fetchExcelFiles(classId)
+            }
+        )
+    }
+
+    if (showCategoryDialog) {
+        CategorySelectionDialog(
+            excelViewModel = excelViewModel,
+            onDismiss = { showCategoryDialog = false },
+            onCategorySelected = { category, subcategory ->
+                showCategoryDialog = false
+                selectedColumnName = subcategory ?: when (category) {
+                    RecordingCategory.QUIZ -> "Quiz 1"
+                    RecordingCategory.LAB -> "Laboratory Activity 1" 
+                    RecordingCategory.EXAM -> "Prelim Exam"
+                }
+                showVoiceRecording = true
+            }
+        )
+    }
+
+    if (showVoiceRecording && selectedColumnName != null) {
+        VoiceRecordingInterface(
+            excelViewModel = excelViewModel,
+            columnName = selectedColumnName!!,
+            onDismiss = { 
+                showVoiceRecording = false 
+                selectedColumnName = null
             }
         )
     }

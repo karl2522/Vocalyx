@@ -78,8 +78,7 @@ class ExcelImportViewModel(application: Application) : AndroidViewModel(applicat
         val currentStep = _importState.value.currentStep
         val nextStep = when (currentStep) {
             ImportStep.FILE_INFO -> ImportStep.PREVIEW_DATA
-            ImportStep.PREVIEW_DATA -> ImportStep.MAP_COLUMNS
-            ImportStep.MAP_COLUMNS -> return // Already at last step
+            ImportStep.PREVIEW_DATA -> return // Already at last step (removed MAP_COLUMNS)
         }
         
         _importState.value = _importState.value.copy(currentStep = nextStep)
@@ -93,72 +92,9 @@ class ExcelImportViewModel(application: Application) : AndroidViewModel(applicat
         val previousStep = when (currentStep) {
             ImportStep.FILE_INFO -> return // Already at first step
             ImportStep.PREVIEW_DATA -> ImportStep.FILE_INFO
-            ImportStep.MAP_COLUMNS -> ImportStep.PREVIEW_DATA
         }
         
         _importState.value = _importState.value.copy(currentStep = previousStep)
-    }
-    
-    /**
-     * Select a template for column mapping
-     */
-    fun selectTemplate(template: ImportTemplate?) {
-        val newMappings = mutableMapOf<String, String>()
-        
-        // If a template was selected, try to auto-map columns
-        template?.columns?.forEach { field ->
-            // Find a matching column name
-            val matchingColumn = _importState.value.allColumns.find { 
-                it.contains(field, ignoreCase = true) 
-            }
-            
-            if (matchingColumn != null) {
-                newMappings[field] = matchingColumn
-            }
-        }
-        
-        _importState.value = _importState.value.copy(
-            selectedTemplate = template,
-            columnMappings = newMappings
-        )
-    }
-    
-    /**
-     * Map a column to a system field
-     */
-    fun mapColumn(field: String, column: String) {
-        val currentMappings = _importState.value.columnMappings.toMutableMap()
-        currentMappings[field] = column
-        
-        _importState.value = _importState.value.copy(
-            columnMappings = currentMappings
-        )
-    }
-    
-    /**
-     * Add a custom column
-     */
-    fun addCustomColumn(columnName: String) {
-        val currentColumns = _importState.value.customColumns.toMutableList()
-        if (!currentColumns.contains(columnName)) {
-            currentColumns.add(columnName)
-            
-            _importState.value = _importState.value.copy(
-                customColumns = currentColumns
-            )
-        }
-    }
-    
-    /**
-     * Delete a custom column
-     */
-    fun deleteCustomColumn(columnName: String) {
-        val currentColumns = _importState.value.customColumns.toMutableList()
-        currentColumns.remove(columnName)
-        
-        _importState.value = _importState.value.copy(
-            customColumns = currentColumns
-        )
     }
     
     /**
@@ -174,26 +110,58 @@ class ExcelImportViewModel(application: Application) : AndroidViewModel(applicat
     }
     
     /**
-     * Skip column mapping and import the file as is
+     * Import the Excel file with loading states
      */
-    fun skipColumnMapping() {
-        importFile()
-    }
-    
-    /**
-     * Import the Excel file with the applied mappings
-     */
-    fun importFile() {
+    fun importFile(onComplete: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
             try {
+                // Set loading state
+                _importState.value = _importState.value.copy(
+                    isImporting = true,
+                    importSuccess = false,
+                    importError = null
+                )
+                
                 if (tempFile != null && classId > 0) {
                     // Upload the file to the backend
                     excelRepository.uploadExcelFile(tempFile!!, classId)
+                    
+                    // Set success state
+                    _importState.value = _importState.value.copy(
+                        isImporting = false,
+                        importSuccess = true,
+                        importError = null
+                    )
+                    
+                    // Notify completion
+                    onComplete(true)
+                } else {
+                    throw Exception("No file selected or invalid class ID")
                 }
             } catch (e: Exception) {
+                // Set error state
+                _importState.value = _importState.value.copy(
+                    isImporting = false,
+                    importSuccess = false,
+                    importError = e.message ?: "Import failed"
+                )
+                
+                // Notify completion
+                onComplete(false)
                 e.printStackTrace()
             }
         }
+    }
+    
+    /**
+     * Reset import states
+     */
+    fun resetImportState() {
+        _importState.value = _importState.value.copy(
+            isImporting = false,
+            importSuccess = false,
+            importError = null
+        )
     }
     
     /**
