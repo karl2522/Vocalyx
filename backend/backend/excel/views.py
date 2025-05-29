@@ -860,14 +860,19 @@ class ExcelViewSet(viewsets.ModelViewSet):
                 print(f"Error parsing category mappings: {str(e)}")
 
         def find_best_column_replacement(category_id, new_column_name, new_column_data, existing_data,
-                                         existing_category_mappings, max_columns_per_category=10):
+                                         existing_category_mappings, already_assigned_columns=None,
+                                         max_columns_per_category=10):
             """
             Find the best strategy for placing a new column:
-            1. Replace an empty existing column
+            1. Replace an empty existing column (that hasn't been assigned yet)
             2. Add as new column if space allows
             3. Reject if no space and all columns have data
             """
+            if already_assigned_columns is None:
+                already_assigned_columns = set()
+
             print(f"\n🎯 FINDING BEST PLACEMENT FOR: {new_column_name} in {category_id} category")
+            print(f"  Already assigned columns in this batch: {list(already_assigned_columns)}")
 
             # Get existing columns for this category
             existing_categories = {cat.get('id'): cat.get('columns', []) for cat in existing_category_mappings}
@@ -880,6 +885,11 @@ class ExcelViewSet(viewsets.ModelViewSet):
             columns_with_data = []
 
             for column in existing_columns_in_category:
+                # Skip columns that have already been assigned in this batch
+                if column in already_assigned_columns:
+                    print(f"  ⏭️ Skipping '{column}' - already assigned in this batch")
+                    continue
+
                 column_data = []
                 for row in existing_data:
                     value = row.get(column) if isinstance(row, dict) else None
@@ -907,9 +917,9 @@ class ExcelViewSet(viewsets.ModelViewSet):
                     columns_with_data.append(column)
                     print(f"  ✅ Column with data: '{column}' ({percentage:.1f}% data)")
 
-            # Strategy 1: Replace the first empty column
+            # Strategy 1: Replace the first available empty column
             if empty_columns:
-                target_column = empty_columns[0]
+                target_column = empty_columns[0]  # First available empty column
                 print(f"  🔄 STRATEGY: Replace empty column '{target_column}' with '{new_column_name}' data")
                 return {
                     'action': 'replace',
@@ -943,8 +953,6 @@ class ExcelViewSet(viewsets.ModelViewSet):
             """
             print("\n🧠 PROCESSING SMART COLUMN MAPPING")
 
-            current_import_assignments = {}
-
             print(f"🔍 DEBUG: Frontend sent category_mappings: {category_mappings}")
             for i, cat in enumerate(category_mappings):
                 print(f"  Category {i}: {cat.get('id')} → columns: {cat.get('columns', [])}")
@@ -970,6 +978,9 @@ class ExcelViewSet(viewsets.ModelViewSet):
 
             print(f"📌 Only processing explicitly mapped columns: {list(explicitly_mapped_columns)}")
             print(f"📌 Ignoring unmapped columns: {set(imported_headers) - explicitly_mapped_columns}")
+
+            # 🔧 NEW: Track which columns have been assigned during this operation
+            already_assigned_columns = set()
 
             # Process each imported column ONLY IF IT WAS EXPLICITLY MAPPED
             for header in imported_headers:
@@ -1011,19 +1022,24 @@ class ExcelViewSet(viewsets.ModelViewSet):
                 # Get column data from imported records
                 column_data = [record.get(header) for record in imported_records]
 
-                # Find best placement strategy
+                # 🔧 PASS already_assigned_columns to avoid conflicts
                 strategy = find_best_column_replacement(
                     category_id,
                     header,
                     column_data,
                     existing_data,
                     existing_category_mappings,
+                    already_assigned_columns,  # 🆕 Pass the tracking set
                     max_columns_per_category
                 )
 
                 if strategy['action'] == 'replace':
                     # Replace existing empty column
                     target_column = strategy['target_column']
+
+                    # 🔧 TRACK the assigned column to prevent conflicts
+                    already_assigned_columns.add(target_column)
+
                     column_operations.append({
                         'imported_column': header,
                         'action': 'replace',
