@@ -1,0 +1,41 @@
+# Python
+*.py[cod]
+__pycache__/
+*.so
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Django
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+media/
+
+# PyCharm
+.idea/
+*.iml
+
+# VS Code
+.vscode/
+
+# Python Environment
+.Python
+*.pyc
+.env
+.env.local
+
+# Django Static and Media
+/static/
+/media/
+
+# MongoDB
+*.mongodb
+mongod.log
+
+firebase-service-account.json
+google-cloud-credentials.json
