@@ -47,6 +47,7 @@ class FriendlyStudentsActivity : ComponentActivity() {
         val classId = intent.getIntExtra("CLASS_ID", -1)
         val className = intent.getStringExtra("CLASS_NAME") ?: "My Students"
         val classSection = intent.getStringExtra("CLASS_SECTION")
+        val selectedExcelFileId = intent.getIntExtra("SELECTED_EXCEL_FILE_ID", -1)
         
         setContent {
             VOCALYXAPKTheme {
@@ -54,6 +55,7 @@ class FriendlyStudentsActivity : ComponentActivity() {
                     classId = classId,
                     className = className,
                     classSection = classSection,
+                    selectedExcelFileId = if (selectedExcelFileId != -1) selectedExcelFileId else null,
                     onBackPressed = { finish() }
                 )
             }
@@ -67,6 +69,7 @@ fun FriendlyStudentsScreen(
     classId: Int,
     className: String,
     classSection: String?,
+    selectedExcelFileId: Int?,
     onBackPressed: () -> Unit,
     excelViewModel: ExcelViewModel = viewModel()
 ) {
@@ -153,9 +156,15 @@ fun FriendlyStudentsScreen(
                     val selectedExcelFile = excelViewModel.selectedExcelFile
                     
                     if (selectedExcelFile == null && excelFiles.isNotEmpty()) {
-                        // Auto-select the first file if none is selected
+                        // Auto-select the correct file
                         LaunchedEffect(excelFiles) {
-                            excelViewModel.selectExcelFile(excelFiles.first().id)
+                            if (selectedExcelFileId != null && excelFiles.any { it.id == selectedExcelFileId }) {
+                                // Select the specific file passed from MyStudentsActivity
+                                excelViewModel.selectExcelFile(selectedExcelFileId)
+                            } else {
+                                // Default to selecting the first file
+                                excelViewModel.selectExcelFile(excelFiles.first().id)
+                            }
                         }
                     }
                     

@@ -79,6 +79,14 @@
             android:name=".FriendlyStudentsActivity"
             android:exported="false"
             android:theme="@style/Theme.VOCALYXAPK" />
+        <activity
+            android:name=".StudentListActivity"
+            android:exported="false"
+            android:theme="@style/Theme.VOCALYXAPK" />
+        <activity
+            android:name=".StudentDetailActivity"
+            android:exported="false"
+            android:theme="@style/Theme.VOCALYXAPK" />
     </application>
 
 </manifest>
