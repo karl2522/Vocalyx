@@ -943,16 +943,24 @@ class ExcelViewSet(viewsets.ModelViewSet):
             """
             print("\n🧠 PROCESSING SMART COLUMN MAPPING")
 
-            column_operations = []
-            final_category_mappings = []
+            current_import_assignments = {}
 
-            # Create working copy of existing categories
-            working_categories = {}
+            print(f"🔍 DEBUG: Frontend sent category_mappings: {category_mappings}")
+            for i, cat in enumerate(category_mappings):
+                print(f"  Category {i}: {cat.get('id')} → columns: {cat.get('columns', [])}")
+
+            column_operations = []
+
+            # 🔧 FIX: Start with existing categories and ONLY update what changed
+            final_category_mappings = []
             for cat in existing_category_mappings:
-                working_categories[cat.get('id')] = {
+                final_category_mappings.append({
+                    'id': cat.get('id'),
                     'name': cat.get('name'),
-                    'columns': cat.get('columns', []).copy()
-                }
+                    'columns': cat.get('columns', []).copy(),  # Keep existing columns
+                    'imported_column_mapping': cat.get('imported_column_mapping', {}).copy()
+                    # ✅ PRESERVE EXISTING MAPPINGS!
+                })
 
             # 🆕 ONLY PROCESS EXPLICITLY MAPPED COLUMNS (USER'S DRAG & DROP CHOICES)
             explicitly_mapped_columns = set()
@@ -1004,7 +1012,7 @@ class ExcelViewSet(viewsets.ModelViewSet):
                 column_data = [record.get(header) for record in imported_records]
 
                 # Find best placement strategy
-                strategy = find_best_column_replacement(  # 🔧 FIX: This was incorrect before
+                strategy = find_best_column_replacement(
                     category_id,
                     header,
                     column_data,
@@ -1025,6 +1033,20 @@ class ExcelViewSet(viewsets.ModelViewSet):
                     })
                     print(f"  🔄 {header} → {target_column} (replace)")
 
+                    # 🔧 CRITICAL FIX: PRESERVE existing imported_column_mapping
+                    for final_cat in final_category_mappings:
+                        if final_cat['id'] == category_id:
+                            # Initialize if doesn't exist
+                            if 'imported_column_mapping' not in final_cat:
+                                final_cat['imported_column_mapping'] = {}
+
+                            # 🆕 PRESERVE existing mappings and add new one
+                            existing_mapping = final_cat.get('imported_column_mapping', {})
+                            final_cat['imported_column_mapping'] = {**existing_mapping, target_column: header}
+                            print(
+                                f"🔧 Updated imported_column_mapping for {category_id}: {final_cat['imported_column_mapping']}")
+                            break
+
                 elif strategy['action'] == 'add_new':
                     # Add as new column
                     column_operations.append({
@@ -1034,10 +1056,24 @@ class ExcelViewSet(viewsets.ModelViewSet):
                         'category': category_id,
                         'reason': strategy['reason']
                     })
-                    # Update working category
-                    if category_id in working_categories:
-                        working_categories[category_id]['columns'].append(header)
                     print(f"  ➕ {header} → {header} (new)")
+
+                    # 🔧 CRITICAL FIX: PRESERVE existing imported_column_mapping
+                    for final_cat in final_category_mappings:
+                        if final_cat['id'] == category_id:
+                            if header not in final_cat['columns']:
+                                final_cat['columns'].append(header)
+
+                            # Initialize if doesn't exist
+                            if 'imported_column_mapping' not in final_cat:
+                                final_cat['imported_column_mapping'] = {}
+
+                            # 🆕 PRESERVE existing mappings and add new one
+                            existing_mapping = final_cat.get('imported_column_mapping', {})
+                            final_cat['imported_column_mapping'] = {**existing_mapping, header: header}
+                            print(
+                                f"🔧 Updated imported_column_mapping for {category_id}: {final_cat['imported_column_mapping']}")
+                            break
 
                 else:  # reject
                     column_operations.append({
@@ -1047,9 +1083,25 @@ class ExcelViewSet(viewsets.ModelViewSet):
                     })
                     print(f"  ❌ {header} → REJECTED ({strategy['reason']})")
 
-            # 🆕 HANDLE UNMAPPED COLUMNS - Add them to final data without category processing
+            # 🆕 HANDLE UNMAPPED COLUMNS - But check if they were already imported before
             unmapped_columns = set(imported_headers) - explicitly_mapped_columns
+
+            # 🚫 Get list of previously imported column names to avoid duplicates
+            previously_imported_columns = set()
+            for category in existing_category_mappings:
+                imported_mapping = category.get('imported_column_mapping', {})
+                for original_name in imported_mapping.values():
+                    if original_name:
+                        previously_imported_columns.add(original_name)
+
+            print(f"🚫 Previously imported columns to skip: {list(previously_imported_columns)}")
+
             for unmapped_col in unmapped_columns:
+                # 🚫 Skip if this column was already imported before
+                if unmapped_col in previously_imported_columns:
+                    print(f"  🚫 SKIPPING '{unmapped_col}' - already imported previously")
+                    continue
+
                 print(f"  📝 Adding unmapped column '{unmapped_col}' as-is (no smart replacement)")
                 column_operations.append({
                     'imported_column': unmapped_col,
@@ -1058,16 +1110,7 @@ class ExcelViewSet(viewsets.ModelViewSet):
                     'reason': 'Column not mapped to any category by user'
                 })
 
-            # Build final category mappings
-            for category in category_mappings:
-                category_id = category.get('id')
-                if category_id in working_categories:
-                    final_category_mappings.append({
-                        'id': category_id,
-                        'name': working_categories[category_id]['name'],
-                        'columns': working_categories[category_id]['columns']
-                    })
-
+            print(f"🔍 DEBUG: Final category mappings: {final_category_mappings}")
             return column_operations, final_category_mappings
 
         def reorder_columns_by_category(headers, category_mappings):

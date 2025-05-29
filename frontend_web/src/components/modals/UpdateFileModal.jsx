@@ -151,12 +151,46 @@ const UpdateFileModal = ({
     // Also exclude common student column patterns
     const studentPatterns = ['no.', 'id', 'first name', 'last name', 'name', 'student'];
     
-    // Filter out student info columns
-    const availableCols = allHeaders.filter(col => {
+    // 🆕 NEW: Get existing columns from current file's category mappings
+    const existingCategorizedColumns = new Set();
+    const existingImportedColumns = new Set(); // 🆕 Track original imported names
+    const existingCategories = currentFile?.all_sheets?.category_mappings || [];
+    console.log("🔍 Existing categories:", existingCategories);
+    
+    existingCategories.forEach(category => {
+      const columns = category.columns || [];
+      columns.forEach(col => {
+        if (col) existingCategorizedColumns.add(col);
+      });
+      
+      // 🆕 NEW: Also check imported_column_mapping
+      const importedMapping = category.imported_column_mapping || {};
+      Object.values(importedMapping).forEach(originalName => {
+        if (originalName) existingImportedColumns.add(originalName);
+      });
+    });
+    
+    console.log("🚫 Columns already in categories:", Array.from(existingCategorizedColumns));
+    console.log("🚫 Original imported column names:", Array.from(existingImportedColumns));
+    
+    // Filter out student info columns AND existing categorized columns
+   const availableCols = allHeaders.filter(col => {
       if (!col) return false;
       
       // Skip if already identified as student column
       if (studentColumns.has(col)) return false;
+      
+      // 🆕 NEW: Skip if already exists in current file's categories
+      if (existingCategorizedColumns.has(col)) {
+        console.log(`🚫 Skipping '${col}' - already exists in categories`);
+        return false;
+      }
+      
+      // 🆕 NEW: Skip if this was an original imported column name
+      if (existingImportedColumns.has(col)) {
+        console.log(`🚫 Skipping '${col}' - was previously imported`);
+        return false;
+      }
       
       // Skip if matches student patterns
       const colLower = col.toLowerCase().trim();
@@ -171,6 +205,7 @@ const UpdateFileModal = ({
     
     console.log("Available columns for mapping:", availableCols);
     console.log("Excluded student columns:", Array.from(studentColumns));
+    console.log("Excluded existing categorized columns:", Array.from(existingCategorizedColumns));
     console.log("Student patterns excluded:", studentPatterns);
     
     return availableCols;
