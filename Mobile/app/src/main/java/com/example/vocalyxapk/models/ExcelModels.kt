@@ -1,0 +1,83 @@
+package com.example.vocalyxapk.models
+
+import com.google.gson.annotations.SerializedName
+
+data class ExcelFileResponse(
+    val count: Int,
+    val next: String?,
+    val previous: String?,
+    val results: List<ExcelFileItem>
+)
+
+data class ExcelFileItem(
+    val id: Int,
+    val file_name: String,
+    val uploaded_at: String,
+    val all_sheets: Map<String, Any>,
+    val active_sheet: String,
+    val sheet_names: List<String>,
+    val column_categories: Map<String, String>? = null,
+    val update_count: Int? = null,
+    @SerializedName("class_ref") val classId: Int?
+) {
+    // Helper method to safely get sheet content
+    fun getSheetContent(sheetName: String): SheetContent? {
+        val sheet = all_sheets[sheetName] ?: return null
+        
+        // Skip sheets that are not regular data sheets (like category_mappings)
+        if (sheet !is Map<*, *>) return null
+        
+        val data = try {
+            @Suppress("UNCHECKED_CAST")
+            (sheet["data"] as? List<Map<String, Any>>)?.map { row ->
+                row.mapValues { it.value.toString() }
+            } ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+        
+        val headers = try {
+            @Suppress("UNCHECKED_CAST")
+            (sheet["headers"] as? List<String>) ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+        
+        return SheetContent(data.map { it.mapValues { it.value as String } }, headers)
+    }
+}
+
+data class SheetContent(
+    val data: List<Map<String, String>>,
+    val headers: List<String>
+)
+
+data class ExcelUploadResponse(
+    val id: Int,
+    val file_name: String,
+    val uploaded_at: String,
+    val message: String
+)
+
+data class VoiceParseResult(
+    val studentName: String?,
+    val value: String?
+)
+
+data class VoiceEntryRecord(
+    val timestamp: Long,
+    val studentName: String,
+    val column: String,
+    val value: String,
+    val successful: Boolean
+)
+
+
+data class BatchEntry(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val studentName: String,
+    val originalText: String,
+    val value: String,
+    val suggestedName: String? = null,
+    val confirmed: Boolean = false
+)

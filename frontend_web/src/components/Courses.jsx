@@ -1,0 +1,653 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'react-hot-toast';
+import { FiBook, FiEdit, FiFilter, FiMoreVertical, FiPlus, FiSearch, FiTrash2, FiUsers } from 'react-icons/fi';
+import { MdArchive, MdOutlineSchool } from 'react-icons/md';
+import { useNavigate } from 'react-router-dom';
+import { courseService } from '../services/api';
+import { commonHeaderAnimations } from '../utils/animation.js';
+import DashboardLayout from "./layouts/DashboardLayout.jsx";
+import CourseModal from './modals/CourseModal';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+
+// Animation styles component - optimized to prevent flickering
+const CoursesStyles = () => {
+  const styles = useMemo(() => `
+    ${commonHeaderAnimations}
+    
+    .course-card {
+      transition: all 0.3s ease;
+      border: 1px solid #f1f1f1;
+      will-change: transform, box-shadow;
+    }
+    
+    .course-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    }
+    
+    .course-header {
+      background-color: #f9fafb;
+    }
+  `, []);
+  
+  return <style>{styles}</style>;
+};
+
+const Courses = () => {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filter, setFilter] = useState('all');
+  const [teamFilter, setTeamFilter] = useState('my-teams');
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  const [showTeamFilterDropdown, setShowTeamFilterDropdown] = useState(false);
+  const [isCourseModalOpen, setIsCourseModalOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [currentCourse, setCurrentCourse] = useState(null);
+  const [activeDropdown, setActiveDropdown] = useState(null);
+  const [dropdownPosition, setDropdownPosition] = useState(null);
+  const [dropdownCourse, setDropdownCourse] = useState(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [courseToDelete, setCourseToDelete] = useState(null);
+  
+  // Replace useState and useEffect with useQuery
+  const { 
+    data: courses = [], 
+    isLoading, 
+    error 
+  } = useQuery({
+    queryKey: ['courses'],
+    queryFn: async () => {
+      const response = await courseService.getCourses();
+      return response.data;
+    },
+    staleTime: 5 * 60 * 1000, // Data considered fresh for 5 minutes
+    onError: (error) => {
+      console.error('Error fetching courses:', error);
+      if (error.response?.status === 401) {
+        toast.error('Session expired. Please login again.');
+        navigate('/login');
+      } else {
+        toast.error('Failed to load courses');
+      }
+    }
+  });
+  
+  // Setup mutations for adding, updating, and deleting courses
+  const addCourseMutation = useMutation({
+    mutationFn: (courseData) => courseService.createCourse(courseData),
+    onSuccess: (response) => {
+      queryClient.invalidateQueries(['courses']);
+      toast.success('Course added successfully');
+    },
+    onError: (error) => {
+      console.error('Error adding course:', error);
+      toast.error('Failed to add course');
+    }
+  });
+  
+  const updateCourseMutation = useMutation({
+    mutationFn: ({ id, courseData }) => courseService.updateCourse(id, courseData),
+    onSuccess: (response) => {
+      queryClient.invalidateQueries(['courses']);
+      toast.success('Course updated successfully');
+    },
+    onError: (error) => {
+      console.error('Error updating course:', error);
+      toast.error('Failed to update course');
+    }
+  });
+  
+ const deleteCourseMutation = useMutation({
+  mutationFn: (id) => courseService.deleteCourse(id),
+  onSuccess: () => {
+    queryClient.invalidateQueries(['courses']);
+    toast.success('Course deleted successfully');
+  },
+  onError: (error) => {
+    console.error('Error deleting course:', error);
+    
+    if (error.response?.status === 404) {
+      toast.error('Course not found or you do not have permission to delete it.');
+    } else if (error.response?.status === 403) {
+      toast.error('You do not have permission to delete this course.');
+    } else {
+      toast.error('Failed to delete course');
+    }
+    
+    setIsDeleteModalOpen(false);
+    setCourseToDelete(null);
+  }
+});
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (activeDropdown && !event.target.closest('.dropdown-trigger')) {
+        setActiveDropdown(null);
+        setDropdownPosition(null);
+        setDropdownCourse(null);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [activeDropdown]);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (activeDropdown) {
+        setActiveDropdown(null);
+        setDropdownPosition(null);
+        setDropdownCourse(null);
+      }
+    };
+    
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [activeDropdown]);
+
+  const handleAddCourse = (newCourse) => {
+    addCourseMutation.mutate(newCourse);
+  };
+
+  const handleEditCourse = (course) => {
+    setCurrentCourse(course);
+    setIsEditMode(true);
+    setIsCourseModalOpen(true);
+    setActiveDropdown(null);
+  };
+
+  const handleUpdateCourse = (updatedCourse) => {
+    updateCourseMutation.mutate({
+      id: updatedCourse.id, 
+      courseData: updatedCourse
+    });
+  };
+
+  const handleUpdateStatus = async (courseId, newStatus) => {
+    try {
+      updateCourseMutation.mutate({
+        id: courseId, 
+        courseData: { status: newStatus }
+      });
+      setActiveDropdown(null);
+    } catch (error) {
+      console.error(`Error updating course status:`, error);
+    }
+  };
+  
+  const handleDeleteCourse = (courseId) => {
+  setCourseToDelete(courseId);
+  setIsDeleteModalOpen(true);
+  setActiveDropdown(null);
+};
+
+  const confirmDeleteCourse = () => {
+  deleteCourseMutation.mutate(courseToDelete);
+  setIsDeleteModalOpen(false);
+  setCourseToDelete(null);
+};
+
+  const toggleDropdown = (courseId, event) => {
+    if (activeDropdown === courseId) {
+      setActiveDropdown(null);
+      setDropdownPosition(null);
+      setDropdownCourse(null);
+      return;
+    }
+    
+    // Get the position of the click
+    const rect = event.currentTarget.getBoundingClientRect();
+    setDropdownPosition({ x: rect.left + rect.width, y: rect.top });
+    setDropdownCourse(courses.find(course => course.id === courseId));
+    setActiveDropdown(courseId);
+  };
+
+  // Filter courses based on search term, filter selection, and team filter
+  const filteredCourses = courses.filter(course => {
+    // Apply search filter
+    const matchesSearch = course.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          course.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          course.courseCode?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    // Apply status filter
+    const matchesStatus = filter === 'all' ? true : 
+                         (course.status?.toLowerCase() === filter.toLowerCase());
+    
+    // Apply team filter - this is a placeholder as we don't have actual team data
+    // In a real application, you would filter based on team membership
+    const matchesTeam = teamFilter === 'all-teams' ? true : 
+                        (course.is_member === undefined ? true : course.is_member);
+    
+    return matchesSearch && matchesStatus && matchesTeam;
+  });
+
+  // Function to determine if a course is active, completed, or archived
+  const getCourseStatusClasses = (status) => {
+    switch(status?.toLowerCase()) {
+      case 'active':
+        return 'border-l-4 border-l-emerald-500';
+      case 'completed':
+        return 'border-l-4 border-l-blue-500';
+      case 'archived':
+        return 'border-l-4 border-l-gray-400';
+      default:
+        return 'border-l-4 border-l-gray-200';
+    }
+  };
+
+  useEffect(() => {
+    console.log("Current courses with access levels:", courses.map(c => ({
+      id: c.id,
+      name: c.name,
+      accessLevel: c.accessLevel
+    })));
+  }, [courses]);
+
+  return (
+    <DashboardLayout>
+      <CoursesStyles />
+      <div className="pb-6">
+        {/* Header Section */}
+        <div className="hero-gradient rounded-xl mb-8 p-5 shadow-sm border border-gray-100 overflow-hidden relative">
+          {/* Background Elements */}
+          <div className="bg-blur-circle bg-blur-circle-top"></div>
+          <div className="bg-blur-circle bg-blur-circle-bottom"></div>
+          <div className="bg-floating-circle hidden md:block"></div>
+          
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center relative z-10">
+            <div className="flex items-center gap-4 fade-in-up" style={{animationDelay: '0s'}}>
+              <div className="h-12 w-12 rounded-xl bg-gradient-to-r from-[#333D79] to-[#4A5491] flex items-center justify-center flex-shrink-0 shadow-md float-animation">
+                <MdOutlineSchool className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Your Courses</h1>
+                <p className="text-gray-600">Manage and organize your academic courses</p>
+              </div>
+            </div>
+            
+            <button 
+              onClick={() => {
+                setIsEditMode(false);
+                setCurrentCourse(null);
+                setIsCourseModalOpen(true);
+              }}
+              className="px-5 py-2.5 bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white rounded-lg shadow-md hover:shadow-lg transition-all flex items-center gap-2 mt-4 md:mt-0 fade-in-up group"
+              style={{animationDelay: '0s'}}
+            >
+              <FiPlus size={18} className="group-hover:rotate-90 transition-transform duration-300" />
+              <span>Add Course</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Course Modal */}
+        <CourseModal 
+          isOpen={isCourseModalOpen} 
+          onClose={() => {
+            setIsCourseModalOpen(false);
+            setIsEditMode(false);
+            setCurrentCourse(null);
+          }} 
+          onAddCourse={handleAddCourse}
+          onUpdateCourse={handleUpdateCourse}
+          isEditMode={isEditMode}
+          currentCourse={currentCourse}
+        />
+
+        {/* Filters and search - updated with team filter */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-6">
+          <div className="flex flex-col space-y-4 md:flex-row md:space-y-0 md:space-x-4 md:items-center">
+            <div className="relative flex-1">
+              <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <input
+                type="text"
+                placeholder="Search by course name, code, or description..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-12 pr-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#333D79] focus:border-transparent bg-gray-50"
+              />
+            </div>
+            
+            <div className="flex gap-3">
+              {/* Status Filter */}
+              <div className="relative">
+                <button
+                  onClick={() => {
+                    setShowFilterDropdown(!showFilterDropdown);
+                    setShowTeamFilterDropdown(false);
+                  }}
+                  className="flex items-center space-x-2 px-5 py-3 border border-gray-200 rounded-xl hover:bg-[#F0F2F8] transition-all shadow-sm"
+                >
+                  <FiFilter size={18} className="text-[#4A5491]" />
+                  <span className="text-gray-700 font-medium">
+                    {filter === 'all' ? 'All Courses' : filter.charAt(0).toUpperCase() + filter.slice(1)}
+                  </span>
+                </button>
+                
+                {showFilterDropdown && (
+                  <div className="absolute right-0 mt-2 w-52 bg-white rounded-xl shadow-lg z-50 py-2 border border-gray-100 overflow-hidden">
+                    <button
+                      onClick={() => { setFilter('all'); setShowFilterDropdown(false); }}
+                      className="block w-full text-left px-5 py-2.5 text-sm text-gray-700 hover:bg-[#F0F2F8] flex items-center"
+                    >
+                      <span className="w-3 h-3 rounded-full bg-gray-400 mr-3"></span>
+                      All Courses
+                    </button>
+                    <button
+                      onClick={() => { setFilter('active'); setShowFilterDropdown(false); }}
+                      className="block w-full text-left px-5 py-2.5 text-sm text-gray-700 hover:bg-[#F0F2F8] flex items-center"
+                    >
+                      <span className="w-3 h-3 rounded-full bg-green-500 mr-3"></span>
+                      Active
+                    </button>
+                    <button
+                      onClick={() => { setFilter('completed'); setShowFilterDropdown(false); }}
+                      className="block w-full text-left px-5 py-2.5 text-sm text-gray-700 hover:bg-[#F0F2F8] flex items-center"
+                    >
+                      <span className="w-3 h-3 rounded-full bg-blue-500 mr-3"></span>
+                      Completed
+                    </button>
+                    <button
+                      onClick={() => { setFilter('archived'); setShowFilterDropdown(false); }}
+                      className="block w-full text-left px-5 py-2.5 text-sm text-gray-700 hover:bg-[#F0F2F8] flex items-center"
+                    >
+                      <span className="w-3 h-3 rounded-full bg-gray-600 mr-3"></span>
+                      Archived
+                    </button>
+                  </div>
+                )}
+              </div>
+              
+              {/* Team Filter */}
+              <div className="relative">
+                <button
+                  onClick={() => {
+                    setShowTeamFilterDropdown(!showTeamFilterDropdown);
+                    setShowFilterDropdown(false);
+                  }}
+                  className="flex items-center space-x-2 px-5 py-3 border border-gray-200 rounded-xl hover:bg-[#F0F2F8] transition-all shadow-sm"
+                >
+                  <FiUsers size={18} className="text-[#4A5491]" />
+                  <span className="text-gray-700 font-medium">
+                    {teamFilter === 'my-teams' ? 'My Teams' : 'All Teams'}
+                  </span>
+                </button>
+                
+                {showTeamFilterDropdown && (
+                  <div className="absolute right-0 mt-2 w-52 bg-white rounded-xl shadow-lg z-50 py-2 border border-gray-100 overflow-hidden">
+                    <button
+                      onClick={() => { setTeamFilter('my-teams'); setShowTeamFilterDropdown(false); }}
+                      className="block w-full text-left px-5 py-2.5 text-sm text-gray-700 hover:bg-[#F0F2F8] flex items-center"
+                    >
+                      <span className="w-3 h-3 rounded-full bg-[#4A5491] mr-3"></span>
+                      My Teams
+                    </button>
+                    <button
+                      onClick={() => { setTeamFilter('all-teams'); setShowTeamFilterDropdown(false); }}
+                      className="block w-full text-left px-5 py-2.5 text-sm text-gray-700 hover:bg-[#F0F2F8] flex items-center"
+                    >
+                      <span className="w-3 h-3 rounded-full bg-gray-400 mr-3"></span>
+                      All Teams
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Stats Section */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex items-center">
+            <div className="w-12 h-12 rounded-lg bg-[#EEF0F8] flex items-center justify-center mr-4">
+              <MdOutlineSchool className="text-[#333D79]" size={24} />
+            </div>
+            <div>
+              <p className="text-gray-500 text-sm">Total Courses</p>
+              <h3 className="text-xl font-bold text-gray-800">{courses.length}</h3>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex items-center">
+            <div className="w-12 h-12 rounded-lg bg-[#EEF0F8] flex items-center justify-center mr-4">
+              <FiBook className="text-[#333D79]" size={24} />
+            </div>
+            <div>
+              <p className="text-gray-500 text-sm">Active Courses</p>
+              <h3 className="text-xl font-bold text-gray-800">
+                {courses.filter(course => course.status === 'active').length}
+              </h3>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex items-center">
+            <div className="w-12 h-12 rounded-lg bg-[#EEF0F8] flex items-center justify-center mr-4">
+              <FiUsers className="text-[#333D79]" size={24} />
+            </div>
+            <div>
+              <p className="text-gray-500 text-sm">Total Students</p>
+              <h3 className="text-xl font-bold text-gray-800">
+                {courses.reduce((total, course) => total + (course.student_count || 0), 0)}
+              </h3>
+            </div>
+          </div>
+        </div>
+
+        {/* Courses Grid */}
+        {isLoading ? (
+          <div className="flex justify-center items-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#333D79]"></div>
+          </div>
+        ) : (
+          <>
+            {filteredCourses.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredCourses.map((course) => (
+                  <div 
+                    key={course.id} 
+                    className={`course-card relative bg-white rounded-lg shadow-sm ${getCourseStatusClasses(course.status)} overflow-hidden`}
+                  >
+                    {(!course.accessLevel || course.accessLevel !== 'view') && (
+                      <div className="absolute right-2 top-2 flex space-x-1 z-20">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditCourse(course);
+                          }}
+                          className="p-2 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-600"
+                          title="Edit Course"
+                        >
+                          <FiEdit size={14} />
+                        </button>
+                        
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteCourse(course.id);
+                          }}
+                          className="p-2 rounded-md bg-red-50 hover:bg-red-100 text-red-500"
+                          title="Delete Course"
+                        >
+                          <FiTrash2 size={14} />
+                        </button>
+                        
+                        <div className="relative dropdown-trigger">
+                          <button
+                            className="p-2 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-600"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleDropdown(course.id, e);
+                            }}
+                            title="More Options"
+                          >
+                            <FiMoreVertical size={14} />
+                          </button>
+                          
+                          {activeDropdown === course.id && (
+                            <div 
+                              className="absolute right-0 top-full mt-1 bg-white rounded-md shadow-lg py-1 border border-gray-100 w-48 z-50"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {course.status !== 'completed' && (
+                                <button 
+                                  className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleUpdateStatus(course.id, 'completed');
+                                  }}
+                                >
+                                  <FiBook className="mr-2" size={14} />
+                                  Mark as Completed
+                                </button>
+                              )}
+                              
+                              {course.status !== 'archived' && (
+                                <button 
+                                  className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleUpdateStatus(course.id, 'archived');
+                                  }}
+                                >
+                                  <MdArchive className="mr-2" size={14} />
+                                  Archive Course
+                                </button>
+                              )}
+                              
+                              {course.status !== 'active' && (
+                                <button 
+                                  className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleUpdateStatus(course.id, 'active');
+                                  }}
+                                >
+                                  <FiBook className="mr-2" size={14} />
+                                  Set as Active
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div className="p-5">
+                      <div className="flex items-center mb-3 pr-20"> {/* Add right padding to make room for action buttons */}
+                        <div className="flex items-center cursor-pointer" onClick={() => navigate(`/dashboard/course/${course.id}`)}>
+                          <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center mr-3">
+                            <MdOutlineSchool className="text-[#333D79]" size={20} />
+                          </div>
+                          <div>
+                            <h3 className="font-semibold text-gray-900">{course.name}</h3>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-sm text-gray-500">{course.courseCode || 'No Code'}</span>
+                              <span className="h-1 w-1 bg-gray-300 rounded-full"></span>
+                              <span className="text-sm text-gray-500">{course.semester || 'No Semester'}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div 
+                        className="text-sm text-gray-600 mb-4 line-clamp-2 h-10 cursor-pointer" 
+                        onClick={() => navigate(`/dashboard/course/${course.id}`)}
+                      >
+                        {course.description || 'No description available for this course.'}
+                      </div>
+                      
+                      <div className="flex items-center justify-between border-t border-gray-100 pt-3">
+                        <div className="flex items-center space-x-3">
+                          <div className="flex items-center text-gray-600">
+                            <FiBook className="text-gray-400 mr-1.5" size={14} />
+                            <span className="text-sm">{course.classes_count || 0}</span>
+                          </div>
+                          <div className="flex items-center text-gray-600">
+                            <FiUsers className="text-gray-400 mr-1.5" size={14} />
+                            <span className="text-sm">{course.student_count || 0}</span>
+                          </div>
+                        </div>
+                        
+                        <span className={`text-xs px-2 py-1 rounded-md font-medium ${
+                          course.status === 'active' ? 'text-emerald-700 bg-emerald-50' : 
+                          course.status === 'completed' ? 'text-blue-700 bg-blue-50' : 
+                          'text-gray-600 bg-gray-100'
+                        }`}>
+                          {course.status ? (course.status.charAt(0).toUpperCase() + course.status.slice(1)) : 'Unknown'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-8 text-center">
+                <div className="max-w-lg mx-auto">
+                  <div className="flex justify-center mb-4">
+                    <div className="w-16 h-16 rounded-lg bg-gray-100 flex items-center justify-center">
+                      <MdOutlineSchool className="text-[#333D79]" size={28} />
+                    </div>
+                  </div>
+                  <h3 className="text-xl font-medium text-gray-900 mb-2">No courses found</h3>
+                  <p className="text-gray-600 mb-6 mx-auto">
+                    {searchTerm ? 
+                      'No courses match your search criteria. Try adjusting your filters or search terms.' : 
+                      'Get started by creating your first course to organize your classes.'}
+                  </p>
+                  
+                  <button 
+                    onClick={() => {
+                      setIsEditMode(false);
+                      setCurrentCourse(null);
+                      setIsCourseModalOpen(true);
+                    }}
+                    className="bg-[#333D79] hover:bg-[#4A5491] text-white px-4 py-2 rounded-lg inline-flex items-center transition-colors"
+                  >
+                    <FiPlus size={16} className="mr-2" />
+                    <span>Create Course</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Delete Confirmation Modal */}
+        {isDeleteModalOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full mx-4 animate-fade-in-up">
+              <div className="flex items-center justify-center mb-4">
+                <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                  <FiTrash2 className="text-red-500" size={24} />
+                </div>
+              </div>
+              
+              <h3 className="text-xl font-semibold text-center mb-2">Delete Course</h3>
+              <p className="text-gray-600 text-center mb-6">
+                Are you sure you want to delete this course? This action cannot be undone.
+              </p>
+              
+              <div className="flex justify-center space-x-3">
+                <button
+                  onClick={() => setIsDeleteModalOpen(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteCourse}
+                  className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+    </DashboardLayout>
+  );
+};
+
+export default Courses;
