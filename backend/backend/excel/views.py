@@ -1,3 +1,4 @@
+import json
 import os
 
 import Levenshtein
@@ -279,8 +280,21 @@ class ExcelViewSet(viewsets.ModelViewSet):
             print("Traceback:", traceback.format_exc())
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+    def normalize_student_id(self, student_id):
+        """Normalize student ID by removing dashes, spaces, and leading zeros."""
+        if not student_id:
+            return ""
+
+        # Convert to string and remove dashes, spaces
+        normalized = str(student_id).strip().replace('-', '').replace(' ', '')
+
+        # Remove leading zeros but keep at least one digit
+        normalized = normalized.lstrip('0') or '0'
+
+        return normalized.lower()
+
     def normalize_name(self, name):
-        """Normalize a name by removing accents, extra spaces, and converting to lowercase."""
+        """Enhanced name normalization with better handling."""
         if name is None:
             return ""
 
@@ -290,83 +304,327 @@ class ExcelViewSet(viewsets.ModelViewSet):
         # Remove accents and convert to lowercase
         normalized = unidecode(name).lower()
 
-        # Remove extra spaces
+        # Remove extra spaces and special characters
         normalized = " ".join(normalized.split())
 
-        return normalized
+        # Remove common prefixes/suffixes
+        prefixes = ['mr.', 'ms.', 'mrs.', 'dr.']
+        suffixes = ['jr.', 'sr.', 'ii', 'iii', 'iv']
 
-    def find_best_match(self, name, existing_names, threshold=0.85):
-        """Find best matching name from existing names using Levenshtein distance."""
-        if not name:
-            return None
+        words = normalized.split()
+        words = [w for w in words if w not in prefixes and w not in suffixes]
 
-        name = self.normalize_name(name)
+        return " ".join(words)
 
-        # Quick exact match first (most efficient)
-        if name in existing_names:
-            return existing_names[name]
+    def detect_student_columns(self, headers):
+        """Enhanced column detection for No, First Name, Last Name."""
+        column_mapping = {
+            'student_id': None,
+            'first_name': None,
+            'last_name': None,
+            'full_name': None
+        }
 
-        # Try reversing "Last, First" to "First Last"
-        if "," in name:
-            parts = name.split(",")
-            if len(parts) == 2:
-                reversed_name = f"{parts[1].strip()} {parts[0].strip()}"
-                if reversed_name in existing_names:
-                    return existing_names[reversed_name]
+        # Enhanced patterns for better detection
+        id_patterns = ['no.', 'no', 'student no', 'student no.', 'id', 'student id', '#', 'number', 'student number']
+        first_patterns = ['first name', 'firstname', 'first', 'given name', 'fname']
+        last_patterns = ['last name', 'lastname', 'last', 'surname', 'family name', 'lname']
+        full_patterns = ['full name', 'fullname', 'name', 'student name', 'complete name']
 
-        # Fuzzy matching using Levenshtein distance
+        for header in headers:
+            header_lower = str(header).lower().strip()
+
+            # Check for student ID
+            if any(pattern in header_lower for pattern in id_patterns):
+                if column_mapping['student_id'] is None:  # Take first match
+                    column_mapping['student_id'] = header
+
+            # Check for first name
+            elif any(pattern in header_lower for pattern in first_patterns):
+                if column_mapping['first_name'] is None:
+                    column_mapping['first_name'] = header
+
+            # Check for last name
+            elif any(pattern in header_lower for pattern in last_patterns):
+                if column_mapping['last_name'] is None:
+                    column_mapping['last_name'] = header
+
+            # Check for full name
+            elif any(pattern in header_lower for pattern in full_patterns):
+                if column_mapping['full_name'] is None:
+                    column_mapping['full_name'] = header
+
+        return column_mapping
+
+    def build_student_lookup(self, data, column_mapping):
+        """Build comprehensive lookup dictionaries for students."""
+        lookup_by_id = {}
+        lookup_by_name = {}
+        lookup_by_full_name = {}
+
+        for record in data:
+            # Student ID lookup
+            if column_mapping['student_id']:
+                student_id = self.normalize_student_id(record.get(column_mapping['student_id']))
+                if student_id:
+                    lookup_by_id[student_id] = record
+
+            # Name-based lookups
+            first_name = self.normalize_name(record.get(column_mapping['first_name'])) if column_mapping[
+                'first_name'] else ""
+            last_name = self.normalize_name(record.get(column_mapping['last_name'])) if column_mapping[
+                'last_name'] else ""
+            full_name = self.normalize_name(record.get(column_mapping['full_name'])) if column_mapping[
+                'full_name'] else ""
+
+            # Build combined first + last name
+            if first_name and last_name:
+                combined_name = f"{first_name} {last_name}"
+                lookup_by_name[combined_name] = record
+
+                # Also add reversed version (last, first)
+                reversed_name = f"{last_name} {first_name}"
+                lookup_by_name[reversed_name] = record
+
+            # Full name lookup
+            if full_name:
+                lookup_by_full_name[full_name] = record
+
+        return {
+            'by_id': lookup_by_id,
+            'by_name': lookup_by_name,
+            'by_full_name': lookup_by_full_name
+        }
+
+    def find_student_match(self, imported_record, existing_lookups, column_mapping, threshold=0.85):
+        """Find matching student with detailed conflict detection."""
+
+        # Extract imported student data
+        imported_id = self.normalize_student_id(imported_record.get(column_mapping['student_id'])) if column_mapping[
+            'student_id'] else ""
+        imported_first = self.normalize_name(imported_record.get(column_mapping['first_name'])) if column_mapping[
+            'first_name'] else ""
+        imported_last = self.normalize_name(imported_record.get(column_mapping['last_name'])) if column_mapping[
+            'last_name'] else ""
+        imported_full = self.normalize_name(imported_record.get(column_mapping['full_name'])) if column_mapping[
+            'full_name'] else ""
+
+        imported_combined = f"{imported_first} {imported_last}".strip() if imported_first and imported_last else ""
+
+        # Priority 1: Exact Student ID match
+        if imported_id and imported_id in existing_lookups['by_id']:
+            existing_record = existing_lookups['by_id'][imported_id]
+            existing_first = self.normalize_name(existing_record.get(column_mapping['first_name'])) if column_mapping[
+                'first_name'] else ""
+            existing_last = self.normalize_name(existing_record.get(column_mapping['last_name'])) if column_mapping[
+                'last_name'] else ""
+            existing_combined = f"{existing_first} {existing_last}".strip()
+
+            # Check if names match too
+            if imported_combined and existing_combined:
+                if imported_combined == existing_combined:
+                    return {
+                        'type': 'exact_match',
+                        'existing_record': existing_record,
+                        'imported_record': imported_record,
+                        'match_method': 'id_and_name_exact',
+                        'confidence': 1.0
+                    }
+                else:
+                    # Same ID but different names - potential conflict
+                    name_similarity = Levenshtein.ratio(imported_combined, existing_combined)
+                    if name_similarity < 0.7:  # Names are quite different
+                        return {
+                            'type': 'conflict',
+                            'conflict_type': 'DUPLICATE_ID_DIFFERENT_NAME',
+                            'existing_record': existing_record,
+                            'imported_record': imported_record,
+                            'details': {
+                                'existing_name': existing_combined,
+                                'imported_name': imported_combined,
+                                'student_id': imported_id,
+                                'name_similarity': name_similarity
+                            },
+                            'recommended_action': 'override_name' if name_similarity > 0.5 else 'manual_review'
+                        }
+
+            # ID match but no name comparison possible
+            return {
+                'type': 'exact_match',
+                'existing_record': existing_record,
+                'imported_record': imported_record,
+                'match_method': 'id_only',
+                'confidence': 0.95
+            }
+
+        # Priority 2: Exact name match (combined or full)
+        name_to_check = imported_combined if imported_combined else imported_full
+
+        if name_to_check:
+            # Check combined name lookup
+            if imported_combined and imported_combined in existing_lookups['by_name']:
+                existing_record = existing_lookups['by_name'][imported_combined]
+                existing_id = self.normalize_student_id(existing_record.get(column_mapping['student_id'])) if \
+                column_mapping['student_id'] else ""
+
+                # Check for ID conflict
+                if imported_id and existing_id and imported_id != existing_id:
+                    return {
+                        'type': 'conflict',
+                        'conflict_type': 'DUPLICATE_NAME_DIFFERENT_ID',
+                        'existing_record': existing_record,
+                        'imported_record': imported_record,
+                        'details': {
+                            'existing_id': existing_id,
+                            'imported_id': imported_id,
+                            'student_name': imported_combined
+                        },
+                        'recommended_action': 'manual_review'
+                    }
+
+                return {
+                    'type': 'exact_match',
+                    'existing_record': existing_record,
+                    'imported_record': imported_record,
+                    'match_method': 'name_exact',
+                    'confidence': 0.98
+                }
+
+            # Check full name lookup
+            if imported_full and imported_full in existing_lookups['by_full_name']:
+                existing_record = existing_lookups['by_full_name'][imported_full]
+                return {
+                    'type': 'exact_match',
+                    'existing_record': existing_record,
+                    'imported_record': imported_record,
+                    'match_method': 'full_name_exact',
+                    'confidence': 0.98
+                }
+
+        # Priority 3: Fuzzy matching
         best_match = None
         best_score = 0
+        best_method = None
 
-        for existing_name, original in existing_names.items():
-            # Skip very short names for fuzzy matching to avoid false positives
-            if len(name) < 3 or len(existing_name) < 3:
-                continue
+        # Fuzzy match against combined names
+        if imported_combined:
+            for existing_name, existing_record in existing_lookups['by_name'].items():
+                similarity = Levenshtein.ratio(imported_combined, existing_name)
 
-            # Calculate similarity ratio
-            similarity = Levenshtein.ratio(name, existing_name)
+                # Boost score for partial matches (first or last name matches)
+                if imported_first or imported_last:
+                    existing_parts = set(existing_name.split())
+                    imported_parts = set([imported_first, imported_last]) - {''}
+                    common_parts = existing_parts.intersection(imported_parts)
+                    if common_parts:
+                        similarity += 0.1 * len(common_parts) / max(len(existing_parts), len(imported_parts))
 
-            # If names are very similar or exact match for first/last names
-            name_parts = set(name.split())
-            existing_parts = set(existing_name.split())
-            common_parts = name_parts.intersection(existing_parts)
+                if similarity > best_score and similarity >= threshold:
+                    best_score = similarity
+                    best_match = existing_record
+                    best_method = 'fuzzy_name'
 
-            # Boost score if there are common parts (first/last name matches)
-            if common_parts:
-                similarity += 0.1 * len(common_parts) / max(len(name_parts), len(existing_parts))
+        # Fuzzy match against full names
+        if imported_full:
+            for existing_name, existing_record in existing_lookups['by_full_name'].items():
+                similarity = Levenshtein.ratio(imported_full, existing_name)
 
-            if similarity > best_score and similarity >= threshold:
-                best_score = similarity
-                best_match = original
+                if similarity > best_score and similarity >= threshold:
+                    best_score = similarity
+                    best_match = existing_record
+                    best_method = 'fuzzy_full_name'
 
-        return best_match
+        if best_match:
+            return {
+                'type': 'fuzzy_match',
+                'existing_record': best_match,
+                'imported_record': imported_record,
+                'match_method': best_method,
+                'confidence': best_score,
+                'requires_confirmation': best_score < 0.95
+            }
+
+        # No match found - new student
+        return {
+            'type': 'new_student',
+            'imported_record': imported_record,
+            'confidence': 1.0
+        }
+
+    def process_merge_conflicts(self, existing_data, imported_data, existing_column_mapping, imported_column_mapping,
+                                threshold=0.85):
+        """Process merge and detect all conflicts."""
+
+        # Build lookup dictionaries
+        existing_lookups = self.build_student_lookup(existing_data, existing_column_mapping)
+
+        results = {
+            'exact_matches': [],
+            'fuzzy_matches': [],
+            'conflicts': [],
+            'new_students': [],
+            'statistics': {
+                'total_imported': len(imported_data),
+                'exact_matches': 0,
+                'fuzzy_matches': 0,
+                'conflicts': 0,
+                'new_students': 0
+            }
+        }
+
+        # Process each imported record
+        for imported_record in imported_data:
+            match_result = self.find_student_match(
+                imported_record,
+                existing_lookups,
+                imported_column_mapping,
+                threshold
+            )
+
+            # Categorize results
+            if match_result['type'] == 'exact_match':
+                results['exact_matches'].append(match_result)
+                results['statistics']['exact_matches'] += 1
+
+            elif match_result['type'] == 'fuzzy_match':
+                results['fuzzy_matches'].append(match_result)
+                results['statistics']['fuzzy_matches'] += 1
+
+            elif match_result['type'] == 'conflict':
+                results['conflicts'].append(match_result)
+                results['statistics']['conflicts'] += 1
+
+            elif match_result['type'] == 'new_student':
+                results['new_students'].append(match_result)
+                results['statistics']['new_students'] += 1
+
+        return results
 
     @extend_schema(
-        description='Merge Excel file with existing file',
+        description='Preview merge conflicts before actual merge',
         request={
             'multipart/form-data': {
                 'type': 'object',
                 'properties': {
                     'file': {'type': 'string', 'format': 'binary'},
                     'class_id': {'type': 'integer'},
-                    'merge': {'type': 'boolean'},
-                    'override_names': {'type': 'boolean'},
-                    'category_mappings': {'type': 'string'},  # JSON string of category mappings
-                    'matching_threshold': {'type': 'number'}  # Added threshold parameter
+                    'matching_threshold': {'type': 'number'},
+                    'column_mapping': {'type': 'string'}  # JSON string of column mappings
                 }
             }
         },
-        responses={200: ExcelFileSerializer}
+        responses={200: 'Conflict preview data'}
     )
     @action(detail=False, methods=['POST'])
-    def merge(self, request):
-        print("Merge request received")
+    def preview_merge(self, request):
+        """Preview merge conflicts before actual merge - no data changes."""
+        print("Preview merge request received")
 
         if 'file' not in request.FILES:
             return Response({'error': 'No file provided'}, status=status.HTTP_400_BAD_REQUEST)
 
         file = request.FILES['file']
-        print(f"File received for merge: {file.name}")
+        print(f"File received for preview: {file.name}")
 
         if not file.name.endswith(('.xlsx', '.xls', '.csv')):
             return Response({'error': 'File must be an Excel file'}, status=status.HTTP_400_BAD_REQUEST)
@@ -375,23 +633,20 @@ class ExcelViewSet(viewsets.ModelViewSet):
         if not class_id:
             return Response({'error': 'class_id is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        override_names = request.data.get('override_names', 'false').lower() == 'true'
-
-        # Get optional matching threshold (default to 0.85 - 85% similarity)
+        # Get matching threshold
         try:
             matching_threshold = float(request.data.get('matching_threshold', 0.85))
-            matching_threshold = max(0.5, min(1.0, matching_threshold))  # Ensure between 0.5 and 1.0
+            matching_threshold = max(0.5, min(1.0, matching_threshold))
         except (ValueError, TypeError):
             matching_threshold = 0.85
 
         try:
-            # Check permissions for the class
+            # Check permissions
             from classes.models import Class
             class_obj = Class.objects.get(id=class_id)
 
             if class_obj.user != request.user:
                 from teams.models import TeamMember
-
                 team_member = TeamMember.objects.filter(
                     team__courses__course_id=class_obj.course.id if class_obj.course else None,
                     user=request.user,
@@ -402,266 +657,875 @@ class ExcelViewSet(viewsets.ModelViewSet):
                     return Response({'error': 'You do not have permission to modify files in this class'},
                                     status=status.HTTP_403_FORBIDDEN)
 
-            # Get the most recent excel file for this class to merge with
+            # Get existing file
             existing_file = ExcelFile.objects.filter(class_ref=class_obj).order_by('-uploaded_at').first()
 
             if not existing_file:
-                # If no existing file, just upload as new
-                return self.upload(request)
+                return Response({
+                    'status': 'no_existing_file',
+                    'message': 'No existing file found. This will be uploaded as a new file.',
+                    'statistics': {'total_imported': 0, 'new_students': 0}
+                })
 
-            # Load both excel files
+            # Load and process new file
             new_excel = pd.read_excel(file, sheet_name=None)
+            first_sheet_name = list(new_excel.keys())[0]
+            df = new_excel[first_sheet_name]
 
-            # Process the new file first
-            all_sheets_data = {}
-            for sheet_name, df in new_excel.items():
-                print(f"Processing sheet: {sheet_name}, shape: {df.shape}")
+            # Clean columns
+            original_columns = df.columns.tolist()
+            columns_to_keep = []
+            for col in original_columns:
+                col_str = str(col).strip()
+                if not (col_str.startswith('Unnamed:') or
+                        col_str in ['', 'nan', 'NaN', 'None'] or
+                        col_str.lower() == 'null' or
+                        df[col].isna().all() or
+                        (df[col] == '').all()):
+                    columns_to_keep.append(col)
 
-                df = df.replace({pd.NA: None})
-                df = df.fillna("")
+            df = df[columns_to_keep]
+            df = df.replace({pd.NA: None}).fillna("")
 
-                for column in df.select_dtypes(include=['float64', 'int64']).columns:
-                    df[column] = df[column].apply(
-                        lambda x: None if pd.isna(x) else float(x) if isinstance(x, float) else int(x))
+            # Convert to records
+            imported_records = df.to_dict('records')
+            imported_headers = df.columns.tolist()
 
-                records = []
-                for record in df.to_dict('records'):
-                    cleaned_record = {}
-                    for key, value in record.items():
-                        if pd.isna(value):
-                            cleaned_record[key] = None
-                        elif isinstance(value, (pd.Timestamp, pd.DatetimeTZDtype, datetime.datetime, datetime.date)):
-                            cleaned_record[key] = value.isoformat()
-                        else:
-                            cleaned_record[key] = value
-                    records.append(cleaned_record)
-
-                headers = df.columns.tolist()
-
-                all_sheets_data[sheet_name] = {
-                    'headers': headers,
-                    'data': records
-                }
-
-            # Now merge with existing file
+            # Get existing data
             active_sheet = existing_file.active_sheet
-            existing_data = existing_file.all_sheets[active_sheet]
-            new_data = all_sheets_data[list(all_sheets_data.keys())[0]]  # First sheet of new file
+            existing_data = existing_file.all_sheets[active_sheet]['data']
+            existing_headers = existing_file.all_sheets[active_sheet]['headers']
 
-            # Find name columns in both datasets
-            name_patterns = ['name', 'student', 'learner', 'no.', 'id']
+            # Detect columns in both datasets
+            existing_column_mapping = self.detect_student_columns(existing_headers)
+            imported_column_mapping = self.detect_student_columns(imported_headers)
 
-            def find_name_column(headers):
-                for header in headers:
-                    if any(pattern in str(header).lower() for pattern in name_patterns):
-                        return header
-                return headers[0] if headers else None
+            # Parse custom column mapping if provided
+            if 'column_mapping' in request.data:
+                try:
+                    custom_mapping = json.loads(request.data.get('column_mapping'))
+                    imported_column_mapping.update(custom_mapping)
+                    print(f"Applied custom column mapping: {custom_mapping}")
+                except Exception as e:
+                    print(f"Error parsing column mapping: {str(e)}")
 
-            existing_name_col = find_name_column(existing_data['headers'])
-            new_name_col = find_name_column(new_data['headers'])
+            # Process conflicts
+            conflict_results = self.process_merge_conflicts(
+                existing_data,
+                imported_records,
+                existing_column_mapping,
+                imported_column_mapping,
+                matching_threshold
+            )
 
-            # Build lookup dictionaries for quick access with normalized names
-            existing_lookup = {}
-            existing_lookup_normalized = {}
+            print("=== CONFLICT DETECTION DEBUG ===")
+            print(f"Exact matches found: {len(conflict_results.get('exact_matches', []))}")
+            print(f"Fuzzy matches found: {len(conflict_results.get('fuzzy_matches', []))}")
+            print(f"Conflicts found: {len(conflict_results.get('conflicts', []))}")
+            print(f"New students found: {len(conflict_results.get('new_students', []))}")
+            print(f"Total imported records: {len(imported_records)}")
 
-            for record in existing_data['data']:
-                if existing_name_col and existing_name_col in record:
-                    # Store both raw and normalized versions
-                    raw_name = str(record[existing_name_col])
-                    normalized_name = self.normalize_name(raw_name)
+            if conflict_results.get('exact_matches'):
+                print("=== EXACT MATCHES DETAILS ===")
+                for i, match in enumerate(conflict_results['exact_matches'][:3]):  # Show first 3
+                    print(f"  Match {i}: {match['existing_record']} -> {match['imported_record']}")
 
-                    existing_lookup[raw_name] = record
-                    existing_lookup_normalized[normalized_name] = record
+            if conflict_results.get('new_students'):
+                print("=== NEW STUDENTS DETAILS ===")
+                for i, new_student in enumerate(conflict_results['new_students'][:3]):  # Show first 3
+                    print(f"  New student {i}: {new_student['imported_record']}")
 
-            # Start with existing data
-            merged_data = existing_data.copy()
+            print("=== END DEBUG ===")
 
-            # Merge headers
-            all_new_cols = []
-            # Add new columns from new file that aren't in existing headers
-            for col in new_data['headers']:
-                if col not in merged_data['headers'] and col != new_name_col:
-                    merged_data['headers'].append(col)
-                    all_new_cols.append(col)
+            # Prepare response data
+            response_data = {
+                'status': 'conflicts_detected' if conflict_results['conflicts'] else 'ready_to_merge',
+                'file_info': {
+                    'name': file.name,
+                    'imported_rows': len(imported_records),
+                    'imported_columns': len(imported_headers)
+                },
+                'column_mapping': {
+                    'existing': existing_column_mapping,
+                    'imported': imported_column_mapping
+                },
+                'conflicts': conflict_results['conflicts'],
+                'exact_matches': conflict_results['exact_matches'][:10],  # Limit for preview
+                'fuzzy_matches': conflict_results['fuzzy_matches'][:10],  # Limit for preview
+                'new_students': conflict_results['new_students'][:10],  # Limit for preview
+                'statistics': conflict_results['statistics'],
+                'bulk_actions_available': [
+                    'accept_all_exact',
+                    'accept_all_fuzzy_high_confidence',
+                    'add_all_new',
+                    'override_all_conflicts'
+                ]
+            }
 
-            print(f"Added {len(all_new_cols)} new columns to headers")
+            # Add sample data for frontend display
+            if conflict_results['conflicts']:
+                response_data['sample_conflicts'] = conflict_results['conflicts'][:5]
 
-            # Update existing records and add new ones
-            added_count = 0
-            updated_count = 0
-            fuzzy_matched_count = 0
+            if conflict_results['fuzzy_matches']:
+                high_confidence = [m for m in conflict_results['fuzzy_matches'] if m['confidence'] > 0.9]
+                response_data['high_confidence_matches'] = high_confidence[:5]
 
-            # For detailed logging of matches
-            match_results = []
+            print(f"Preview complete: {conflict_results['statistics']}")
 
-            for record in new_data['data']:
-                if not new_name_col or new_name_col not in record:
+            return Response(response_data)
+
+        except Class.DoesNotExist:
+            return Response({'error': 'Class not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            import traceback
+            print("Error during preview:", str(e))
+            print("Traceback:", traceback.format_exc())
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @extend_schema(
+        description='Execute merge with conflict resolutions',
+        request={
+            'multipart/form-data': {
+                'type': 'object',
+                'properties': {
+                    'file': {'type': 'string', 'format': 'binary'},
+                    'class_id': {'type': 'integer'},
+                    'conflict_resolutions': {'type': 'string'},  # JSON string
+                    'bulk_actions': {'type': 'string'},  # JSON string
+                    'matching_threshold': {'type': 'number'},
+                    'column_mapping': {'type': 'string'},
+                    'category_mappings': {'type': 'string'}  # JSON string
+                }
+            }
+        },
+        responses={200: ExcelFileSerializer}
+    )
+    @action(detail=False, methods=['POST'])
+    def execute_merge(self, request):
+        """Execute merge with user-provided conflict resolutions."""
+        print("Execute merge request received")
+
+        if 'file' not in request.FILES:
+            return Response({'error': 'No file provided'}, status=status.HTTP_400_BAD_REQUEST)
+
+        file = request.FILES['file']
+        print(f"File received for execute merge: {file.name}")
+
+        if not file.name.endswith(('.xlsx', '.xls', '.csv')):
+            return Response({'error': 'File must be an Excel file'}, status=status.HTTP_400_BAD_REQUEST)
+
+        class_id = request.data.get('class_id')
+        if not class_id:
+            return Response({'error': 'class_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Get matching threshold
+        try:
+            matching_threshold = float(request.data.get('matching_threshold', 0.85))
+            matching_threshold = max(0.5, min(1.0, matching_threshold))
+        except (ValueError, TypeError):
+            matching_threshold = 0.85
+
+        # Parse conflict resolutions
+        conflict_resolutions = {}
+        bulk_actions = {}
+        column_mapping = {}
+        category_mappings = []
+
+        if 'conflict_resolutions' in request.data:
+            try:
+                conflict_resolutions = json.loads(request.data.get('conflict_resolutions'))
+                print(f"Parsed conflict resolutions: {len(conflict_resolutions)} items")
+            except Exception as e:
+                print(f"Error parsing conflict resolutions: {str(e)}")
+
+        if 'bulk_actions' in request.data:
+            try:
+                bulk_actions = json.loads(request.data.get('bulk_actions'))
+                print(f"Parsed bulk actions: {bulk_actions}")
+            except Exception as e:
+                print(f"Error parsing bulk actions: {str(e)}")
+
+        if 'column_mapping' in request.data:
+            try:
+                column_mapping = json.loads(request.data.get('column_mapping'))
+                print(f"Parsed column mapping: {column_mapping}")
+            except Exception as e:
+                print(f"Error parsing column mapping: {str(e)}")
+
+        if 'category_mappings' in request.data:
+            try:
+                category_mappings = json.loads(request.data.get('category_mappings'))
+                print(f"Parsed category mappings: {len(category_mappings)} categories")
+            except Exception as e:
+                print(f"Error parsing category mappings: {str(e)}")
+
+        def find_best_column_replacement(category_id, new_column_name, new_column_data, existing_data,
+                                         existing_category_mappings, already_assigned_columns=None,
+                                         max_columns_per_category=10):
+            """
+            Find the best strategy for placing a new column:
+            1. Replace an empty existing column (that hasn't been assigned yet)
+            2. Add as new column if space allows
+            3. Reject if no space and all columns have data
+            """
+            if already_assigned_columns is None:
+                already_assigned_columns = set()
+
+            print(f"\n🎯 FINDING BEST PLACEMENT FOR: {new_column_name} in {category_id} category")
+            print(f"  Already assigned columns in this batch: {list(already_assigned_columns)}")
+
+            # Get existing columns for this category
+            existing_categories = {cat.get('id'): cat.get('columns', []) for cat in existing_category_mappings}
+            existing_columns_in_category = existing_categories.get(category_id, [])
+
+            print(f"  Existing columns in category: {existing_columns_in_category}")
+
+            # Check data quality in existing columns
+            empty_columns = []
+            columns_with_data = []
+
+            for column in existing_columns_in_category:
+                # Skip columns that have already been assigned in this batch
+                if column in already_assigned_columns:
+                    print(f"  ⏭️ Skipping '{column}' - already assigned in this batch")
                     continue
 
-                # Get original name
-                original_name = str(record[new_name_col])
+                column_data = []
+                for row in existing_data:
+                    value = row.get(column) if isinstance(row, dict) else None
+                    column_data.append(value)
 
-                # Try exact match first
-                if original_name in existing_lookup:
-                    existing_record = existing_lookup[original_name]
-                    if override_names and new_name_col and existing_name_col:
-                        existing_record[existing_name_col] = record[new_name_col]
+                # Check if column is mostly empty
+                numeric_count = 0
+                total_rows = len(existing_data)
 
-                    # Add all new columns from new record
-                    for key, value in record.items():
-                        if key != new_name_col or key not in existing_record:
-                            existing_record[key] = value
+                for value in column_data:
+                    if value is not None and value != '' and value != 'None':
+                        try:
+                            float_val = float(value)
+                            if not (pd.isna(float_val) or float_val == 0):
+                                numeric_count += 1
+                        except (ValueError, TypeError):
+                            continue
 
-                    updated_count += 1
-                    match_results.append(f"Exact match: '{original_name}'")
+                percentage = (numeric_count / total_rows * 100) if total_rows > 0 else 0
+
+                if percentage < 20:  # Less than 20% data = empty
+                    empty_columns.append(column)
+                    print(f"  📝 Empty column found: '{column}' ({percentage:.1f}% data)")
                 else:
-                    # Try fuzzy matching
-                    normalized_name = self.normalize_name(original_name)
+                    columns_with_data.append(column)
+                    print(f"  ✅ Column with data: '{column}' ({percentage:.1f}% data)")
 
-                    # Try direct normalized match first
-                    if normalized_name in existing_lookup_normalized:
-                        existing_record = existing_lookup_normalized[normalized_name]
-                        if override_names and new_name_col and existing_name_col:
-                            existing_record[existing_name_col] = record[new_name_col]
+            # Strategy 1: Replace the first available empty column
+            if empty_columns:
+                target_column = empty_columns[0]  # First available empty column
+                print(f"  🔄 STRATEGY: Replace empty column '{target_column}' with '{new_column_name}' data")
+                return {
+                    'action': 'replace',
+                    'target_column': target_column,
+                    'new_column_name': new_column_name,
+                    'reason': f"Replacing empty column '{target_column}' with '{new_column_name}' data"
+                }
 
-                        # Add all new columns from new record
-                        for key, value in record.items():
-                            if key != new_name_col or key not in existing_record:
-                                existing_record[key] = value
+            # Strategy 2: Add as new column if under limit
+            if len(existing_columns_in_category) < max_columns_per_category:
+                print(
+                    f"  ➕ STRATEGY: Add new column '{new_column_name}' ({len(existing_columns_in_category) + 1}/{max_columns_per_category})")
+                return {
+                    'action': 'add_new',
+                    'new_column_name': new_column_name,
+                    'reason': f"Adding new column - under limit ({len(existing_columns_in_category) + 1}/{max_columns_per_category})"
+                }
 
-                        updated_count += 1
-                        fuzzy_matched_count += 1
-                        match_results.append(
-                            f"Normalized match: '{original_name}' -> '{existing_record[existing_name_col]}'")
+            # Strategy 3: Reject - no space and all columns have data
+            print(
+                f"  ❌ STRATEGY: Reject - all columns have data and at max limit ({len(existing_columns_in_category)}/{max_columns_per_category})")
+            return {
+                'action': 'reject',
+                'reason': f"Category '{category_id}' is at maximum capacity ({max_columns_per_category} columns) and all existing columns have data"
+            }
+
+        def process_smart_column_mapping(imported_headers, imported_records, category_mappings, existing_data,
+                                         existing_category_mappings, max_columns_per_category=10):
+            """
+            Process imported columns with smart replacement/addition logic
+            """
+            print("\n🧠 PROCESSING SMART COLUMN MAPPING")
+
+            print(f"🔍 DEBUG: Frontend sent category_mappings: {category_mappings}")
+            for i, cat in enumerate(category_mappings):
+                print(f"  Category {i}: {cat.get('id')} → columns: {cat.get('columns', [])}")
+
+            column_operations = []
+
+            # 🔧 FIX: Start with existing categories and ONLY update what changed
+            final_category_mappings = []
+            for cat in existing_category_mappings:
+                final_category_mappings.append({
+                    'id': cat.get('id'),
+                    'name': cat.get('name'),
+                    'columns': cat.get('columns', []).copy(),  # Keep existing columns
+                    'imported_column_mapping': cat.get('imported_column_mapping', {}).copy()
+                    # ✅ PRESERVE EXISTING MAPPINGS!
+                })
+
+            # 🆕 ONLY PROCESS EXPLICITLY MAPPED COLUMNS (USER'S DRAG & DROP CHOICES)
+            explicitly_mapped_columns = set()
+            for category in category_mappings:
+                for col in category.get('columns', []):
+                    explicitly_mapped_columns.add(col)
+
+            print(f"📌 Only processing explicitly mapped columns: {list(explicitly_mapped_columns)}")
+            print(f"📌 Ignoring unmapped columns: {set(imported_headers) - explicitly_mapped_columns}")
+
+            # 🔧 NEW: Track which columns have been assigned during this operation
+            already_assigned_columns = set()
+
+            # Process each imported column ONLY IF IT WAS EXPLICITLY MAPPED
+            for header in imported_headers:
+                # 🆕 SKIP UNMAPPED COLUMNS - Let them stay as uncategorized
+                if header not in explicitly_mapped_columns:
+                    print(f"  ⏭️ SKIPPING {header} - not explicitly mapped by user")
+                    continue
+
+                # Find which category this column belongs to
+                target_category = None
+                for category in category_mappings:
+                    if header in category.get('columns', []):
+                        target_category = category
+                        break
+
+                if not target_category:
+                    # This shouldn't happen since we filtered for explicitly mapped columns
+                    column_operations.append({
+                        'imported_column': header,
+                        'action': 'keep',
+                        'final_column': header,
+                        'reason': 'No category mapping specified'
+                    })
+                    continue
+
+                category_id = target_category.get('id')
+
+                # Skip student category - always allow
+                if category_id == 'student':
+                    column_operations.append({
+                        'imported_column': header,
+                        'action': 'keep',
+                        'final_column': header,
+                        'category': category_id,
+                        'reason': 'Student category - always allowed'
+                    })
+                    continue
+
+                # Get column data from imported records
+                column_data = [record.get(header) for record in imported_records]
+
+                # 🔧 PASS already_assigned_columns to avoid conflicts
+                strategy = find_best_column_replacement(
+                    category_id,
+                    header,
+                    column_data,
+                    existing_data,
+                    existing_category_mappings,
+                    already_assigned_columns,  # 🆕 Pass the tracking set
+                    max_columns_per_category
+                )
+
+                if strategy['action'] == 'replace':
+                    # Replace existing empty column
+                    target_column = strategy['target_column']
+
+                    # 🔧 TRACK the assigned column to prevent conflicts
+                    already_assigned_columns.add(target_column)
+
+                    column_operations.append({
+                        'imported_column': header,
+                        'action': 'replace',
+                        'final_column': target_column,
+                        'category': category_id,
+                        'reason': strategy['reason']
+                    })
+                    print(f"  🔄 {header} → {target_column} (replace)")
+
+                    # 🔧 CRITICAL FIX: PRESERVE existing imported_column_mapping
+                    for final_cat in final_category_mappings:
+                        if final_cat['id'] == category_id:
+                            # Initialize if doesn't exist
+                            if 'imported_column_mapping' not in final_cat:
+                                final_cat['imported_column_mapping'] = {}
+
+                            # 🆕 PRESERVE existing mappings and add new one
+                            existing_mapping = final_cat.get('imported_column_mapping', {})
+                            final_cat['imported_column_mapping'] = {**existing_mapping, target_column: header}
+                            print(
+                                f"🔧 Updated imported_column_mapping for {category_id}: {final_cat['imported_column_mapping']}")
+                            break
+
+                elif strategy['action'] == 'add_new':
+                    # Add as new column
+                    column_operations.append({
+                        'imported_column': header,
+                        'action': 'add_new',
+                        'final_column': header,
+                        'category': category_id,
+                        'reason': strategy['reason']
+                    })
+                    print(f"  ➕ {header} → {header} (new)")
+
+                    # 🔧 CRITICAL FIX: PRESERVE existing imported_column_mapping
+                    for final_cat in final_category_mappings:
+                        if final_cat['id'] == category_id:
+                            if header not in final_cat['columns']:
+                                final_cat['columns'].append(header)
+
+                            # Initialize if doesn't exist
+                            if 'imported_column_mapping' not in final_cat:
+                                final_cat['imported_column_mapping'] = {}
+
+                            # 🆕 PRESERVE existing mappings and add new one
+                            existing_mapping = final_cat.get('imported_column_mapping', {})
+                            final_cat['imported_column_mapping'] = {**existing_mapping, header: header}
+                            print(
+                                f"🔧 Updated imported_column_mapping for {category_id}: {final_cat['imported_column_mapping']}")
+                            break
+
+                else:  # reject
+                    column_operations.append({
+                        'imported_column': header,
+                        'action': 'reject',
+                        'reason': strategy['reason']
+                    })
+                    print(f"  ❌ {header} → REJECTED ({strategy['reason']})")
+
+            # 🆕 HANDLE UNMAPPED COLUMNS - But check if they were already imported before
+            unmapped_columns = set(imported_headers) - explicitly_mapped_columns
+
+            # 🚫 Get list of previously imported column names to avoid duplicates
+            previously_imported_columns = set()
+            for category in existing_category_mappings:
+                imported_mapping = category.get('imported_column_mapping', {})
+                for original_name in imported_mapping.values():
+                    if original_name:
+                        previously_imported_columns.add(original_name)
+
+            print(f"🚫 Previously imported columns to skip: {list(previously_imported_columns)}")
+
+            for unmapped_col in unmapped_columns:
+                # 🚫 Skip if this column was already imported before
+                if unmapped_col in previously_imported_columns:
+                    print(f"  🚫 SKIPPING '{unmapped_col}' - already imported previously")
+                    continue
+
+                print(f"  📝 Adding unmapped column '{unmapped_col}' as-is (no smart replacement)")
+                column_operations.append({
+                    'imported_column': unmapped_col,
+                    'action': 'keep_unmapped',
+                    'final_column': unmapped_col,
+                    'reason': 'Column not mapped to any category by user'
+                })
+
+            print(f"🔍 DEBUG: Final category mappings: {final_category_mappings}")
+            return column_operations, final_category_mappings
+
+        def reorder_columns_by_category(headers, category_mappings):
+            """Reorder headers to group categories together"""
+            print("=== REORDERING COLUMNS BY CATEGORY ===")
+
+            # Create ordered header list
+            ordered_headers = []
+            used_headers = set()
+
+            # Process each category in order
+            category_order = ['student', 'quiz', 'laboratory', 'exams']
+
+            for category_mapping in category_mappings:
+                category_id = category_mapping.get('id')
+                category_columns = category_mapping.get('columns', [])
+
+                if category_id in category_order:
+                    print(f"Adding {len(category_columns)} columns for {category_id}: {category_columns}")
+                    for col in category_columns:
+                        if col in headers and col not in used_headers:
+                            ordered_headers.append(col)
+                            used_headers.add(col)
+
+            # Add any remaining headers that weren't categorized
+            for header in headers:
+                if header not in used_headers:
+                    ordered_headers.append(header)
+                    used_headers.add(header)
+
+            print(f"Original order: {headers}")
+            print(f"New order: {ordered_headers}")
+
+            return ordered_headers
+
+        try:
+            # Check permissions for the class
+            from classes.models import Class
+            class_obj = Class.objects.get(id=class_id)
+
+            if class_obj.user != request.user:
+                from teams.models import TeamMember
+                team_member = TeamMember.objects.filter(
+                    team__courses__course_id=class_obj.course.id if class_obj.course else None,
+                    user=request.user,
+                    is_active=True
+                ).first()
+
+                if not team_member or team_member.permissions not in ['edit', 'full']:
+                    return Response({'error': 'You do not have permission to modify files in this class'},
+                                    status=status.HTTP_403_FORBIDDEN)
+
+            # Get existing file
+            existing_file = ExcelFile.objects.filter(class_ref=class_obj).order_by('-uploaded_at').first()
+
+            if not existing_file:
+                # No existing file, upload as new
+                return self.upload(request)
+
+            # Load and process new file
+            new_excel = pd.read_excel(file, sheet_name=None)
+            first_sheet_name = list(new_excel.keys())[0]
+            df = new_excel[first_sheet_name]
+
+            # Clean columns (same as preview_merge)
+            original_columns = df.columns.tolist()
+            columns_to_keep = []
+            for col in original_columns:
+                col_str = str(col).strip()
+                if not (col_str.startswith('Unnamed:') or
+                        col_str in ['', 'nan', 'NaN', 'None'] or
+                        col_str.lower() == 'null' or
+                        df[col].isna().all() or
+                        (df[col] == '').all()):
+                    columns_to_keep.append(col)
+
+            df = df[columns_to_keep]
+            df = df.replace({pd.NA: None}).fillna("")
+
+            # Convert to records
+            imported_records = []
+            for record in df.to_dict('records'):
+                cleaned_record = {}
+                for key, value in record.items():
+                    if pd.isna(value):
+                        cleaned_record[key] = None
+                    elif isinstance(value, (pd.Timestamp, pd.DatetimeTZDtype, datetime.datetime, datetime.date)):
+                        cleaned_record[key] = value.isoformat()
                     else:
-                        # Try Levenshtein-based fuzzy matching
-                        best_match = self.find_best_match(original_name, existing_lookup_normalized,
-                                                          threshold=matching_threshold)
+                        cleaned_record[key] = value
+                imported_records.append(cleaned_record)
 
-                        if best_match:
-                            if override_names and new_name_col and existing_name_col:
-                                best_match[existing_name_col] = record[new_name_col]
+            imported_headers = df.columns.tolist()
 
-                            # Add all new columns from new record
-                            for key, value in record.items():
-                                if key != new_name_col or key not in best_match:
-                                    best_match[key] = value
+            # Get existing data
+            active_sheet = existing_file.active_sheet
+            existing_data = existing_file.all_sheets[active_sheet]['data']
+            existing_headers = existing_file.all_sheets[active_sheet]['headers']
+            existing_category_mappings = existing_file.all_sheets.get('category_mappings', [])
 
-                            updated_count += 1
-                            fuzzy_matched_count += 1
-                            match_results.append(f"Fuzzy match: '{original_name}' -> '{best_match[existing_name_col]}'")
-                        else:
-                            # Add new record
+            # 🆕 SMART COLUMN MAPPING INSTEAD OF SIMPLE FILTERING
+            column_operations, updated_category_mappings = process_smart_column_mapping(
+                imported_headers,
+                imported_records,
+                category_mappings,
+                existing_data,
+                existing_category_mappings
+            )
+
+            # Check for rejected columns
+            rejected_operations = [op for op in column_operations if op['action'] == 'reject']
+            if rejected_operations:
+                print(f"\n⚠️ WARNING: {len(rejected_operations)} columns were rejected:")
+                for i, op in enumerate(rejected_operations):
+                    print(f"  {i + 1}. {op['imported_column']}: {op['reason']}")
+
+                return Response({
+                    'error': 'Some columns were rejected due to category capacity limits',
+                    'details': {
+                        'rejected_columns': [op['imported_column'] for op in rejected_operations],
+                        'rejection_reasons': [op['reason'] for op in rejected_operations],
+                        'suggestion': 'All existing columns in the category have data and the category is at maximum capacity.'
+                    }
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Apply column operations
+            print(f"\n🔄 APPLYING {len(column_operations)} COLUMN OPERATIONS:")
+            merged_data = existing_file.all_sheets[active_sheet].copy()
+
+            # Track new columns that are actually added (not replaced)
+            new_columns_added = []
+
+            for operation in column_operations:
+                if operation['action'] in ['keep', 'add_new', 'replace', 'keep_unmapped']:  # 🆕 Add keep_unmapped
+                    imported_column = operation['imported_column']
+                    final_column = operation['final_column']
+
+                    print(f"  {operation['action'].upper()}: {imported_column} → {final_column}")
+
+                    # Add column to headers if new
+                    if final_column not in merged_data['headers']:
+                        merged_data['headers'].append(final_column)
+                        if operation['action'] in ['add_new', 'keep_unmapped']:  # 🆕 Count unmapped as new
+                            new_columns_added.append(final_column)
+
+                    # Initialize column in existing records if new
+                    for record in merged_data['data']:
+                        if final_column not in record:
+                            record[final_column] = None
+
+            print(f"✅ Applied column operations successfully")
+
+            # Use provided column mapping or detect automatically
+            if not column_mapping:
+                existing_column_mapping = self.detect_student_columns(existing_headers)
+                imported_column_mapping = self.detect_student_columns(imported_headers)
+            else:
+                existing_column_mapping = self.detect_student_columns(existing_headers)
+                imported_column_mapping = column_mapping
+
+            print(f"Using column mapping - Existing: {existing_column_mapping}, Imported: {imported_column_mapping}")
+
+            # Re-run conflict detection to get current state
+            conflict_results = self.process_merge_conflicts(
+                existing_data,
+                imported_records,
+                existing_column_mapping,
+                imported_column_mapping,
+                matching_threshold
+            )
+
+            # Counters for statistics
+            exact_matches_processed = 0
+            fuzzy_matches_processed = 0
+            conflicts_resolved = 0
+            new_students_added = 0
+            skipped_count = 0
+
+            # Process exact matches (if bulk action enabled or individual decisions)
+            if bulk_actions.get('accept_all_exact', False):
+                print("Processing bulk action: accept all exact matches")
+                for match in conflict_results['exact_matches']:
+                    try:
+                        existing_record = match['existing_record']
+                        imported_record = match['imported_record']
+
+                        # Apply column operations to update the right columns
+                        for operation in column_operations:
+                            if operation['action'] in ['keep', 'add_new', 'replace']:
+                                imported_column = operation['imported_column']
+                                final_column = operation['final_column']
+
+                                if imported_column in imported_record:
+                                    existing_record[final_column] = imported_record[imported_column]
+
+                        exact_matches_processed += 1
+                    except Exception as e:
+                        print(f"Error processing exact match: {str(e)}")
+                        skipped_count += 1
+
+            # Process fuzzy matches with high confidence (if bulk action enabled)
+            if bulk_actions.get('accept_high_confidence', False):
+                print("Processing bulk action: accept high confidence fuzzy matches")
+                high_confidence_matches = [m for m in conflict_results['fuzzy_matches'] if m.get('confidence', 0) > 0.9]
+                for match in high_confidence_matches:
+                    try:
+                        existing_record = match['existing_record']
+                        imported_record = match['imported_record']
+
+                        # Apply column operations to update the right columns
+                        for operation in column_operations:
+                            if operation['action'] in ['keep', 'add_new', 'replace']:
+                                imported_column = operation['imported_column']
+                                final_column = operation['final_column']
+
+                                if imported_column in imported_record:
+                                    existing_record[final_column] = imported_record[imported_column]
+
+                        fuzzy_matches_processed += 1
+                    except Exception as e:
+                        print(f"Error processing high confidence match: {str(e)}")
+                        skipped_count += 1
+
+            # Process individual conflict resolutions
+            for conflict_index, resolution in conflict_resolutions.items():
+                try:
+                    conflict_index = int(conflict_index)
+                    if conflict_index < len(conflict_results['conflicts']):
+                        conflict = conflict_results['conflicts'][conflict_index]
+                        action = resolution.get('action')
+
+                        if action == 'override':
+                            # Override existing record with imported data
+                            existing_record = conflict['existing_record']
+                            imported_record = conflict['imported_record']
+
+                            # Apply column operations to update the right columns
+                            for operation in column_operations:
+                                if operation['action'] in ['keep', 'add_new', 'replace']:
+                                    imported_column = operation['imported_column']
+                                    final_column = operation['final_column']
+
+                                    if imported_column in imported_record:
+                                        existing_record[final_column] = imported_record[imported_column]
+
+                            conflicts_resolved += 1
+                            print(f"Conflict {conflict_index}: Override existing record")
+
+                        elif action == 'keep_existing':
+                            # Keep existing record, just add new columns with null values
+                            existing_record = conflict['existing_record']
+                            imported_record = conflict['imported_record']
+
+                            # Only add data for completely new columns (not replacements)
+                            for operation in column_operations:
+                                if operation['action'] == 'add_new':
+                                    imported_column = operation['imported_column']
+                                    final_column = operation['final_column']
+
+                                    if imported_column in imported_record:
+                                        existing_record[final_column] = imported_record[imported_column]
+
+                            conflicts_resolved += 1
+                            print(f"Conflict {conflict_index}: Keep existing record")
+
+                        elif action == 'add_new':
+                            # Add imported record as new student
                             new_record = {key: None for key in merged_data['headers']}
-                            for key, value in record.items():
-                                new_record[key] = value
+
+                            # Apply column operations for the new student record
+                            for operation in column_operations:
+                                if operation['action'] in ['keep', 'add_new', 'replace']:
+                                    imported_column = operation['imported_column']
+                                    final_column = operation['final_column']
+
+                                    if imported_column in conflict['imported_record']:
+                                        new_record[final_column] = conflict['imported_record'][imported_column]
 
                             merged_data['data'].append(new_record)
-                            added_count += 1
-                            match_results.append(f"No match, added new record: '{original_name}'")
+                            conflicts_resolved += 1
+                            new_students_added += 1
+                            print(f"Conflict {conflict_index}: Add as new student")
 
-            # Get existing category mappings if they exist
-            existing_mappings = {}
-            if 'category_mappings' in existing_file.all_sheets:
-                print("Found existing category mappings, will preserve them")
-                try:
-                    for category in existing_file.all_sheets['category_mappings']:
-                        for column in category.get('columns', []):
-                            if column in existing_data['headers']:  # Only keep columns that still exist
-                                existing_mappings[column] = category['id']
-                    print(f"Loaded {len(existing_mappings)} existing column mappings")
                 except Exception as e:
-                    print(f"Error processing existing mappings: {str(e)}")
+                    print(f"Error processing conflict resolution {conflict_index}: {str(e)}")
+                    skipped_count += 1
 
-            # Process new category mappings if provided
-            new_column_mappings = {}
-            if 'category_mappings' in request.data:
-                try:
-                    import json
-                    category_mappings_str = request.data.get('category_mappings')
-                    print(
-                        f"Raw category mappings from request: {category_mappings_str[:100]}...")  # Print first 100 chars
+            # Process new students (if bulk action enabled or no conflicts)
+            if bulk_actions.get('add_all_new', False):
+                print("Processing bulk action: add all new students")
+                for new_student in conflict_results['new_students']:
+                    try:
+                        new_record = {key: None for key in merged_data['headers']}
 
-                    category_mappings_data = json.loads(category_mappings_str)
-                    print(f"Parsed category mappings - type: {type(category_mappings_data)}")
+                        # Apply column operations for the new student record
+                        for operation in column_operations:
+                            if operation['action'] in ['keep', 'add_new', 'replace']:
+                                imported_column = operation['imported_column']
+                                final_column = operation['final_column']
 
-                    # Handle dictionary format directly
-                    if isinstance(category_mappings_data, dict):
-                        for column, category in category_mappings_data.items():
-                            if column in merged_data['headers']:
-                                new_column_mappings[column] = category
-                    # Handle array format with 'columns' property
-                    elif isinstance(category_mappings_data, list):
-                        for item in category_mappings_data:
-                            if isinstance(item, dict) and 'id' in item and 'columns' in item:
-                                for column in item['columns']:
-                                    if column in merged_data['headers']:
-                                        new_column_mappings[column] = item['id']
+                                if imported_column in new_student['imported_record']:
+                                    new_record[final_column] = new_student['imported_record'][imported_column]
 
-                    print(f"Processed {len(new_column_mappings)} new column mappings")
-                except Exception as e:
-                    import traceback
-                    print("Error parsing category mappings:", str(e))
-                    print("Traceback:", traceback.format_exc())
+                        merged_data['data'].append(new_record)
+                        new_students_added += 1
+                    except Exception as e:
+                        print(f"Error adding new student: {str(e)}")
+                        skipped_count += 1
 
-            # Combine existing and new mappings (new mappings override existing ones)
-            combined_mappings = {**existing_mappings, **new_column_mappings}
-            print(f"Combined mappings: {len(combined_mappings)} columns mapped")
+            # Process remaining fuzzy matches that weren't handled by bulk actions
+            remaining_fuzzy = [m for m in conflict_results['fuzzy_matches']
+                               if
+                               not bulk_actions.get('accept_high_confidence', False) or m.get('confidence', 0) <= 0.9]
 
-            # Convert back to category -> columns format for storage
-            category_structure = []
-            category_ids = set(combined_mappings.values())
-            for cat_id in category_ids:
-                # Find all columns for this category
-                columns = [col for col, cat in combined_mappings.items() if cat == cat_id]
-                if columns:
-                    # Use the standard category names or default names
-                    category_name = {
-                        'quiz': 'Quizzes',
-                        'laboratory': 'Laboratory',
-                        'exams': 'Major Exams',
-                        'other': 'Other Activities'
-                    }.get(cat_id, cat_id.capitalize())
+            # Handle category mappings with updated mappings
+            if updated_category_mappings:
+                print(f"Received {len(updated_category_mappings)} updated category mappings")
 
-                    category_structure.append({
-                        'id': cat_id,
-                        'name': category_name,
-                        'columns': columns
-                    })
+                existing_file.all_sheets['category_mappings'] = updated_category_mappings
+                print(f"✅ Updated category mappings with {len(updated_category_mappings)} categories (smart mapped)")
 
-            # Update the existing file with merged data
-            existing_file.all_sheets[active_sheet] = merged_data
+                # Reorder columns
+                current_headers = merged_data['headers']
+                new_header_order = reorder_columns_by_category(current_headers, updated_category_mappings)
 
-            # Store the combined category mappings
-            if category_structure:
-                existing_file.all_sheets['category_mappings'] = category_structure
-                print(f"Saved category structure with {len(category_structure)} categories")
+                if new_header_order != current_headers:
+                    print("🔄 Reordering columns based on category mappings...")
 
-                # Debug output of categories
-                for cat in category_structure:
-                    print(f"  Category '{cat['name']}' ({cat['id']}): {len(cat['columns'])} columns")
+                    # Reorder data to match new header order - handle both dict and list formats
+                    reordered_data = []
+                    for row in merged_data['data']:
+                        if isinstance(row, dict):
+                            # Keep as dict but ensure all headers are present
+                            reordered_row = {}
+                            for header in new_header_order:
+                                reordered_row[header] = row.get(header)
+                            reordered_data.append(reordered_row)
+                        else:
+                            # Convert list to dict first, then reorder
+                            row_dict = {}
+                            for i, header in enumerate(current_headers):
+                                row_dict[header] = row[i] if i < len(row) else None
+
+                            # Create reordered dict
+                            reordered_row = {}
+                            for header in new_header_order:
+                                reordered_row[header] = row_dict.get(header)
+                            reordered_data.append(reordered_row)
+
+                    # Update merged data
+                    merged_data['headers'] = new_header_order
+                    merged_data['data'] = reordered_data
+
+                    print(f"✅ Reordered {len(new_header_order)} columns to group categories")
+                else:
+                    print("No column reordering needed - order is already correct")
+
             else:
-                print("Warning: No category structure to save")
+                print("No updated category mappings - keeping existing structure")
 
+            # Update the file with merged data
+            existing_file.all_sheets[active_sheet] = merged_data
             existing_file.update_count += 1
-            # Log the updated counter
-            print(f"Incremented update count to: {existing_file.update_count}")
-
             existing_file.save()
 
-            print(
-                f"Merge complete: {updated_count} records updated ({fuzzy_matched_count} fuzzy matched), {added_count} records added")
-            print(f"Category mappings preserved: {len(category_structure)} categories")
-            print(f"Sample of matches: {match_results[:10]}")
+            # Count operations for summary
+            replaced_columns = len([op for op in column_operations if op['action'] == 'replace'])
+            added_columns = len([op for op in column_operations if op['action'] == 'add_new'])
+
+            print(f"Merge execution complete:")
+            print(f"  - Exact matches processed: {exact_matches_processed}")
+            print(f"  - Fuzzy matches processed: {fuzzy_matches_processed}")
+            print(f"  - Conflicts resolved: {conflicts_resolved}")
+            print(f"  - New students added: {new_students_added}")
+            print(f"  - Records skipped: {skipped_count}")
+            print(f"  - Columns replaced: {replaced_columns}")
+            print(f"  - New columns added: {added_columns}")
 
             serializer = self.get_serializer(existing_file)
             return Response({
                 **serializer.data,
-                'match_stats': {
-                    'updated': updated_count,
-                    'fuzzy_matched': fuzzy_matched_count,
-                    'added': added_count,
-                    'match_samples': match_results[:10]
+                'merge_results': {
+                    'exact_matches_processed': exact_matches_processed,
+                    'fuzzy_matches_processed': fuzzy_matches_processed,
+                    'conflicts_resolved': conflicts_resolved,
+                    'new_students_added': new_students_added,
+                    'skipped_count': skipped_count,
+                    'columns_replaced': replaced_columns,
+                    'new_columns_added': added_columns,
+                    'total_records': len(merged_data['data']),
+                    'bulk_actions_applied': list(bulk_actions.keys()) if bulk_actions else [],
+                    'column_operations': [
+                        {
+                            'imported': op['imported_column'],
+                            'final': op['final_column'],
+                            'action': op['action']
+                        } for op in column_operations if op['action'] != 'reject'
+                    ],
+                    'summary': f"Successfully merged file with {exact_matches_processed + fuzzy_matches_processed + new_students_added} records processed, {replaced_columns} columns replaced, {added_columns} new columns added"
                 }
             })
 
@@ -669,9 +1533,9 @@ class ExcelViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Class not found'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             import traceback
-            print("Error during merge:", str(e))
+            print("Error during execute merge:", str(e))
             print("Traceback:", traceback.format_exc())
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': f'Merge execution failed: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
 
     @extend_schema(
         description='Upload Excel file',
@@ -706,6 +1570,30 @@ class ExcelViewSet(viewsets.ModelViewSet):
                 print("Error parsing custom columns:", str(e))
                 # Continue processing even if custom columns parsing fails
 
+        # Process category mappings if provided
+        category_mappings = []
+        if 'category_mappings' in request.data:
+            try:
+                import json
+                category_mappings_str = request.data.get('category_mappings')
+                print(f"Raw category mappings from request: {category_mappings_str[:100] if category_mappings_str else 'None'}...")
+
+                if category_mappings_str:
+                    category_mappings_data = json.loads(category_mappings_str)
+                    print(f"Parsed category mappings - type: {type(category_mappings_data)}")
+
+                    # Handle array format with 'id', 'name', and 'columns' properties
+                    if isinstance(category_mappings_data, list):
+                        category_mappings = category_mappings_data
+                        print(f"Processed {len(category_mappings)} category mappings from array format")
+                    else:
+                        print("Category mappings data is not in expected array format")
+            except Exception as e:
+                print("Error parsing category mappings:", str(e))
+                import traceback
+                print("Traceback:", traceback.format_exc())
+                # Continue processing even if category mappings parsing fails
+
         try:
             from classes.models import Class
             class_obj = Class.objects.get(id=class_id)
@@ -734,6 +1622,36 @@ class ExcelViewSet(viewsets.ModelViewSet):
             for sheet_name, df in excel_data.items():
                 print(f"Processing sheet: {sheet_name}, shape: {df.shape}")
 
+                # Remove columns that are completely empty or have unnamed/null column names
+                # This fixes the issue with extra blank columns appearing
+                original_columns = df.columns.tolist()
+
+                # Filter out columns that are:
+                # 1. Completely empty (all NaN/null values)
+                # 2. Have unnamed/generic column names like 'Unnamed: X'
+                # 3. Have null/empty column names
+                columns_to_keep = []
+                for col in original_columns:
+                    col_str = str(col).strip()
+
+                    # Skip columns with generic/unnamed headers
+                    if (col_str.startswith('Unnamed:') or
+                        col_str in ['', 'nan', 'NaN', 'None'] or
+                        col_str.lower() == 'null'):
+                        print(f"Removing column with generic/empty name: '{col_str}'")
+                        continue
+
+                    # Skip columns that are completely empty
+                    if df[col].isna().all() or (df[col] == '').all():
+                        print(f"Removing completely empty column: '{col_str}'")
+                        continue
+
+                    columns_to_keep.append(col)
+
+                # Keep only the valid columns
+                df = df[columns_to_keep]
+                print(f"Filtered columns from {len(original_columns)} to {len(columns_to_keep)}")
+
                 df = df.replace({pd.NA: None})
                 df = df.fillna("")
 
@@ -757,8 +1675,8 @@ class ExcelViewSet(viewsets.ModelViewSet):
 
                 # Add custom columns if provided
                 if custom_columns and sheet_name == list(excel_data.keys())[0]:  # Apply to first sheet only
-                    # Add custom column headers
-                    custom_column_headers = [col['name'] for col in custom_columns]
+                    # Filter out header-type columns for adding to data
+                    custom_column_headers = [col['name'] for col in custom_columns if col.get('type') != 'header']
                     headers.extend(custom_column_headers)
 
                     for record in records:
@@ -769,6 +1687,13 @@ class ExcelViewSet(viewsets.ModelViewSet):
                     'headers': headers,
                     'data': records
                 }
+
+            # Add category mappings to the data structure if provided
+            if category_mappings:
+                all_sheets_data['category_mappings'] = category_mappings
+                print(f"Added category mappings to file data: {len(category_mappings)} categories")
+                for cat in category_mappings:
+                    print(f"  Category '{cat.get('name')}' ({cat.get('id')}): {len(cat.get('columns', []))} columns")
 
             first_sheet_name = list(all_sheets_data.keys())[0] if all_sheets_data else 'Sheet1'
 
@@ -786,83 +1711,12 @@ class ExcelViewSet(viewsets.ModelViewSet):
 
         except Exception as e:
             print(f"Error during upload: {str(e)}")
+            import traceback
+            print("Traceback:", traceback.format_exc())
             if 'excel_file' in locals():
                 excel_file.delete()
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-    @extend_schema(
-        description='Download Excel file',
-        parameters=[
-            OpenApiParameter(
-                name='format',
-                type=OpenApiTypes.STR,
-                location=OpenApiParameter.QUERY,
-                description='File format to download (xlsx or csv)',
-                required=False,
-                enum=['xlsx', 'csv'],
-                default='xlsx'
-            )
-        ],
-        responses={200: OpenApiTypes.BINARY}
-    )
-    @action(detail=True, methods=['GET'])
-    def download(self, request, pk=None):
-        try:
-            excel_file = self.get_object()
-            # Get the requested format (default to xlsx)
-            file_format = request.query_params.get('format', 'xlsx').lower()
-
-            # Validate format
-            if file_format not in ['xlsx', 'csv']:
-                return Response(
-                    {'error': 'Invalid format. Must be xlsx or csv'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            # Get the active sheet name
-            sheet_name = request.query_params.get('sheet', excel_file.active_sheet)
-            if sheet_name not in excel_file.all_sheets:
-                return Response(
-                    {'error': f'Sheet {sheet_name} not found'},
-                    status=status.HTTP_404_NOT_FOUND
-                )
-
-            # Get sheet data for the selected sheet
-            sheet_data = excel_file.all_sheets[sheet_name]
-
-            # Convert to DataFrame
-            df = pd.DataFrame(sheet_data.get('data', []))
-
-            # Prepare the response based on format
-            if file_format == 'csv':
-                # CSV export
-                csv_buffer = BytesIO()
-                df.to_csv(csv_buffer, index=False)
-                csv_buffer.seek(0)
-
-                response = HttpResponse(csv_buffer.getvalue(), content_type='text/csv')
-                filename = f"{os.path.splitext(excel_file.file_name)[0]}.csv"
-                response['Content-Disposition'] = f'attachment; filename="{filename}"'
-                return response
-            else:
-                # XLSX export - create a workbook with the selected sheet
-                buffer = BytesIO()
-                with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-                    df.to_excel(writer, sheet_name=sheet_name, index=False)
-
-                buffer.seek(0)
-                response = HttpResponse(
-                    buffer.getvalue(),
-                    content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                )
-                response['Content-Disposition'] = f'attachment; filename="{excel_file.file_name}"'
-                return response
-
-        except Exception as e:
-            import traceback
-            print("Error downloading file:", str(e))
-            print("Traceback:", traceback.format_exc())
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['PATCH'], permission_classes=[IsAuthenticated])
     def update_categories(self, request, pk=None):
