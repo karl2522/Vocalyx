@@ -31,6 +31,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.vocalyxapk.composables.CoursesTab
 import com.example.vocalyxapk.composables.HomeTab
+import com.example.vocalyxapk.composables.ProfileScreen
 import com.example.vocalyxapk.composables.TeamsTab
 import com.example.vocalyxapk.composables.ScheduleTab
 import com.example.vocalyxapk.repository.AuthRepository
@@ -57,6 +58,7 @@ class HomeActivity : ComponentActivity() {
                     val scope = rememberCoroutineScope()
                     var selectedTab by remember { mutableStateOf(0) }
                     val context = LocalContext.current
+                    var showProfile by remember { mutableStateOf(false) }
                     
                     val navigationItems = listOf(
                         Triple("Dashboard", Icons.Filled.Dashboard, "Dashboard"),
@@ -190,7 +192,7 @@ class HomeActivity : ComponentActivity() {
                                     ),
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                                 )
-                                
+
                                 NavigationDrawerItem(
                                     icon = {
                                         Box(
@@ -217,8 +219,13 @@ class HomeActivity : ComponentActivity() {
                                             )
                                         )
                                     },
-                                    selected = false,
-                                    onClick = { /* TODO: Implement profile */ },
+                                    selected = showProfile,
+                                    onClick = {
+                                        showProfile = true
+                                        scope.launch {
+                                            drawerState.close()
+                                        }
+                                    },
                                     colors = NavigationDrawerItemDefaults.colors(
                                         selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
                                         unselectedContainerColor = Color.Transparent
@@ -369,24 +376,30 @@ class HomeActivity : ComponentActivity() {
                             modifier = Modifier.fillMaxSize(),
                             topBar = {
                                 TopAppBar(
-                                    title = { 
+                                    title = {
                                         Text(
-                                            "Vocalyx",
+                                            text = if (showProfile) "Profile" else "Vocalyx",
                                             color = MaterialTheme.colorScheme.onPrimary
-                                        ) 
+                                        )
                                     },
                                     colors = TopAppBarDefaults.topAppBarColors(
                                         containerColor = MaterialTheme.colorScheme.primary
                                     ),
                                     navigationIcon = {
-                                        IconButton(onClick = { 
-                                            scope.launch {
-                                                drawerState.open()
+                                        IconButton(onClick = {
+                                            if (showProfile) {
+                                                // 🎯 NEW: Go back from profile
+                                                showProfile = false
+                                            } else {
+                                                // 🎯 Existing: Open drawer
+                                                scope.launch {
+                                                    drawerState.open()
+                                                }
                                             }
                                         }) {
                                             Icon(
-                                                Icons.Rounded.Menu,
-                                                contentDescription = "Menu",
+                                                imageVector = if (showProfile) Icons.Rounded.ArrowBack else Icons.Rounded.Menu,
+                                                contentDescription = if (showProfile) "Back" else "Menu",
                                                 tint = MaterialTheme.colorScheme.onPrimary
                                             )
                                         }
@@ -394,146 +407,145 @@ class HomeActivity : ComponentActivity() {
                                 )
                             },
                             bottomBar = {
-                                Surface(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .heightIn(min = 68.dp)
-                                            .drawBehind {
-                                                val colors = listOf(
-                                                    Color(0xFF1C2347),  // Deep blue
-                                                    Color(0xFF333D79),  // Brand blue
-                                                    Color(0xFF3C4B99)   // Slightly lighter blue
-                                                )
-                                                drawRect(
-                                                    brush = Brush.verticalGradient(
-                                                        colors = colors
-                                                    )
-                                                )
-                                            }
+                                if (!showProfile) { // 🎯 NEW: Only show bottom nav when not in profile
+                                    Surface(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
                                     ) {
-                                        NavigationBar(
-                                            containerColor = Color.Transparent,
-                                            contentColor = Color.White,
+                                        Box(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .heightIn(min = 68.dp),
-                                            tonalElevation = 0.dp
+                                                .heightIn(min = 68.dp)
+                                                .drawBehind {
+                                                    val colors = listOf(
+                                                        Color(0xFF1C2347),  // Deep blue
+                                                        Color(0xFF333D79),  // Brand blue
+                                                        Color(0xFF3C4B99)   // Slightly lighter blue
+                                                    )
+                                                    drawRect(
+                                                        brush = Brush.verticalGradient(
+                                                            colors = colors
+                                                        )
+                                                    )
+                                                }
                                         ) {
-                                            navigationItems.forEachIndexed { index, (title, icon, label) ->
-                                                val selected = selectedTab == index
-                                                val animatedIconSize by animateDpAsState(
-                                                    targetValue = if (selected) 28.dp else 24.dp,
-                                                    animationSpec = spring(
-                                                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                                                        stiffness = Spring.StiffnessLow
-                                                    ), label = "iconSize"
-                                                )
+                                            NavigationBar(
+                                                containerColor = Color.Transparent,
+                                                contentColor = Color.White,
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .heightIn(min = 68.dp),
+                                                tonalElevation = 0.dp
+                                            ) {
+                                                navigationItems.forEachIndexed { index, (title, icon, label) ->
+                                                    val selected = selectedTab == index
+                                                    val animatedIconSize by animateDpAsState(
+                                                        targetValue = if (selected) 28.dp else 24.dp,
+                                                        animationSpec = spring(
+                                                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                                                            stiffness = Spring.StiffnessLow
+                                                        ), label = "iconSize"
+                                                    )
 
-                                                NavigationBarItem(
-                                                    icon = {
-                                                        Box(
-                                                            contentAlignment = Alignment.Center,
-                                                            modifier = Modifier.size(48.dp)
-                                                        ) {
-                                                            if (selected) {
-                                                                Box(
-                                                                    modifier = Modifier
-                                                                        .size(40.dp)
-                                                                        .background(
-                                                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                                                                            shape = CircleShape
-                                                                        )
+                                                    NavigationBarItem(
+                                                        icon = {
+                                                            Box(
+                                                                contentAlignment = Alignment.Center,
+                                                                modifier = Modifier.size(48.dp)
+                                                            ) {
+                                                                if (selected) {
+                                                                    Box(
+                                                                        modifier = Modifier
+                                                                            .size(40.dp)
+                                                                            .background(
+                                                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                                                                shape = CircleShape
+                                                                            )
+                                                                    )
+                                                                }
+                                                                Icon(
+                                                                    imageVector = icon,
+                                                                    contentDescription = title,
+                                                                    tint = if (selected)
+                                                                        Color.White
+                                                                    else
+                                                                        Color.White.copy(alpha = 0.6f),
+                                                                    modifier = Modifier.size(animatedIconSize)
                                                                 )
                                                             }
-                                                            Icon(
-                                                                imageVector = icon,
-                                                                contentDescription = title,
-                                                                tint = if (selected)
-                                                                    Color.White
-                                                                else
-                                                                    Color.White.copy(alpha = 0.6f),
-                                                                modifier = Modifier.size(animatedIconSize)
-                                                            )
-                                                        }
-                                                    },
-                                                    label = {
-                                                        AnimatedVisibility(
-                                                            visible = true,
-                                                            enter = fadeIn() + expandVertically(),
-                                                            exit = fadeOut() + shrinkVertically()
-                                                        ) {
-                                                            Text(
-                                                                label,
-                                                                color = if (selected)
-                                                                    Color.White
-                                                                else
-                                                                    Color.White.copy(alpha = 0.6f),
-                                                                style = MaterialTheme.typography.labelSmall.copy(
-                                                                    fontFamily = DMSans,
-                                                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
-                                                                ),
-                                                                maxLines = 1,
-                                                                overflow = TextOverflow.Ellipsis
-                                                            )
-                                                        }
-                                                    },
-                                                    selected = selected,
-                                                    onClick = {
-                                                        selectedTab = index
-                                                    },
-                                                    colors = NavigationBarItemDefaults.colors(
-                                                        selectedIconColor = Color.White,
-                                                        unselectedIconColor = Color.White.copy(alpha = 0.6f),
-                                                        selectedTextColor = Color.White,
-                                                        unselectedTextColor = Color.White.copy(alpha = 0.6f),
-                                                        indicatorColor = Color(0xFF3C4B99).copy(alpha = 0.3f)
+                                                        },
+                                                        label = {
+                                                            AnimatedVisibility(
+                                                                visible = true,
+                                                                enter = fadeIn() + expandVertically(),
+                                                                exit = fadeOut() + shrinkVertically()
+                                                            ) {
+                                                                Text(
+                                                                    label,
+                                                                    color = if (selected)
+                                                                        Color.White
+                                                                    else
+                                                                        Color.White.copy(alpha = 0.6f),
+                                                                    style = MaterialTheme.typography.labelSmall.copy(
+                                                                        fontFamily = DMSans,
+                                                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+                                                                    ),
+                                                                    maxLines = 1,
+                                                                    overflow = TextOverflow.Ellipsis
+                                                                )
+                                                            }
+                                                        },
+                                                        selected = selected,
+                                                        onClick = {
+                                                            selectedTab = index
+                                                            // 🎯 NEW: Also close profile when tab is clicked
+                                                            showProfile = false
+                                                        },
+                                                        colors = NavigationBarItemDefaults.colors(
+                                                            selectedIconColor = Color.White,
+                                                            unselectedIconColor = Color.White.copy(alpha = 0.6f),
+                                                            selectedTextColor = Color.White,
+                                                            unselectedTextColor = Color.White.copy(alpha = 0.6f),
+                                                            indicatorColor = Color(0xFF3C4B99).copy(alpha = 0.3f)
+                                                        )
                                                     )
-                                                )
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
                         ) { paddingValues ->
-                            when (selectedTab) {
-                                0 -> HomeTab(
-                                    modifier = Modifier.padding(paddingValues),
-                                    onNavigateToSchedule = {
-                                        selectedTab = 2
-                                    },
-                                    onNavigateToCourseList = {
-                                        selectedTab = 1
-                                    },
-                                    onNavigateToTeamList = {
-                                        selectedTab = 3
-                                    },
-                                    onNavigateToAddCourse = {
-                                        selectedTab = 1
-                                    },
-                                    onNavigateToCourseDetail = { courseId ->
-                                        selectedTab = 1
-                                    },
-                                    onNavigateToTeamDetail = { teamId ->
-                                        // For now, go to Teams tab. Later you can implement team detail screen
-                                        selectedTab = 3
-                                    },
-                                    onNavigateToStatSection = { statType ->
-                                        when (statType) {
-                                            "Courses" -> selectedTab = 1
-                                            "Classes" -> selectedTab = 1
-                                            "Teams" -> selectedTab = 3
-                                            else -> selectedTab = 1
-                                        }
-                                    }
+                            if (showProfile) {
+                                // Show Profile Screen
+                                ProfileScreen(
+                                    modifier = Modifier.padding(paddingValues)
                                 )
-                                1 -> CoursesTab(modifier = Modifier.padding(paddingValues))
-                                2 -> ScheduleTab(modifier = Modifier.padding(paddingValues))
-                                3 -> TeamsTab(modifier = Modifier.padding(paddingValues))
+                            } else {
+                                // Show normal tab content
+                                when (selectedTab) {
+                                    0 -> HomeTab(
+                                        modifier = Modifier.padding(paddingValues),
+                                        onNavigateToSchedule = { selectedTab = 2 },
+                                        onNavigateToCourseList = { selectedTab = 1 },
+                                        onNavigateToTeamList = { selectedTab = 3 },
+                                        onNavigateToAddCourse = { selectedTab = 1 },
+                                        onNavigateToCourseDetail = { courseId -> selectedTab = 1 },
+                                        onNavigateToTeamDetail = { teamId -> selectedTab = 3 },
+                                        onNavigateToStatSection = { statType ->
+                                            when (statType) {
+                                                "Courses" -> selectedTab = 1
+                                                "Classes" -> selectedTab = 1
+                                                "Teams" -> selectedTab = 3
+                                                else -> selectedTab = 1
+                                            }
+                                        }
+                                    )
+                                    1 -> CoursesTab(modifier = Modifier.padding(paddingValues))
+                                    2 -> ScheduleTab(modifier = Modifier.padding(paddingValues))
+                                    3 -> TeamsTab(modifier = Modifier.padding(paddingValues))
+                                }
                             }
                         }
                     }
