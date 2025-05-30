@@ -38,7 +38,7 @@ fun VOCALYXAPKTheme(
 ) {
     val colorScheme = CustomColorScheme
     val view = LocalView.current
-    
+
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window

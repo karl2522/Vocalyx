@@ -1,8 +1,5 @@
 package com.example.vocalyxapk.composables
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
@@ -54,7 +51,7 @@ fun HomeTab(
 ) {
     // Mock data for demonstration
     val username = "User" // In a real app, get this from a ViewModel
-    
+
     // Mock stats data
     val statsData = listOf(
         StatCardData(
@@ -88,7 +85,7 @@ fun HomeTab(
             )
         )
     )
-    
+
     // Mock courses data
     val recentCourses = listOf(
         CourseData(
@@ -113,7 +110,7 @@ fun HomeTab(
             lastUpdated = "2023-09-30"
         )
     )
-    
+
     // Mock teams data
     val teamsData = listOf(
         TeamData(
@@ -133,21 +130,21 @@ fun HomeTab(
             lastActive = "Yesterday"
         )
     )
-    
+
     // State for active tab in courses section
     var activeCoursesTab by remember { mutableStateOf("recent") }
-    
+
     // Animation for welcome section
     var isWelcomeVisible by remember { mutableStateOf(false) }
     val welcomeAlpha by animateFloatAsState(
         targetValue = if (isWelcomeVisible) 1f else 0f,
         animationSpec = tween(500), label = "welcomeAlpha"
     )
-    
+
     LaunchedEffect(Unit) {
         isWelcomeVisible = true
     }
-    
+
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
@@ -202,7 +199,7 @@ fun HomeTab(
                                 color = Color.White.copy(alpha = 0.8f)
                             )
                         }
-                        
+
                         Box(
                             modifier = Modifier
                                 .size(60.dp)
@@ -218,9 +215,9 @@ fun HomeTab(
                             )
                         }
                     }
-                    
+
                     Spacer(modifier = Modifier.height(16.dp))
-                    
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -254,7 +251,7 @@ fun HomeTab(
                                 )
                             }
                         }
-                        
+
                         OutlinedButton(
                             onClick = { onNavigateToSchedule() },
                             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)),
@@ -297,7 +294,7 @@ fun HomeTab(
                 color = Color(0xFF333D79),
                 modifier = Modifier.padding(vertical = 8.dp)
             )
-            
+
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(vertical = 4.dp)
@@ -307,7 +304,7 @@ fun HomeTab(
                 }
             }
         }
-        
+
         // Courses section
         item {
             Column(
@@ -351,7 +348,7 @@ fun HomeTab(
                             color = Color(0xFF333D79)
                         )
                     }
-                    
+
                     TextButton(onClick = { onNavigateToCourseList() }) {
         Text(
                             text = "View All",
@@ -366,7 +363,7 @@ fun HomeTab(
                         )
                     }
                 }
-                
+
                 // Tab row
                 TabRow(
                     selectedTabIndex = when(activeCoursesTab) {
@@ -411,7 +408,7 @@ fun HomeTab(
                         }
                     )
                 }
-                
+
                 // Course list
                 AnimatedVisibility(visible = activeCoursesTab == "recent") {
                     Column {
@@ -424,7 +421,7 @@ fun HomeTab(
                             }
                     }
                 }
-                
+
                 AnimatedVisibility(visible = activeCoursesTab == "completed") {
                     Column {
                         if (recentCourses.any { it.status == "completed" }) {
@@ -446,7 +443,7 @@ fun HomeTab(
                 }
             }
         }
-        
+
         // Teams section
         item {
             Column(
@@ -490,7 +487,7 @@ fun HomeTab(
                             color = Color(0xFF333D79)
                         )
                     }
-                    
+
                     TextButton(onClick = { onNavigateToTeamList() }) {
         Text(
                             text = "View All",
@@ -505,7 +502,7 @@ fun HomeTab(
                         )
                     }
                 }
-                
+
                 // Teams list
                 if (teamsData.isNotEmpty()) {
                     teamsData.forEach { team ->
@@ -535,7 +532,7 @@ fun StatCard(
         modifier = Modifier
             .width(180.dp)
             .height(120.dp)
-            .clickable { 
+            .clickable {
                 onNavigateToStatSection(stat.title)
             },
         shape = RoundedCornerShape(16.dp),
@@ -561,7 +558,7 @@ fun StatCard(
                     style = MaterialTheme.typography.labelMedium.withDMSansMedium(),
                     color = Color.Gray
                 )
-                
+
                 Box(
                     modifier = Modifier
                         .size(36.dp)
@@ -577,13 +574,13 @@ fun StatCard(
                     )
                 }
             }
-            
+
             Text(
                 text = stat.value,
                 style = MaterialTheme.typography.headlineMedium.withDMSansBold(),
                 color = Color(0xFF333333)
             )
-            
+
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (stat.trend == "up") {
                     Icon(
@@ -600,9 +597,9 @@ fun StatCard(
                         modifier = Modifier.size(16.dp)
                     )
                 }
-                
+
                 Spacer(modifier = Modifier.width(4.dp))
-                
+
                 Text(
                     text = "+${stat.change} from last month",
                     style = MaterialTheme.typography.labelSmall.withDMSansRegular(),
@@ -653,9 +650,9 @@ fun CourseItem(
                     modifier = Modifier.size(24.dp)
             )
         }
-        
+
         Spacer(modifier = Modifier.width(12.dp))
-        
+
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = course.name,
@@ -664,16 +661,16 @@ fun CourseItem(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            
+
             Spacer(modifier = Modifier.height(2.dp))
-            
+
             // Course code
             Text(
                 text = course.code,
                 style = MaterialTheme.typography.labelSmall.withDMSansMedium(),
                 color = Color.Gray
             )
-            
+
             // Date below course code
             Spacer(modifier = Modifier.height(2.dp))
             Text(
@@ -682,7 +679,7 @@ fun CourseItem(
                 color = Color.Gray.copy(alpha = 0.8f)
             )
         }
-        
+
         SuggestionChip(
             onClick = { /* No action */ },
             colors = SuggestionChipDefaults.suggestionChipColors(
@@ -738,9 +735,9 @@ fun TeamItem(
                 modifier = Modifier.size(24.dp)
             )
         }
-        
+
         Spacer(modifier = Modifier.width(12.dp))
-        
+
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = team.name,
@@ -749,16 +746,16 @@ fun TeamItem(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            
+
             Spacer(modifier = Modifier.height(2.dp))
-            
+
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "${team.memberCount} members",
                     style = MaterialTheme.typography.labelSmall.withDMSansRegular(),
                     color = Color.Gray
                 )
-                
+
                 Box(
                     modifier = Modifier
                         .padding(horizontal = 4.dp)
@@ -766,7 +763,7 @@ fun TeamItem(
                         .clip(CircleShape)
                         .background(Color.LightGray)
                 )
-                
+
                 Text(
                     text = "${team.courseCount} courses",
                     style = MaterialTheme.typography.labelSmall.withDMSansRegular(),
@@ -774,7 +771,7 @@ fun TeamItem(
                 )
             }
         }
-        
+
                 SuggestionChip(
             onClick = { /* No action */ },
             colors = SuggestionChipDefaults.suggestionChipColors(
@@ -818,9 +815,9 @@ fun EmptyStateMessage(
                 modifier = Modifier.size(32.dp)
             )
         }
-        
+
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         Text(
             text = message,
             style = MaterialTheme.typography.bodyMedium.withDMSansMedium(),

@@ -212,11 +212,8 @@ fun MyClassesScreen(courseId: Int, courseName: String) {
                     },
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Color(0xFF333D79),
                         unfocusedBorderColor = Color(0xFFDDDDDD),
-                        unfocusedContainerColor = Color.White,
-                        focusedContainerColor = Color.White
                     )
                 )
 
@@ -805,7 +802,6 @@ fun EnhancedClassCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(140.dp) // Reduced height from 180dp to 140dp
             .clickable {
                 // Preserve the navigation functionality
                 val intent = android.content.Intent(context, com.example.vocalyxapk.MyStudentsActivity::class.java).apply {
@@ -815,7 +811,6 @@ fun EnhancedClassCard(
                 }
                 context.startActivity(intent)
             },
-        elevation = CardDefaults.cardElevation(2.dp), // Reduced elevation
         colors = CardDefaults.cardColors(
             containerColor = when(classData.status) {
                 "active" -> Color(0xFFE8F5E9)  // Light green background for active
@@ -833,7 +828,6 @@ fun EnhancedClassCard(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
-                // Top section with status badge
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -843,7 +837,6 @@ fun EnhancedClassCard(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
-                                .size(8.dp)
                                 .background(
                                     color = when(classData.status) {
                                         "active" -> Color(0xFF4CAF50)  // Green
@@ -854,7 +847,6 @@ fun EnhancedClassCard(
                                     shape = CircleShape
                                 )
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = classData.status?.replaceFirstChar { it.uppercase() } ?: "Unknown",
                             style = MaterialTheme.typography.bodySmall,
@@ -867,33 +859,8 @@ fun EnhancedClassCard(
                         )
                     }
 
-                    // Student count badge
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Default.Person,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                            tint = Color(0xFF666666)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "${classData.student_count ?: 0} students",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFF666666)
-                        )
-                    }
-                }
-
-                // Center section with class name (highlighted)
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    verticalArrangement = Arrangement.Center
-                ) {
                     Text(
                         text = classData.name,
-                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF333D79),
                         maxLines = 2,
@@ -908,11 +875,9 @@ fun EnhancedClassCard(
                     }
                 }
 
-                // Bottom section with schedule and actions
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     // Schedule info
                     if (!classData.schedule.isNullOrBlank()) {
@@ -920,7 +885,6 @@ fun EnhancedClassCard(
                             Icon(
                                 Icons.Filled.Schedule,
                                 contentDescription = null,
-                                modifier = Modifier.size(14.dp),
                                 tint = Color(0xFF666666)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
@@ -932,45 +896,18 @@ fun EnhancedClassCard(
                         }
                     }
 
-                    // Action buttons
-                    Row(
-                        horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Edit button
-                        IconButton(
-                            onClick = { showEditDialog = true },
-                            modifier = Modifier.size(32.dp)
-                        ) {
                             Icon(
-                                Icons.Default.Edit,
-                                contentDescription = "Edit",
-                                tint = Color(0xFF333D79),
-                                modifier = Modifier.size(16.dp)
                             )
                         }
                         
-                        // Menu button
                         IconButton(
                             onClick = { showMenu = true },
-                            modifier = Modifier.size(32.dp)
                         ) {
                             Icon(
                                 Icons.Default.MoreVert,
                                 contentDescription = "More options",
-                                tint = Color(0xFF333D79),
-                                modifier = Modifier.size(16.dp)
                             )
-                        }
-                    }
-                }
-            }
 
-            // Dropdown menu
-            Box(modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 8.dp, bottom = 8.dp)
-            ) {
                 DropdownMenu(
                     expanded = showMenu,
                     onDismissRequest = { showMenu = false }
@@ -1082,9 +1019,6 @@ fun EditClassDialog(
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Color(0xFF333D79),
-                        unfocusedBorderColor = Color(0xFFDDDDDD),
-                        unfocusedContainerColor = Color.White,
-                        focusedContainerColor = Color.White
                     )
                 )
 
@@ -1104,9 +1038,6 @@ fun EditClassDialog(
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Color(0xFF333D79),
-                        unfocusedBorderColor = Color(0xFFDDDDDD),
-                        unfocusedContainerColor = Color.White,
-                        focusedContainerColor = Color.White
                     )
                 )
 
@@ -1124,13 +1055,9 @@ fun EditClassDialog(
                     placeholder = { Text("e.g. MWF 1:30 - 3:00PM") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                                                leadingIcon = { Icon(imageVector = Icons.Filled.Schedule, contentDescription = "Schedule") },
                     supportingText = { Text("Format: Days, Time Range", style = MaterialTheme.typography.bodySmall) },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Color(0xFF333D79),
-                        unfocusedBorderColor = Color(0xFFDDDDDD),
-                        unfocusedContainerColor = Color.White,
-                        focusedContainerColor = Color.White
                     )
                 )
 
@@ -1163,9 +1090,6 @@ fun EditClassDialog(
                         placeholder = { Text("Select a semester") },
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Color(0xFF333D79),
-                            unfocusedBorderColor = Color(0xFFDDDDDD),
-                            unfocusedContainerColor = Color.White,
-                            focusedContainerColor = Color.White
                         )
                     )
 
@@ -1201,9 +1125,6 @@ fun EditClassDialog(
                     minLines = 3,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Color(0xFF333D79),
-                        unfocusedBorderColor = Color(0xFFDDDDDD),
-                        unfocusedContainerColor = Color.White,
-                        focusedContainerColor = Color.White
                     )
                 )
             }
@@ -1252,52 +1173,28 @@ fun AddClassDialog(
     onDismiss: () -> Unit,
     onCreateClass: () -> Unit
 ) {
-    // Schedule handling matching web version exactly
-    var selectedDays by remember { mutableStateOf(emptyList<String>()) }
     var startTime by remember { mutableStateOf("") }
     var endTime by remember { mutableStateOf("") }
-    var formattedSchedule by remember { mutableStateOf(classSchedule) }
     
-    // Update formatted schedule when components change
     LaunchedEffect(selectedDays, startTime, endTime) {
         if (selectedDays.isNotEmpty() && startTime.isNotEmpty() && endTime.isNotEmpty()) {
-            val schedule = "${selectedDays.joinToString(",")} $startTime - $endTime"
-            formattedSchedule = schedule
-            onClassScheduleChange(schedule)
         }
     }
     
-    // Day options exactly matching web version
     val dayOptions = listOf(
-        "M" to "Monday (M)",
-        "T" to "Tuesday (T)", 
-        "W" to "Wednesday (W)",
-        "TH" to "Thursday (TH)",
-        "F" to "Friday (F)"
     )
     
-    // Common day patterns exactly matching web version
     val dayPatterns = listOf(
-        "M,W,F" to "Monday, Wednesday, Friday (M,W,F)",
-        "T,TH" to "Tuesday, Thursday (T,TH)",
-        "M,W" to "Monday, Wednesday (M,W)",
-        "M,T,W,TH,F" to "Every Day (M,T,W,TH,F)"
     )
     
-    // Generate time options exactly matching web version (7:30 AM to 9:30 PM in 30-minute increments)
-    val generateTimeOptions = {
-        val options = mutableListOf<String>()
         var hour = 7
         var minute = 30
         var period = "AM"
         
         while (!(hour == 9 && minute == 30 && period == "PM")) {
             val formattedHour = if (hour > 12) hour - 12 else hour
-            val formattedMinute = if (minute == 0) "00" else minute.toString()
             val timeString = "$formattedHour:$formattedMinute $period"
-            options.add(timeString)
             
-            // Increment by 30 minutes
             if (minute == 30) {
                 minute = 0
                 hour++
@@ -1310,316 +1207,114 @@ fun AddClassDialog(
                 minute = 30
             }
         }
-        options.add("9:30 PM") // Add final option
         options
     }
     
-    val timeOptions = generateTimeOptions()
-    
-    // Helper function to handle day pattern selection
-    val handleDayPatternChange = { pattern: String ->
-        if (pattern.isNotEmpty()) {
-            selectedDays = pattern.split(",")
-        }
-    }
-    
-    // Helper function to handle individual day selection
-    val handleDayChange = { day: String ->
-        selectedDays = if (selectedDays.contains(day)) {
-            selectedDays - day
-        } else {
-            selectedDays + day
-        }
-    }
-
     AlertDialog(
         onDismissRequest = onDismiss,
         modifier = Modifier.fillMaxWidth(0.98f),
         title = {
             Column {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .background(
-                                brush = androidx.compose.ui.graphics.Brush.linearGradient(
-                                    colors = listOf(Color(0xFF333D79), Color(0xFF4A5491))
-                                ),
-                                shape = CircleShape
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Rounded.School,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Column {
                         Text(
-                            "Add Class to $courseName",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Medium,
-                            color = Color(0xFF111827)
                         )
-                    }
-                    Spacer(modifier = Modifier.weight(1f))
-                    IconButton(
-                        onClick = onDismiss,
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Close,
-                            contentDescription = "Close",
-                            tint = Color(0xFF6B7280),
-                            modifier = Modifier.size(20.dp)
                         )
-                    }
-                }
             }
         },
         text = {
-            Column(
-                modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 650.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
                 // Class Name
                 OutlinedTextField(
                     value = className,
                     onValueChange = onClassNameChange,
-                    label = { Text("Class Name", color = Color(0xFF374151)) },
-                    placeholder = { Text("e.g. 'Section A', '1-B', 'Group 3'", color = Color(0xFF9CA3AF)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Color(0xFF333D79),
-                        focusedLabelColor = Color(0xFF333D79),
-                        unfocusedBorderColor = Color(0xFFD1D5DB),
-                        unfocusedLabelColor = Color(0xFF6B7280),
-                        focusedContainerColor = Color.White,
-                        unfocusedContainerColor = Color.White
                     )
-                )
 
                 // Number of Students
                 OutlinedTextField(
-                    value = classStudentCount,
-                    onValueChange = onClassStudentCountChange,
-                    label = { Text("Number of Students", color = Color(0xFF374151)) },
-                    placeholder = { Text("e.g. 30", color = Color(0xFF9CA3AF)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Color(0xFF333D79),
-                        focusedLabelColor = Color(0xFF333D79),
-                        unfocusedBorderColor = Color(0xFFD1D5DB),
-                        unfocusedLabelColor = Color(0xFF6B7280),
-                        focusedContainerColor = Color.White,
-                        unfocusedContainerColor = Color.White
                     )
                 )
 
-                // Schedule Section - Enhanced design matching web version
-                Column(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
                     Text(
-                        "Schedule",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = Color(0xFF374151),
-                        modifier = Modifier.padding(bottom = 12.dp)
                     )
                     
-                    // Display formatted schedule with better design
                     if (formattedSchedule.isNotEmpty()) {
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(bottom = 16.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF0F9FF)),
-                            border = BorderStroke(1.dp, Color(0xFF333D79).copy(alpha = 0.2f)),
-                            shape = RoundedCornerShape(8.dp)
                         ) {
                             Row(
-                                modifier = Modifier.padding(16.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
-                                    Icons.Default.Schedule,
                                     contentDescription = null,
-                                    tint = Color(0xFF333D79),
                                     modifier = Modifier.size(20.dp)
                                 )
-                                Spacer(modifier = Modifier.width(12.dp))
                                 Text(
-                                    formattedSchedule,
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Medium,
-                                    color = Color(0xFF333D79)
                                 )
                             }
                         }
                     }
                     
-                    // Day pattern selection
-                    Column(
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
                         Text(
-                            "Class Days:",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                            color = Color(0xFF374151),
-                            modifier = Modifier.padding(bottom = 8.dp)
                         )
                         
-                        var patternExpanded by remember { mutableStateOf(false) }
                         ExposedDropdownMenuBox(
-                            expanded = patternExpanded,
-                            onExpandedChange = { patternExpanded = it }
                         ) {
                             OutlinedTextField(
-                                value = if (selectedDays.isNotEmpty()) {
-                                    dayPatterns.find { it.first == selectedDays.joinToString(",") }?.second ?: "Custom pattern"
-                                } else {
-                                    "Choose common pattern"
-                                },
-                                onValueChange = { },
                                 readOnly = true,
-                                label = { Text("Day Pattern", color = Color(0xFF6B7280)) },
                                 trailingIcon = {
-                                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = patternExpanded)
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .menuAnchor(),
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedBorderColor = Color(0xFF333D79),
-                                    focusedLabelColor = Color(0xFF333D79),
-                                    unfocusedBorderColor = Color(0xFFD1D5DB),
-                                    unfocusedLabelColor = Color(0xFF6B7280),
-                                    focusedContainerColor = Color.White,
-                                    unfocusedContainerColor = Color.White
                                 )
                             )
                             ExposedDropdownMenu(
-                                expanded = patternExpanded,
-                                onDismissRequest = { patternExpanded = false }
                             ) {
-                                DropdownMenuItem(
-                                    text = { Text("Choose common pattern", color = Color(0xFF9CA3AF)) },
-                                    onClick = {
-                                        selectedDays = emptyList()
-                                        patternExpanded = false
-                                    }
-                                )
                                 dayPatterns.forEach { (pattern, label) ->
                                     DropdownMenuItem(
                                         text = { Text(label) },
                                         onClick = {
-                                            handleDayPatternChange(pattern)
-                                            patternExpanded = false
                                         }
                                     )
                                 }
                             }
                         }
-                    }
                     
-                    // Individual days selection
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 12.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFAFBFC)),
-                        border = BorderStroke(1.dp, Color(0xFFE1E5E9)),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp)
-                        ) {
                             Text(
-                                "Or select individual days:",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF6B7280),
-                                modifier = Modifier.padding(bottom = 12.dp)
                             )
                             
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                dayOptions.forEach { (dayCode, dayName) ->
-                                    val isSelected = selectedDays.contains(dayCode)
-                                    OutlinedButton(
-                                        onClick = { handleDayChange(dayCode) },
                                         modifier = Modifier
-                                            .height(40.dp)
-                                            .weight(1f),
-                                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
-                                        colors = ButtonDefaults.outlinedButtonColors(
-                                            containerColor = if (isSelected) Color(0xFF333D79) else Color.White,
-                                            contentColor = if (isSelected) Color.White else Color(0xFF374151)
-                                        ),
-                                        border = BorderStroke(
-                                            1.dp, 
-                                            if (isSelected) Color(0xFF333D79) else Color(0xFFD1D5DB)
-                                        ),
-                                        shape = RoundedCornerShape(8.dp)
                                     ) {
-                                        Text(
-                                            text = dayCode,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
-                                            textAlign = TextAlign.Center,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
                                         )
-                                    }
-                                }
-                            }
                         }
                     }
                     
                     // Time selection 
-                    Column(
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            "Class Time:",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                            color = Color(0xFF374151),
-                            modifier = Modifier.padding(bottom = 12.dp)
-                        )
-                        
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.Top
                         ) {
-                            // Start Time
-                            var startTimeExpanded by remember { mutableStateOf(false) }
                             Column(modifier = Modifier.weight(1f)) {
                                 ExposedDropdownMenuBox(
                                     expanded = startTimeExpanded,
                                     onExpandedChange = { startTimeExpanded = it }
                                 ) {
                                     OutlinedTextField(
-                                        value = startTime.ifEmpty { "Start time" },
-                                        onValueChange = { },
                                         readOnly = true,
-                                        label = { Text("Start", color = Color(0xFF6B7280)) },
                                         trailingIcon = {
                                             ExposedDropdownMenuDefaults.TrailingIcon(expanded = startTimeExpanded)
                                         },
@@ -1628,22 +1323,13 @@ fun AddClassDialog(
                                             .menuAnchor(),
                                         colors = OutlinedTextFieldDefaults.colors(
                                             focusedBorderColor = Color(0xFF333D79),
-                                            focusedLabelColor = Color(0xFF333D79),
-                                            unfocusedBorderColor = Color(0xFFD1D5DB),
-                                            unfocusedLabelColor = Color(0xFF6B7280),
-                                            focusedContainerColor = Color.White,
-                                            unfocusedContainerColor = Color.White
                                         )
                                     )
                                     ExposedDropdownMenu(
                                         expanded = startTimeExpanded,
-                                        onDismissRequest = { startTimeExpanded = false }
                                     ) {
-                                        timeOptions.forEach { time ->
                                             DropdownMenuItem(
-                                                text = { Text(time) },
                                                 onClick = {
-                                                    startTime = time
                                                     startTimeExpanded = false
                                                 }
                                             )
@@ -1652,33 +1338,16 @@ fun AddClassDialog(
                                 }
                             }
                             
-                            // Separator
-                            Box(
-                                modifier = Modifier
-                                    .padding(top = 28.dp)
-                                    .height(24.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
                                 Text(
-                                    "to",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Color(0xFF6B7280),
-                                    fontWeight = FontWeight.Medium
                                 )
-                            }
                             
-                            // End Time
                             var endTimeExpanded by remember { mutableStateOf(false) }
-                            Column(modifier = Modifier.weight(1f)) {
                                 ExposedDropdownMenuBox(
                                     expanded = endTimeExpanded,
                                     onExpandedChange = { endTimeExpanded = it }
                                 ) {
                                     OutlinedTextField(
-                                        value = endTime.ifEmpty { "End time" },
-                                        onValueChange = { },
                                         readOnly = true,
-                                        label = { Text("End", color = Color(0xFF6B7280)) },
                                         trailingIcon = {
                                             ExposedDropdownMenuDefaults.TrailingIcon(expanded = endTimeExpanded)
                                         },
@@ -1687,22 +1356,13 @@ fun AddClassDialog(
                                             .menuAnchor(),
                                         colors = OutlinedTextFieldDefaults.colors(
                                             focusedBorderColor = Color(0xFF333D79),
-                                            focusedLabelColor = Color(0xFF333D79),
-                                            unfocusedBorderColor = Color(0xFFD1D5DB),
-                                            unfocusedLabelColor = Color(0xFF6B7280),
-                                            focusedContainerColor = Color.White,
-                                            unfocusedContainerColor = Color.White
                                         )
                                     )
                                     ExposedDropdownMenu(
                                         expanded = endTimeExpanded,
-                                        onDismissRequest = { endTimeExpanded = false }
                                     ) {
-                                        timeOptions.forEach { time ->
                                             DropdownMenuItem(
-                                                text = { Text(time) },
                                                 onClick = {
-                                                    endTime = time
                                                     endTimeExpanded = false
                                                 }
                                             )
@@ -1716,95 +1376,26 @@ fun AddClassDialog(
 
                 // Error message
                 if (classCreationState is ClassCreationState.Error) {
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = Color(0xFFFEF2F2)
-                        ),
-                        border = BorderStroke(1.dp, Color(0xFFFECACA))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                Icons.Default.Error,
-                                contentDescription = null,
-                                tint = Color(0xFFDC2626),
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                classCreationState.message,
-                                color = Color(0xFFDC2626),
-                                style = MaterialTheme.typography.bodySmall
                             )
-                        }
-                    }
                 }
             }
         },
         confirmButton = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedButton(
-                    onClick = onDismiss,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = Color(0xFF6B7280)
-                    ),
-                    border = BorderStroke(1.dp, Color(0xFFD1D5DB)),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text(
-                        "Cancel",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
                 
                 Button(
-                    onClick = onCreateClass,
                     enabled = className.isNotBlank() && 
-                             (classStudentCount.toIntOrNull() ?: 0) > 0 &&
-                             selectedDays.isNotEmpty() &&
-                             startTime.isNotEmpty() &&
-                             endTime.isNotEmpty() &&
                              classCreationState !is ClassCreationState.Loading,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF333D79),
-                        disabledContainerColor = Color(0xFFE5E7EB)
-                    ),
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp),
-                    shape = RoundedCornerShape(8.dp)
                 ) {
                     if (classCreationState is ClassCreationState.Loading) {
                         CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
                             color = Color.White,
                             strokeWidth = 2.dp
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            "Creating...",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium
-                        )
                     } else {
-                        Text(
-                            "Add Class",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium
-                        )
                     }
                 }
             }
-        },
-        dismissButton = null
     )
 }

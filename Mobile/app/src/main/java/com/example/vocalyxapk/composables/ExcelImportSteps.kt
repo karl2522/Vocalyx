@@ -89,27 +89,27 @@ private fun EmptyFileState(onSelectFile: () -> Unit) {
                 modifier = Modifier.size(64.dp),
                 tint = Color(0xFF333D79)
             )
-            
+
             Spacer(modifier = Modifier.height(16.dp))
-            
+
             Text(
                 "No File Selected",
                 style = MaterialTheme.typography.titleLarge,
                 color = Color(0xFF333D79),
                 fontWeight = FontWeight.Bold
             )
-            
+
             Spacer(modifier = Modifier.height(8.dp))
-            
+
             Text(
                 "Upload an Excel file to import data",
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color(0xFF666666),
                 textAlign = TextAlign.Center
             )
-            
+
             Spacer(modifier = Modifier.height(24.dp))
-            
+
             Button(
                 onClick = onSelectFile,
                 colors = ButtonDefaults.buttonColors(
@@ -125,9 +125,9 @@ private fun EmptyFileState(onSelectFile: () -> Unit) {
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Select Excel File")
             }
-            
+
             Spacer(modifier = Modifier.height(8.dp))
-            
+
             Text(
                 "Supported formats: .xlsx, .xls",
                 style = MaterialTheme.typography.bodySmall,
@@ -210,9 +210,9 @@ private fun FileInfoContent(
                         }
                     }
                 }
-                
+
                 Spacer(modifier = Modifier.width(16.dp))
-                
+
                 // File name and details
                 Column {
                     Text(
@@ -233,7 +233,7 @@ private fun FileInfoContent(
                                 color = Color(0xFF666666)
                             )
                         }
-                        
+
                         if (fileDate.isNotEmpty()) {
                             if (fileSize.isNotEmpty()) {
                                 Box(
@@ -242,7 +242,7 @@ private fun FileInfoContent(
                                         .background(Color(0xFFCCCCCC), CircleShape)
                                 )
                             }
-                            
+
                             Text(
                                 text = fileDate,
                                 style = MaterialTheme.typography.bodySmall,
@@ -252,9 +252,9 @@ private fun FileInfoContent(
                     }
                 }
             }
-            
+
             Divider(color = Color(0xFFEEEEEE))
-            
+
             // Sheet selection if multiple sheets exist
             if (sheetNames.isNotEmpty()) {
                 Column(
@@ -266,11 +266,11 @@ private fun FileInfoContent(
                         color = Color(0xFF333333),
                         fontWeight = FontWeight.Medium
                     )
-                    
+
                     Spacer(modifier = Modifier.height(8.dp))
-                    
+
                     var sheetMenuExpanded by remember { mutableStateOf(false) }
-                    
+
                     ExposedDropdownMenuBox(
                         expanded = sheetMenuExpanded,
                         onExpandedChange = { sheetMenuExpanded = it }
@@ -290,7 +290,7 @@ private fun FileInfoContent(
                                 unfocusedBorderColor = Color(0xFFDDDDDD)
                             )
                         )
-                        
+
                         ExposedDropdownMenu(
                             expanded = sheetMenuExpanded,
                             onDismissRequest = { sheetMenuExpanded = false }
@@ -307,10 +307,10 @@ private fun FileInfoContent(
                         }
                     }
                 }
-                
+
                 Divider(color = Color(0xFFEEEEEE))
             }
-            
+
             // Import information
             Column(
                 modifier = Modifier.padding(vertical = 16.dp)
@@ -321,9 +321,9 @@ private fun FileInfoContent(
                     color = Color(0xFF333333),
                     fontWeight = FontWeight.Medium
                 )
-                
+
                 Spacer(modifier = Modifier.height(8.dp))
-                
+
                 Card(
                     colors = CardDefaults.cardColors(
                         containerColor = Color(0xFFF8F9FC)
@@ -338,16 +338,16 @@ private fun FileInfoContent(
                             number = 1,
                             text = "Data will be loaded into the spreadsheet editor"
                         )
-                        
+
                         Spacer(modifier = Modifier.height(12.dp))
-                        
+
                         StepItem(
                             number = 2,
                             text = "You can map columns to specific data fields"
                         )
-                        
+
                         Spacer(modifier = Modifier.height(12.dp))
-                        
+
                         StepItem(
                             number = 3,
                             text = "Save changes to update class records"
@@ -380,9 +380,9 @@ private fun StepItem(number: Int, text: String) {
                 color = Color(0xFF333D79)
             )
         }
-        
+
         Spacer(modifier = Modifier.width(12.dp))
-        
+
         Text(
             text = text,
             style = MaterialTheme.typography.bodyMedium,
@@ -425,9 +425,9 @@ fun PreviewDataStep(
                     tint = Color(0xFF333D79),
                     modifier = Modifier.size(24.dp)
                 )
-                
+
                 Spacer(modifier = Modifier.width(12.dp))
-                
+
                 Column {
                     Text(
                         text = "Data Preview",
@@ -435,7 +435,7 @@ fun PreviewDataStep(
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF333D79)
                     )
-                    
+
                     Text(
                         text = "This is a preview of your data. In the next step, you'll be able to map columns to specific fields.",
                         style = MaterialTheme.typography.bodySmall,
@@ -481,7 +481,7 @@ fun PreviewDataStep(
                     // Header row (if available)
                     if (previewData.size > 0) {
                         val headers = previewData[0]
-                        
+
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -492,7 +492,7 @@ fun PreviewDataStep(
                             headers.forEachIndexed { index, header ->
                                 val isNameColumn = index == detectedNameColumn
                                 val isIdColumn = index == detectedIdColumn
-                                
+
                                 Box(
                                     modifier = Modifier
                                         .width(120.dp)
@@ -511,7 +511,7 @@ fun PreviewDataStep(
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
-                                    
+
                                     if (isNameColumn || isIdColumn) {
                                         Row(
                                             modifier = Modifier
@@ -525,9 +525,9 @@ fun PreviewDataStep(
                                                 tint = if (isNameColumn) Color(0xFF388E3C) else Color(0xFF1976D2),
                                                 modifier = Modifier.size(12.dp)
                                             )
-                                            
+
                                             Spacer(modifier = Modifier.width(4.dp))
-                                            
+
                                             Text(
                                                 text = if (isNameColumn) "Name" else "ID",
                                                 style = MaterialTheme.typography.bodySmall,
@@ -549,7 +549,7 @@ fun PreviewDataStep(
                         } else {
                             emptyList()
                         }
-                        
+
                         items(dataRows) { row ->
                             Row(
                                 modifier = Modifier
@@ -573,7 +573,7 @@ fun PreviewDataStep(
                                     }
                                 }
                             }
-                            
+
                             Divider(color = Color(0xFFEEEEEE))
                         }
                     }
@@ -638,14 +638,14 @@ fun MapColumnsStep(
                     color = Color(0xFF333333),
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
-                
+
                 Text(
                     text = "Choose a template to automatically map common columns",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0xFF666666),
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
-                
+
                 // Template chips
                 Row(
                     modifier = Modifier
@@ -663,7 +663,7 @@ fun MapColumnsStep(
                             selectedLabelColor = Color.White
                         )
                     )
-                    
+
                     // Template options
                     ImportTemplates.ALL_TEMPLATES.forEach { template ->
                         FilterChip(
@@ -698,14 +698,14 @@ fun MapColumnsStep(
                     color = Color(0xFF333333),
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
-                
+
                 Text(
                     text = "Connect your spreadsheet columns to the appropriate student data fields",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0xFF666666),
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
-                
+
                 // Info card
                 Card(
                     modifier = Modifier
@@ -726,9 +726,9 @@ fun MapColumnsStep(
                             tint = Color(0xFF1976D2),
                             modifier = Modifier.size(20.dp)
                         )
-                        
+
                         Spacer(modifier = Modifier.width(8.dp))
-                        
+
                         Text(
                             text = "Student name columns will be automatically detected. Map additional columns as needed.",
                             style = MaterialTheme.typography.bodySmall,
@@ -736,7 +736,7 @@ fun MapColumnsStep(
                         )
                     }
                 }
-                
+
                 // Field mappings
                 Column(
                     modifier = Modifier.padding(bottom = 16.dp),
@@ -750,9 +750,9 @@ fun MapColumnsStep(
                         color = Color(0xFF333333),
                         modifier = Modifier.padding(bottom = 4.dp)
                     )
-                    
-                    SystemField.values().filter { 
-                        it == SystemField.STUDENT_ID || it == SystemField.STUDENT_NAME 
+
+                    SystemField.values().filter {
+                        it == SystemField.STUDENT_ID || it == SystemField.STUDENT_NAME
                     }.forEach { field ->
                         MappingDropdown(
                             fieldName = field.displayName,
@@ -764,9 +764,9 @@ fun MapColumnsStep(
                             isRequired = true
                         )
                     }
-                    
+
                     Divider(color = Color(0xFFEEEEEE))
-                    
+
                     // Optional fields
                     Text(
                         text = "Additional Fields",
@@ -775,9 +775,9 @@ fun MapColumnsStep(
                         color = Color(0xFF333333),
                         modifier = Modifier.padding(vertical = 4.dp)
                     )
-                    
-                    SystemField.values().filter { 
-                        it != SystemField.STUDENT_ID && it != SystemField.STUDENT_NAME 
+
+                    SystemField.values().filter {
+                        it != SystemField.STUDENT_ID && it != SystemField.STUDENT_NAME
                     }.forEach { field ->
                         MappingDropdown(
                             fieldName = field.displayName,
@@ -805,7 +805,7 @@ private fun MappingDropdown(
     isRequired: Boolean = false
 ) {
     var expanded by remember { mutableStateOf(false) }
-    
+
     Column {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -817,7 +817,7 @@ private fun MappingDropdown(
                 fontWeight = FontWeight.Medium,
                 color = Color(0xFF333333)
             )
-            
+
             if (isRequired) {
                 Text(
                     text = " *",
@@ -827,7 +827,7 @@ private fun MappingDropdown(
                 )
             }
         }
-        
+
         ExposedDropdownMenuBox(
             expanded = expanded,
             onExpandedChange = { expanded = it }
@@ -852,7 +852,7 @@ private fun MappingDropdown(
                     { Text("This field is required") }
                 } else null
             )
-            
+
             ExposedDropdownMenu(
                 expanded = expanded,
                 onDismissRequest = { expanded = false },

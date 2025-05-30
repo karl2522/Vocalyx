@@ -117,12 +117,12 @@ class HomeActivity : ComponentActivity() {
                                         )
                                     }
                                 }
-                                
+
                                 Spacer(modifier = Modifier.height(12.dp))
-                                
+
                                 // Drawer Menu Items with improved styling
                                 NavigationDrawerItem(
-                                    icon = { 
+                                    icon = {
                                         Box(
                                             modifier = Modifier
                                                 .size(36.dp)
@@ -131,21 +131,21 @@ class HomeActivity : ComponentActivity() {
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Icon(
-                                                Icons.Rounded.Notifications, 
-                                                contentDescription = "Notifications", 
+                                                Icons.Rounded.Notifications,
+                                                contentDescription = "Notifications",
                                                 tint = MaterialTheme.colorScheme.primary,
                                                 modifier = Modifier.size(20.dp)
                                             )
                                         }
                                     },
-                                    label = { 
+                                    label = {
                                         Text(
-                                            "Notifications", 
+                                            "Notifications",
                                             color = MaterialTheme.colorScheme.onSurface,
                                             style = MaterialTheme.typography.bodyMedium.copy(
                                                 fontFamily = DMSans
                                             )
-                                        ) 
+                                        )
                                     },
                                     selected = false,
                                     onClick = { /* TODO: Implement notifications */ },
@@ -157,7 +157,7 @@ class HomeActivity : ComponentActivity() {
                                 )
                                 
                                 NavigationDrawerItem(
-                                    icon = { 
+                                    icon = {
                                         Box(
                                             modifier = Modifier
                                                 .size(36.dp)
@@ -166,21 +166,21 @@ class HomeActivity : ComponentActivity() {
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Icon(
-                                                Icons.Rounded.Download, 
-                                                contentDescription = "Export Reports", 
+                                                Icons.Rounded.Download,
+                                                contentDescription = "Export Reports",
                                                 tint = MaterialTheme.colorScheme.primary,
                                                 modifier = Modifier.size(20.dp)
                                             )
                                         }
                                     },
-                                    label = { 
+                                    label = {
                                         Text(
-                                            "Export Reports", 
+                                            "Export Reports",
                                             color = MaterialTheme.colorScheme.onSurface,
                                             style = MaterialTheme.typography.bodyMedium.copy(
                                                 fontFamily = DMSans
                                             )
-                                        ) 
+                                        )
                                     },
                                     selected = false,
                                     onClick = { /* TODO: Implement export */ },
@@ -192,7 +192,7 @@ class HomeActivity : ComponentActivity() {
                                 )
                                 
                                 NavigationDrawerItem(
-                                    icon = { 
+                                    icon = {
                                         Box(
                                             modifier = Modifier
                                                 .size(36.dp)
@@ -201,21 +201,21 @@ class HomeActivity : ComponentActivity() {
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Icon(
-                                                Icons.Rounded.Person, 
-                                                contentDescription = "Profile", 
+                                                Icons.Rounded.Person,
+                                                contentDescription = "Profile",
                                                 tint = MaterialTheme.colorScheme.primary,
                                                 modifier = Modifier.size(20.dp)
                                             )
                                         }
                                     },
-                                    label = { 
+                                    label = {
                                         Text(
-                                            "Profile", 
+                                            "Profile",
                                             color = MaterialTheme.colorScheme.onSurface,
                                             style = MaterialTheme.typography.bodyMedium.copy(
                                                 fontFamily = DMSans
                                             )
-                                        ) 
+                                        )
                                     },
                                     selected = false,
                                     onClick = { /* TODO: Implement profile */ },
@@ -227,7 +227,7 @@ class HomeActivity : ComponentActivity() {
                                 )
                                 
                                 NavigationDrawerItem(
-                                    icon = { 
+                                    icon = {
                                         Box(
                                             modifier = Modifier
                                                 .size(36.dp)
@@ -236,21 +236,21 @@ class HomeActivity : ComponentActivity() {
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Icon(
-                                                Icons.Rounded.Settings, 
-                                                contentDescription = "Settings", 
+                                                Icons.Rounded.Settings,
+                                                contentDescription = "Settings",
                                                 tint = MaterialTheme.colorScheme.primary,
                                                 modifier = Modifier.size(20.dp)
                                             )
                                         }
                                     },
-                                    label = { 
+                                    label = {
                                         Text(
-                                            "Settings", 
+                                            "Settings",
                                             color = MaterialTheme.colorScheme.onSurface,
                                             style = MaterialTheme.typography.bodyMedium.copy(
                                                 fontFamily = DMSans
                                             )
-                                        ) 
+                                        )
                                     },
                                     selected = false,
                                     onClick = { /* TODO: Implement settings */ },
@@ -262,7 +262,7 @@ class HomeActivity : ComponentActivity() {
                                 )
                                 
                                 NavigationDrawerItem(
-                                    icon = { 
+                                    icon = {
                                         Box(
                                             modifier = Modifier
                                                 .size(36.dp)
@@ -271,21 +271,21 @@ class HomeActivity : ComponentActivity() {
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Icon(
-                                                Icons.Rounded.Info, 
-                                                contentDescription = "About/Help", 
+                                                Icons.Rounded.Info,
+                                                contentDescription = "About/Help",
                                                 tint = MaterialTheme.colorScheme.primary,
                                                 modifier = Modifier.size(20.dp)
                                             )
                                         }
                                     },
-                                    label = { 
+                                    label = {
                                         Text(
-                                            "About/Help", 
+                                            "About/Help",
                                             color = MaterialTheme.colorScheme.onSurface,
                                             style = MaterialTheme.typography.bodyMedium.copy(
                                                 fontFamily = DMSans
                                             )
-                                        ) 
+                                        )
                                     },
                                     selected = false,
                                     onClick = { /* TODO: Implement about/help */ },
@@ -295,14 +295,14 @@ class HomeActivity : ComponentActivity() {
                                     ),
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                                 )
-                                
+
                                 Divider(
                                     color = MaterialTheme.colorScheme.outlineVariant,
                                     modifier = Modifier.padding(vertical = 12.dp, horizontal = 24.dp)
                                 )
 
                                 NavigationDrawerItem(
-                                    icon = { 
+                                    icon = {
                                         Box(
                                             modifier = Modifier
                                                 .size(36.dp)
@@ -311,22 +311,22 @@ class HomeActivity : ComponentActivity() {
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Icon(
-                                                Icons.Rounded.Logout, 
-                                                contentDescription = "Logout", 
+                                                Icons.Rounded.Logout,
+                                                contentDescription = "Logout",
                                                 tint = Color(0xFFE53935),
                                                 modifier = Modifier.size(20.dp)
                                             )
                                         }
                                     },
-                                    label = { 
+                                    label = {
                                         Text(
-                                            "Logout", 
+                                            "Logout",
                                             color = Color(0xFFE53935),
                                             style = MaterialTheme.typography.bodyMedium.copy(
                                                 fontFamily = DMSans,
                                                 fontWeight = FontWeight.Medium
                                             )
-                                        ) 
+                                        )
                                     },
                                     selected = false,
                                     onClick = {
@@ -433,7 +433,7 @@ class HomeActivity : ComponentActivity() {
                                                         stiffness = Spring.StiffnessLow
                                                     ), label = "iconSize"
                                                 )
-                                                
+
                                                 NavigationBarItem(
                                                     icon = {
                                                         Box(
@@ -483,8 +483,8 @@ class HomeActivity : ComponentActivity() {
                                                         }
                                                     },
                                                     selected = selected,
-                                                    onClick = { 
-                                                        selectedTab = index 
+                                                    onClick = {
+                                                        selectedTab = index
                                                     },
                                                     colors = NavigationBarItemDefaults.colors(
                                                         selectedIconColor = Color.White,
@@ -567,7 +567,7 @@ fun HomeScreen() {
                                     stiffness = Spring.StiffnessLow
                                 ), label = "iconSize"
                             )
-                            
+
                             NavigationBarItem(
                                 icon = {
                                     Box(

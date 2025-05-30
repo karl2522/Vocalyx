@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FiArchive, FiCalendar, FiCheck, FiClock, FiPlus, FiSearch, FiTag, FiTrendingUp, FiTrash2, FiUsers } from 'react-icons/fi';
+import { FiArchive, FiCalendar, FiCheck, FiClock, FiPlus, FiTag, FiTrendingUp, FiUsers } from 'react-icons/fi';
 import { MdOutlineClass, MdOutlineSchool } from 'react-icons/md';
-import { RiBookOpenLine, RiSoundModuleLine } from 'react-icons/ri';
+import { RiBookOpenLine } from 'react-icons/ri';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { courseService, teamService } from '../services/api.js';
@@ -370,7 +370,7 @@ const Dashboard = () => {
         
         setCourses(prevCourses => [response.data, ...prevCourses]);
         
-        showToast.success('Course created successfully!');
+        showToast.created('Course');
     } catch (error) {
         console.error('Error creating course:', error);
         showToast.error('Failed to create course');
