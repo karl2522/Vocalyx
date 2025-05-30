@@ -355,6 +355,7 @@ export const courseService = {
 };
 
 export const userService = {
+    getProfile: () => api.get('/profile/'),
     updateProfile: (userData) => api.put('/update-profile/', userData),
     uploadProfilePicture: (file) => {
         const formData = new FormData();

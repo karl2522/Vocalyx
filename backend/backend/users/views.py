@@ -519,3 +519,30 @@ def update_profile(request):
             'profile_picture': user.profile_picture
         }
     })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_profile(request):
+    """Get current user's profile"""
+    user = request.user
+
+    return Response({
+        'user': {
+            'id': str(user.id),
+            'email': user.email,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'institution': user.institution,
+            'position': user.position,
+            'bio': user.bio,
+            'has_google': user.has_google,
+            'has_microsoft': user.has_microsoft,
+            'profile_picture': user.profile_picture,
+            'email_verified': user.email_verified,
+            'created_at': user.created_at.isoformat(),
+            'updated_at': user.updated_at.isoformat(),
+            'google_id': user.google_id,
+            'microsoft_id': user.microsoft_id
+        }
+    })

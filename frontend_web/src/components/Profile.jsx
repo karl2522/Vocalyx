@@ -63,9 +63,52 @@ const Profile = () => {
   const [loadingImage, setLoadingImage] = useState(false);
   const [activeTab, setActiveTab] = useState('profile');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (user) {
+    const fetchProfile = async () => {
+      try {
+        setIsLoading(true);
+        const response = await userService.getProfile();
+        const freshUser = response.data.user;
+        
+        // Update user context and localStorage with fresh data
+        setUser(freshUser);
+        localStorage.setItem('user', JSON.stringify(freshUser));
+        
+        // Update form data with fresh data
+        setFormData({
+          first_name: freshUser.first_name || '',
+          last_name: freshUser.last_name || '',
+          email: freshUser.email || '',
+          institution: freshUser.institution || 'Cebu Institute of Technology - University',
+          position: freshUser.position || 'Teacher/Instructor',
+          bio: freshUser.bio || '',
+        });
+      } catch (error) {
+        console.error('Error fetching profile:', error);
+        // Fall back to cached data if API fails
+        if (user) {
+          setFormData({
+            first_name: user.first_name || '',
+            last_name: user.last_name || '',
+            email: user.email || '',
+            institution: user.institution || 'Cebu Institute of Technology - University',
+            position: user.position || 'Teacher/Instructor',
+            bio: user.bio || '',
+          });
+        }
+        showToast.error('Failed to load latest profile data');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchProfile();
+  }, []); // Run once on mount
+
+  useEffect(() => {
+    if (user && !isLoading) {
       setFormData({
         first_name: user.first_name || '',
         last_name: user.last_name || '',
@@ -75,7 +118,7 @@ const Profile = () => {
         bio: user.bio || '',
       });
     }
-  }, [user]);
+  }, [user, isLoading]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -98,7 +141,7 @@ const Profile = () => {
         bio: formData.bio
       });
       
-      // Update local storage and context
+      // Update local storage and context with fresh data
       const updatedUser = response.data.user;
       localStorage.setItem('user', JSON.stringify(updatedUser));
       setUser(updatedUser);
@@ -162,6 +205,19 @@ const Profile = () => {
 
     reader.readAsDataURL(file);
   };
+
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <div className="w-8 h-8 border-4 border-[#333D79] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading profile...</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>

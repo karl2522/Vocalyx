@@ -13,6 +13,7 @@ import com.example.vocalyxapk.models.CreateTeamRequest
 import com.example.vocalyxapk.models.ExcelFileItem
 import com.example.vocalyxapk.models.ExcelUploadResponse
 import com.example.vocalyxapk.models.FirebaseAuthRequest
+import com.example.vocalyxapk.models.GetProfileResponse
 import com.example.vocalyxapk.models.JoinTeamRequest
 import com.example.vocalyxapk.models.LoginRequest
 import com.example.vocalyxapk.models.LoginResponse
@@ -29,7 +30,6 @@ import com.example.vocalyxapk.models.UpdateMemberPermissionsRequest
 import com.example.vocalyxapk.models.UpdateProfileRequest
 import com.example.vocalyxapk.models.UpdateProfileResponse
 import com.example.vocalyxapk.models.UserItem
-import com.example.vocalyxapk.models.UserProfile
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import retrofit2.Response
@@ -176,7 +176,7 @@ interface ApiService {
     ): Response<Map<String, String>>
 
     @GET("api/teams/search_users/")
-    suspend fun searchUsers(@Query("q") query: String): Response<List<UserItem>>=
+    suspend fun searchUsers(@Query("q") query: String): Response<List<UserItem>>
 
     @GET("api/teams/available_courses/")
     suspend fun getAvailableCourses(): Response<List<CourseItem>>
@@ -191,8 +191,10 @@ interface ApiService {
     suspend fun acceptInvitation(@Path("id") invitationId: Int): Response<TeamInvitationItem>
 
     @PUT("api/update-profile/")
-    suspend fun updateProfile(@Body updateRequest: UpdateProfileRequest): Response<UpdateProfileResponse>
+    suspend fun updateProfile(
+        @Body updateRequest: UpdateProfileRequest
+    ): Response<UpdateProfileResponse>
 
     @GET("api/profile/")
-    suspend fun getProfile(): Response<UserProfile>
+    suspend fun getProfile(): Response<GetProfileResponse>
 }
