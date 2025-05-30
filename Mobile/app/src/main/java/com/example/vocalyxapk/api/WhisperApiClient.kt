@@ -34,8 +34,12 @@ class WhisperApiClient(private val context: Context) {
         Log.d("WhisperApiClient", "API key storage not needed when using backend API")
     }
 
-    // Transcribe audio bytes using backend API
-    suspend fun transcribeAudioBytes(audioBytes: ByteArray, language: String? = null): Result<String> {
+    // 🎯 ENHANCED: Transcribe audio bytes with optional student names
+    suspend fun transcribeAudioBytes(
+        audioBytes: ByteArray,
+        language: String? = null,
+        studentNames: List<String>? = null
+    ): Result<String> {
         return try {
             Log.d("WhisperApiClient", "Transcribing ${audioBytes.size} bytes of audio")
 
@@ -64,6 +68,13 @@ class WhisperApiClient(private val context: Context) {
                     language?.let {
                         addFormDataPart("language", it)
                     }
+
+                    // 🎯 NEW: Add student names if provided
+                    studentNames?.let { names ->
+                        val namesJson = names.joinToString(",")
+                        addFormDataPart("student_names", namesJson)
+                        Log.d("WhisperApiClient", "Added student names: $namesJson")
+                    }
                 }
                 .build()
 
@@ -89,7 +100,23 @@ class WhisperApiClient(private val context: Context) {
                 val jsonObject = JSONObject(responseBody)
                 if (jsonObject.optBoolean("success", false)) {
                     val text = jsonObject.optString("text", "")
-                    Log.d("WhisperApiClient", "Transcription successful: $text")
+
+                    // 🎯 NEW: Log additional response data for debugging
+                    val confidence = jsonObject.optDouble("confidence", 0.0)
+                    Log.d("WhisperApiClient", "Transcription successful: '$text' (confidence: $confidence)")
+
+                    // Log alternatives if available
+                    if (jsonObject.has("alternatives")) {
+                        val alternatives = jsonObject.getJSONArray("alternatives")
+                        Log.d("WhisperApiClient", "Available alternatives: ${alternatives.length()}")
+                        for (i in 0 until alternatives.length()) {
+                            val alt = alternatives.getJSONObject(i)
+                            val altText = alt.optString("transcript", "")
+                            val altConf = alt.optDouble("confidence", 0.0)
+                            Log.d("WhisperApiClient", "  Alternative $i: '$altText' (confidence: $altConf)")
+                        }
+                    }
+
                     Result.success(text)
                 } else {
                     val errorMessage = jsonObject.optString("error", "Unknown error")
@@ -107,7 +134,12 @@ class WhisperApiClient(private val context: Context) {
         }
     }
 
-    suspend fun transcribeAudio(audioFile: File, language: String? = null): Result<String> {
-        return transcribeAudioBytes(audioFile.readBytes(), language)
+    // 🎯 ENHANCED: Transcribe audio file with optional student names
+    suspend fun transcribeAudio(
+        audioFile: File,
+        language: String? = null,
+        studentNames: List<String>? = null
+    ): Result<String> {
+        return transcribeAudioBytes(audioFile.readBytes(), language, studentNames)
     }
 }

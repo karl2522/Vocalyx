@@ -344,7 +344,12 @@ fun VoiceRecordingInterface(
                 val audioBytes = outputStream.toByteArray()
                 Log.d("VoiceRecording", "Google Cloud: Recorded ${audioBytes.size} bytes")
 
-                val result = whisperClient.transcribeAudioBytes(audioBytes)
+                // 🎯 NEW: Get student names from Excel data (for future implementation)
+                // For now, we'll use some sample names - you can replace this later
+                val sampleStudentNames = listOf("Omen", "Owen", "Ethan", "Aaron", "Zaki", "John", "Jane")
+
+                // 🎯 ENHANCED: Call with student names
+                val result = whisperClient.transcribeAudioBytes(audioBytes, "en-US", sampleStudentNames)
 
                 result.fold(
                     onSuccess = { transcription ->

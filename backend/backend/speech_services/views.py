@@ -31,6 +31,11 @@ class SpeechServiceViewSet(viewsets.ViewSet):
             audio_file = request.FILES.get('audio_file')
             language = request.data.get('language')
 
+            # 🎯 NEW: Get student names from request (for future use)
+            student_names_str = request.data.get('student_names', '')
+            student_names = [name.strip() for name in student_names_str.split(',') if
+                             name.strip()] if student_names_str else None
+
             if not audio_file:
                 return Response(
                     {"success": False, "error": "No audio file provided"},
@@ -40,8 +45,8 @@ class SpeechServiceViewSet(viewsets.ViewSet):
             # Read the audio file
             audio_bytes = audio_file.read()
 
-            # Call OpenAI Whisper API through our utility
-            result = transcribe_audio(audio_bytes, language)
+            # 🎯 ENHANCED: Call improved transcribe function with student names
+            result = transcribe_audio(audio_bytes, language, student_names)
 
             # Record usage for monitoring
             TranscriptionUsage.objects.create(
