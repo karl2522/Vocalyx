@@ -30,9 +30,11 @@ data class ExcelFileItem(
         val data = try {
             @Suppress("UNCHECKED_CAST")
             (sheet["data"] as? List<Map<String, Any>>)?.map { row ->
-                row.mapValues { it.value.toString() }
+                row.mapValues { it.value?.toString() ?: "" }
             } ?: emptyList()
         } catch (e: Exception) {
+            // Log the error for debugging but don't crash
+            android.util.Log.w("ExcelModels", "Error parsing sheet data: ${e.message}")
             emptyList()
         }
         
@@ -40,10 +42,12 @@ data class ExcelFileItem(
             @Suppress("UNCHECKED_CAST")
             (sheet["headers"] as? List<String>) ?: emptyList()
         } catch (e: Exception) {
+            // Log the error for debugging but don't crash
+            android.util.Log.w("ExcelModels", "Error parsing sheet headers: ${e.message}")
             emptyList()
         }
         
-        return SheetContent(data.map { it.mapValues { it.value as String } }, headers)
+        return SheetContent(data, headers)
     }
 }
 

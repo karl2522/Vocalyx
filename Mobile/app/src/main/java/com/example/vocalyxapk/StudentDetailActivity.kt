@@ -149,27 +149,32 @@ fun StudentDetailScreen(
         
         val scores = mutableListOf<StudentScore>()
         studentData.forEach { (columnName, value) ->
-            // Skip name columns and empty values
-            if (!columnName.contains("name", ignoreCase = true) && 
-                !columnName.contains("id", ignoreCase = true) && 
-                value.isNotEmpty() && 
-                value != "0" && 
-                value != "-") {
-                
-                // Try to parse as score (could be "85/100", "85%", "85", etc.)
-                val scoreInfo = parseScore(value)
-                if (scoreInfo != null) {
-                    scores.add(
-                        StudentScore(
-                            assessmentName = columnName,
-                            score = scoreInfo.first,
-                            maxScore = scoreInfo.second,
-                            percentage = scoreInfo.third,
-                            date = "N/A", // Could be extracted if date column exists
-                            category = categorizeAssessment(columnName)
+            try {
+                // Skip name columns and empty values
+                if (!columnName.contains("name", ignoreCase = true) && 
+                    !columnName.contains("id", ignoreCase = true) && 
+                    value.isNotEmpty() && 
+                    value != "0" && 
+                    value != "-") {
+                    
+                    // Try to parse as score (could be "85/100", "85%", "85", etc.)
+                    val scoreInfo = parseScore(value.toString())
+                    if (scoreInfo != null) {
+                        scores.add(
+                            StudentScore(
+                                assessmentName = columnName,
+                                score = scoreInfo.first,
+                                maxScore = scoreInfo.second,
+                                percentage = scoreInfo.third,
+                                date = "N/A", // Could be extracted if date column exists
+                                category = categorizeAssessment(columnName)
+                            )
                         )
-                    )
+                    }
                 }
+            } catch (e: Exception) {
+                // Skip this column if there's any issue processing it
+                android.util.Log.w("StudentDetailActivity", "Error processing column $columnName: ${e.message}")
             }
         }
         return scores

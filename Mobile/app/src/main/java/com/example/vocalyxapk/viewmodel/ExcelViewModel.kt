@@ -198,9 +198,19 @@ class ExcelViewModel : ViewModel() {
         val sheet = selectedSheetName ?: return mapOf("headers" to emptyList<String>(), "data" to emptyList<Map<String, String>>())
         val sheetContent = file.getSheetContent(sheet) ?: return mapOf("headers" to emptyList<String>(), "data" to emptyList<Map<String, String>>())
         
+        // Ensure all data values are properly converted to strings
+        val safeData = try {
+            sheetContent.data.map { row ->
+                row.mapValues { it.value?.toString() ?: "" }
+            }
+        } catch (e: Exception) {
+            // If there's any issue with data conversion, return empty data but keep headers
+            emptyList<Map<String, String>>()
+        }
+        
         return mapOf(
             "headers" to sheetContent.headers,
-            "data" to sheetContent.data
+            "data" to safeData
         )
     }
     

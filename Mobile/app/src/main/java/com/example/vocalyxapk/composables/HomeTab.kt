@@ -1,5 +1,8 @@
 package com.example.vocalyxapk.composables
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
@@ -159,10 +162,10 @@ fun HomeTab(
                     .fillMaxWidth()
                     .alpha(welcomeAlpha)
             ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
                         .background(
                             Brush.linearGradient(
                                 colors = listOf(
@@ -285,7 +288,7 @@ fun HomeTab(
                 }
             }
         }
-        
+
         // Stats cards section
         item {
             Text(
@@ -350,7 +353,7 @@ fun HomeTab(
                     }
 
                     TextButton(onClick = { onNavigateToCourseList() }) {
-        Text(
+                        Text(
                             text = "View All",
                             style = MaterialTheme.typography.labelMedium.withDMSansMedium(),
                             color = Color(0xFF333D79)
@@ -391,7 +394,7 @@ fun HomeTab(
                         selected = activeCoursesTab == "recent",
                         onClick = { activeCoursesTab = "recent" },
                         text = {
-        Text(
+                            Text(
                                 text = "Recent",
                                 style = MaterialTheme.typography.labelMedium.withDMSansMedium()
                             )
@@ -401,7 +404,7 @@ fun HomeTab(
                         selected = activeCoursesTab == "completed",
                         onClick = { activeCoursesTab = "completed" },
                         text = {
-        Text(
+                            Text(
                                 text = "Completed",
                                 style = MaterialTheme.typography.labelMedium.withDMSansMedium()
                             )
@@ -467,7 +470,7 @@ fun HomeTab(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
-            modifier = Modifier
+                            modifier = Modifier
                                 .size(36.dp)
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(Color(0xFFEEF0F8)),
@@ -481,7 +484,7 @@ fun HomeTab(
                             )
                         }
                         Spacer(modifier = Modifier.width(8.dp))
-        Text(
+                        Text(
                             text = "My Teams",
                             style = MaterialTheme.typography.titleMedium.withDMSansBold(),
                             color = Color(0xFF333D79)
@@ -489,7 +492,7 @@ fun HomeTab(
                     }
 
                     TextButton(onClick = { onNavigateToTeamList() }) {
-        Text(
+                        Text(
                             text = "View All",
                             style = MaterialTheme.typography.labelMedium.withDMSansMedium(),
                             color = Color(0xFF333D79)
@@ -615,16 +618,16 @@ fun CourseItem(
     course: CourseData,
     onNavigateToCourseDetail: (String) -> Unit = {}
 ) {
-        Row(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onNavigateToCourseDetail(course.id) }
             .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(48.dp)
                 .clip(RoundedCornerShape(8.dp))
                 .background(
                     when (course.status) {
@@ -633,21 +636,21 @@ fun CourseItem(
                         else -> Color(0xFFF5F5F5)
                     }
                 ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
                 imageVector = when (course.status) {
                     "active" -> Icons.Filled.School
                     "completed" -> Icons.Filled.Check
                     else -> Icons.Filled.School
                 },
-                    contentDescription = null,
+                contentDescription = null,
                 tint = when (course.status) {
                     "active" -> Color(0xFF333D79)
                     "completed" -> Color(0xFF4CAF50)
                     else -> Color(0xFF757575)
                 },
-                    modifier = Modifier.size(24.dp)
+                modifier = Modifier.size(24.dp)
             )
         }
 
@@ -772,7 +775,7 @@ fun TeamItem(
             }
         }
 
-                SuggestionChip(
+        SuggestionChip(
             onClick = { /* No action */ },
             colors = SuggestionChipDefaults.suggestionChipColors(
                 containerColor = Color(0xFFE3F2FD)

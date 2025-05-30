@@ -113,6 +113,19 @@ fun StudentListScreen(
     
     // Function to detect name columns
     fun detectNameColumns(headers: List<String>): Pair<String?, String?> {
+        // Filter out assessment-related columns first
+        val assessmentKeywords = listOf(
+            "quiz", "lab", "laboratory", "exam", "test", "midterm", "final", 
+            "assignment", "activity", "score", "grade", "points", "pts",
+            "percentage", "%", "completion", "prelim", "prefinal"
+        )
+        
+        val filteredHeaders = headers.filter { header ->
+            val lowerHeader = header.lowercase()
+            // Only include headers that don't contain assessment keywords
+            assessmentKeywords.none { keyword -> lowerHeader.contains(keyword) }
+        }
+        
         val firstNamePatterns = listOf(
             "first name", "firstname", "first_name", "fname", "given name", "givenname",
             "name_first", "student_first", "first", "prenom", "nombre"
@@ -122,13 +135,13 @@ fun StudentListScreen(
             "familyname", "name_last", "student_last", "last", "apellido", "nom"
         )
         
-        val firstNameCol = headers.find { header ->
+        val firstNameCol = filteredHeaders.find { header ->
             firstNamePatterns.any { pattern ->
                 header.contains(pattern, ignoreCase = true)
             }
         }
         
-        val lastNameCol = headers.find { header ->
+        val lastNameCol = filteredHeaders.find { header ->
             lastNamePatterns.any { pattern ->
                 header.contains(pattern, ignoreCase = true)
             }
@@ -144,18 +157,32 @@ fun StudentListScreen(
         lastNameCol: String?
     ): List<StudentName> {
         return data.mapNotNull { student ->
-            val firstName = if (firstNameCol != null) student[firstNameCol]?.trim() ?: "" else ""
-            val lastName = if (lastNameCol != null) student[lastNameCol]?.trim() ?: "" else ""
-            
-            if (firstName.isNotEmpty() || lastName.isNotEmpty()) {
-                val fullName = when {
-                    firstName.isNotEmpty() && lastName.isNotEmpty() -> "$firstName $lastName"
-                    firstName.isNotEmpty() -> firstName
-                    lastName.isNotEmpty() -> lastName
-                    else -> "Unknown Student"
-                }
-                StudentName(firstName, lastName, fullName)
-            } else null
+            try {
+                // Safely extract first name with null checks and type conversion
+                val firstName = if (firstNameCol != null) {
+                    student[firstNameCol]?.toString()?.trim() ?: ""
+                } else ""
+                
+                // Safely extract last name with null checks and type conversion
+                val lastName = if (lastNameCol != null) {
+                    student[lastNameCol]?.toString()?.trim() ?: ""
+                } else ""
+                
+                // Only create StudentName if we have at least one name component
+                if (firstName.isNotEmpty() || lastName.isNotEmpty()) {
+                    val fullName = when {
+                        firstName.isNotEmpty() && lastName.isNotEmpty() -> "$firstName $lastName"
+                        firstName.isNotEmpty() -> firstName
+                        lastName.isNotEmpty() -> lastName
+                        else -> "Unknown Student"
+                    }
+                    StudentName(firstName, lastName, fullName)
+                } else null
+            } catch (e: Exception) {
+                // Skip this row if there's any issue processing it
+                // This handles cases where assessment data might cause type issues
+                null
+            }
         }
     }
     
@@ -245,6 +272,13 @@ fun StudentListScreen(
                                     val (detectedFirst, detectedLast) = detectNameColumns(headers)
                                     detectedFirstNameColumn = detectedFirst
                                     detectedLastNameColumn = detectedLast
+                                    
+                                    // Log for debugging
+                                    android.util.Log.d("StudentListActivity", 
+                                        "Total headers: ${headers.size}, " +
+                                        "Detected first name: $detectedFirst, " +
+                                        "Detected last name: $detectedLast"
+                                    )
                                 }
                             }
                             
@@ -634,7 +668,20 @@ fun StudentListScreen(
     // Column selection dialog
     if (showColumnSelectionDialog) {
         val sheetData = excelViewModel.getSelectedSheetDataAsMap()
-        val headers = sheetData["headers"] as? List<String> ?: emptyList()
+        val allHeaders = sheetData["headers"] as? List<String> ?: emptyList()
+        
+        // Filter out assessment-related columns for cleaner selection
+        val assessmentKeywords = listOf(
+            "quiz", "lab", "laboratory", "exam", "test", "midterm", "final", 
+            "assignment", "activity", "score", "grade", "points", "pts",
+            "percentage", "%", "completion", "prelim", "prefinal"
+        )
+        
+        val nameHeaders = allHeaders.filter { header ->
+            val lowerHeader = header.lowercase()
+            // Only include headers that don't contain assessment keywords
+            assessmentKeywords.none { keyword -> lowerHeader.contains(keyword) }
+        }
         
         Dialog(
             onDismissRequest = { showColumnSelectionDialog = false },
@@ -669,6 +716,16 @@ fun StudentListScreen(
                         color = Color(0xFF666666)
                     )
                     
+                    if (nameHeaders.size < allHeaders.size) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "Note: Assessment columns are hidden for clarity",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF999999),
+                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                        )
+                    }
+                    
                     Spacer(modifier = Modifier.height(20.dp))
                     
                     // First Name Selection
@@ -683,7 +740,7 @@ fun StudentListScreen(
                     LazyColumn(
                         modifier = Modifier.heightIn(max = 150.dp)
                     ) {
-                        items(headers) { column ->
+                        items(nameHeaders) { column ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -720,7 +777,7 @@ fun StudentListScreen(
                     LazyColumn(
                         modifier = Modifier.heightIn(max = 150.dp)
                     ) {
-                        items(headers) { column ->
+                        items(nameHeaders) { column ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
