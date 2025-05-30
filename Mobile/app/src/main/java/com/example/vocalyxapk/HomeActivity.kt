@@ -2,106 +2,50 @@ package com.example.vocalyxapk
 
 import android.content.Intent
 import android.os.Bundle
-import android.speech.RecognizerIntent
-import android.speech.SpeechRecognizer
-import android.speech.tts.TextToSpeech
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.clickable
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.background
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
+import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.example.vocalyxapk.composables.CoursesTab
+import com.example.vocalyxapk.composables.HomeTab
+import com.example.vocalyxapk.composables.TeamsTab
+import com.example.vocalyxapk.composables.ScheduleTab
+import com.example.vocalyxapk.repository.AuthRepository
 import com.example.vocalyxapk.ui.theme.VOCALYXAPKTheme
-import java.util.*
-import androidx.compose.ui.viewinterop.AndroidView
-import android.widget.Button
-import androidx.compose.ui.graphics.Color
+import com.example.vocalyxapk.utils.AuthStateManager
 import kotlinx.coroutines.launch
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.result.ActivityResultLauncher
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import kotlinx.parcelize.Parcelize
+import com.example.vocalyxapk.ui.theme.DMSans
 
-class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
+class HomeActivity : ComponentActivity() {
 
-    private lateinit var textToSpeech: TextToSpeech
-    private lateinit var speechRecognizer: SpeechRecognizer
     private val REQUEST_CODE_SPEECH_INPUT = 100
-
-    // Add state holders
-    private var currentText by mutableStateOf("")
-    private var isVoiceRecognitionActive by mutableStateOf(false)
-
-    private val speechRecognizerListener = object : android.speech.RecognitionListener {
-        override fun onReadyForSpeech(params: Bundle?) {
-            isVoiceRecognitionActive = true
-        }
-
-        override fun onResults(results: Bundle?) {
-            val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-            if (!matches.isNullOrEmpty()) {
-                currentText = matches[0]
-                isVoiceRecognitionActive = false
-            }
-        }
-
-        override fun onError(error: Int) {
-            isVoiceRecognitionActive = false
-            val message = when (error) {
-                SpeechRecognizer.ERROR_NO_MATCH -> "No speech was recognized. Please try again."
-                SpeechRecognizer.ERROR_NETWORK -> "Network error. Please check your internet connection."
-                SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Network timeout. Please try again."
-                SpeechRecognizer.ERROR_AUDIO -> "Audio recording error. Please try again."
-                SpeechRecognizer.ERROR_SERVER -> "Server error. Please try again later."
-                SpeechRecognizer.ERROR_CLIENT -> "Client side error. Please try again."
-                SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech input detected. Please try again."
-                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Please grant microphone permission."
-                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Speech recognizer is busy. Please try again."
-                else -> "Error occurred during recognition. Error code: $error"
-            }
-            Toast.makeText(this@HomeActivity, message, Toast.LENGTH_SHORT).show()
-        }
-
-        // Required overrides with empty implementations
-        override fun onBeginningOfSpeech() {}
-        override fun onRmsChanged(rmsdB: Float) {}
-        override fun onBufferReceived(buffer: ByteArray?) {}
-        override fun onEndOfSpeech() {}
-        override fun onPartialResults(partialResults: Bundle?) {}
-        override fun onEvent(eventType: Int, params: Bundle?) {}
-    }
 
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        // Initialize TextToSpeech
-        textToSpeech = TextToSpeech(this, this)
-
-        // Initialize SpeechRecognizer
-        if (SpeechRecognizer.isRecognitionAvailable(this)) {
-            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
-            speechRecognizer.setRecognitionListener(speechRecognizerListener)
-        } else {
-            Toast.makeText(this, "Speech recognition is not supported on this device.", Toast.LENGTH_SHORT).show()
-        }
 
         setContent {
             VOCALYXAPKTheme {
@@ -112,104 +56,317 @@ class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                     var drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
                     val scope = rememberCoroutineScope()
                     var selectedTab by remember { mutableStateOf(0) }
+                    val context = LocalContext.current
                     
                     val navigationItems = listOf(
-                        Triple("Home", Icons.Rounded.Home, "Home"),
-                        Triple("Voice", Icons.Rounded.Mic, "Voice"),
-                        Triple("Manual", Icons.Rounded.Edit, "Manual"),
-                        Triple("Classes", Icons.Rounded.List, "Classes")
+                        Triple("Dashboard", Icons.Filled.Dashboard, "Dashboard"),
+                        Triple("Courses", Icons.Rounded.School, "Courses"),
+                        Triple("Schedule", Icons.Rounded.CalendarToday, "Schedule"),
+                        Triple("Teams", Icons.Rounded.Group, "Teams")
                     )
                     
                     ModalNavigationDrawer(
                         drawerState = drawerState,
                         drawerContent = {
-                            ModalDrawerSheet {
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Text(
-                                    "Vocalyx Menu",
-                                    modifier = Modifier.padding(16.dp),
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Divider(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+                            ModalDrawerSheet(
+                                modifier = Modifier
+                                    .width(280.dp)
+                                    .fillMaxHeight(),
+                                drawerContainerColor = MaterialTheme.colorScheme.surface,
+                                drawerContentColor = MaterialTheme.colorScheme.onSurface,
+                                drawerShape = RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp)
+                            ) {
+                                // Header with logo and styling
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(160.dp)
+                                        .drawBehind {
+                                            val gradientColors = listOf(
+                                                Color(0xFF333D79),
+                                                Color(0xFF4A5495)
+                                            )
+                                            drawRect(
+                                                brush = Brush.linearGradient(
+                                                    colors = gradientColors,
+                                                    start = Offset(0f, 0f),
+                                                    end = Offset(size.width, size.height)
+                                                )
+                                            )
+                                        }
+                                        .padding(16.dp),
+                                    contentAlignment = Alignment.BottomStart
+                                ) {
+                                    Column {
+                                        Text(
+                                            "Vocalyx",
+                                            style = MaterialTheme.typography.headlineMedium.copy(
+                                                fontFamily = DMSans,
+                                                fontWeight = FontWeight.Bold
+                                            ),
+                                            color = Color.White
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            "Education Management",
+                                            style = MaterialTheme.typography.bodyMedium.copy(
+                                                fontFamily = DMSans,
+                                                fontWeight = FontWeight.Medium
+                                            ),
+                                            color = Color.White.copy(alpha = 0.8f)
+                                        )
+                                    }
+                                }
                                 
-                                // Drawer Menu Items
+                                Spacer(modifier = Modifier.height(12.dp))
+                                
+                                // Drawer Menu Items with improved styling
                                 NavigationDrawerItem(
-                                    icon = { Icon(Icons.Rounded.Notifications, contentDescription = "Notifications", tint = MaterialTheme.colorScheme.primary) },
-                                    label = { Text("Notifications", color = MaterialTheme.colorScheme.onSurface) },
+                                    icon = { 
+                                        Box(
+                                            modifier = Modifier
+                                                .size(36.dp)
+                                                .clip(CircleShape)
+                                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                Icons.Rounded.Notifications, 
+                                                contentDescription = "Notifications", 
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    },
+                                    label = { 
+                                        Text(
+                                            "Notifications", 
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            style = MaterialTheme.typography.bodyMedium.copy(
+                                                fontFamily = DMSans
+                                            )
+                                        ) 
+                                    },
                                     selected = false,
                                     onClick = { /* TODO: Implement notifications */ },
                                     colors = NavigationDrawerItemDefaults.colors(
                                         selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
                                         unselectedContainerColor = Color.Transparent
-                                    )
+                                    ),
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                                 )
                                 
                                 NavigationDrawerItem(
-                                    icon = { Icon(Icons.Rounded.Download, contentDescription = "Export Reports", tint = MaterialTheme.colorScheme.primary) },
-                                    label = { Text("Export Reports", color = MaterialTheme.colorScheme.onSurface) },
+                                    icon = { 
+                                        Box(
+                                            modifier = Modifier
+                                                .size(36.dp)
+                                                .clip(CircleShape)
+                                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                Icons.Rounded.Download, 
+                                                contentDescription = "Export Reports", 
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    },
+                                    label = { 
+                                        Text(
+                                            "Export Reports", 
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            style = MaterialTheme.typography.bodyMedium.copy(
+                                                fontFamily = DMSans
+                                            )
+                                        ) 
+                                    },
                                     selected = false,
                                     onClick = { /* TODO: Implement export */ },
                                     colors = NavigationDrawerItemDefaults.colors(
                                         selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
                                         unselectedContainerColor = Color.Transparent
-                                    )
+                                    ),
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                                 )
                                 
                                 NavigationDrawerItem(
-                                    icon = { Icon(Icons.Rounded.Person, contentDescription = "Profile", tint = MaterialTheme.colorScheme.primary) },
-                                    label = { Text("Profile", color = MaterialTheme.colorScheme.onSurface) },
+                                    icon = { 
+                                        Box(
+                                            modifier = Modifier
+                                                .size(36.dp)
+                                                .clip(CircleShape)
+                                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                Icons.Rounded.Person, 
+                                                contentDescription = "Profile", 
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    },
+                                    label = { 
+                                        Text(
+                                            "Profile", 
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            style = MaterialTheme.typography.bodyMedium.copy(
+                                                fontFamily = DMSans
+                                            )
+                                        ) 
+                                    },
                                     selected = false,
                                     onClick = { /* TODO: Implement profile */ },
                                     colors = NavigationDrawerItemDefaults.colors(
                                         selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
                                         unselectedContainerColor = Color.Transparent
-                                    )
+                                    ),
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                                 )
                                 
                                 NavigationDrawerItem(
-                                    icon = { Icon(Icons.Rounded.Settings, contentDescription = "Settings", tint = MaterialTheme.colorScheme.primary) },
-                                    label = { Text("Settings", color = MaterialTheme.colorScheme.onSurface) },
+                                    icon = { 
+                                        Box(
+                                            modifier = Modifier
+                                                .size(36.dp)
+                                                .clip(CircleShape)
+                                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                Icons.Rounded.Settings, 
+                                                contentDescription = "Settings", 
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    },
+                                    label = { 
+                                        Text(
+                                            "Settings", 
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            style = MaterialTheme.typography.bodyMedium.copy(
+                                                fontFamily = DMSans
+                                            )
+                                        ) 
+                                    },
                                     selected = false,
                                     onClick = { /* TODO: Implement settings */ },
                                     colors = NavigationDrawerItemDefaults.colors(
                                         selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
                                         unselectedContainerColor = Color.Transparent
-                                    )
+                                    ),
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                                 )
                                 
                                 NavigationDrawerItem(
-                                    icon = { Icon(Icons.Rounded.Info, contentDescription = "About/Help", tint = MaterialTheme.colorScheme.primary) },
-                                    label = { Text("About/Help", color = MaterialTheme.colorScheme.onSurface) },
+                                    icon = { 
+                                        Box(
+                                            modifier = Modifier
+                                                .size(36.dp)
+                                                .clip(CircleShape)
+                                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                Icons.Rounded.Info, 
+                                                contentDescription = "About/Help", 
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    },
+                                    label = { 
+                                        Text(
+                                            "About/Help", 
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            style = MaterialTheme.typography.bodyMedium.copy(
+                                                fontFamily = DMSans
+                                            )
+                                        ) 
+                                    },
                                     selected = false,
                                     onClick = { /* TODO: Implement about/help */ },
                                     colors = NavigationDrawerItemDefaults.colors(
                                         selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
                                         unselectedContainerColor = Color.Transparent
-                                    )
+                                    ),
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                                 )
                                 
-                                Divider(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
-                                
+                                Divider(
+                                    color = MaterialTheme.colorScheme.outlineVariant,
+                                    modifier = Modifier.padding(vertical = 12.dp, horizontal = 24.dp)
+                                )
+
                                 NavigationDrawerItem(
-                                    icon = { Icon(Icons.Rounded.Logout, contentDescription = "Logout", tint = MaterialTheme.colorScheme.primary) },
-                                    label = { Text("Logout", color = MaterialTheme.colorScheme.onSurface) },
+                                    icon = { 
+                                        Box(
+                                            modifier = Modifier
+                                                .size(36.dp)
+                                                .clip(CircleShape)
+                                                .background(Color(0xFFFFECEC)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                Icons.Rounded.Logout, 
+                                                contentDescription = "Logout", 
+                                                tint = Color(0xFFE53935),
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    },
+                                    label = { 
+                                        Text(
+                                            "Logout", 
+                                            color = Color(0xFFE53935),
+                                            style = MaterialTheme.typography.bodyMedium.copy(
+                                                fontFamily = DMSans,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        ) 
+                                    },
                                     selected = false,
-                                    onClick = { 
-                                        // Navigate to login screen
-                                        val intent = Intent(this@HomeActivity, LoginActivity::class.java)
-                                        startActivity(intent)
-                                        finish()
+                                    onClick = {
+                                        val authRepository = AuthRepository(context)
+
+                                        scope.launch {
+                                            try {
+                                                Toast.makeText(context, "Logging out...", Toast.LENGTH_SHORT).show()
+
+                                                val result = authRepository.logout()
+
+                                                AuthStateManager.setLoggedOut(context)
+
+                                                val intent = Intent(this@HomeActivity, LoginActivity::class.java)
+                                                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                                                startActivity(intent)
+                                                finish()
+                                            } catch (e: Exception) {
+                                                AuthStateManager.setLoggedOut(context)
+
+                                                Toast.makeText(context, "Logout failed on server but you're logged out locally", Toast.LENGTH_SHORT).show()
+
+                                                val intent = Intent(this@HomeActivity, LoginActivity::class.java)
+                                                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                                                startActivity(intent)
+                                                finish()
+                                            }
+                                        }
                                     },
                                     colors = NavigationDrawerItemDefaults.colors(
-                                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                        selectedContainerColor = Color(0xFFFFECEC),
                                         unselectedContainerColor = Color.Transparent
-                                    )
+                                    ),
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                                 )
                             }
                         }
                     ) {
                         Scaffold(
+                            modifier = Modifier.fillMaxSize(),
                             topBar = {
                                 TopAppBar(
                                     title = { 
@@ -237,62 +394,117 @@ class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                                 )
                             },
                             bottomBar = {
-                                NavigationBar(
-                                    containerColor = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.height(64.dp)
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
                                 ) {
-                                    navigationItems.forEachIndexed { index, (title, icon, label) ->
-                                        NavigationBarItem(
-                                            icon = { 
-                                                Icon(
-                                                    imageVector = icon,
-                                                    contentDescription = title,
-                                                    tint = if (selectedTab == index) 
-                                                        MaterialTheme.colorScheme.onPrimary 
-                                                    else 
-                                                        MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
-                                                    modifier = Modifier.size(24.dp)
-                                                ) 
-                                            },
-                                            label = { 
-                                                Text(
-                                                    label,
-                                                    color = if (selectedTab == index) 
-                                                        MaterialTheme.colorScheme.onPrimary 
-                                                    else 
-                                                        MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
-                                                    style = MaterialTheme.typography.labelSmall
-                                                ) 
-                                            },
-                                            selected = selectedTab == index,
-                                            onClick = { selectedTab = index },
-                                            colors = NavigationBarItemDefaults.colors(
-                                                selectedIconColor = MaterialTheme.colorScheme.onPrimary,
-                                                unselectedIconColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
-                                                selectedTextColor = MaterialTheme.colorScheme.onPrimary,
-                                                unselectedTextColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
-                                                indicatorColor = MaterialTheme.colorScheme.primary
-                                            )
-                                        )
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(min = 68.dp)
+                                            .drawBehind {
+                                                val colors = listOf(
+                                                    Color(0xFF1C2347),  // Deep blue
+                                                    Color(0xFF333D79),  // Brand blue
+                                                    Color(0xFF3C4B99)   // Slightly lighter blue
+                                                )
+                                                drawRect(
+                                                    brush = Brush.verticalGradient(
+                                                        colors = colors
+                                                    )
+                                                )
+                                            }
+                                    ) {
+                                        NavigationBar(
+                                            containerColor = Color.Transparent,
+                                            contentColor = Color.White,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .heightIn(min = 68.dp),
+                                            tonalElevation = 0.dp
+                                        ) {
+                                            navigationItems.forEachIndexed { index, (title, icon, label) ->
+                                                val selected = selectedTab == index
+                                                val animatedIconSize by animateDpAsState(
+                                                    targetValue = if (selected) 28.dp else 24.dp,
+                                                    animationSpec = spring(
+                                                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                                                        stiffness = Spring.StiffnessLow
+                                                    ), label = "iconSize"
+                                                )
+                                                
+                                                NavigationBarItem(
+                                                    icon = {
+                                                        Box(
+                                                            contentAlignment = Alignment.Center,
+                                                            modifier = Modifier.size(48.dp)
+                                                        ) {
+                                                            if (selected) {
+                                                                Box(
+                                                                    modifier = Modifier
+                                                                        .size(40.dp)
+                                                                        .background(
+                                                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                                                            shape = CircleShape
+                                                                        )
+                                                                )
+                                                            }
+                                                            Icon(
+                                                                imageVector = icon,
+                                                                contentDescription = title,
+                                                                tint = if (selected)
+                                                                    Color.White
+                                                                else
+                                                                    Color.White.copy(alpha = 0.6f),
+                                                                modifier = Modifier.size(animatedIconSize)
+                                                            )
+                                                        }
+                                                    },
+                                                    label = {
+                                                        AnimatedVisibility(
+                                                            visible = true,
+                                                            enter = fadeIn() + expandVertically(),
+                                                            exit = fadeOut() + shrinkVertically()
+                                                        ) {
+                                                            Text(
+                                                                label,
+                                                                color = if (selected)
+                                                                    Color.White
+                                                                else
+                                                                    Color.White.copy(alpha = 0.6f),
+                                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                                    fontFamily = DMSans,
+                                                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+                                                                ),
+                                                                maxLines = 1,
+                                                                overflow = TextOverflow.Ellipsis
+                                                            )
+                                                        }
+                                                    },
+                                                    selected = selected,
+                                                    onClick = { 
+                                                        selectedTab = index 
+                                                    },
+                                                    colors = NavigationBarItemDefaults.colors(
+                                                        selectedIconColor = Color.White,
+                                                        unselectedIconColor = Color.White.copy(alpha = 0.6f),
+                                                        selectedTextColor = Color.White,
+                                                        unselectedTextColor = Color.White.copy(alpha = 0.6f),
+                                                        indicatorColor = Color(0xFF3C4B99).copy(alpha = 0.3f)
+                                                    )
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
                         ) { paddingValues ->
                             when (selectedTab) {
-                                0 -> HomeTab()
-                                1 -> VoiceInputTab(
-                                    text = currentText,
-                                    onTextChange = { newText -> currentText = newText },
-                                    onStartVoiceRecognition = {
-                                        isVoiceRecognitionActive = true
-                                        startVoiceRecognition()
-                                    },
-                                    onSpeakOut = { speakOut(currentText) },
-                                    isVoiceRecognitionActive = isVoiceRecognitionActive,
-                                    modifier = Modifier.padding(paddingValues)
-                                )
-                                2 -> ManualInputTab(modifier = Modifier.padding(paddingValues))
-                                3 -> ClassesTab(modifier = Modifier.padding(paddingValues))
+                                0 -> HomeTab(modifier = Modifier.padding(paddingValues))
+                                1 -> CoursesTab(modifier = Modifier.padding(paddingValues))
+                                2 -> ScheduleTab(modifier = Modifier.padding(paddingValues))
+                                3 -> TeamsTab(modifier = Modifier.padding(paddingValues))
                             }
                         }
                     }
@@ -300,392 +512,139 @@ class HomeActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             }
         }
     }
-
-    override fun onInit(status: Int) {
-        if (status == TextToSpeech.SUCCESS) {
-            val result = textToSpeech.setLanguage(Locale.getDefault())
-            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                Toast.makeText(this, "Language not supported", Toast.LENGTH_SHORT).show()
-            }
-        } else {
-            Toast.makeText(this, "Initialization failed", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        if (::textToSpeech.isInitialized) {
-            textToSpeech.stop()
-            textToSpeech.shutdown()
-        }
-        if (::speechRecognizer.isInitialized) {
-            speechRecognizer.destroy()
-        }
-    }
-
-    private fun startVoiceRecognition() {
-        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 1)
-            return
-        }
-
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak now...")
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 1000L)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 3000L)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L)
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-        }
-
-        try {
-            // Stop any existing recognition
-            if (::speechRecognizer.isInitialized) {
-                speechRecognizer.cancel()
-            }
-
-            // Start listening
-            speechRecognizer.startListening(intent)
-            Toast.makeText(this, "Listening... Please speak", Toast.LENGTH_SHORT).show()
-        } catch (e: Exception) {
-            isVoiceRecognitionActive = false
-            Toast.makeText(this, "Speech recognition failed to start: ${e.message}", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun speakOut(text: String) {
-        textToSpeech.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
-    }
-
-    // Add permission result handling
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 1 && grantResults.isNotEmpty() && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            startVoiceRecognition()
-        } else {
-            Toast.makeText(this, "Microphone permission is required for voice recognition", Toast.LENGTH_SHORT).show()
-        }
-    }
 }
 
 @Composable
-fun HomeScreen(
-    text: String,
-    onTextChange: (String) -> Unit,
-    onStartVoiceRecognition: () -> Unit,
-    onSpeakOut: (String) -> Unit,
-    isVoiceRecognitionActive: Boolean
-) {
+fun HomeScreen() {
     var selectedTab by remember { mutableStateOf(0) }
     
     val navigationItems = listOf(
-        Triple("Home", Icons.Rounded.Home, "Home"),
-        Triple("Voice", Icons.Rounded.Mic, "Voice"),
-        Triple("Manual", Icons.Rounded.Edit, "Manual"),
-        Triple("Classes", Icons.Rounded.List, "Classes")
+        Triple("Dashboard", Icons.Filled.Dashboard, "Dashboard"),
+        Triple("Courses", Icons.Rounded.School, "Courses"),
+        Triple("Schedule", Icons.Rounded.CalendarToday, "Schedule"),
+        Triple("Teams", Icons.Rounded.Group, "Teams")
     )
     
     Scaffold(
+        modifier = Modifier.fillMaxSize(),
         bottomBar = {
-            NavigationBar {
-                navigationItems.forEachIndexed { index, (title, icon, label) ->
-                    NavigationBarItem(
-                        icon = { Icon(imageVector = icon, contentDescription = title) },
-                        label = { Text(label) },
-                        selected = selectedTab == index,
-                        onClick = { selectedTab = index }
-                    )
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 68.dp)
+                        .drawBehind {
+                            val colors = listOf(
+                                Color(0xFF1C2347),  // Deep blue
+                                Color(0xFF333D79),  // Brand blue
+                                Color(0xFF3C4B99)   // Slightly lighter blue
+                            )
+                            drawRect(
+                                brush = Brush.verticalGradient(
+                                    colors = colors
+                                )
+                            )
+                        }
+                ) {
+                    NavigationBar(
+                        containerColor = Color.Transparent,
+                        contentColor = Color.White,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 68.dp),
+                        tonalElevation = 0.dp
+                    ) {
+                        navigationItems.forEachIndexed { index, (title, icon, label) ->
+                            val selected = selectedTab == index
+                            val animatedIconSize by animateDpAsState(
+                                targetValue = if (selected) 28.dp else 24.dp,
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                                    stiffness = Spring.StiffnessLow
+                                ), label = "iconSize"
+                            )
+                            
+                            NavigationBarItem(
+                                icon = {
+                                    Box(
+                                        contentAlignment = Alignment.Center,
+                                        modifier = Modifier.size(48.dp)
+                                    ) {
+                                        if (selected) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(40.dp)
+                                                    .background(
+                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                                        shape = CircleShape
+                                                    )
+                                            )
+                                        }
+                                        Icon(
+                                            imageVector = icon,
+                                            contentDescription = title,
+                                            tint = if (selected)
+                                                Color.White
+                                            else
+                                                Color.White.copy(alpha = 0.6f),
+                                            modifier = Modifier.size(animatedIconSize)
+                                        )
+                                    }
+                                },
+                                label = {
+                                    AnimatedVisibility(
+                                        visible = true,
+                                        enter = fadeIn() + expandVertically(),
+                                        exit = fadeOut() + shrinkVertically()
+                                    ) {
+                                        Text(
+                                            label,
+                                            color = if (selected)
+                                                Color.White
+                                            else
+                                                Color.White.copy(alpha = 0.6f),
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontFamily = DMSans,
+                                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+                                            ),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                },
+                                selected = selected,
+                                onClick = { selectedTab = index },
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = Color.White,
+                                    unselectedIconColor = Color.White.copy(alpha = 0.6f),
+                                    selectedTextColor = Color.White,
+                                    unselectedTextColor = Color.White.copy(alpha = 0.6f),
+                                    indicatorColor = Color(0xFF3C4B99).copy(alpha = 0.3f)
+                                )
+                            )
+                        }
+                    }
                 }
             }
         }
     ) { paddingValues ->
         when (selectedTab) {
-            0 -> HomeTab()
-            1 -> VoiceInputTab(
-                text = text,
-                onTextChange = onTextChange,
-                onStartVoiceRecognition = onStartVoiceRecognition,
-                onSpeakOut = onSpeakOut,
-                isVoiceRecognitionActive = isVoiceRecognitionActive,
-                modifier = Modifier.padding(paddingValues)
-            )
-            2 -> ManualInputTab(modifier = Modifier.padding(paddingValues))
-            3 -> ClassesTab(modifier = Modifier.padding(paddingValues))
+            0 -> HomeTab(modifier = Modifier.padding(paddingValues))
+            1 -> CoursesTab(modifier = Modifier.padding(paddingValues))
+            2 -> ScheduleTab(modifier = Modifier.padding(paddingValues))
+            3 -> TeamsTab(modifier = Modifier.padding(paddingValues))
         }
     }
 }
 
-@Composable
-fun HomeTab() {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = "Welcome to Vocalyx",
-            style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
-        Text("Select an option from the bottom navigation to get started.")
-    }
-}
-
-@Composable
-fun VoiceInputTab(
-    text: String,
-    onTextChange: (String) -> Unit,
-    onStartVoiceRecognition: () -> Unit,
-    onSpeakOut: (String) -> Unit,
-    isVoiceRecognitionActive: Boolean,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        OutlinedTextField(
-            value = text,
-            onValueChange = onTextChange,
-            label = { Text("Enter text here") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(
-            onClick = onStartVoiceRecognition,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(if (isVoiceRecognitionActive) "Listening..." else "Start Voice Recognition")
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(
-            onClick = { onSpeakOut(text) },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Speak Text")
-        }
-    }
-}
-
-@Composable
-fun ManualInputTab(modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        Text("Manual Input", style = MaterialTheme.typography.headlineMedium)
-        // Add manual input UI here
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ClassesTab(modifier: Modifier = Modifier) {
-    var searchQuery by remember { mutableStateOf("") }
-    val context = LocalContext.current
-
-    // File picker launcher
-    val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri?.let {
-            // Start FileViewerActivity with the selected file URI
-            val intent = Intent(context, FileViewerActivity::class.java).apply {
-                data = uri
-            }
-            context.startActivity(intent)
-        }
-    }
-
-    // Observe imported classes
-    val importedClasses = ClassRepository.classes
-    val filteredClasses = importedClasses.filter {
-        it.name.contains(searchQuery, ignoreCase = true) ||
-        it.section.contains(searchQuery, ignoreCase = true)
-    }
-
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color.White)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 20.dp)
-        ) {
-            // Header
-            Text(
-                "My Classes",
-                style = MaterialTheme.typography.headlineMedium.copy(
-                    color = Color(0xFF333D79)
-                ),
-                modifier = Modifier.padding(top = 24.dp, bottom = 16.dp)
-            )
-
-            // Search Bar
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 20.dp)
-                    .height(52.dp),
-                placeholder = { Text("Search classes...", color = Color(0xFF666666)) },
-                leadingIcon = {
-                    Icon(
-                        Icons.Rounded.Search,
-                        contentDescription = "Search",
-                        tint = Color(0xFF666666),
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp),
-                colors = TextFieldDefaults.outlinedTextFieldColors(
-                    focusedBorderColor = Color(0xFFE0E0E0),
-                    unfocusedBorderColor = Color(0xFFE0E0E0),
-                    containerColor = Color.White
-                )
-            )
-
-            // Class Cards Grid
-            if (filteredClasses.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(bottom = 80.dp), // Add padding for FAB
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            Icons.Rounded.Upload,
-                            contentDescription = null,
-                            modifier = Modifier
-                                .size(64.dp)
-                                .padding(bottom = 16.dp),
-                            tint = Color(0xFF666666)
-                        )
-                        Text(
-                            "No classes found",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = Color(0xFF666666),
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
-                        Text(
-                            "Import an Excel or CSV file to create your first class",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color(0xFF666666),
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                }
-            } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    contentPadding = PaddingValues(bottom = 80.dp), // Add padding for FAB
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    items(filteredClasses) { classData ->
-                        ImportedClassCard(classData = classData)
-                    }
-                }
-            }
-        }
-
-        // Floating Action Button for Import
-        FloatingActionButton(
-            onClick = { filePickerLauncher.launch("*/*") },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 20.dp, bottom = 20.dp)
-                .size(56.dp),
-            containerColor = Color(0xFF333D79),
-            shape = CircleShape
-        ) {
-            Icon(
-                Icons.Rounded.Upload,
-                contentDescription = "Import Excel/CSV",
-                tint = Color.White,
-                modifier = Modifier.size(24.dp)
-            )
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ImportedClassCard(classData: ImportedClass) {
-    val context = LocalContext.current
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(120.dp)
-            .clickable {
-                val fileTableData = FileTableData(
-                    fileData = classData.fileData,
-                    fileName = classData.name,
-                    section = classData.section
-                )
-                val intent = Intent(context, FileViewerActivity::class.java).apply {
-                    putExtra("file_table_data", fileTableData)
-                }
-                context.startActivity(intent)
-            },
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFFF8F9FA)
-        ),
-        shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .padding(12.dp)
-                .fillMaxWidth()
-        ) {
-            Text(
-                classData.name,
-                style = MaterialTheme.typography.titleMedium.copy(
-                    color = Color(0xFF333D79)
-                ),
-                maxLines = 1
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                classData.section,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFF666666),
-                maxLines = 1
-            )
-            Spacer(modifier = Modifier.weight(1f))
-            Text(
-                "Imported file rows: ${classData.fileData.size}",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFF666666)
-            )
-        }
-    }
-}
-
-@Preview(showBackground = true)
+@Preview
 @Composable
 fun HomeScreenPreview() {
     VOCALYXAPKTheme {
-        HomeScreen(
-            text = "",
-            onTextChange = {},
-            onStartVoiceRecognition = {},
-            onSpeakOut = {},
-            isVoiceRecognitionActive = false
-        )
+        HomeScreen()
     }
-} 
+}

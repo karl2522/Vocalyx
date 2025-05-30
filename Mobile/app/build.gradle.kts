@@ -41,6 +41,13 @@ android {
     }
 }
 
+configurations.all {
+    resolutionStrategy {
+        force("net.jcip:jcip-annotations:1.0")
+        exclude(group = "com.github.stephenc.jcip", module = "jcip-annotations")
+    }
+}
+
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -55,6 +62,8 @@ dependencies {
     implementation(libs.androidx.activity)
     implementation(libs.androidx.constraintlayout)
     implementation("androidx.compose.material:material-icons-extended:1.5.4")
+    implementation(libs.androidx.lifecycle.runtime.compose.android)
+    implementation(libs.androidx.ui.text.google.fonts)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -64,7 +73,6 @@ dependencies {
     debugImplementation(libs.androidx.ui.test.manifest)
 
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.2")
-
     // Retrofit
     implementation(libs.retrofit)
     implementation(libs.converter.gson)
@@ -82,7 +90,17 @@ dependencies {
     // Apache POI for Excel files
     implementation("org.apache.poi:poi:5.2.3")
     implementation("org.apache.poi:poi-ooxml:5.2.3")
-    
+
     // OpenCSV for CSV files
     implementation("com.opencsv:opencsv:5.7.1")
+
+    // String similarity with exclusion for conflict resolution
+    implementation("com.github.tdebatty:java-string-similarity:2.0.0") {
+        exclude(group = "net.jcip", module = "jcip-annotations")
+    }
+
+    implementation("androidx.datastore:datastore-preferences:1.0.0")
+    
+    // Google Fonts for DM Sans
+    implementation("androidx.compose.ui:ui-text-google-fonts:1.6.0")
 }

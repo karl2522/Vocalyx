@@ -36,7 +36,7 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*', '10.0.191.212', '192.168.1.10', '.herokuapp.com']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*', '10.0.191.212', '192.168.1.10', '.herokuapp.com', "192.168.254.100"]
 
 FIREBASE_SERVICE_ACCOUNT_PATH = os.path.join(BASE_DIR.parent, 'firebase-service-account.json')
 
@@ -62,6 +62,9 @@ INSTALLED_APPS = [
     'drf_spectacular',
     'excel',
     'classes',
+    'teams',
+    'notifications',
+    'speech_services',
     'token_management.apps.TokenManagementConfig',
 ]
 
@@ -147,6 +150,8 @@ CORS_ALLOWED_ORIGINS = [
     "http://10.0.191.212:8080",
     "http://10.0.191.212",
     "https://vocalyx-frontend.vercel.app",
+    "http://192.168.254.100:8000",
+    "http://192.168.254.100"
 ]
 
 CORS_ALLOW_CREDENTIALS = True
@@ -179,6 +184,8 @@ MICROSOFT_AUTH_TENANT_ID = 'common'
 
 MICROSOFT_AUTH_CLIENT_SECRET = '36831e3e-4390-41b4-a7d2-6248bf7e3a4b'
 
+GOOGLE_APPLICATION_CREDENTIALS = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+
 #Email Settings
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
@@ -210,19 +217,23 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 
 
 DATABASES = {
-    'default': dj_database_url.config(
-        default=os.getenv('DATABASE_URL',
-            'postgres://neondb_owner:npg_BC0EMfk4VXAL@ep-twilight-hat-a1o7vy4b-pooler.ap-southeast-1.aws.neon.tech/neondb'
-        ),
-        conn_max_age=600,
-        ssl_require=True
-    )
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'dbvocalyx',
+        'USER': 'dbvocalyx_owner',
+        'PASSWORD': 'npg_kHaeUhGPX7f3',
+        'HOST': 'ep-wispy-breeze-a1djx2jd-pooler.ap-southeast-1.aws.neon.tech',
+        'PORT': '5432',
+        'OPTIONS': {
+            'sslmode': 'require',
+        }
+    }
 }
 
-SECURE_SSL_REDIRECT = not DEBUG
+SECURE_SSL_REDIRECT = False if DEBUG else True
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
+SESSION_COOKIE_SECURE = False if DEBUG else True
+CSRF_COOKIE_SECURE = False if DEBUG else True
 
 CELERY_BEAT_SCHEDULE = {
     'cleanup-expired-tokens': {

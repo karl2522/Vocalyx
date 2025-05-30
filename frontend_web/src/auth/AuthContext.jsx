@@ -1,19 +1,27 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
 import { PublicClientApplication } from '@azure/msal-browser';
 import { MsalProvider } from "@azure/msal-react";
+import PropTypes from 'prop-types';
+import { createContext, useContext, useEffect, useState } from 'react';
+import { clearAuthState } from '../utils/auth';
+import { showToast } from '../utils/toast';
+import sessionTimer from '../utils/sessiontimer';
+import { refreshToken } from '../services/api';
 
-const baseUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
+// Environment variables
+const REDIRECT_URI = import.meta.env.NODE_ENV === 'production' 
+  ? 'https://vocalyx-frontend.vercel.app/' 
+  : 'http://localhost:5173';
+const BACKEND_URL = import.meta.env.NODE_ENV === 'production' 
+  ? 'https://vocalyx-c61a072bf25a.herokuapp.com' 
+  : 'http://127.0.0.1:8000';
 
 const AuthContext = createContext(null);
-
 
 const msalConfig = {
   auth: {
     clientId: '5a7221d3-d167-4f9d-b62e-79c987bb5d5f',
     authority: 'https://login.microsoftonline.com/common',
-    redirectUri: process.env.NODE_ENV === 'production' 
-    ? 'https://vocalyx-frontend.vercel.app/' 
-    : 'http://localhost:5173',
+    redirectUri: REDIRECT_URI,
   },
   cache: {
     cacheLocation: 'sessionStorage',
@@ -28,6 +36,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [initialized, setInitialized] = useState(false);
+  const [showSessionTimeoutModal, setShowSessionTimeoutModal] = useState(false);
 
   useEffect(() => {
     const initializeMsal = async () => {
@@ -52,6 +61,9 @@ export const AuthProvider = ({ children }) => {
         try {
           const user = JSON.parse(userData);
           setUser(user);
+          
+          // Start session timer when user is authenticated
+          startSessionTimer();
         } catch (error) {
           console.error('Error parsing user data:', error);
           localStorage.removeItem('authToken');
@@ -67,14 +79,92 @@ export const AuthProvider = ({ children }) => {
     checkAuth();
   }, [initialized]);
 
-  const handleAuthResponse = async (token, provider) => {
+  // Set up activity listeners to refresh session timer
+  useEffect(() => {
+    if (user) {
+      const events = ['mousedown', 'keydown', 'touchstart', 'scroll'];
+      const activityHandler = () => sessionTimer.resetTimersOnActivity();
+      
+      events.forEach(event => {
+        window.addEventListener(event, activityHandler);
+      });
+      
+      return () => {
+        events.forEach(event => {
+          window.removeEventListener(event, activityHandler);
+        });
+      };
+    }
+  }, [user]);
+
+  const startSessionTimer = () => {
+    sessionTimer.start(
+      // Logout callback
+      () => {
+        handleLogout('session_expired');
+      },
+      // Warning callback (5 minutes before)
+      () => {
+        setShowSessionTimeoutModal(true);
+      }
+    );
+  };
+
+  const handleLogout = (reason = 'manual_logout') => {
+    // Clear session timer
+    sessionTimer.clear();
+    
+    // Clear auth data
+    clearAuthState();
+    
+    // Set logout reason
+    if (reason !== 'manual_logout') {
+      localStorage.setItem('logout_reason', reason);
+    } else {
+      localStorage.removeItem('logout_reason');
+    }
+    
+    // Clear user state
+    setUser(null);
+    
+    // Close modal if open
+    setShowSessionTimeoutModal(false);
+  };
+
+  const handleStayLoggedIn = async () => {
+    try {
+      setShowSessionTimeoutModal(false);
+      
+      // Try to refresh the token
+      const refreshTokenStr = localStorage.getItem('refreshToken');
+      if (refreshTokenStr) {
+        const response = await refreshToken(refreshTokenStr);
+        
+        if (response && response.access) {
+          localStorage.setItem('authToken', response.access);
+          
+          // Reset session timer
+          sessionTimer.clear();
+          startSessionTimer();
+          
+          showToast.success('Session extended successfully');
+          return;
+        }
+      }
+      
+      // If refresh token failed, logout
+      handleLogout('session_expired');
+    } catch (error) {
+      console.error('Error refreshing token:', error);
+      handleLogout('session_expired');
+    }
+  };
+
+  const handleAuthResponse = async (token) => {
     try {
       console.log('Sending auth request with token:', token);
-      const baseUrl = process.env.NODE_ENV === 'production' 
-        ? 'https://vocalyx-c61a072bf25a.herokuapp.com' 
-        : 'http://127.0.0.1:8000';
         
-      const response = await fetch(`${baseUrl}/api/auth/google/`, {
+      const response = await fetch(`${BACKEND_URL}/api/auth/google/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -93,6 +183,10 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem('refreshToken', data.refresh);
         localStorage.setItem('user', JSON.stringify(data.user));
         setUser(data.user);
+        
+        // Start session timer when user logs in
+        startSessionTimer();
+        
         return data;
       } else {
         throw new Error(data.error || 'Authentication failed');
@@ -101,26 +195,26 @@ export const AuthProvider = ({ children }) => {
       console.error('Authentication error:', error);
       throw error;
     }
-};
+  };
 
-      const googleLogin = async (response) => {
-        try {
-          if (!response || !response.credential) {
-            throw new Error('No ID token received from Google');
-          }
-          return await handleAuthResponse(response.credential, 'google-oauth2');
-        } catch (error) {
-          console.error('Google login error:', error);
-          throw error;
-        }
-      };
+  const googleLogin = async (response) => {
+    try {
+      if (!response || !response.credential) {
+        throw new Error('No ID token received from Google');
+      }
+      return await handleAuthResponse(response.credential);
+    } catch (error) {
+      console.error('Google login error:', error);
+      throw error;
+    }
+  };
 
   const microsoftLogin = async () => {
     try {
       const result = await msalInstance.loginPopup({
         scopes: ['user.read'],
       });
-      await handleAuthResponse(result.accessToken, 'microsoft-graph');
+      await handleAuthResponse(result.accessToken);
     } catch (error) {
       console.error('Microsoft login error:', error);
       throw error;
@@ -128,9 +222,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('user');
-    setUser(null);
+    handleLogout('manual_logout');
   };
 
   return (
@@ -142,13 +234,20 @@ export const AuthProvider = ({ children }) => {
           googleLogin, 
           microsoftLogin, 
           logout,
-          setUser
+          setUser,
+          showSessionTimeoutModal,
+          handleStayLoggedIn,
+          handleLogout
         }}
       >
         {children}
       </AuthContext.Provider>
     </MsalProvider>
   );
+};
+
+AuthProvider.propTypes = {
+  children: PropTypes.node.isRequired
 };
 
 export const useAuth = () => {

@@ -38,3 +38,4 @@ media/
 mongod.log
 
 firebase-service-account.json
+google-cloud-credentials.json
