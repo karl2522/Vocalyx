@@ -501,7 +501,36 @@ class HomeActivity : ComponentActivity() {
                             }
                         ) { paddingValues ->
                             when (selectedTab) {
-                                0 -> HomeTab(modifier = Modifier.padding(paddingValues))
+                                0 -> HomeTab(
+                                    modifier = Modifier.padding(paddingValues),
+                                    onNavigateToSchedule = {
+                                        selectedTab = 2
+                                    },
+                                    onNavigateToCourseList = {
+                                        selectedTab = 1
+                                    },
+                                    onNavigateToTeamList = {
+                                        selectedTab = 3
+                                    },
+                                    onNavigateToAddCourse = {
+                                        selectedTab = 1
+                                    },
+                                    onNavigateToCourseDetail = { courseId ->
+                                        selectedTab = 1
+                                    },
+                                    onNavigateToTeamDetail = { teamId ->
+                                        // For now, go to Teams tab. Later you can implement team detail screen
+                                        selectedTab = 3
+                                    },
+                                    onNavigateToStatSection = { statType ->
+                                        when (statType) {
+                                            "Courses" -> selectedTab = 1
+                                            "Classes" -> selectedTab = 1
+                                            "Teams" -> selectedTab = 3
+                                            else -> selectedTab = 1
+                                        }
+                                    }
+                                )
                                 1 -> CoursesTab(modifier = Modifier.padding(paddingValues))
                                 2 -> ScheduleTab(modifier = Modifier.padding(paddingValues))
                                 3 -> TeamsTab(modifier = Modifier.padding(paddingValues))

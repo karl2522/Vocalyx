@@ -1,5 +1,7 @@
 package com.example.vocalyxapk.api
 
+import com.example.vocalyxapk.models.AddCourseRequest
+import com.example.vocalyxapk.models.AddMemberRequest
 import com.example.vocalyxapk.models.AuthResponse
 import com.example.vocalyxapk.models.ClassCreateRequest
 import com.example.vocalyxapk.models.ClassItem
@@ -7,14 +9,24 @@ import com.example.vocalyxapk.models.ClassUpdateRequest
 import com.example.vocalyxapk.models.CourseCreateRequest
 import com.example.vocalyxapk.models.CourseItem
 import com.example.vocalyxapk.models.CourseUpdateRequest
+import com.example.vocalyxapk.models.CreateTeamRequest
 import com.example.vocalyxapk.models.ExcelFileItem
 import com.example.vocalyxapk.models.ExcelUploadResponse
 import com.example.vocalyxapk.models.FirebaseAuthRequest
+import com.example.vocalyxapk.models.JoinTeamRequest
 import com.example.vocalyxapk.models.LoginRequest
 import com.example.vocalyxapk.models.LoginResponse
 import com.example.vocalyxapk.models.MicrosoftAuthRequest
 import com.example.vocalyxapk.models.RegisterRequest
 import com.example.vocalyxapk.models.RegisterResponse
+import com.example.vocalyxapk.models.RemoveCourseRequest
+import com.example.vocalyxapk.models.RemoveMemberRequest
+import com.example.vocalyxapk.models.TeamCourseItem
+import com.example.vocalyxapk.models.TeamInvitationItem
+import com.example.vocalyxapk.models.TeamItem
+import com.example.vocalyxapk.models.TeamMemberItem
+import com.example.vocalyxapk.models.UpdateMemberPermissionsRequest
+import com.example.vocalyxapk.models.UserItem
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import retrofit2.Response
@@ -105,4 +117,73 @@ interface ApiService {
         @Path("id") excelId: Int,
         @Body data: HashMap<String, Any>
     ): Response<Map<String, Any>>
+
+    @GET("api/teams/my_teams/")
+    suspend fun getMyTeams(): Response<List<TeamItem>>
+
+    @GET("api/teams/owned_teams/")
+    suspend fun getOwnedTeams(): Response<List<TeamItem>>
+
+    @GET("api/teams/joined_teams/")
+    suspend fun getJoinedTeams(): Response<List<TeamItem>>
+
+    @GET("api/teams/my_team/")
+    suspend fun getMyTeam(): Response<TeamItem>
+
+    @GET("api/teams/all_teams/")
+    suspend fun getAllTeams(): Response<List<TeamItem>>
+
+    @GET("api/teams/{id}/")
+    suspend fun getTeamById(@Path("id") teamId: Int): Response<TeamItem>
+
+    @POST("api/teams/")
+    suspend fun createTeam(@Body teamRequest: CreateTeamRequest): Response<TeamItem>
+
+    @POST("api/teams/join/")
+    suspend fun joinTeam(@Body joinRequest: JoinTeamRequest): Response<TeamItem>
+
+    @POST("api/teams/{id}/add_member/")
+    suspend fun addTeamMember(
+        @Path("id") teamId: Int,
+        @Body addMemberRequest: AddMemberRequest
+    ): Response<TeamMemberItem>
+
+    @DELETE("api/teams/{id}/remove_member/")
+    suspend fun removeTeamMember(
+        @Path("id") teamId: Int,
+        @Body removeMemberRequest: RemoveMemberRequest
+    ): Response<Map<String, String>>
+
+    @PATCH("api/teams/{id}/update_member_permissions/")
+    suspend fun updateMemberPermissions(
+        @Path("id") teamId: Int,
+        @Body updateRequest: UpdateMemberPermissionsRequest
+    ): Response<TeamMemberItem>
+
+    @POST("api/teams/{id}/add_course/")
+    suspend fun addCourseToTeam(
+        @Path("id") teamId: Int,
+        @Body addCourseRequest: AddCourseRequest
+    ): Response<TeamCourseItem>
+
+    @DELETE("api/teams/{id}/remove_course/")
+    suspend fun removeCourseFromTeam(
+        @Path("id") teamId: Int,
+        @Body removeCourseRequest: RemoveCourseRequest
+    ): Response<Map<String, String>>
+
+    @GET("api/teams/search_users/")
+    suspend fun searchUsers(@Query("q") query: String): Response<List<UserItem>>
+
+    @GET("api/teams/available_courses/")
+    suspend fun getAvailableCourses(): Response<List<CourseItem>>
+
+    @GET("api/teams/check-class-access/{classId}/")
+    suspend fun checkClassAccess(@Path("classId") classId: Int): Response<Map<String, Boolean>>
+
+    @GET("api/teams/check-course-access/{courseId}/")
+    suspend fun checkCourseAccess(@Path("courseId") courseId: Int): Response<Map<String, Boolean>>
+
+    @POST("api/teams/{id}/accept/")
+    suspend fun acceptInvitation(@Path("id") invitationId: Int): Response<TeamInvitationItem>
 }

@@ -7,6 +7,7 @@ import com.example.vocalyxapk.models.FirebaseAuthRequest
 import com.example.vocalyxapk.models.LoginRequest
 import com.example.vocalyxapk.models.MicrosoftAuthRequest
 import com.example.vocalyxapk.models.RegisterRequest
+import com.example.vocalyxapk.utils.AuthStateManager
 import com.example.vocalyxapk.utils.TokenManager
 
 class AuthRepository(private val context: Context) {
@@ -17,11 +18,25 @@ class AuthRepository(private val context: Context) {
             val response = apiService.login(LoginRequest(email, password))
             if (response.isSuccessful) {
                 response.body()?.let { loginResponse ->
+                    // Save tokens
                     TokenManager.saveTokens(
                         context,
                         loginResponse.tokens.access,
                         loginResponse.tokens.refresh
                     )
+
+                    // 🎯 NEW: Save user info
+                    TokenManager.saveUserInfo(
+                        context,
+                        loginResponse.user.id,
+                        loginResponse.user.email,
+                        loginResponse.user.first_name,
+                        loginResponse.user.last_name
+                    )
+
+                    // Update auth state
+                    AuthStateManager.setLoggedIn(context)
+
                     Result.success(Unit)
                 } ?: Result.failure(Exception("Empty response body"))
             } else {
@@ -66,6 +81,7 @@ class AuthRepository(private val context: Context) {
                 val response = apiService.logout(mapOf("refresh_token" to refreshToken))
                 if (response.isSuccessful) {
                     TokenManager.clearTokens(context)
+                    AuthStateManager.setLoggedOut(context)
                     Result.success(Unit)
                 } else {
                     Result.failure(Exception(response.errorBody()?.string() ?: "Unknown error"))
@@ -88,11 +104,25 @@ class AuthRepository(private val context: Context) {
                 val authResponse = response.body()
                 println("Firebase auth response received: $authResponse")
                 if (authResponse != null) {
+                    // Save tokens
                     TokenManager.saveTokens(
                         context,
                         authResponse.token,
                         authResponse.refresh
                     )
+
+                    // 🎯 NEW: Save user info
+                    TokenManager.saveUserInfo(
+                        context,
+                        authResponse.user.id,
+                        authResponse.user.email,
+                        authResponse.user.first_name,
+                        authResponse.user.last_name
+                    )
+
+                    // Update auth state
+                    AuthStateManager.setLoggedIn(context)
+
                     Result.success(Unit)
                 } else {
                     Result.failure(Exception("Empty response from server"))
@@ -111,20 +141,29 @@ class AuthRepository(private val context: Context) {
     suspend fun loginWithMicrosoft(accessToken: String): Result<Unit> {
         return try {
             val request = MicrosoftAuthRequest(access_token = accessToken)
-
             val response = apiService.microsoftAuth(request)
 
             if (response.isSuccessful) {
                 val authResponse = response.body()
                 if (authResponse != null) {
-                    val sharedPreferences = context.getSharedPreferences("auth_prefs", Context.MODE_PRIVATE)
-                    sharedPreferences.edit()
-                        .putString("access_token", authResponse.token)
-                        .putString("refresh_token", authResponse.refresh)
-                        .putString("user_id", authResponse.user.id)
-                        .putString("user_email", authResponse.user.email)
-                        .putString("user_name", "${authResponse.user.first_name} ${authResponse.user.last_name}")
-                        .apply()
+                    // Save tokens using TokenManager
+                    TokenManager.saveTokens(
+                        context,
+                        authResponse.token,
+                        authResponse.refresh
+                    )
+
+                    // 🎯 NEW: Save user info using TokenManager
+                    TokenManager.saveUserInfo(
+                        context,
+                        authResponse.user.id,
+                        authResponse.user.email,
+                        authResponse.user.first_name,
+                        authResponse.user.last_name
+                    )
+
+                    // Update auth state
+                    AuthStateManager.setLoggedIn(context)
 
                     Result.success(Unit)
                 } else {
