@@ -103,4 +103,8 @@ dependencies {
     
     // Google Fonts for DM Sans
     implementation("androidx.compose.ui:ui-text-google-fonts:1.6.0")
+
+    implementation("androidx.compose.runtime:runtime-livedata:1.5.4")
+
+
 }
