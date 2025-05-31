@@ -1,7 +1,6 @@
 package com.example.vocalyxapk.composables
 
 import android.Manifest
-import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioFormat
@@ -19,25 +18,21 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import com.example.vocalyxapk.api.WhisperApiClient
 import com.example.vocalyxapk.viewmodel.ExcelViewModel
+import com.example.vocalyxapk.models.*
+import com.example.vocalyxapk.utils.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -45,42 +40,27 @@ import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.util.*
 
-enum class RecordingState {
-    REQUESTING_PERMISSION,
-    READY_TO_RECORD,
-    LISTENING,
-    PROCESSING,
-    SPEECH_RECOGNIZED,
-    TTS_SPEAKING
-}
-
-enum class SpeechEngine {
-    GOOGLE_CLOUD,    // Your backend with Google Cloud Speech-to-Text
-    ANDROID_NATIVE   // Android's built-in SpeechRecognizer
-}
-
-data class RecognizedSpeech(
-    val fullText: String,
-    val name: String?,
-    val score: String?
-)
-
 @Composable
 fun VoiceRecordingInterface(
     excelViewModel: ExcelViewModel,
     columnName: String,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onSaveCompleted: (Int) -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
     var recordingState by remember { mutableStateOf(RecordingState.REQUESTING_PERMISSION) }
     var recognizedSpeech by remember { mutableStateOf<RecognizedSpeech?>(null) }
-    var recordedCount by remember { mutableStateOf(0) }
+    var voiceEntries by remember { mutableStateOf<List<VoiceEntry>>(emptyList()) }
+    var currentDuplicateMatches by remember { mutableStateOf<List<StudentMatch>>(emptyList()) }
+    var currentOverrideEntry by remember { mutableStateOf<VoiceEntry?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var permissionGranted by remember { mutableStateOf(false) }
+    var sessionComplete by remember { mutableStateOf(false) }
+    var isSaving by remember { mutableStateOf(false) }
 
-    // 🎯 NEW: Speech Engine Toggle
+    // Speech Engine Toggle
     var selectedEngine by remember { mutableStateOf(SpeechEngine.ANDROID_NATIVE) }
 
     // TTS Engine
@@ -95,6 +75,33 @@ fun VoiceRecordingInterface(
 
     // WhisperApiClient (for Google Cloud)
     val whisperClient = remember { WhisperApiClient(context) }
+
+    // Get student data from ExcelViewModel
+    val studentData = remember {
+        val sheetData = excelViewModel.getSelectedSheetDataAsMap()
+        val headers = sheetData["headers"] as? List<String> ?: emptyList()
+        val data = sheetData["data"] as? List<Map<String, String>> ?: emptyList()
+        
+        // Find name columns
+        val firstNameCol = headers.find { it.contains("first", ignoreCase = true) && it.contains("name", ignoreCase = true) }
+        val lastNameCol = headers.find { it.contains("last", ignoreCase = true) && it.contains("name", ignoreCase = true) }
+        val fullNameCol = headers.find { it.contains("name", ignoreCase = true) && !it.contains("first", ignoreCase = true) && !it.contains("last", ignoreCase = true) }
+        
+        data.mapNotNull { row ->
+            val firstName = row[firstNameCol]?.trim() ?: ""
+            val lastName = row[lastNameCol]?.trim() ?: ""
+            val fullName = row[fullNameCol]?.trim() ?: "${firstName} ${lastName}".trim()
+            
+            if (fullName.isNotBlank()) {
+                StudentData(
+                    firstName = firstName,
+                    lastName = lastName,
+                    fullName = fullName,
+                    rowData = row
+                )
+            } else null
+        }
+    }
 
     // Animation states
     val infiniteTransition = rememberInfiniteTransition(label = "voice_animation")
@@ -120,71 +127,283 @@ fun VoiceRecordingInterface(
         }
     }
 
-    // Initialize TTS
-    LaunchedEffect(Unit) {
-        ttsEngine = TextToSpeech(context) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                ttsEngine?.language = Locale.US
-                Log.d("VoiceRecording", "TTS initialized successfully")
-            } else {
-                Log.e("VoiceRecording", "TTS initialization failed")
+    // Check if student already has a score in the column
+    val checkExistingScore = remember(columnName) {
+        { studentRowData: Map<String, String> ->
+            val existingScore = studentRowData[columnName]?.trim()
+            Log.d("VoiceRecording", "Checking existing score for column '$columnName': $existingScore")
+            if (existingScore.isNullOrBlank()) null else existingScore
+        }
+    }
+
+    // Process recognized speech and handle student matching - Create stable reference
+    val processRecognizedSpeech = remember {
+        { transcription: String ->
+            // Check if user said "done" to end the session
+            if (transcription.lowercase().contains("done") || transcription.lowercase().contains("finish")) {
+                Log.d("VoiceRecording", "User said 'done' or 'finish', ending session with ${voiceEntries.size} entries")
+                recordingState = RecordingState.SESSION_SUMMARY
+                return@remember Unit
             }
+
+            // Parse the transcription for name and score
+            val parseResult = parseTranscription(transcription)
+            
+            if (parseResult.recognizedName == null || parseResult.score == null) {
+                errorMessage = "Could not understand name and score. Please try again."
+                recordingState = RecordingState.READY_TO_RECORD
+                return@remember Unit
+            }
+
+            // Find matching students
+            val matches = findStudentMatches(parseResult.recognizedName, studentData)
+            
+            if (matches.isEmpty()) {
+                errorMessage = "No matching student found for '${parseResult.recognizedName}'. Please try again."
+                recordingState = RecordingState.READY_TO_RECORD
+                return@remember Unit
+            }
+
+            val speech = RecognizedSpeech(
+                fullText = transcription,
+                recognizedName = parseResult.recognizedName,
+                score = parseResult.score,
+                studentMatches = matches
+            )
+
+            recognizedSpeech = speech
+
+            if (matches.size == 1) {
+                // Single match - check for existing score
+                val match = matches[0]
+                val existingScore = checkExistingScore(match.rowData)
+                
+                Log.d("VoiceRecording", "Single match found: ${match.fullName}, checking for existing score in column '$columnName'")
+                Log.d("VoiceRecording", "Student row data keys: ${match.rowData.keys}")
+                Log.d("VoiceRecording", "Existing score result: $existingScore")
+                
+                if (existingScore != null) {
+                    // Student already has a score - show override confirmation
+                    Log.d("VoiceRecording", "Student ${match.fullName} has existing score '$existingScore' in column '$columnName', showing override dialog")
+                    val entry = VoiceEntry(
+                        studentName = parseResult.recognizedName,
+                        score = parseResult.score,
+                        fullStudentName = match.fullName,
+                        originalRecognition = transcription,
+                        hasExistingScore = true,
+                        existingScore = existingScore
+                    )
+                    currentOverrideEntry = entry
+                    recordingState = RecordingState.SHOWING_OVERRIDE_CONFIRMATION
+                } else {
+                    // No existing score - add entry directly
+                    Log.d("VoiceRecording", "Student ${match.fullName} has no existing score in column '$columnName', adding entry directly")
+                    val entry = VoiceEntry(
+                        studentName = parseResult.recognizedName,
+                        score = parseResult.score,
+                        fullStudentName = match.fullName,
+                        originalRecognition = transcription,
+                        confirmed = true
+                    )
+                    Log.d("VoiceRecording", "Adding entry directly: ${entry.fullStudentName} - ${entry.score} - Confirmed: ${entry.confirmed}")
+                    voiceEntries = voiceEntries + entry
+                    recordingState = RecordingState.SPEECH_RECOGNIZED
+                    
+                    // Auto-continue after showing success message
+                    coroutineScope.launch {
+                        delay(1500)
+                        recordingState = RecordingState.READY_TO_RECORD
+                    }
+                }
+            } else {
+                // Multiple matches - show selection dialog
+                currentDuplicateMatches = matches
+                recordingState = RecordingState.SHOWING_DUPLICATE_SELECTION
+            }
+            Unit
         }
     }
 
-    // Initialize Android SpeechRecognizer
-    LaunchedEffect(Unit) {
-        if (SpeechRecognizer.isRecognitionAvailable(context)) {
-            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context)
-            Log.d("VoiceRecording", "Android SpeechRecognizer initialized")
-        } else {
-            Log.w("VoiceRecording", "Android SpeechRecognizer not available")
+    // Handle duplicate selection - Create stable reference
+    val handleDuplicateSelection = remember {
+        { selectedMatch: StudentMatch ->
+            val speech = recognizedSpeech ?: return@remember Unit
+            val existingScore = checkExistingScore(selectedMatch.rowData)
+            
+            Log.d("VoiceRecording", "Duplicate selection: ${selectedMatch.fullName}, checking for existing score in column '$columnName'")
+            Log.d("VoiceRecording", "Student row data keys: ${selectedMatch.rowData.keys}")
+            Log.d("VoiceRecording", "Existing score result: $existingScore")
+            
+            if (existingScore != null) {
+                // Student already has a score - show override confirmation
+                Log.d("VoiceRecording", "Student ${selectedMatch.fullName} has existing score '$existingScore' in column '$columnName', showing override dialog")
+                val entry = VoiceEntry(
+                    studentName = speech.recognizedName ?: "",
+                    score = speech.score ?: "",
+                    fullStudentName = selectedMatch.fullName,
+                    originalRecognition = speech.fullText,
+                    hasExistingScore = true,
+                    existingScore = existingScore
+                )
+                currentOverrideEntry = entry
+                recordingState = RecordingState.SHOWING_OVERRIDE_CONFIRMATION
+            } else {
+                // No existing score - add entry directly
+                Log.d("VoiceRecording", "Student ${selectedMatch.fullName} has no existing score in column '$columnName', adding entry directly")
+                val entry = VoiceEntry(
+                    studentName = speech.recognizedName ?: "",
+                    score = speech.score ?: "",
+                    fullStudentName = selectedMatch.fullName,
+                    originalRecognition = speech.fullText,
+                    confirmed = true
+                )
+                Log.d("VoiceRecording", "Adding entry from duplicate selection: ${entry.fullStudentName} - ${entry.score} - Confirmed: ${entry.confirmed}")
+                voiceEntries = voiceEntries + entry
+                recordingState = RecordingState.SPEECH_RECOGNIZED
+                
+                // Auto-continue after showing success message
+                coroutineScope.launch {
+                    delay(1500)
+                    recordingState = RecordingState.READY_TO_RECORD
+                }
+            }
+            
+            currentDuplicateMatches = emptyList()
+            Unit
         }
     }
 
-    // Check permission on launch
-    LaunchedEffect(Unit) {
-        when (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)) {
-            PackageManager.PERMISSION_GRANTED -> {
-                permissionGranted = true
+    // Handle override confirmation - Create stable reference
+    val handleOverrideConfirmation = remember {
+        { override: Boolean ->
+            val entry = currentOverrideEntry ?: return@remember Unit
+            
+            if (override) {
+                val confirmedEntry = entry.copy(confirmed = true)
+                Log.d("VoiceRecording", "Adding entry from override confirmation: ${confirmedEntry.fullStudentName} - ${confirmedEntry.score} - Confirmed: ${confirmedEntry.confirmed}")
+                voiceEntries = voiceEntries + confirmedEntry
+            } else {
+                Log.d("VoiceRecording", "User chose not to override existing score for: ${entry.fullStudentName}")
+            }
+            
+            currentOverrideEntry = null
+            recordingState = RecordingState.SPEECH_RECOGNIZED
+            
+            // Auto-continue after showing result
+            coroutineScope.launch {
+                delay(1500)
                 recordingState = RecordingState.READY_TO_RECORD
             }
-            else -> {
-                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            Unit
+        }
+    }
+
+    // Save all entries to Excel - Create stable reference
+    val saveAllEntries = remember {
+        {
+            coroutineScope.launch {
+                try {
+                    isSaving = true
+                    val totalEntries = voiceEntries.filter { it.confirmed }
+                    
+                    Log.d("VoiceRecording", "=== SAVE DEBUG ===")
+                    Log.d("VoiceRecording", "Total voice entries: ${voiceEntries.size}")
+                    Log.d("VoiceRecording", "Confirmed entries: ${totalEntries.size}")
+                    voiceEntries.forEachIndexed { index, entry ->
+                        Log.d("VoiceRecording", "Entry $index: ${entry.fullStudentName} - ${entry.score} - Confirmed: ${entry.confirmed}")
+                    }
+                    
+                    if (totalEntries.isEmpty()) {
+                        Log.w("VoiceRecording", "No confirmed entries to save!")
+                        isSaving = false
+                        sessionComplete = true
+                        // Still call onSaveCompleted with 0 to show the message
+                        onSaveCompleted(0)
+                        return@launch
+                    }
+                    
+                    Log.d("VoiceRecording", "Starting to save ${totalEntries.size} entries")
+                    
+                    // Use a counter that's properly synchronized
+                    var successCount = 0
+                    var completedCount = 0
+                    
+                    totalEntries.forEach { entry ->
+                        try {
+                            Log.d("VoiceRecording", "Attempting to save: ${entry.fullStudentName} -> ${entry.score} in column: $columnName")
+                            
+                            excelViewModel.updateStudentValue(
+                                studentName = entry.fullStudentName,
+                                columnName = columnName,
+                                value = entry.score
+                            ) { success ->
+                                // This callback might be called from different threads
+                                coroutineScope.launch {
+                                    completedCount++
+                                    if (success) {
+                                        successCount++
+                                        Log.d("VoiceRecording", "Successfully saved: ${entry.fullStudentName} -> ${entry.score} in column: $columnName")
+                                    } else {
+                                        Log.e("VoiceRecording", "Failed to save: ${entry.fullStudentName} -> ${entry.score} in column: $columnName")
+                                    }
+                                    
+                                    // Check if all entries have been processed
+                                    if (completedCount >= totalEntries.size) {
+                                        Log.d("VoiceRecording", "All entries processed. Success: $successCount, Total: ${totalEntries.size}")
+                                        withContext(Dispatchers.Main) {
+                                            isSaving = false
+                                            sessionComplete = true
+                                            
+                                            // Notify parent screen that saving is complete
+                                            onSaveCompleted(successCount)
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.e("VoiceRecording", "Exception saving entry: ${entry.fullStudentName} -> ${entry.score} in column: $columnName", e)
+                            coroutineScope.launch {
+                                completedCount++
+                                if (completedCount >= totalEntries.size) {
+                                    withContext(Dispatchers.Main) {
+                                        isSaving = false
+                                        sessionComplete = true
+                                        onSaveCompleted(successCount)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Add a timeout mechanism in case callbacks don't fire
+                    launch {
+                        delay(10000) // 10 second timeout
+                        if (!sessionComplete && isSaving) {
+                            Log.w("VoiceRecording", "Timeout reached, forcing completion")
+                            withContext(Dispatchers.Main) {
+                                isSaving = false
+                                sessionComplete = true
+                                onSaveCompleted(successCount)
+                            }
+                        }
+                    }
+                    
+                } catch (e: Exception) {
+                    Log.e("VoiceRecording", "Error in saveAllEntries", e)
+                    isSaving = false
+                    sessionComplete = true // Complete even on error to prevent hanging
+                    onSaveCompleted(0)
+                }
             }
+            Unit // Explicitly return Unit to fix type mismatch
         }
     }
 
-    // Cleanup
-    DisposableEffect(Unit) {
-        onDispose {
-            audioRecord?.stop()
-            audioRecord?.release()
-            speechRecognizer?.destroy()
-            ttsEngine?.stop()
-            ttsEngine?.shutdown()
-        }
-    }
-
-    // Functions - Define speakResponse FIRST
-    fun speakResponse(text: String) {
-        coroutineScope.launch {
-            recordingState = RecordingState.TTS_SPEAKING
-            ttsEngine?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "response")
-
-            // Wait for TTS to finish (approximate)
-            delay(text.length * 100L + 1500L)
-
-            // Clear the recognized speech and return to ready state
-            recognizedSpeech = null
-            recordingState = RecordingState.READY_TO_RECORD
-        }
-    }
-
-    // 🎯 NEW: Android Native Speech Recognition
+    // Functions for speech recognition
     fun startAndroidSpeechRecognition() {
         try {
             recordingState = RecordingState.LISTENING
+            errorMessage = null
 
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
@@ -204,13 +423,9 @@ fun VoiceRecordingInterface(
                     Log.d("VoiceRecording", "Android STT: Beginning of speech")
                 }
 
-                override fun onRmsChanged(rmsdB: Float) {
-                    // Audio level feedback
-                }
+                override fun onRmsChanged(rmsdB: Float) {}
 
-                override fun onBufferReceived(buffer: ByteArray?) {
-                    // Raw audio data (not used here)
-                }
+                override fun onBufferReceived(buffer: ByteArray?) {}
 
                 override fun onEndOfSpeech() {
                     Log.d("VoiceRecording", "Android STT: End of speech")
@@ -245,18 +460,7 @@ fun VoiceRecordingInterface(
                         Log.d("VoiceRecording", "Android STT Result: $transcription")
 
                         coroutineScope.launch {
-                            parseSimpleTranscription(transcription) { speech ->
-                                recognizedSpeech = speech
-                                recordingState = RecordingState.SPEECH_RECOGNIZED
-
-                                // Automatically start TTS after showing result
-                                launch {
-                                    delay(2000)
-                                    recordedCount++
-                                    val response = "Yes, ${speech.fullText} done!"
-                                    speakResponse(response)
-                                }
-                            }
+                            processRecognizedSpeech(transcription)
                         }
                     } else {
                         coroutineScope.launch {
@@ -266,17 +470,8 @@ fun VoiceRecordingInterface(
                     }
                 }
 
-                override fun onPartialResults(partialResults: Bundle?) {
-                    // Handle partial results if needed
-                    val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    if (!matches.isNullOrEmpty()) {
-                        Log.d("VoiceRecording", "Android STT Partial: ${matches[0]}")
-                    }
-                }
-
-                override fun onEvent(eventType: Int, params: Bundle?) {
-                    // Handle other events
-                }
+                override fun onPartialResults(partialResults: Bundle?) {}
+                override fun onEvent(eventType: Int, params: Bundle?) {}
             }
 
             speechRecognizer?.setRecognitionListener(recognitionListener)
@@ -291,12 +486,12 @@ fun VoiceRecordingInterface(
         }
     }
 
-    // Google Cloud Speech Recognition (existing function, slightly modified)
     fun startGoogleCloudRecording() {
         coroutineScope.launch {
             try {
                 recordingState = RecordingState.LISTENING
                 isRecording = true
+                errorMessage = null
 
                 // Audio recording setup
                 val sampleRate = 16000
@@ -344,27 +539,13 @@ fun VoiceRecordingInterface(
                 val audioBytes = outputStream.toByteArray()
                 Log.d("VoiceRecording", "Google Cloud: Recorded ${audioBytes.size} bytes")
 
-                // 🎯 NEW: Get student names from Excel data (for future implementation)
-                // For now, we'll use some sample names - you can replace this later
-                val sampleStudentNames = listOf("Omen", "Owen", "Ethan", "Aaron", "Zaki", "John", "Jane")
-
-                // 🎯 ENHANCED: Call with student names
-                val result = whisperClient.transcribeAudioBytes(audioBytes, "en-US", sampleStudentNames)
+                val studentNames = studentData.map { "${it.firstName} ${it.lastName}".trim() }
+                val result = whisperClient.transcribeAudioBytes(audioBytes, "en-US", studentNames)
 
                 result.fold(
                     onSuccess = { transcription ->
                         Log.d("VoiceRecording", "Google Cloud Result: $transcription")
-                        parseSimpleTranscription(transcription) { speech ->
-                            recognizedSpeech = speech
-                            recordingState = RecordingState.SPEECH_RECOGNIZED
-
-                            coroutineScope.launch {
-                                delay(2000)
-                                recordedCount++
-                                val response = "Yes, ${speech.fullText} done!"
-                                speakResponse(response)
-                            }
-                        }
+                        processRecognizedSpeech(transcription)
                     },
                     onFailure = { error ->
                         Log.e("VoiceRecording", "Google Cloud failed", error)
@@ -384,13 +565,77 @@ fun VoiceRecordingInterface(
         }
     }
 
-    // 🎯 NEW: Smart start recording function
     fun startRecording() {
         errorMessage = null
         when (selectedEngine) {
             SpeechEngine.ANDROID_NATIVE -> startAndroidSpeechRecognition()
             SpeechEngine.GOOGLE_CLOUD -> startGoogleCloudRecording()
         }
+    }
+
+    // Initialize TTS
+    LaunchedEffect(Unit) {
+        ttsEngine = TextToSpeech(context) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                ttsEngine?.language = Locale.US
+                Log.d("VoiceRecording", "TTS initialized successfully")
+            } else {
+                Log.e("VoiceRecording", "TTS initialization failed")
+            }
+        }
+    }
+
+    // Initialize Android SpeechRecognizer
+    LaunchedEffect(Unit) {
+        if (SpeechRecognizer.isRecognitionAvailable(context)) {
+            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context)
+            Log.d("VoiceRecording", "Android SpeechRecognizer initialized")
+        } else {
+            Log.w("VoiceRecording", "Android SpeechRecognizer not available")
+        }
+    }
+
+    // Check permission on launch
+    LaunchedEffect(Unit) {
+        when (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)) {
+            PackageManager.PERMISSION_GRANTED -> {
+                permissionGranted = true
+                recordingState = RecordingState.READY_TO_RECORD
+            }
+            else -> {
+                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            }
+        }
+    }
+
+    // Add debugging for state changes
+    LaunchedEffect(voiceEntries) {
+        Log.d("VoiceRecording", "=== VOICE ENTRIES STATE CHANGED ===")
+        Log.d("VoiceRecording", "Total entries: ${voiceEntries.size}")
+        Log.d("VoiceRecording", "Confirmed entries: ${voiceEntries.filter { it.confirmed }.size}")
+        voiceEntries.forEachIndexed { index, entry ->
+            Log.d("VoiceRecording", "Entry $index: ID=${entry.id}, Student=${entry.fullStudentName}, Score=${entry.score}, Confirmed=${entry.confirmed}")
+        }
+    }
+
+    // Cleanup
+    DisposableEffect(Unit) {
+        onDispose {
+            audioRecord?.stop()
+            audioRecord?.release()
+            speechRecognizer?.destroy()
+            ttsEngine?.stop()
+            ttsEngine?.shutdown()
+        }
+    }
+
+    // Log the column name and check if it exists in headers
+    LaunchedEffect(columnName) {
+        val headers = excelViewModel.getColumnNames()
+        Log.d("VoiceRecordingInterface", "=== VOICE RECORDING INTERFACE STARTED ===")
+        Log.d("VoiceRecordingInterface", "Target column: '$columnName'")
+        Log.d("VoiceRecordingInterface", "Available headers: $headers")
+        Log.d("VoiceRecordingInterface", "Column exists in headers: ${headers.contains(columnName)}")
     }
 
     Dialog(
@@ -409,576 +654,112 @@ fun VoiceRecordingInterface(
         ) {
             Card(
                 modifier = Modifier
-                    .fillMaxWidth(0.9f)
-                    .fillMaxHeight(0.8f),
+                    .fillMaxWidth(0.95f)
+                    .fillMaxHeight(0.9f),
                 colors = CardDefaults.cardColors(containerColor = Color.White),
                 elevation = CardDefaults.cardElevation(16.dp),
                 shape = RoundedCornerShape(24.dp)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    // Header with Engine Selector
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(
-                                text = "Voice Test Mode",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF333D79)
-                            )
-                            Text(
-                                text = "$recordedCount recordings tested",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF666666)
-                            )
-                        }
-
-                        IconButton(onClick = onDismiss) {
-                            Icon(
-                                Icons.Default.Close,
-                                contentDescription = "Close",
-                                tint = Color(0xFF666666)
-                            )
-                        }
+                when (recordingState) {
+                    RecordingState.REQUESTING_PERMISSION -> {
+                        PermissionRequestScreen()
                     }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // 🎯 NEW: Speech Engine Selector
-                    SpeechEngineSelector(
-                        selectedEngine = selectedEngine,
-                        onEngineSelected = { engine ->
-                            selectedEngine = engine
-                            errorMessage = null
-                        }
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Error message display
-                    if (errorMessage != null) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = Color(0xFFFFEBEE)
-                            )
-                        ) {
-                            Text(
-                                text = errorMessage!!,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color(0xFFD32F2F),
-                                modifier = Modifier.padding(16.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
-                    }
-
-                    // Main content based on recording state
-                    Box(
-                        modifier = Modifier.weight(1f),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        when (recordingState) {
-                            RecordingState.REQUESTING_PERMISSION -> {
-                                PermissionRequestUI()
-                            }
-
-                            RecordingState.READY_TO_RECORD -> {
-                                ReadyToRecordUI(
-                                    selectedEngine = selectedEngine,
-                                    onStartRecording = { startRecording() }
-                                )
-                            }
-
-                            RecordingState.LISTENING -> {
-                                ListeningUI(
-                                    pulseScale = pulseScale,
-                                    selectedEngine = selectedEngine
-                                )
-                            }
-
-                            RecordingState.PROCESSING -> {
-                                ProcessingUI(selectedEngine = selectedEngine)
-                            }
-
-                            RecordingState.SPEECH_RECOGNIZED -> {
-                                SpeechRecognizedUI(
-                                    speech = recognizedSpeech!!,
-                                    onTryAgain = {
-                                        recognizedSpeech = null
-                                        recordingState = RecordingState.READY_TO_RECORD
-                                    }
-                                )
-                            }
-
-                            RecordingState.TTS_SPEAKING -> {
-                                TTSSpeakingUI()
-                            }
-                        }
-                    }
-
-                    // Status text
-                    Text(
-                        text = when (recordingState) {
-                            RecordingState.REQUESTING_PERMISSION -> "Requesting microphone permission..."
-                            RecordingState.READY_TO_RECORD -> "Tap microphone to test voice recognition"
-                            RecordingState.LISTENING -> when (selectedEngine) {
-                                SpeechEngine.ANDROID_NATIVE -> "Listening... (Android STT) Say anything like \"John Doe 50\""
-                                SpeechEngine.GOOGLE_CLOUD -> "Listening... (Google Cloud STT) Say anything like \"John Doe 50\""
-                            }
-                            RecordingState.PROCESSING -> "Processing your voice..."
-                            RecordingState.SPEECH_RECOGNIZED -> "Speech recognized! TTS will start automatically..."
-                            RecordingState.TTS_SPEAKING -> "Speaking response..."
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFF666666),
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(16.dp)
-                    )
-                }
-            }
-        }
-    }
-}
-
-// 🎯 NEW: Speech Engine Selector Component
-@Composable
-fun SpeechEngineSelector(
-    selectedEngine: SpeechEngine,
-    onEngineSelected: (SpeechEngine) -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFFF5F5F5)
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Text(
-                text = "Speech Recognition Engine",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = Color(0xFF333D79)
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // Android Native Option
-                FilterChip(
-                    selected = selectedEngine == SpeechEngine.ANDROID_NATIVE,
-                    onClick = { onEngineSelected(SpeechEngine.ANDROID_NATIVE) },
-                    label = {
-                        Text("Android Native")
-                    },
-                    leadingIcon = {
-                        Icon(
-                            Icons.Default.Android,
-                            contentDescription = "Android",
-                            modifier = Modifier.size(18.dp)
+                    
+                    RecordingState.READY_TO_RECORD -> {
+                        MainRecordingScreen(
+                            selectedEngine = selectedEngine,
+                            onEngineSelected = { selectedEngine = it },
+                            onStartRecording = { startRecording() },
+                            voiceEntries = voiceEntries.filter { it.confirmed },
+                            columnName = columnName,
+                            onDismiss = onDismiss,
+                            onViewSummary = { recordingState = RecordingState.SESSION_SUMMARY },
+                            errorMessage = errorMessage,
+                            onClearError = { errorMessage = null }
                         )
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-
-                // Google Cloud Option
-                FilterChip(
-                    selected = selectedEngine == SpeechEngine.GOOGLE_CLOUD,
-                    onClick = { onEngineSelected(SpeechEngine.GOOGLE_CLOUD) },
-                    label = {
-                        Text("Google Cloud")
-                    },
-                    leadingIcon = {
-                        Icon(
-                            Icons.Default.Cloud,
-                            contentDescription = "Cloud",
-                            modifier = Modifier.size(18.dp)
+                    }
+                    
+                    RecordingState.LISTENING -> {
+                        ListeningScreen(
+                            selectedEngine = selectedEngine,
+                            pulseScale = pulseScale
                         )
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = when (selectedEngine) {
-                    SpeechEngine.ANDROID_NATIVE -> "✓ Fast • Works offline • Device-based"
-                    SpeechEngine.GOOGLE_CLOUD -> "✓ High accuracy • Requires internet • Cloud-based"
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFF666666)
-            )
-        }
-    }
-}
-
-// SIMPLIFIED: Parse transcription without Excel matching (unchanged)
-fun parseSimpleTranscription(
-    transcription: String,
-    onResult: (RecognizedSpeech) -> Unit
-) {
-    val scorePattern = Regex("""(\d+)""")
-    val scoreMatch = scorePattern.find(transcription)
-
-    val score = scoreMatch?.value
-    val nameText = if (score != null) {
-        transcription.replace(score, "").trim().removeSuffix(".").trim()
-    } else {
-        transcription.trim().removeSuffix(".").trim()
-    }
-
-    val speech = RecognizedSpeech(
-        fullText = transcription.trim().removeSuffix(".").trim(),
-        name = if (nameText.isNotEmpty()) nameText else null,
-        score = score
-    )
-
-    onResult(speech)
-}
-
-// Updated UI Components with engine awareness
-@Composable
-fun PermissionRequestUI() {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Icon(
-            Icons.Default.Mic,
-            contentDescription = "Microphone",
-            modifier = Modifier.size(80.dp),
-            tint = Color(0xFF666666)
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(
-            text = "Requesting Permission...",
-            style = MaterialTheme.typography.titleMedium,
-            color = Color(0xFF333D79)
-        )
-    }
-}
-
-@Composable
-fun ReadyToRecordUI(
-    selectedEngine: SpeechEngine,
-    onStartRecording: () -> Unit
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Button(
-            onClick = onStartRecording,
-            modifier = Modifier.size(120.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = when (selectedEngine) {
-                    SpeechEngine.ANDROID_NATIVE -> Color(0xFF4CAF50)  // Green for Android
-                    SpeechEngine.GOOGLE_CLOUD -> Color(0xFF333D79)    // Blue for Google
-                }
-            ),
-            shape = CircleShape
-        ) {
-            Icon(
-                Icons.Default.Mic,
-                contentDescription = "Start Recording",
-                modifier = Modifier.size(48.dp),
-                tint = Color.White
-            )
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text(
-            text = "Ready to Test Voice",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = Color(0xFF333D79)
-        )
-
-        Text(
-            text = "Try saying: \"John Doe 85\"",
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color(0xFF666666),
-            textAlign = TextAlign.Center
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            text = "Using: ${when (selectedEngine) {
-                SpeechEngine.ANDROID_NATIVE -> "Android Native STT"
-                SpeechEngine.GOOGLE_CLOUD -> "Google Cloud STT"
-            }}",
-            style = MaterialTheme.typography.bodySmall,
-            color = Color(0xFF999999),
-            textAlign = TextAlign.Center
-        )
-    }
-}
-
-@Composable
-fun ListeningUI(
-    pulseScale: Float,
-    selectedEngine: SpeechEngine
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Box(
-            modifier = Modifier.size(200.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(120.dp)
-                    .scale(pulseScale)
-                    .background(
-                        when (selectedEngine) {
-                            SpeechEngine.ANDROID_NATIVE -> Color(0xFF4CAF50)  // Green for Android
-                            SpeechEngine.GOOGLE_CLOUD -> Color(0xFFFF5722)    // Orange for Google
-                        },
-                        shape = CircleShape
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Default.Mic,
-                    contentDescription = "Recording",
-                    modifier = Modifier.size(48.dp),
-                    tint = Color.White
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
-        SoundWaveVisualization(selectedEngine)
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text(
-            text = "Listening...",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = when (selectedEngine) {
-                SpeechEngine.ANDROID_NATIVE -> Color(0xFF4CAF50)
-                SpeechEngine.GOOGLE_CLOUD -> Color(0xFFFF5722)
-            }
-        )
-    }
-}
-
-@Composable
-fun ProcessingUI(selectedEngine: SpeechEngine) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        CircularProgressIndicator(
-            modifier = Modifier.size(80.dp),
-            color = when (selectedEngine) {
-                SpeechEngine.ANDROID_NATIVE -> Color(0xFF4CAF50)
-                SpeechEngine.GOOGLE_CLOUD -> Color(0xFF333D79)
-            },
-            strokeWidth = 6.dp
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text(
-            text = "Analyzing voice...",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = Color(0xFF333D79)
-        )
-
-        Text(
-            text = when (selectedEngine) {
-                SpeechEngine.ANDROID_NATIVE -> "Android STT Processing"
-                SpeechEngine.GOOGLE_CLOUD -> "Google Cloud STT Processing"
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = Color(0xFF666666)
-        )
-    }
-}
-
-@Composable
-fun SpeechRecognizedUI(
-    speech: RecognizedSpeech,
-    onTryAgain: () -> Unit
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Box(
-            modifier = Modifier
-                .size(100.dp)
-                .background(Color(0xFF4CAF50).copy(alpha = 0.1f), CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                Icons.Default.CheckCircle,
-                contentDescription = "Success",
-                tint = Color(0xFF4CAF50),
-                modifier = Modifier.size(48.dp)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text(
-            text = "Speech Recognized!",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFF4CAF50)
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = Color(0xFF4CAF50).copy(alpha = 0.1f)
-            )
-        ) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "\"${speech.fullText}\"",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF333D79),
-                    textAlign = TextAlign.Center
-                )
-
-                if (speech.name != null && speech.score != null) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "Name: ${speech.name}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFF666666)
-                    )
-                    Text(
-                        text = "Score: ${speech.score}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFF666666)
-                    )
+                    }
+                    
+                    RecordingState.PROCESSING -> {
+                        ProcessingScreen(selectedEngine = selectedEngine)
+                    }
+                    
+                    RecordingState.SPEECH_RECOGNIZED -> {
+                        SpeechRecognizedScreen(
+                            recognizedSpeech = recognizedSpeech,
+                            onContinue = { recordingState = RecordingState.READY_TO_RECORD }
+                        )
+                    }
+                    
+                    RecordingState.SHOWING_DUPLICATE_SELECTION -> {
+                        DuplicateSelectionScreen(
+                            matches = currentDuplicateMatches,
+                            recognizedName = recognizedSpeech?.recognizedName ?: "",
+                            onStudentSelected = handleDuplicateSelection,
+                            onCancel = { 
+                                currentDuplicateMatches = emptyList()
+                                recordingState = RecordingState.READY_TO_RECORD 
+                            }
+                        )
+                    }
+                    
+                    RecordingState.SHOWING_OVERRIDE_CONFIRMATION -> {
+                        OverrideConfirmationScreen(
+                            entry = currentOverrideEntry,
+                            onConfirm = handleOverrideConfirmation
+                        )
+                    }
+                    
+                    RecordingState.SESSION_SUMMARY -> {
+                        Log.d("VoiceRecording", "=== SESSION SUMMARY ===")
+                        Log.d("VoiceRecording", "Total entries: ${voiceEntries.size}")
+                        Log.d("VoiceRecording", "Confirmed entries: ${voiceEntries.filter { it.confirmed }.size}")
+                        voiceEntries.forEachIndexed { index, entry ->
+                            Log.d("VoiceRecording", "Entry $index: ${entry.fullStudentName} - ${entry.score} - Confirmed: ${entry.confirmed}")
+                        }
+                        
+                        SessionSummaryScreen(
+                            voiceEntries = voiceEntries.filter { it.confirmed },
+                            columnName = columnName,
+                            onContinueRecording = { recordingState = RecordingState.READY_TO_RECORD },
+                            onFinalValidation = { 
+                                Log.d("VoiceRecording", "Transitioning to FINAL_VALIDATION with ${voiceEntries.filter { it.confirmed }.size} confirmed entries")
+                                recordingState = RecordingState.FINAL_VALIDATION 
+                            },
+                            onRemoveEntry = { entryId ->
+                                voiceEntries = voiceEntries.filter { it.id != entryId }
+                            }
+                        )
+                    }
+                    
+                    RecordingState.FINAL_VALIDATION -> {
+                        Log.d("VoiceRecording", "=== FINAL VALIDATION ===")
+                        Log.d("VoiceRecording", "Total entries: ${voiceEntries.size}")
+                        Log.d("VoiceRecording", "Confirmed entries: ${voiceEntries.filter { it.confirmed }.size}")
+                        
+                        FinalValidationScreen(
+                            voiceEntries = voiceEntries.filter { it.confirmed },
+                            columnName = columnName,
+                            onSaveAll = {
+                                Log.d("VoiceRecording", "=== SAVE ALL BUTTON CLICKED ===")
+                                Log.d("VoiceRecording", "Current voiceEntries size: ${voiceEntries.size}")
+                                Log.d("VoiceRecording", "Current confirmed entries: ${voiceEntries.filter { it.confirmed }.size}")
+                                saveAllEntries()
+                            },
+                            onCancel = { recordingState = RecordingState.SESSION_SUMMARY },
+                            sessionComplete = sessionComplete,
+                            isSaving = isSaving,
+                            onDismiss = onDismiss
+                        )
+                    }
                 }
             }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Button(
-            onClick = onTryAgain,
-            modifier = Modifier.fillMaxWidth(0.6f),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF666666)
-            )
-        ) {
-            Icon(
-                Icons.Default.Refresh,
-                contentDescription = "Try Again",
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Try Again")
-        }
-    }
-}
-
-@Composable
-fun TTSSpeakingUI() {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Box(
-            modifier = Modifier
-                .size(100.dp)
-                .background(Color(0xFF2196F3).copy(alpha = 0.1f), CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                Icons.Default.VolumeUp,
-                contentDescription = "Speaking",
-                tint = Color(0xFF2196F3),
-                modifier = Modifier.size(48.dp)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text(
-            text = "Speaking Response...",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = Color(0xFF2196F3)
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            text = "🔊 Listen for the confirmation",
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color(0xFF666666),
-            textAlign = TextAlign.Center
-        )
-    }
-}
-
-@Composable
-fun SoundWaveVisualization(selectedEngine: SpeechEngine = SpeechEngine.GOOGLE_CLOUD) {
-    val infiniteTransition = rememberInfiniteTransition(label = "sound_wave")
-
-    Row(
-        modifier = Modifier.height(40.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        repeat(8) { index ->
-            val animatedHeight by infiniteTransition.animateFloat(
-                initialValue = 0.3f,
-                targetValue = 1f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(
-                        durationMillis = 800 + (index * 100),
-                        easing = FastOutSlowInEasing
-                    ),
-                    repeatMode = RepeatMode.Reverse
-                ),
-                label = "wave_$index"
-            )
-
-            Box(
-                modifier = Modifier
-                    .width(4.dp)
-                    .fillMaxHeight(animatedHeight)
-                    .background(
-                        when (selectedEngine) {
-                            SpeechEngine.ANDROID_NATIVE -> Color(0xFF4CAF50).copy(alpha = 0.7f)
-                            SpeechEngine.GOOGLE_CLOUD -> Color(0xFFFF5722).copy(alpha = 0.7f)
-                        },
-                        RoundedCornerShape(2.dp)
-                    )
-            )
         }
     }
 }

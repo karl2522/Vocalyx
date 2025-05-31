@@ -59,6 +59,8 @@ import java.io.File
 import java.io.FileOutputStream
 import com.example.vocalyxapk.composables.RecordingCategory
 import com.example.vocalyxapk.composables.VoiceRecordingInterface
+import kotlinx.coroutines.delay
+import android.util.Log
 
 class MyStudentsActivity : ComponentActivity() {
     
@@ -143,6 +145,7 @@ fun StudentsScreen(
     var showCategoryDialog by remember { mutableStateOf(false) }
     var showVoiceRecording by remember { mutableStateOf(false) }
     var selectedColumnName by remember { mutableStateOf<String?>(null) }
+    var refreshTrigger by remember { mutableStateOf(0) }
     
     // Fetch Excel files when the screen is first displayed
     LaunchedEffect(classId) {
@@ -379,7 +382,7 @@ fun StudentsScreen(
                                     Spacer(modifier = Modifier.height(20.dp))
                                     
                                     // File statistics
-                                    val sheetData = excelViewModel.getSelectedSheetData()
+                                    val sheetData = remember(refreshTrigger) { excelViewModel.getSelectedSheetData() }
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -675,13 +678,88 @@ fun StudentsScreen(
             excelViewModel = excelViewModel,
             onDismiss = { showCategoryDialog = false },
             onCategorySelected = { category, subcategory ->
+                Log.d("MyStudentsActivity", "=== CATEGORY SELECTED ===")
+                Log.d("MyStudentsActivity", "Category: ${category.displayName}")
+                Log.d("MyStudentsActivity", "Subcategory: $subcategory")
+                
                 showCategoryDialog = false
-                selectedColumnName = subcategory ?: when (category) {
-                    RecordingCategory.QUIZ -> "Quiz 1"
-                    RecordingCategory.LAB -> "Laboratory Activity 1" 
-                    RecordingCategory.EXAM -> "Prelim Exam"
+                
+                if (subcategory != null) {
+                    // User selected an existing column
+                    Log.d("MyStudentsActivity", "User selected existing column: $subcategory")
+                    selectedColumnName = subcategory
+                    showVoiceRecording = true
+                } else {
+                    // User wants to create a new column
+                    Log.d("MyStudentsActivity", "User wants to create new column for category: ${category.displayName}")
+                    
+                    val newColumnName = when (category) {
+                        RecordingCategory.QUIZ -> {
+                            Log.d("MyStudentsActivity", "Processing QUIZ category")
+                            // Find existing quiz columns and get next number
+                            val headers = excelViewModel.getColumnNames()
+                            Log.d("MyStudentsActivity", "Current headers for QUIZ: $headers")
+                            val quizColumns = headers.filter { it.contains("quiz", ignoreCase = true) }
+                            Log.d("MyStudentsActivity", "Found quiz columns: $quizColumns")
+                            val maxNumber = quizColumns.mapNotNull { column ->
+                                val numberRegex = "\\d+".toRegex()
+                                numberRegex.find(column)?.value?.toIntOrNull()
+                            }.maxOrNull() ?: 0
+                            Log.d("MyStudentsActivity", "Max quiz number: $maxNumber")
+                            "Quiz ${maxNumber + 1}"
+                        }
+                        RecordingCategory.LAB -> {
+                            Log.d("MyStudentsActivity", "Processing LAB category")
+                            // Find existing lab columns and get next number
+                            val headers = excelViewModel.getColumnNames()
+                            Log.d("MyStudentsActivity", "Current headers for LAB: $headers")
+                            val labColumns = headers.filter { 
+                                it.contains("lab", ignoreCase = true) || 
+                                it.contains("laboratory", ignoreCase = true) 
+                            }
+                            Log.d("MyStudentsActivity", "Found lab columns: $labColumns")
+                            val maxNumber = labColumns.mapNotNull { column ->
+                                val numberRegex = "\\d+".toRegex()
+                                numberRegex.find(column)?.value?.toIntOrNull()
+                            }.maxOrNull() ?: 0
+                            Log.d("MyStudentsActivity", "Max lab number: $maxNumber")
+                            "Lab ${maxNumber + 1}"
+                        }
+                        RecordingCategory.EXAM -> {
+                            Log.d("MyStudentsActivity", "Processing EXAM category")
+                            // For exams, use predefined sequence
+                            val headers = excelViewModel.getColumnNames()
+                            Log.d("MyStudentsActivity", "Current headers for EXAM: $headers")
+                            val examTypes = listOf("Prelim Exam", "Midterm Exam", "Prefinal Exam", "Final Exam")
+                            Log.d("MyStudentsActivity", "Checking exam types: $examTypes")
+                            
+                            examTypes.forEach { examType ->
+                                val exists = headers.any { it.contains(examType, ignoreCase = true) }
+                                Log.d("MyStudentsActivity", "Exam type '$examType' exists: $exists")
+                            }
+                            
+                            val selectedExamType = examTypes.firstOrNull { examType -> 
+                                val exists = headers.any { it.contains(examType, ignoreCase = true) }
+                                !exists
+                            } ?: "Final Exam"
+                            Log.d("MyStudentsActivity", "Selected exam type: $selectedExamType")
+                            Log.d("MyStudentsActivity", "Current headers: $headers")
+                            selectedExamType
+                        }
+                    }
+                    
+                    Log.d("MyStudentsActivity", "Final column name determined: $newColumnName")
+                    
+                    // Create the new column first
+                    Log.d("MyStudentsActivity", "Creating new column: $newColumnName")
+                    excelViewModel.addColumnToExcelFile(newColumnName)
+                    
+                    // Set the column name and start voice recording
+                    selectedColumnName = newColumnName
+                    showVoiceRecording = true
+                    
+                    Log.d("MyStudentsActivity", "Column creation complete, starting voice recording with column: $selectedColumnName")
                 }
-                showVoiceRecording = true
             }
         )
     }
@@ -693,6 +771,28 @@ fun StudentsScreen(
             onDismiss = { 
                 showVoiceRecording = false 
                 selectedColumnName = null
+            },
+            onSaveCompleted = { savedCount ->
+                // Refresh the Excel data to show updated scores
+                coroutineScope.launch {
+                    // Show success message
+                    snackbarHostState.showSnackbar("Successfully saved $savedCount entries")
+                    
+                    // Force immediate refresh of data from backend
+                    Log.d("MyStudentsActivity", "Voice recording completed, refreshing data...")
+                    excelViewModel.fetchExcelFiles(classId)
+                    
+                    // Wait a moment for the fetch to complete, then force UI refresh
+                    delay(1000)
+                    refreshTrigger++
+                    Log.d("MyStudentsActivity", "UI refresh triggered: $refreshTrigger")
+                    
+                    // Additional refresh after another delay to ensure consistency
+                    delay(2000)
+                    excelViewModel.fetchExcelFiles(classId)
+                    refreshTrigger++
+                    Log.d("MyStudentsActivity", "Secondary UI refresh triggered: $refreshTrigger")
+                }
             }
         )
     }

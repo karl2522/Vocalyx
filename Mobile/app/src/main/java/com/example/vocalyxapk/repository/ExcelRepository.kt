@@ -62,7 +62,7 @@ class ExcelRepository {
         }
     }
 
-    suspend fun updateExcelData(excelId: Int, sheetName: String, data: List<Map<String, Any?>>): Result<Boolean> =
+    suspend fun updateExcelData(excelId: Int, sheetName: String, data: List<Map<String, Any?>>, headers: List<String>? = null): Result<Boolean> =
         withContext(Dispatchers.IO) {
             try {
                 Log.d("ExcelRepository", "Updating excel data: fileId=$excelId, sheet=$sheetName, records=${data.size}")
@@ -78,6 +78,12 @@ class ExcelRepository {
                 val requestBody = HashMap<String, Any>()
                 requestBody["sheet_name"] = sheetName
                 requestBody["sheet_data"] = sanitizedData
+                
+                // Include headers if provided
+                if (headers != null) {
+                    requestBody["headers"] = headers
+                    Log.d("ExcelRepository", "Including headers in request: $headers")
+                }
 
                 val response = apiService.updateExcelData(excelId, requestBody)
                 if (response.isSuccessful) {

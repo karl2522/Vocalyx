@@ -1,6 +1,7 @@
 package com.example.vocalyxapk
 
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -27,6 +28,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.vocalyxapk.ui.theme.VOCALYXAPKTheme
 import com.example.vocalyxapk.viewmodel.ExcelUIState
 import com.example.vocalyxapk.viewmodel.ExcelViewModel
+import kotlinx.coroutines.delay
 
 data class StudentScore(
     val assessmentName: String,
@@ -89,24 +91,73 @@ fun StudentDetailScreen(
     // State for selected category tab
     var selectedCategory by remember { mutableStateOf(AssessmentCategory.QUIZ) }
     
-    // Fetch Excel files when the screen is first displayed
-    LaunchedEffect(classId) {
-        if (classId > 0) {
-            excelViewModel.fetchExcelFiles(classId)
-        }
-    }
+    // Add refresh trigger to force UI updates
+    var refreshTrigger by remember { mutableStateOf(0) }
     
-    // Get current Excel UI state
-    val excelUIState = excelViewModel.excelUIState
+    // Helper functions defined at the top to ensure they're available throughout the composable
     
     // Function to categorize assessments based on column name
     fun categorizeAssessment(columnName: String): AssessmentCategory {
         val lowerName = columnName.lowercase()
         return when {
-            lowerName.contains("quiz") || lowerName.contains("q") && lowerName.length <= 3 -> AssessmentCategory.QUIZ
-            lowerName.contains("lab") || lowerName.contains("laboratory") || lowerName.contains("activity") -> AssessmentCategory.LAB
-            lowerName.contains("exam") || lowerName.contains("test") || lowerName.contains("midterm") || lowerName.contains("final") -> AssessmentCategory.EXAM
-            else -> AssessmentCategory.QUIZ // Default to quiz
+            // Quiz patterns - be more specific
+            lowerName.contains("quiz") || 
+            (lowerName.startsWith("q") && lowerName.length <= 3 && lowerName.matches(Regex("q\\d*"))) ||
+            lowerName.matches(Regex("quiz\\s*\\d+")) -> AssessmentCategory.QUIZ
+            
+            // Lab patterns
+            lowerName.contains("lab") || 
+            lowerName.contains("laboratory") || 
+            lowerName.contains("activity") ||
+            lowerName.contains("practical") -> AssessmentCategory.LAB
+            
+            // Exam patterns
+            lowerName.contains("exam") || 
+            lowerName.contains("test") || 
+            lowerName.contains("midterm") || 
+            lowerName.contains("final") ||
+            lowerName.contains("assessment") -> AssessmentCategory.EXAM
+            
+            // Default to LAB for unknown assessment types (more neutral than Quiz)
+            else -> AssessmentCategory.LAB
+        }
+    }
+    
+    // Function to get exam order priority for sorting
+    fun getExamOrder(examName: String): Int {
+        val lowerName = examName.lowercase()
+        return when {
+            lowerName.contains("prelim") -> 1
+            lowerName.contains("midterm") -> 2
+            lowerName.contains("prefinal") -> 3
+            lowerName.contains("final") -> 4
+            else -> 5 // Any other exam types go last
+        }
+    }
+    
+    // Function to sort assessment scores by category logic
+    fun sortAssessmentScores(scores: List<StudentScore>, category: AssessmentCategory): List<StudentScore> {
+        return when (category) {
+            AssessmentCategory.EXAM -> {
+                // Sort exams by logical order: Prelim -> Midterm -> Prefinal -> Final
+                scores.sortedBy { getExamOrder(it.assessmentName) }
+            }
+            AssessmentCategory.QUIZ -> {
+                // Sort quizzes by number
+                scores.sortedBy { score ->
+                    val numberRegex = "\\d+".toRegex()
+                    val match = numberRegex.find(score.assessmentName)
+                    match?.value?.toIntOrNull() ?: 0
+                }
+            }
+            AssessmentCategory.LAB -> {
+                // Sort labs by number
+                scores.sortedBy { score ->
+                    val numberRegex = "\\d+".toRegex()
+                    val match = numberRegex.find(score.assessmentName)
+                    match?.value?.toIntOrNull() ?: 0
+                }
+            }
         }
     }
     
@@ -136,49 +187,251 @@ fun StudentDetailScreen(
         }
     }
     
+    // Add debugging for Midterm Exam specifically
+    fun debugMidtermExamData(data: List<Map<String, String>>) {
+        Log.d("StudentDetailActivity", "=== DEBUGGING MIDTERM EXAM DATA ===")
+        if (data.isEmpty()) {
+            Log.d("StudentDetailActivity", "No data available")
+            return
+        }
+        
+        // Check headers for Midterm Exam column
+        val headers = data.firstOrNull()?.keys ?: emptySet()
+        val midtermColumns = headers.filter { it.contains("midterm", ignoreCase = true) }
+        Log.d("StudentDetailActivity", "Found Midterm columns: $midtermColumns")
+        
+        // Check all exam-related columns
+        val examColumns = headers.filter { 
+            it.contains("exam", ignoreCase = true) || 
+            it.contains("midterm", ignoreCase = true) ||
+            it.contains("prelim", ignoreCase = true) ||
+            it.contains("final", ignoreCase = true)
+        }
+        Log.d("StudentDetailActivity", "Found exam-related columns: $examColumns")
+        
+        // For each exam column, check if there's any data
+        examColumns.forEach { column ->
+            val valuesInColumn = data.mapNotNull { row -> row[column] }.filter { it.isNotBlank() }
+            Log.d("StudentDetailActivity", "Column '$column' has ${valuesInColumn.size} non-empty values: $valuesInColumn")
+        }
+    }
+    
     // Function to extract student scores
     fun extractStudentScores(
         data: List<Map<String, String>>,
         targetStudentName: String
     ): List<StudentScore> {
-        val studentData = data.find { student ->
-            val fullName = "${student.values.elementAtOrNull(0)} ${student.values.elementAtOrNull(1)}".trim()
-            fullName.equals(targetStudentName, ignoreCase = true) ||
-            student.values.any { it.equals(targetStudentName, ignoreCase = true) }
-        } ?: return emptyList()
+        Log.d("StudentDetailActivity", "=== EXTRACTING SCORES FOR: $targetStudentName ===")
+        Log.d("StudentDetailActivity", "Total records in data: ${data.size}")
+        
+        // Debug Midterm Exam data specifically
+        debugMidtermExamData(data)
+        
+        // Try multiple matching strategies
+        var studentData: Map<String, String>? = null
+        
+        // Strategy 1: Exact match
+        studentData = data.find { student ->
+            val studentValues = student.values.filter { it.isNotBlank() }
+            val fullName = studentValues.take(2).joinToString(" ").trim()
+            Log.d("StudentDetailActivity", "Checking exact match: '$fullName' vs '$targetStudentName'")
+            fullName.equals(targetStudentName, ignoreCase = true)
+        }
+        
+        // Strategy 2: Reversed name format (First Last vs Last First)
+        if (studentData == null) {
+            val nameParts = targetStudentName.split(" ").filter { it.isNotBlank() }
+            if (nameParts.size >= 2) {
+                val reversedName = "${nameParts.last()} ${nameParts.dropLast(1).joinToString(" ")}"
+                Log.d("StudentDetailActivity", "Trying reversed name: '$reversedName'")
+                
+                studentData = data.find { student ->
+                    val studentValues = student.values.filter { it.isNotBlank() }
+                    val fullName = studentValues.take(2).joinToString(" ").trim()
+                    Log.d("StudentDetailActivity", "Checking reversed match: '$fullName' vs '$reversedName'")
+                    fullName.equals(reversedName, ignoreCase = true)
+                }
+            }
+        }
+        
+        // Strategy 3: Partial match (contains)
+        if (studentData == null) {
+            studentData = data.find { student ->
+                val studentValues = student.values.filter { it.isNotBlank() }
+                val fullName = studentValues.take(2).joinToString(" ").trim()
+                Log.d("StudentDetailActivity", "Checking contains match: '$fullName' contains parts of '$targetStudentName'")
+                
+                val targetParts = targetStudentName.split(" ").filter { it.isNotBlank() }
+                targetParts.any { part ->
+                    if (part.length > 2) {
+                        fullName.contains(part, ignoreCase = true)
+                    } else false
+                }
+            }
+        }
+        
+        // Strategy 4: Check individual values for any match
+        if (studentData == null) {
+            studentData = data.find { student ->
+                Log.d("StudentDetailActivity", "Checking individual values for: ${student.values.filter { it.isNotBlank() }.take(3)}")
+                student.values.any { value ->
+                    value.equals(targetStudentName, ignoreCase = true) ||
+                    (value.isNotBlank() && targetStudentName.contains(value, ignoreCase = true))
+                }
+            }
+        }
+        
+        if (studentData == null) {
+            Log.w("StudentDetailActivity", "No matching student found for: $targetStudentName")
+            Log.d("StudentDetailActivity", "Available students:")
+            data.forEachIndexed { index, student ->
+                val studentValues = student.values.filter { it.isNotBlank() }
+                val fullName = studentValues.take(2).joinToString(" ").trim()
+                Log.d("StudentDetailActivity", "  $index: '$fullName' (${studentValues.take(3)})")
+            }
+            return emptyList()
+        }
+        
+        Log.d("StudentDetailActivity", "Found matching student data: ${studentData.values.filter { it.isNotBlank() }.take(3)}")
+        Log.d("StudentDetailActivity", "All student columns and values:")
+        studentData.forEach { (key, value) ->
+            Log.d("StudentDetailActivity", "  Column: '$key' = '$value'")
+        }
         
         val scores = mutableListOf<StudentScore>()
         studentData.forEach { (columnName, value) ->
             try {
-                // Skip name columns and empty values
-                if (!columnName.contains("name", ignoreCase = true) && 
-                    !columnName.contains("id", ignoreCase = true) && 
-                    value.isNotEmpty() && 
-                    value != "0" && 
-                    value != "-") {
+                Log.d("StudentDetailActivity", "=== PROCESSING COLUMN: '$columnName' ===")
+                Log.d("StudentDetailActivity", "Raw value: '$value'")
+                Log.d("StudentDetailActivity", "Value isEmpty: ${value.isEmpty()}")
+                Log.d("StudentDetailActivity", "Value equals '0': ${value == "0"}")
+                Log.d("StudentDetailActivity", "Value equals '-': ${value == "-"}")
+                
+                // Check if column should be skipped
+                val containsName = columnName.contains("name", ignoreCase = true)
+                val containsId = columnName.equals("id", ignoreCase = true) || 
+                                columnName.endsWith("id", ignoreCase = true) || 
+                                columnName.contains("_id", ignoreCase = true) ||
+                                columnName.contains("id_", ignoreCase = true)
+                val equalsNo = columnName.equals("no.", ignoreCase = true)
+                val equalsNoSimple = columnName.equals("no", ignoreCase = true)
+                val equalsHash = columnName.equals("#", ignoreCase = true)
+                val equalsNumber = columnName.equals("number", ignoreCase = true)
+                val containsIndex = columnName.contains("index", ignoreCase = true)
+                val containsRow = columnName.contains("row", ignoreCase = true)
+                
+                val shouldSkipColumn = containsName || containsId || equalsNo || equalsNoSimple || equalsHash || equalsNumber || containsIndex || containsRow
+                
+                Log.d("StudentDetailActivity", "Column skip analysis for '$columnName':")
+                Log.d("StudentDetailActivity", "  containsName: $containsName")
+                Log.d("StudentDetailActivity", "  containsId: $containsId") 
+                Log.d("StudentDetailActivity", "  equalsNo: $equalsNo")
+                Log.d("StudentDetailActivity", "  equalsNoSimple: $equalsNoSimple")
+                Log.d("StudentDetailActivity", "  equalsHash: $equalsHash")
+                Log.d("StudentDetailActivity", "  equalsNumber: $equalsNumber")
+                Log.d("StudentDetailActivity", "  containsIndex: $containsIndex")
+                Log.d("StudentDetailActivity", "  containsRow: $containsRow")
+                Log.d("StudentDetailActivity", "Should skip column: $shouldSkipColumn")
+                
+                val shouldSkipValue = value.isEmpty() || value == "-"
+                Log.d("StudentDetailActivity", "Should skip value: $shouldSkipValue (temporarily allowing '0' scores for debugging)")
+                
+                // Skip name columns, ID columns, row numbers, and empty values
+                if (!shouldSkipColumn && !shouldSkipValue) {
+                    
+                    Log.d("StudentDetailActivity", "Processing column '$columnName' with value '$value'")
                     
                     // Try to parse as score (could be "85/100", "85%", "85", etc.)
                     val scoreInfo = parseScore(value.toString())
+                    Log.d("StudentDetailActivity", "Parse score result: $scoreInfo")
+                    
                     if (scoreInfo != null) {
-                        scores.add(
-                            StudentScore(
-                                assessmentName = columnName,
-                                score = scoreInfo.first,
-                                maxScore = scoreInfo.second,
-                                percentage = scoreInfo.third,
-                                date = "N/A", // Could be extracted if date column exists
-                                category = categorizeAssessment(columnName)
-                            )
+                        val category = categorizeAssessment(columnName)
+                        Log.d("StudentDetailActivity", "Categorized '$columnName' as: $category")
+                        
+                        val score = StudentScore(
+                            assessmentName = columnName,
+                            score = scoreInfo.first,
+                            maxScore = scoreInfo.second,
+                            percentage = scoreInfo.third,
+                            date = "N/A", // Could be extracted if date column exists
+                            category = category
                         )
+                        scores.add(score)
+                        Log.d("StudentDetailActivity", "Successfully added score: $columnName = ${scoreInfo.first}/${scoreInfo.second} (${scoreInfo.third}%) - Category: $category")
+                    } else {
+                        Log.w("StudentDetailActivity", "Failed to parse score for column '$columnName' with value '$value'")
                     }
+                } else {
+                    Log.d("StudentDetailActivity", "Skipped column '$columnName' - shouldSkipColumn: $shouldSkipColumn, shouldSkipValue: $shouldSkipValue")
                 }
             } catch (e: Exception) {
                 // Skip this column if there's any issue processing it
-                android.util.Log.w("StudentDetailActivity", "Error processing column $columnName: ${e.message}")
+                Log.w("StudentDetailActivity", "Error processing column $columnName: ${e.message}")
             }
+        }
+        
+        Log.d("StudentDetailActivity", "=== FINAL SCORE SUMMARY ===")
+        Log.d("StudentDetailActivity", "Total scores found: ${scores.size}")
+        scores.forEach { score ->
+            Log.d("StudentDetailActivity", "  ${score.assessmentName} (${score.category}) = ${score.score}/${score.maxScore} (${score.percentage}%)")
         }
         return scores
     }
+    
+    // Fetch Excel files when the screen is first displayed
+    LaunchedEffect(classId) {
+        if (classId > 0) {
+            Log.d("StudentDetailActivity", "Initial fetch for classId: $classId")
+            excelViewModel.fetchExcelFiles(classId)
+        }
+    }
+    
+    // Refresh when returning to this screen (e.g., from voice recording)
+    LaunchedEffect(Unit) {
+        Log.d("StudentDetailActivity", "Screen composed, fetching fresh data...")
+        if (classId > 0) {
+            excelViewModel.fetchExcelFiles(classId)
+        }
+    }
+    
+    // Force refresh when activity becomes visible (e.g., returning from voice recording)
+    DisposableEffect(Unit) {
+        onDispose {
+            // When this effect is disposed and recreated, it means the screen is being recomposed
+            // This can happen when returning from another activity
+            Log.d("StudentDetailActivity", "Screen recomposed, triggering refresh")
+            refreshTrigger++
+        }
+    }
+    
+    // Add aggressive refresh to catch updates from voice recording
+    LaunchedEffect(classId, selectedExcelFileId) {
+        var refreshCount = 0
+        while (refreshCount < 10) { // Try 10 times over 30 seconds
+            delay(3000) // Check every 3 seconds
+            if (classId > 0) {
+                refreshCount++
+                Log.d("StudentDetailActivity", "Refresh attempt $refreshCount/10...")
+                excelViewModel.fetchExcelFiles(classId)
+                
+                // If we have data, check if the student has scores
+                val currentData = excelViewModel.getSelectedSheetDataAsMap()
+                val data = currentData["data"] as? List<Map<String, String>> ?: emptyList()
+                val studentScores = extractStudentScores(data, studentName)
+                Log.d("StudentDetailActivity", "Student $studentName has ${studentScores.size} scores after refresh $refreshCount")
+                
+                if (studentScores.isNotEmpty()) {
+                    Log.d("StudentDetailActivity", "Found scores, stopping aggressive refresh and triggering UI update")
+                    refreshTrigger++ // Force UI refresh
+                    break
+                }
+            }
+        }
+    }
+    
+    // Get current Excel UI state with refresh trigger
+    val excelUIState = excelViewModel.excelUIState
     
     Scaffold(
         topBar = {
@@ -247,7 +500,9 @@ fun StudentDetailScreen(
                     if (selectedExcelFile != null) {
                         val sheetData = excelViewModel.getSelectedSheetDataAsMap()
                         val data = sheetData["data"] as? List<Map<String, String>> ?: emptyList()
-                        val studentScores = extractStudentScores(data, studentName)
+                        val studentScores = remember(refreshTrigger, data, studentName) { 
+                            extractStudentScores(data, studentName) 
+                        }
                         
                         Column(
                             modifier = Modifier
@@ -413,7 +668,10 @@ fun StudentDetailScreen(
                             }
                             
                             // Assessment list for selected category
-                            val categoryScores = studentScores.filter { it.category == selectedCategory }
+                            val categoryScores = sortAssessmentScores(
+                                studentScores.filter { it.category == selectedCategory },
+                                selectedCategory
+                            )
                             
                             if (categoryScores.isNotEmpty()) {
                                 LazyColumn(

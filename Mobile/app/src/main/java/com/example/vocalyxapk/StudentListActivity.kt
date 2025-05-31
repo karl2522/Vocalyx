@@ -108,6 +108,20 @@ fun StudentListScreen(
         }
     }
     
+    // Refresh data when activity resumes (e.g., returning from voice recording)
+    DisposableEffect(Unit) {
+        onDispose {
+            // When this screen is disposed, it means user navigated away
+            // When they come back, data should be refreshed
+        }
+    }
+    
+    // Refresh when returning to this screen
+    LaunchedEffect(Unit) {
+        // Refresh data when screen is first composed or when returning to it
+        excelViewModel.fetchExcelFiles(classId)
+    }
+    
     // Get current Excel UI state
     val excelUIState = excelViewModel.excelUIState
     
@@ -827,4 +841,7 @@ fun StudentListScreen(
             }
         }
     }
-} 
+}
+
+
+

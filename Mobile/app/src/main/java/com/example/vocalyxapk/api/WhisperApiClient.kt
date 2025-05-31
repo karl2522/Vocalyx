@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit
 
 class WhisperApiClient(private val context: Context) {
     // Change to your Django backend URL
-    private val baseUrl = "http://10.0.191.212:8000"
+    private val baseUrl = "http://192.168.254.106:8000"
 
     private val httpClient = OkHttpClient.Builder()
         .addInterceptor(HttpLoggingInterceptor().apply {

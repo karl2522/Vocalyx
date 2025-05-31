@@ -1,5 +1,6 @@
 package com.example.vocalyxapk.composables
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -27,10 +28,11 @@ enum class RecordingCategory(
     val displayName: String, 
     val icon: ImageVector, 
     val color: Color,
-    val baseColumnName: String
+    val baseColumnName: String,
+    val alternativePatterns: List<String> = emptyList()
 ) {
     QUIZ("Quizzes", Icons.Default.Quiz, Color(0xFF2196F3), "Quiz"),
-    LAB("Laboratory Activities", Icons.Default.Science, Color(0xFF4CAF50), "Laboratory Activity"),
+    LAB("Laboratory Activities", Icons.Default.Science, Color(0xFF4CAF50), "Laboratory Activity", listOf("Lab")),
     EXAM("Exams", Icons.Default.School, Color(0xFFFF5722), "Exam")
 }
 
@@ -52,20 +54,27 @@ fun CategorySelectionDialog(
                 val examTypes = listOf("Prelim Exam", "Midterm Exam", "Prefinal Exam", "Final Exam")
                 examTypes.filter { examType ->
                     headers.any { header -> 
-                        header.contains(examType, ignoreCase = true)
+                        header.equals(examType, ignoreCase = true)
                     }
                 }
             }
             else -> {
                 // For Quiz and Lab, find incrementally numbered columns
-                headers.filter { header ->
-                    header.contains(category.baseColumnName, ignoreCase = true)
+                // Check both base column name and alternative patterns
+                val allPatterns = listOf(category.baseColumnName) + category.alternativePatterns
+                
+                val matchingColumns = headers.filter { header ->
+                    allPatterns.any { pattern ->
+                        header.contains(pattern, ignoreCase = true)
+                    }
                 }.sortedBy { header ->
                     // Extract number from the column name for proper sorting
                     val numberRegex = "\\d+".toRegex()
                     val match = numberRegex.find(header)
                     match?.value?.toIntOrNull() ?: 0
                 }
+                
+                matchingColumns
             }
         }
     }
@@ -78,10 +87,20 @@ fun CategorySelectionDialog(
             RecordingCategory.EXAM -> {
                 val examTypes = listOf("Prelim Exam", "Midterm Exam", "Prefinal Exam", "Final Exam")
                 examTypes.firstOrNull { examType -> 
-                    !existing.any { it.contains(examType, ignoreCase = true) }
+                    !existing.any { it.equals(examType, ignoreCase = true) }
                 } ?: "Final Exam"
             }
+            RecordingCategory.LAB -> {
+                // For Lab, use "Lab X" format
+                val maxNumber = existing.mapNotNull { column ->
+                    val numberRegex = "\\d+".toRegex()
+                    numberRegex.find(column)?.value?.toIntOrNull()
+                }.maxOrNull() ?: 0
+                
+                "Lab ${maxNumber + 1}"
+            }
             else -> {
+                // For Quiz and other categories, use base column name
                 val maxNumber = existing.mapNotNull { column ->
                     val numberRegex = "\\d+".toRegex()
                     numberRegex.find(column)?.value?.toIntOrNull()
@@ -307,7 +326,10 @@ fun SubcategorySelection(
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { onSubcategorySelected(null) },
+                .clickable { 
+                    Log.d("CategorySelectionDialog", "User selected 'Create New' for category: ${category.displayName}, next column name: $nextColumnName")
+                    onSubcategorySelected(null) 
+                },
             colors = CardDefaults.cardColors(
                 containerColor = category.color.copy(alpha = 0.1f)
             ),
