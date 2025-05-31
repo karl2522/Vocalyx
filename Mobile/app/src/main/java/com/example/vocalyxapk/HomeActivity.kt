@@ -29,8 +29,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.vocalyxapk.composables.CoursesTab
 import com.example.vocalyxapk.composables.HomeTab
+import com.example.vocalyxapk.composables.NotificationScreen
 import com.example.vocalyxapk.composables.ProfileScreen
 import com.example.vocalyxapk.composables.TeamsTab
 import com.example.vocalyxapk.composables.ScheduleTab
@@ -39,6 +42,7 @@ import com.example.vocalyxapk.ui.theme.VOCALYXAPKTheme
 import com.example.vocalyxapk.utils.AuthStateManager
 import kotlinx.coroutines.launch
 import com.example.vocalyxapk.ui.theme.DMSans
+import com.example.vocalyxapk.viewmodel.NotificationViewModel
 
 class HomeActivity : ComponentActivity() {
 
@@ -59,14 +63,18 @@ class HomeActivity : ComponentActivity() {
                     var selectedTab by remember { mutableStateOf(0) }
                     val context = LocalContext.current
                     var showProfile by remember { mutableStateOf(false) }
-                    
+
+                    // 🎯 NEW: Add notification state and ViewModel
+                    var showNotifications by remember { mutableStateOf(false) }
+                    val notificationViewModel: NotificationViewModel = viewModel()
+
                     val navigationItems = listOf(
                         Triple("Dashboard", Icons.Filled.Dashboard, "Dashboard"),
                         Triple("Courses", Icons.Rounded.School, "Courses"),
                         Triple("Schedule", Icons.Rounded.CalendarToday, "Schedule"),
                         Triple("Teams", Icons.Rounded.Group, "Teams")
                     )
-                    
+
                     ModalNavigationDrawer(
                         drawerState = drawerState,
                         drawerContent = {
@@ -122,7 +130,7 @@ class HomeActivity : ComponentActivity() {
 
                                 Spacer(modifier = Modifier.height(12.dp))
 
-                                // Drawer Menu Items with improved styling
+                                // 🎯 UPDATED: Notifications with badge
                                 NavigationDrawerItem(
                                     icon = {
                                         Box(
@@ -132,12 +140,42 @@ class HomeActivity : ComponentActivity() {
                                                 .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            Icon(
-                                                Icons.Rounded.Notifications,
-                                                contentDescription = "Notifications",
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(20.dp)
-                                            )
+                                            // Add notification badge
+                                            if (notificationViewModel.unreadCount > 0) {
+                                                Box(
+                                                    modifier = Modifier.size(36.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(
+                                                        Icons.Rounded.Notifications,
+                                                        contentDescription = "Notifications",
+                                                        tint = MaterialTheme.colorScheme.primary,
+                                                        modifier = Modifier.size(20.dp)
+                                                    )
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(12.dp)
+                                                            .clip(CircleShape)
+                                                            .background(Color.Red)
+                                                            .offset(x = 8.dp, y = (-8).dp),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Text(
+                                                            text = if (notificationViewModel.unreadCount > 9) "9+" else notificationViewModel.unreadCount.toString(),
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = Color.White,
+                                                            fontSize = 8.sp
+                                                        )
+                                                    }
+                                                }
+                                            } else {
+                                                Icon(
+                                                    Icons.Rounded.Notifications,
+                                                    contentDescription = "Notifications",
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
                                         }
                                     },
                                     label = {
@@ -149,15 +187,21 @@ class HomeActivity : ComponentActivity() {
                                             )
                                         )
                                     },
-                                    selected = false,
-                                    onClick = { /* TODO: Implement notifications */ },
+                                    selected = showNotifications,
+                                    onClick = {
+                                        showNotifications = true
+                                        showProfile = false // Close profile if open
+                                        scope.launch {
+                                            drawerState.close()
+                                        }
+                                    },
                                     colors = NavigationDrawerItemDefaults.colors(
                                         selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
                                         unselectedContainerColor = Color.Transparent
                                     ),
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                                 )
-                                
+
                                 NavigationDrawerItem(
                                     icon = {
                                         Box(
@@ -222,6 +266,7 @@ class HomeActivity : ComponentActivity() {
                                     selected = showProfile,
                                     onClick = {
                                         showProfile = true
+                                        showNotifications = false // Close notifications if open
                                         scope.launch {
                                             drawerState.close()
                                         }
@@ -232,7 +277,7 @@ class HomeActivity : ComponentActivity() {
                                     ),
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                                 )
-                                
+
                                 NavigationDrawerItem(
                                     icon = {
                                         Box(
@@ -267,7 +312,7 @@ class HomeActivity : ComponentActivity() {
                                     ),
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                                 )
-                                
+
                                 NavigationDrawerItem(
                                     icon = {
                                         Box(
@@ -378,7 +423,12 @@ class HomeActivity : ComponentActivity() {
                                 TopAppBar(
                                     title = {
                                         Text(
-                                            text = if (showProfile) "Profile" else "Vocalyx",
+                                            // 🎯 UPDATED: Support all three screen titles
+                                            text = when {
+                                                showNotifications -> "Notifications"
+                                                showProfile -> "Profile"
+                                                else -> "Vocalyx"
+                                            },
                                             color = MaterialTheme.colorScheme.onPrimary
                                         )
                                     },
@@ -387,19 +437,20 @@ class HomeActivity : ComponentActivity() {
                                     ),
                                     navigationIcon = {
                                         IconButton(onClick = {
-                                            if (showProfile) {
-                                                // 🎯 NEW: Go back from profile
-                                                showProfile = false
-                                            } else {
-                                                // 🎯 Existing: Open drawer
-                                                scope.launch {
-                                                    drawerState.open()
+                                            // 🎯 UPDATED: Support back navigation from all screens
+                                            when {
+                                                showNotifications -> showNotifications = false
+                                                showProfile -> showProfile = false
+                                                else -> {
+                                                    scope.launch {
+                                                        drawerState.open()
+                                                    }
                                                 }
                                             }
                                         }) {
                                             Icon(
-                                                imageVector = if (showProfile) Icons.Rounded.ArrowBack else Icons.Rounded.Menu,
-                                                contentDescription = if (showProfile) "Back" else "Menu",
+                                                imageVector = if (showNotifications || showProfile) Icons.Rounded.ArrowBack else Icons.Rounded.Menu,
+                                                contentDescription = if (showNotifications || showProfile) "Back" else "Menu",
                                                 tint = MaterialTheme.colorScheme.onPrimary
                                             )
                                         }
@@ -407,7 +458,8 @@ class HomeActivity : ComponentActivity() {
                                 )
                             },
                             bottomBar = {
-                                if (!showProfile) { // 🎯 NEW: Only show bottom nav when not in profile
+                                // 🎯 UPDATED: Hide bottom nav for both notifications and profile
+                                if (!showProfile && !showNotifications) {
                                     Surface(
                                         modifier = Modifier.fillMaxWidth(),
                                         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
@@ -499,8 +551,9 @@ class HomeActivity : ComponentActivity() {
                                                         selected = selected,
                                                         onClick = {
                                                             selectedTab = index
-                                                            // 🎯 NEW: Also close profile when tab is clicked
+                                                            // 🎯 UPDATED: Close both profile and notifications when tab is clicked
                                                             showProfile = false
+                                                            showNotifications = false
                                                         },
                                                         colors = NavigationBarItemDefaults.colors(
                                                             selectedIconColor = Color.White,
@@ -517,34 +570,45 @@ class HomeActivity : ComponentActivity() {
                                 }
                             }
                         ) { paddingValues ->
-                            if (showProfile) {
-                                // Show Profile Screen
-                                ProfileScreen(
-                                    modifier = Modifier.padding(paddingValues)
-                                )
-                            } else {
-                                // Show normal tab content
-                                when (selectedTab) {
-                                    0 -> HomeTab(
+                            // 🎯 UPDATED: Support all three screen types
+                            when {
+                                showNotifications -> {
+                                    // Show Notification Screen
+                                    NotificationScreen(
                                         modifier = Modifier.padding(paddingValues),
-                                        onNavigateToSchedule = { selectedTab = 2 },
-                                        onNavigateToCourseList = { selectedTab = 1 },
-                                        onNavigateToTeamList = { selectedTab = 3 },
-                                        onNavigateToAddCourse = { selectedTab = 1 },
-                                        onNavigateToCourseDetail = { courseId -> selectedTab = 1 },
-                                        onNavigateToTeamDetail = { teamId -> selectedTab = 3 },
-                                        onNavigateToStatSection = { statType ->
-                                            when (statType) {
-                                                "Courses" -> selectedTab = 1
-                                                "Classes" -> selectedTab = 1
-                                                "Teams" -> selectedTab = 3
-                                                else -> selectedTab = 1
-                                            }
-                                        }
+                                        viewModel = notificationViewModel
                                     )
-                                    1 -> CoursesTab(modifier = Modifier.padding(paddingValues))
-                                    2 -> ScheduleTab(modifier = Modifier.padding(paddingValues))
-                                    3 -> TeamsTab(modifier = Modifier.padding(paddingValues))
+                                }
+                                showProfile -> {
+                                    // Show Profile Screen
+                                    ProfileScreen(
+                                        modifier = Modifier.padding(paddingValues)
+                                    )
+                                }
+                                else -> {
+                                    // Show normal tab content
+                                    when (selectedTab) {
+                                        0 -> HomeTab(
+                                            modifier = Modifier.padding(paddingValues),
+                                            onNavigateToSchedule = { selectedTab = 2 },
+                                            onNavigateToCourseList = { selectedTab = 1 },
+                                            onNavigateToTeamList = { selectedTab = 3 },
+                                            onNavigateToAddCourse = { selectedTab = 1 },
+                                            onNavigateToCourseDetail = { courseId -> selectedTab = 1 },
+                                            onNavigateToTeamDetail = { teamId -> selectedTab = 3 },
+                                            onNavigateToStatSection = { statType ->
+                                                when (statType) {
+                                                    "Courses" -> selectedTab = 1
+                                                    "Classes" -> selectedTab = 1
+                                                    "Teams" -> selectedTab = 3
+                                                    else -> selectedTab = 1
+                                                }
+                                            }
+                                        )
+                                        1 -> CoursesTab(modifier = Modifier.padding(paddingValues))
+                                        2 -> ScheduleTab(modifier = Modifier.padding(paddingValues))
+                                        3 -> TeamsTab(modifier = Modifier.padding(paddingValues))
+                                    }
                                 }
                             }
                         }
@@ -558,14 +622,14 @@ class HomeActivity : ComponentActivity() {
 @Composable
 fun HomeScreen() {
     var selectedTab by remember { mutableStateOf(0) }
-    
+
     val navigationItems = listOf(
         Triple("Dashboard", Icons.Filled.Dashboard, "Dashboard"),
         Triple("Courses", Icons.Rounded.School, "Courses"),
         Triple("Schedule", Icons.Rounded.CalendarToday, "Schedule"),
         Triple("Teams", Icons.Rounded.Group, "Teams")
     )
-    
+
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         bottomBar = {

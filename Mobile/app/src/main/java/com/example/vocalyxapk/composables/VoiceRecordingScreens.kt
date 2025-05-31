@@ -1,5 +1,6 @@
 package com.example.vocalyxapk.composables
 
+import android.util.Log
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -24,6 +25,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import com.example.vocalyxapk.models.*
+import com.example.vocalyxapk.viewmodel.ExcelViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun PermissionRequestScreen() {
@@ -924,15 +927,24 @@ fun FinalValidationScreen(
     onCancel: () -> Unit,
     sessionComplete: Boolean,
     isSaving: Boolean,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    excelViewModel: ExcelViewModel? = null // 🎯 NEW: Add ExcelViewModel parameter
 ) {
-    if (sessionComplete) {
+    val coroutineScope = rememberCoroutineScope()
+    var localSaving by remember { mutableStateOf(false) }
+    var localSessionComplete by remember { mutableStateOf(false) }
+
+    // Use local state if provided, otherwise use parent state
+    val isCurrentlySaving = localSaving || isSaving
+    val isCurrentlyComplete = localSessionComplete || sessionComplete
+
+    if (isCurrentlyComplete) {
         // Auto-close after showing success for 2 seconds
-        LaunchedEffect(sessionComplete) {
+        LaunchedEffect(isCurrentlyComplete) {
             delay(2000)
             onDismiss()
         }
-        
+
         // Show completion screen
         Column(
             modifier = Modifier
@@ -981,7 +993,7 @@ fun FinalValidationScreen(
                 Text("Close Now")
             }
         }
-    } else if (isSaving) {
+    } else if (isCurrentlySaving) {
         // Show saving progress screen
         Column(
             modifier = Modifier
@@ -1114,15 +1126,65 @@ fun FinalValidationScreen(
                 OutlinedButton(
                     onClick = onCancel,
                     modifier = Modifier.weight(1f),
-                    enabled = !isSaving
+                    enabled = !isCurrentlySaving
                 ) {
                     Text("Back")
                 }
 
                 Button(
-                    onClick = onSaveAll,
+                    onClick = {
+                        // 🎯 NEW: Check if ExcelViewModel is available for direct saving
+                        if (excelViewModel != null && voiceEntries.isNotEmpty()) {
+                            Log.d("FinalValidationScreen", "🎯 Using ExcelViewModel to save ${voiceEntries.size} entries")
+                            localSaving = true
+
+                            coroutineScope.launch {
+                                try {
+                                    var successCount = 0
+                                    var completedCount = 0
+                                    val totalEntries = voiceEntries.size
+
+                                    voiceEntries.forEach { entry ->
+                                        excelViewModel.updateStudentValue(
+                                            studentName = entry.fullStudentName,
+                                            columnName = columnName,
+                                            value = entry.score
+                                        ) { success ->
+                                            coroutineScope.launch {
+                                                completedCount++
+                                                if (success) {
+                                                    successCount++
+                                                    Log.d("FinalValidationScreen", "✅ Saved: ${entry.fullStudentName} -> ${entry.score}")
+                                                } else {
+                                                    Log.e("FinalValidationScreen", "❌ Failed: ${entry.fullStudentName} -> ${entry.score}")
+                                                }
+
+                                                // Check if all entries are processed
+                                                if (completedCount >= totalEntries) {
+                                                    Log.d("FinalValidationScreen", "🎯 All entries processed: $successCount/$totalEntries successful")
+                                                    localSaving = false
+                                                    localSessionComplete = true
+                                                }
+                                            }
+                                        }
+
+                                        // Small delay between saves
+                                        delay(200)
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e("FinalValidationScreen", "❌ Exception during save", e)
+                                    localSaving = false
+                                    localSessionComplete = true
+                                }
+                            }
+                        } else {
+                            // Fallback to parent onSaveAll
+                            Log.d("FinalValidationScreen", "🎯 Using parent onSaveAll")
+                            onSaveAll()
+                        }
+                    },
                     modifier = Modifier.weight(1f),
-                    enabled = !isSaving,
+                    enabled = !isCurrentlySaving && voiceEntries.isNotEmpty(),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFF4CAF50)
                     )

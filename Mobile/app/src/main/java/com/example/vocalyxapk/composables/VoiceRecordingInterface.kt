@@ -277,18 +277,36 @@ fun VoiceRecordingInterface(
     val handleOverrideConfirmation = remember {
         { override: Boolean ->
             val entry = currentOverrideEntry ?: return@remember Unit
-            
+
             if (override) {
                 val confirmedEntry = entry.copy(confirmed = true)
                 Log.d("VoiceRecording", "Adding entry from override confirmation: ${confirmedEntry.fullStudentName} - ${confirmedEntry.score} - Confirmed: ${confirmedEntry.confirmed}")
                 voiceEntries = voiceEntries + confirmedEntry
+
+                // 🎯 NEW: Actually save to backend immediately
+                Log.d("VoiceRecording", "Saving override entry to backend: ${confirmedEntry.fullStudentName} -> ${confirmedEntry.score} in column: $columnName")
+                excelViewModel.updateStudentValue(
+                    studentName = confirmedEntry.fullStudentName,
+                    columnName = columnName,
+                    value = confirmedEntry.score
+                ) { success ->
+                    coroutineScope.launch {
+                        if (success) {
+                            Log.d("VoiceRecording", "✅ Override entry saved successfully to backend!")
+                            // Show success message in TTS or UI if needed
+                        } else {
+                            Log.e("VoiceRecording", "❌ Failed to save override entry to backend")
+                            // Show error message if needed
+                        }
+                    }
+                }
             } else {
                 Log.d("VoiceRecording", "User chose not to override existing score for: ${entry.fullStudentName}")
             }
-            
+
             currentOverrideEntry = null
             recordingState = RecordingState.SPEECH_RECOGNIZED
-            
+
             // Auto-continue after showing result
             coroutineScope.launch {
                 delay(1500)
@@ -755,7 +773,8 @@ fun VoiceRecordingInterface(
                             onCancel = { recordingState = RecordingState.SESSION_SUMMARY },
                             sessionComplete = sessionComplete,
                             isSaving = isSaving,
-                            onDismiss = onDismiss
+                            onDismiss = onDismiss,
+                            excelViewModel = excelViewModel
                         )
                     }
                 }

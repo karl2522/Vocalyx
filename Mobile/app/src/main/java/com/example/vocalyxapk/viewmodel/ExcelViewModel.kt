@@ -13,6 +13,7 @@ import com.example.vocalyxapk.api.WhisperApiClient
 import com.example.vocalyxapk.models.BatchEntry
 import com.example.vocalyxapk.models.ExcelFileItem
 import com.example.vocalyxapk.models.SheetContent
+import com.example.vocalyxapk.models.VoiceEntry
 import com.example.vocalyxapk.models.VoiceEntryRecord
 import com.example.vocalyxapk.models.VoiceParseResult
 import com.example.vocalyxapk.repository.ExcelRepository
@@ -971,6 +972,103 @@ class ExcelViewModel : ViewModel() {
         }
         
         return matrix[str1.length][str2.length]
+    }
+
+    fun saveVoiceEntriesToBackend(
+        voiceEntries: List<VoiceEntry>, // Assuming you have a VoiceEntry model
+        columnName: String,
+        onProgress: (Int, Int) -> Unit = { _, _ -> },
+        onComplete: (Int, Int) -> Unit
+    ) {
+        Log.d("ExcelViewModel", "🎯 Starting to save ${voiceEntries.size} voice entries to backend")
+        Log.d("ExcelViewModel", "Column: $columnName")
+
+        if (voiceEntries.isEmpty()) {
+            Log.w("ExcelViewModel", "No voice entries to save")
+            onComplete(0, 0)
+            return
+        }
+
+        val file = selectedExcelFile
+        if (file == null) {
+            Log.e("ExcelViewModel", "No selected Excel file")
+            onComplete(0, 0)
+            return
+        }
+
+        var successCount = 0
+        var failureCount = 0
+        val totalEntries = voiceEntries.size
+
+        viewModelScope.launch {
+            Log.d("ExcelViewModel", "Processing ${totalEntries} voice entries...")
+
+            voiceEntries.forEachIndexed { index, entry ->
+                Log.d("ExcelViewModel", "Processing entry ${index + 1}/$totalEntries: ${entry.fullStudentName} = ${entry.score}")
+
+                // Use your existing updateStudentValue method
+                var updateSuccess = false
+
+                try {
+                    // Call updateStudentValue which already handles the API call
+                    updateStudentValue(
+                        studentName = entry.fullStudentName,
+                        columnName = columnName,
+                        value = entry.score
+                    ) { success ->
+                        updateSuccess = success
+                        if (success) {
+                            Log.d("ExcelViewModel", "✅ Successfully saved: ${entry.fullStudentName} = ${entry.score}")
+                            successCount++
+                            recordSuccessfulEntry(entry.fullStudentName, columnName, entry.score)
+                        } else {
+                            Log.e("ExcelViewModel", "❌ Failed to save: ${entry.fullStudentName} = ${entry.score}")
+                            failureCount++
+                            recordFailedEntry(entry.fullStudentName, columnName, entry.score)
+                        }
+                    }
+
+                    // Small delay to prevent overwhelming the API
+                    delay(300)
+
+                } catch (e: Exception) {
+                    Log.e("ExcelViewModel", "❌ Exception saving entry: ${entry.fullStudentName}", e)
+                    failureCount++
+                    recordFailedEntry(entry.fullStudentName, columnName, entry.score)
+                }
+
+                // Report progress
+                onProgress(index + 1, totalEntries)
+            }
+
+            Log.d("ExcelViewModel", "🎯 Voice entries save complete: $successCount successes, $failureCount failures")
+            onComplete(successCount, failureCount)
+        }
+    }
+
+    fun saveSingleVoiceEntry(
+        studentName: String,
+        columnName: String,
+        score: String,
+        onComplete: (Boolean) -> Unit
+    ) {
+        Log.d("ExcelViewModel", "🎯 Saving single voice entry: $studentName = $score in column $columnName")
+
+        // Use your existing updateStudentValue method
+        updateStudentValue(
+            studentName = studentName,
+            columnName = columnName,
+            value = score
+        ) { success ->
+            if (success) {
+                Log.d("ExcelViewModel", "✅ Single voice entry saved successfully")
+                recordSuccessfulEntry(studentName, columnName, score)
+            } else {
+                Log.e("ExcelViewModel", "❌ Failed to save single voice entry")
+                recordFailedEntry(studentName, columnName, score)
+            }
+            onComplete(success)
+        }
     }
 }
 
