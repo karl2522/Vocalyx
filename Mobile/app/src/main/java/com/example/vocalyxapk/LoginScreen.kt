@@ -8,21 +8,30 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.sp
 import com.example.vocalyxapk.viewmodel.LoginUIState
 import com.example.vocalyxapk.viewmodel.LoginViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -30,6 +39,9 @@ import com.example.vocalyxapk.utils.NavigationUtils
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.CloudSync
 import com.example.vocalyxapk.viewmodel.ViewModelFactory
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
@@ -37,8 +49,7 @@ import com.google.android.gms.auth.api.signin.GoogleSignInStatusCodes
 import com.google.android.gms.common.api.ApiException
 
 @Composable
-fun LoginScreen(
-) {
+fun LoginScreen() {
     val context = LocalContext.current
     val application = context.applicationContext as Application
     val viewModel: LoginViewModel = viewModel(
@@ -51,6 +62,7 @@ fun LoginScreen(
     var isError by remember { mutableStateOf(false) }
     var passwordVisible by remember { mutableStateOf(false) }
     val activity = context as Activity
+    val scrollState = rememberScrollState()
 
     val uiState by viewModel.uiState.collectAsState()
 
@@ -98,6 +110,7 @@ fun LoginScreen(
             confirmButton = { }
         )
     }
+
     LaunchedEffect(uiState) {
         when (uiState) {
             is LoginUIState.Success -> {
@@ -114,270 +127,467 @@ fun LoginScreen(
         }
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Top
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFFF8F9FF),
+                        Color.White
+                    )
+                )
+            )
     ) {
-        Spacer(modifier = Modifier.height(64.dp))
-
-        // Logo
-        Image(
-            painter = painterResource(id = R.drawable.vocalyxlogo),
-            contentDescription = "Logo",
+        Column(
             modifier = Modifier
-                .size(64.dp)
-                .padding(bottom = 16.dp)
-        )
-
-        // Welcome Text
-        Row(
-            horizontalArrangement = Arrangement.Center,
-            modifier = Modifier.padding(bottom = 16.dp)
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                text = "Log In to ",
-                style = MaterialTheme.typography.titleLarge
-            )
-            Text(
-                text = "Vocalyx",
-                style = MaterialTheme.typography.titleLarge,
-                color = Color(0xFF333D79)
-            )
-        }
+            Spacer(modifier = Modifier.height(60.dp))
 
-        Text(
-            text = "Login with:",
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color.Gray,
-            modifier = Modifier
-                .align(Alignment.Start)
-                .padding(bottom = 8.dp)
-        )
+            // Header Section with Logo and Branding
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 32.dp),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color.White
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Logo with background circle
+                    Box(
+                        modifier = Modifier
+                            .size(80.dp)
+                            .clip(CircleShape)
+                            .background(
+                                brush = Brush.radialGradient(
+                                    colors = listOf(
+                                        Color(0xFF333D79).copy(alpha = 0.1f),
+                                        Color(0xFF333D79).copy(alpha = 0.05f)
+                                    )
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.vocalyxlogo),
+                            contentDescription = "Vocalyx Logo",
+                            modifier = Modifier.size(50.dp)
+                        )
+                    }
 
-        // Social Login Buttons Row
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            OutlinedButton(
-                onClick = {
-                    try {
-                        googleSignInClient.signOut().addOnCompleteListener {
-                            val signInIntent = googleSignInClient.signInIntent
-                            Toast.makeText(context, "Launching Google Sign-In", Toast.LENGTH_SHORT).show()
-                            googleSignInLauncher.launch(signInIntent)
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Welcome Text
+                    Text(
+                        text = "Welcome Back!",
+                        style = MaterialTheme.typography.headlineMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 28.sp
+                        ),
+                        color = Color(0xFF1A1A1A)
+                    )
+
+                    Row(
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier.padding(top = 4.dp)
+                    ) {
+                        Text(
+                            text = "Sign in to ",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = Color.Gray
+                        )
+                        Text(
+                            text = "Vocalyx",
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = Color(0xFF333D79)
+                        )
+                    }
+
+                    Text(
+                        text = "Access your personalized voice experience",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.Gray,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+            }
+
+            // Quick Features Info
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 24.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFFF8F9FF)
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp)
+                ) {
+                    Text(
+                        text = "Why Vocalyx?",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = Color(0xFF333D79),
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+
+                    Row(
+                        modifier = Modifier.padding(bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Security,
+                            contentDescription = null,
+                            tint = Color(0xFF333D79),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "Secure voice authentication",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFF4A4A4A)
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.padding(bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Speed,
+                            contentDescription = null,
+                            tint = Color(0xFF333D79),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "Lightning-fast processing",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFF4A4A4A)
+                        )
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CloudSync,
+                                contentDescription = null,
+                                tint = Color(0xFF333D79),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = "Cross-platform synchronization",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color(0xFF4A4A4A)
+                            )
                         }
-                    } catch (e: Exception) {
-                        Toast.makeText(context, "Error launching sign-in: ${e.message}", Toast.LENGTH_LONG).show()
                     }
-                },
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = Color.Black
-                ),
-                border = BorderStroke(
-                    width = 1.dp,
-                    color = Color.Gray.copy(alpha = 0.3f)
-                )
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
+                }
+
+                // Login Form Card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color.White
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
                 ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.google_logo),
-                        contentDescription = "Google",
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Google")
-                }
-            }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp)
+                    ) {
+                        Text(
+                            text = "Choose your sign-in method:",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.SemiBold
+                            ),
+                            color = Color(0xFF1A1A1A),
+                            modifier = Modifier.padding(bottom = 16.dp)
+                        )
 
-            OutlinedButton(
-                onClick = {
-                    // Launch Microsoft Sign-In
-                    viewModel.startMicrosoftSignIn(activity)
-                },
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = Color.Black
-                ),
-                border = BorderStroke(
-                    width = 1.dp,
-                    color = Color.Gray.copy(alpha = 0.3f)
-                )
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.microsoft_logo),
-                        contentDescription = "Microsoft",
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Microsoft")
-                }
-            }
-        }
+                        // Social Login Buttons
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 24.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    try {
+                                        googleSignInClient.signOut().addOnCompleteListener {
+                                            val signInIntent = googleSignInClient.signInIntent
+                                            Toast.makeText(context, "Launching Google Sign-In", Toast.LENGTH_SHORT).show()
+                                            googleSignInLauncher.launch(signInIntent)
+                                        }
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Error launching sign-in: ${e.message}", Toast.LENGTH_LONG).show()
+                                    }
+                                },
+                                modifier = Modifier.weight(1f).height(52.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = Color(0xFF1A1A1A)
+                                ),
+                                border = BorderStroke(
+                                    width = 1.5.dp,
+                                    color = Color(0xFFE0E0E0)
+                                )
+                            ) {
+                                Image(
+                                    painter = painterResource(id = R.drawable.google_logo),
+                                    contentDescription = "Google",
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Google",
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
 
-        Text(
-            text = "or continue with email",
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color.Gray,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
+                            OutlinedButton(
+                                onClick = {
+                                    viewModel.startMicrosoftSignIn(activity)
+                                },
+                                modifier = Modifier.weight(1f).height(52.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = Color(0xFF1A1A1A)
+                                ),
+                                border = BorderStroke(
+                                    width = 1.5.dp,
+                                    color = Color(0xFFE0E0E0)
+                                )
+                            ) {
+                                Image(
+                                    painter = painterResource(id = R.drawable.microsoft_logo),
+                                    contentDescription = "Microsoft",
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Microsoft",
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
 
-        // Email field
-        OutlinedTextField(
-            value = email,
-            onValueChange = { 
-                email = it
-                emailError = null // Clear error when user types
-            },
-            label = { Text("Email", color = Color.Gray) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = if (emailError != null) 4.dp else 16.dp),
-            shape = RoundedCornerShape(8.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                unfocusedBorderColor = if (emailError != null) Color.Red.copy(alpha = 0.5f) else Color.Gray.copy(alpha = 0.3f),
-                focusedBorderColor = if (emailError != null) Color.Red else Color(0xFF333D79),
-                errorBorderColor = Color.Red
-            ),
-            singleLine = true,
-            isError = emailError != null
-        )
-        if (emailError != null) {
-            Text(
-                text = emailError!!,
-                color = Color.Red,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier
-                    .padding(start = 4.dp, bottom = 16.dp)
-                    .align(Alignment.Start)
-            )
-        }
+                        // Divider
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Divider(
+                                modifier = Modifier.weight(1f),
+                                color = Color(0xFFE0E0E0)
+                            )
+                            Text(
+                                text = "  or continue with email  ",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.Gray
+                            )
+                            Divider(
+                                modifier = Modifier.weight(1f),
+                                color = Color(0xFFE0E0E0)
+                            )
+                        }
 
-        // Password field
-        OutlinedTextField(
-            value = password,
-            onValueChange = { 
-                password = it
-                passwordError = null // Clear error when user types
-            },
-            label = { Text("Password", color = Color.Gray) },
-            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            trailingIcon = {
-                IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                    Icon(
-                        imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                        contentDescription = if (passwordVisible) "Hide password" else "Show password",
-                        tint = Color.Gray
-                    )
-                }
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = if (passwordError != null) 4.dp else 24.dp),
-            shape = RoundedCornerShape(8.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                unfocusedBorderColor = if (passwordError != null) Color.Red.copy(alpha = 0.5f) else Color.Gray.copy(alpha = 0.3f),
-                focusedBorderColor = if (passwordError != null) Color.Red else Color(0xFF333D79),
-                errorBorderColor = Color.Red
-            ),
-            singleLine = true,
-            isError = passwordError != null
-        )
-        if (passwordError != null) {
-            Text(
-                text = passwordError!!,
-                color = Color.Red,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier
-                    .padding(start = 4.dp, bottom = 24.dp)
-                    .align(Alignment.Start)
-            )
-        }
+                        // Email field
+                        Text(
+                            text = "Email Address",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.Medium
+                            ),
+                            color = Color(0xFF1A1A1A),
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
 
-        // Login Button
-        Button(
-            onClick = {
-                var hasError = false
-                
-                if (email.isEmpty()) {
-                    emailError = "Email is required"
-                    hasError = true
-                } else if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
-                    emailError = "Please enter a valid email address"
-                    hasError = true
-                }
-                
-                if (password.isEmpty()) {
-                    passwordError = "Password is required"
-                    hasError = true
-                }
+                        OutlinedTextField(
+                            value = email,
+                            onValueChange = {
+                                email = it
+                                emailError = null
+                            },
+                            placeholder = { Text("Enter your email", color = Color.Gray.copy(alpha = 0.7f)) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = if (emailError != null) 4.dp else 16.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                unfocusedBorderColor = if (emailError != null) Color.Red.copy(alpha = 0.5f) else Color(0xFFE0E0E0),
+                                focusedBorderColor = if (emailError != null) Color.Red else Color(0xFF333D79),
+                                errorBorderColor = Color.Red,
+                                focusedContainerColor = Color(0xFFF8F9FF).copy(alpha = 0.5f)
+                            ),
+                            singleLine = true,
+                            isError = emailError != null
+                        )
+                        if (emailError != null) {
+                            Text(
+                                text = emailError!!,
+                                color = Color.Red,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier
+                                    .padding(start = 4.dp, bottom = 16.dp)
+                                    .fillMaxWidth()
+                            )
+                        }
 
-                if (!hasError) {
-                    viewModel.login(email, password)
-                }
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp),
-            shape = RoundedCornerShape(8.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF333D79)
-            )
-        ) {
-            Text("Login")
-        }
+                        // Password field
+                        Text(
+                            text = "Password",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.Medium
+                            ),
+                            color = Color(0xFF1A1A1A),
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
 
-        // Sign up link
-        Row(
-            modifier = Modifier.padding(top = 16.dp),
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Text(
-                "Don't have an account? ",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.Gray
-            )
-            Text(
-                "Create an Account",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFF333D79),
-                modifier = Modifier
-                    .padding(start = 4.dp)
-                    .clickable {
-                        NavigationUtils.navigateToSignUp(context)
+                        OutlinedTextField(
+                            value = password,
+                            onValueChange = {
+                                password = it
+                                passwordError = null
+                            },
+                            placeholder = { Text("Enter your password", color = Color.Gray.copy(alpha = 0.7f)) },
+                            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                            trailingIcon = {
+                                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                    Icon(
+                                        imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                        contentDescription = if (passwordVisible) "Hide password" else "Show password",
+                                        tint = Color(0xFF333D79)
+                                    )
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = if (passwordError != null) 4.dp else 24.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                unfocusedBorderColor = if (passwordError != null) Color.Red.copy(alpha = 0.5f) else Color(0xFFE0E0E0),
+                                focusedBorderColor = if (passwordError != null) Color.Red else Color(0xFF333D79),
+                                errorBorderColor = Color.Red,
+                                focusedContainerColor = Color(0xFFF8F9FF).copy(alpha = 0.5f)
+                            ),
+                            singleLine = true,
+                            isError = passwordError != null
+                        )
+                        if (passwordError != null) {
+                            Text(
+                                text = passwordError!!,
+                                color = Color.Red,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier
+                                    .padding(start = 4.dp, bottom = 24.dp)
+                                    .fillMaxWidth()
+                            )
+                        }
+
+                        // Login Button
+                        Button(
+                            onClick = {
+                                var hasError = false
+
+                                if (email.isEmpty()) {
+                                    emailError = "Email is required"
+                                    hasError = true
+                                } else if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                                    emailError = "Please enter a valid email address"
+                                    hasError = true
+                                }
+
+                                if (password.isEmpty()) {
+                                    passwordError = "Password is required"
+                                    hasError = true
+                                }
+
+                                if (!hasError) {
+                                    viewModel.login(email, password)
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF333D79)
+                            )
+                        ) {
+                            Text(
+                                text = "Sign In",
+                                style = MaterialTheme.typography.bodyLarge.copy(
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            )
+                        }
                     }
-            )
-        }
+                }
 
-        // Temporary button to directly go to home
-        Button(
-            onClick = { NavigationUtils.navigateToHome(context) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp)
-                .height(48.dp),
-            shape = RoundedCornerShape(8.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.Gray
-            )
-        ) {
-            Text("Skip to Home (Temporary)")
+                // Sign up section
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xFFF8F9FF)
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "New to Vocalyx? ",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = Color(0xFF4A4A4A)
+                        )
+                        Text(
+                            "Create Account",
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = Color(0xFF333D79),
+                            modifier = Modifier.clickable {
+                                NavigationUtils.navigateToSignUp(context)
+                            }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(32.dp))
+            }
         }
     }
 }

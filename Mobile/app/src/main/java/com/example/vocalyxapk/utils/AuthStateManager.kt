@@ -11,6 +11,10 @@ object AuthStateManager {
     private const val KEY_IS_LOGGED_IN = "is_logged_in"
     private const val KEY_LAST_LOGIN_TIME = "last_login_time"
 
+    // App state preferences
+    private const val APP_STATE_PREF_NAME = "VocalyxAppState"
+    private const val KEY_HAS_OPENED_BEFORE = "has_opened_before"
+
     // Set to 1 hour to match backend session timeout
     private const val SESSION_TIMEOUT = 60 * 60 * 1000L
 
@@ -19,6 +23,10 @@ object AuthStateManager {
 
     private fun getPreferences(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+    }
+
+    private fun getAppStatePreferences(context: Context): SharedPreferences {
+        return context.getSharedPreferences(APP_STATE_PREF_NAME, Context.MODE_PRIVATE)
     }
 
     fun setLoggedIn(context: Context) {
@@ -58,6 +66,19 @@ object AuthStateManager {
             } else {
                 _authState.value = AuthState.Unauthenticated
             }
+        }
+    }
+
+    // New function to check if this is the first time opening the app
+    fun isFirstTimeUser(context: Context): Boolean {
+        return !getAppStatePreferences(context).getBoolean(KEY_HAS_OPENED_BEFORE, false)
+    }
+
+    // New function to mark that the user has opened the app
+    fun markAppAsOpened(context: Context) {
+        getAppStatePreferences(context).edit().apply {
+            putBoolean(KEY_HAS_OPENED_BEFORE, true)
+            apply()
         }
     }
 }
