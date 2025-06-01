@@ -426,10 +426,13 @@ fun VoiceRecordingInterface(
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
-                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false) // Disable partial results
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 3000L)
-                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 3000L)
+                // Shorter timeouts to prevent long listening
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L) // 1.5 seconds
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1000L) // 1 second
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 2000L) // Minimum 2 seconds
+                putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
             }
 
             val recognitionListener = object : RecognitionListener {
@@ -457,16 +460,16 @@ fun VoiceRecordingInterface(
                         SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Insufficient permissions"
                         SpeechRecognizer.ERROR_NETWORK -> "Network error"
                         SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Network timeout"
-                        SpeechRecognizer.ERROR_NO_MATCH -> "No speech match found"
+                        SpeechRecognizer.ERROR_NO_MATCH -> "No speech match found - try speaking more clearly"
                         SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Recognition service busy"
                         SpeechRecognizer.ERROR_SERVER -> "Server error"
-                        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech input"
-                        else -> "Unknown error"
+                        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Speech timeout - try speaking faster"
+                        else -> "Unknown error ($error)"
                     }
                     Log.e("VoiceRecording", "Android STT Error: $errorMsg")
 
                     coroutineScope.launch {
-                        errorMessage = "Speech recognition failed: $errorMsg"
+                        errorMessage = errorMsg
                         recordingState = RecordingState.READY_TO_RECORD
                     }
                 }
@@ -476,24 +479,41 @@ fun VoiceRecordingInterface(
                     if (!matches.isNullOrEmpty()) {
                         val transcription = matches[0]
                         Log.d("VoiceRecording", "Android STT Result: $transcription")
+                        Log.d("VoiceRecording", "All results: $matches") // Log all alternatives
 
                         coroutineScope.launch {
                             processRecognizedSpeech(transcription)
                         }
                     } else {
                         coroutineScope.launch {
-                            errorMessage = "No speech detected"
+                            errorMessage = "No speech detected - please try again"
                             recordingState = RecordingState.READY_TO_RECORD
                         }
                     }
                 }
 
-                override fun onPartialResults(partialResults: Bundle?) {}
+                override fun onPartialResults(partialResults: Bundle?) {
+                    // Log partial results for debugging
+                    val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    if (!matches.isNullOrEmpty()) {
+                        Log.d("VoiceRecording", "Partial result: ${matches[0]}")
+                    }
+                }
+
                 override fun onEvent(eventType: Int, params: Bundle?) {}
             }
 
             speechRecognizer?.setRecognitionListener(recognitionListener)
             speechRecognizer?.startListening(intent)
+
+            // Add a safety timeout to stop listening after 5 seconds
+            coroutineScope.launch {
+                delay(5000) // 5 seconds maximum
+                if (recordingState == RecordingState.LISTENING) {
+                    Log.d("VoiceRecording", "Forcing stop listening due to timeout")
+                    speechRecognizer?.stopListening()
+                }
+            }
 
         } catch (e: Exception) {
             Log.e("VoiceRecording", "Android STT Error", e)

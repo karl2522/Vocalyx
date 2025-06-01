@@ -97,33 +97,66 @@ fun findStudentMatches(recognizedName: String, studentData: List<StudentData>): 
 fun parseTranscription(transcription: String): ParseResult {
     Log.d("VoiceRecording", "=== PARSE TRANSCRIPTION DEBUG ===")
     Log.d("VoiceRecording", "Input transcription: '$transcription'")
-    
+
+    val cleanText = transcription.trim()
+
     // Look for number patterns (score)
-    val scorePattern = Regex("""(\d+(?:\.\d+)?)""")
-    val scoreMatch = scorePattern.find(transcription)
-    val score = scoreMatch?.value
+    val scorePattern = Regex("""\b(\d+(?:\.\d+)?)\b""")
+    val scoreMatches = scorePattern.findAll(cleanText).map { it.value }.toList()
 
-    Log.d("VoiceRecording", "Found score: '$score'")
+    Log.d("VoiceRecording", "Found potential scores: $scoreMatches")
 
-    // Extract name by removing the score and cleaning up
+    val score = scoreMatches.firstOrNull()
+
+    // Extract name by removing ONLY the score numbers, not other words
     val nameText = if (score != null) {
-        transcription.replace(score, "").trim()
+        cleanText
+            .replace(Regex("""\b${Regex.escape(score)}\b"""), "") // Remove only the specific score found
             .replace(Regex("""[.,!?]"""), "") // Remove punctuation
+            .replace(Regex("""\s+"""), " ") // Replace multiple spaces with single space
             .trim()
     } else {
-        transcription.trim()
-            .replace(Regex("""[.,!?]"""), "")
+        cleanText
+            .replace(Regex("""[.,!?]"""), "") // Remove punctuation only
+            .replace(Regex("""\s+"""), " ") // Clean up spaces
             .trim()
     }
 
-    Log.d("VoiceRecording", "Extracted name: '$nameText'")
+    // Only remove obvious duplicates or repeated words, not arbitrary text
+    val cleanedName = removeDuplicateWords(nameText)
+
+    Log.d("VoiceRecording", "Extracted name after cleaning: '$cleanedName'")
+    Log.d("VoiceRecording", "Found score: '$score'")
 
     val result = ParseResult(
-        recognizedName = if (nameText.isNotBlank()) nameText else null,
+        recognizedName = if (cleanedName.isNotBlank()) cleanedName else null,
         score = score
     )
-    
+
     Log.d("VoiceRecording", "Parse result - Name: '${result.recognizedName}', Score: '${result.score}'")
-    
+
     return result
-} 
+}
+
+fun removeDuplicateWords(text: String): String {
+    val words = text.lowercase().split(Regex("""\s+"""))
+    val cleanedWords = mutableListOf<String>()
+
+    var i = 0
+    while (i < words.size) {
+        val currentWord = words[i]
+
+        // Add the word
+        cleanedWords.add(currentWord)
+
+        // Skip any immediate duplicates of the same word
+        while (i + 1 < words.size && words[i + 1] == currentWord) {
+            Log.d("VoiceRecording", "Removing duplicate word: ${words[i + 1]}")
+            i++
+        }
+
+        i++
+    }
+
+    return cleanedWords.joinToString(" ")
+}

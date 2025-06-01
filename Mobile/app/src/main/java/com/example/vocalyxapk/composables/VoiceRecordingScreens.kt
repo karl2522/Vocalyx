@@ -210,6 +210,20 @@ fun MainRecordingScreen(
                     textAlign = TextAlign.Center
                 )
 
+                Text(
+                    text = "Examples: \"John Doe 85\" or \"85 John Doe\"",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF999999),
+                    textAlign = TextAlign.Center
+                )
+
+                Text(
+                    text = "Speak clearly and pause after speaking",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF999999),
+                    textAlign = TextAlign.Center
+                )
+
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
