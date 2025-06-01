@@ -755,6 +755,17 @@ fun AccountSettingsContent(
                 }
             }
         }
+
+        Column {
+            Text(
+                text = "Security & Authentication",
+                style = MaterialTheme.typography.titleSmall.withDMSansMedium(),
+                color = Color(0xFF666666),
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            BiometricSettingsCard()
+        }
     }
 }
 

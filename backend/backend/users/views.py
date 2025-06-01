@@ -19,6 +19,7 @@ from .models import CustomUser
 from .utils import send_verification_email, get_current_utc_time, get_user_login
 from firebase_admin import auth
 
+
 logger = logging.getLogger(__name__)
 
 class RegisterView(APIView):
@@ -546,3 +547,26 @@ def get_profile(request):
             'microsoft_id': user.microsoft_id
         }
     })
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def validate_token(request):
+    """Validate the current JWT token"""
+    try:
+        # If we reach here, the token is valid (middleware already validated it)
+        user = request.user
+        return Response({
+            'valid': True,
+            'user': {
+                'id': str(user.id),
+                'email': user.email,
+                'first_name': user.first_name,
+                'last_name': user.last_name
+            }
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        logger.error(f"Token validation error: {str(e)}")
+        return Response({
+            'valid': False,
+            'error': 'Invalid token'
+        }, status=status.HTTP_401_UNAUTHORIZED)

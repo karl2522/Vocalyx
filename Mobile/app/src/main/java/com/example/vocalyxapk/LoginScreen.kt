@@ -42,6 +42,11 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.Fingerprint
+import androidx.fragment.app.FragmentActivity
+import com.example.vocalyxapk.utils.BiometricAuthManager
+import com.example.vocalyxapk.utils.BiometricAuthResult
+import com.example.vocalyxapk.utils.BiometricAuthStatus
 import com.example.vocalyxapk.viewmodel.ViewModelFactory
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
@@ -61,10 +66,23 @@ fun LoginScreen() {
     var passwordError by remember { mutableStateOf<String?>(null) }
     var isError by remember { mutableStateOf(false) }
     var passwordVisible by remember { mutableStateOf(false) }
-    val activity = context as Activity
+    val activity = context as FragmentActivity
     val scrollState = rememberScrollState()
+    val coroutineScope = rememberCoroutineScope()
 
     val uiState by viewModel.uiState.collectAsState()
+
+    var showBiometricPrompt by remember { mutableStateOf(false) }
+    val biometricStatus = BiometricAuthManager.isBiometricAvailable(context)
+    val isBiometricEnabled = BiometricAuthManager.isBiometricEnabled(context)
+
+    LaunchedEffect(Unit) {
+        android.util.Log.d("BiometricDebug", "=== LOGIN SCREEN DEBUG ===")
+        android.util.Log.d("BiometricDebug", "Biometric status: $biometricStatus")
+        android.util.Log.d("BiometricDebug", "Biometric enabled: $isBiometricEnabled")
+        android.util.Log.d("BiometricDebug", "Should show button: ${biometricStatus == BiometricAuthStatus.AVAILABLE && isBiometricEnabled}")
+    }
+
 
     val gso = remember {
         GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
@@ -109,6 +127,36 @@ fun LoginScreen() {
             text = { CircularProgressIndicator() },
             confirmButton = { }
         )
+    }
+
+    LaunchedEffect(showBiometricPrompt) {
+        if (showBiometricPrompt) {
+            try {
+                val result = BiometricAuthManager.authenticateWithBiometric(
+                    activity = activity,
+                    title = "Sign in to Vocalyx",
+                    subtitle = "Use your fingerprint to access your account"
+                )
+
+                when (result) {
+                    is BiometricAuthResult.Success -> {
+                        // Login with stored tokens
+                        viewModel.loginWithStoredTokens(
+                            result.tokens.accessToken,
+                            result.tokens.refreshToken,
+                            result.tokens.userEmail
+                        )
+                    }
+                    is BiometricAuthResult.Error -> {
+                        Toast.makeText(context, "Biometric authentication failed: ${result.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "Biometric authentication error: ${e.message}", Toast.LENGTH_LONG).show()
+            } finally {
+                showBiometricPrompt = false
+            }
+        }
     }
 
     LaunchedEffect(uiState) {
@@ -326,6 +374,57 @@ fun LoginScreen() {
                             color = Color(0xFF1A1A1A),
                             modifier = Modifier.padding(bottom = 16.dp)
                         )
+
+                        if (biometricStatus == BiometricAuthStatus.AVAILABLE && isBiometricEnabled) {
+                            Button(
+                                onClick = { showBiometricPrompt = true },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(52.dp)
+                                    .padding(bottom = 16.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF4CAF50)
+                                )
+                            ) {
+                                Icon(
+                                    Icons.Default.Fingerprint,
+                                    contentDescription = "Fingerprint",
+                                    modifier = Modifier.size(24.dp),
+                                    tint = Color.White
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = "Sign in with Fingerprint",
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontWeight = FontWeight.SemiBold
+                                    ),
+                                    color = Color.White
+                                )
+                            }
+
+                            // Divider after biometric button
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Divider(
+                                    modifier = Modifier.weight(1f),
+                                    color = Color(0xFFE0E0E0)
+                                )
+                                Text(
+                                    text = "  or  ",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color.Gray
+                                )
+                                Divider(
+                                    modifier = Modifier.weight(1f),
+                                    color = Color(0xFFE0E0E0)
+                                )
+                            }
+                        }
 
                         // Social Login Buttons
                         Row(

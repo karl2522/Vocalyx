@@ -2,6 +2,7 @@ package com.example.vocalyxapk.utils
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 
 object TokenManager {
     private const val PREF_NAME = "AuthTokens"
@@ -25,6 +26,11 @@ object TokenManager {
             putString(KEY_REFRESH_TOKEN, refreshToken)
             apply()
         }
+
+        // 🎯 NEW: Update biometric stored tokens if enabled
+        if (BiometricAuthManager.isBiometricEnabled(context)) {
+            BiometricAuthManager.updateStoredTokens(context, accessToken, refreshToken)
+        }
     }
 
     fun saveUserInfo(
@@ -43,6 +49,17 @@ object TokenManager {
             putString(KEY_LAST_NAME, lastName)
             apply()
         }
+    }
+
+    // 🎯 NEW: Save tokens and enable biometric login
+    fun saveTokensAndEnableBiometric(
+        context: Context,
+        accessToken: String,
+        refreshToken: String,
+        userEmail: String
+    ) {
+        saveTokens(context, accessToken, refreshToken)
+        BiometricAuthManager.enableBiometricLogin(context, accessToken, refreshToken, userEmail)
     }
 
     fun getToken(context: Context): String? {
@@ -74,6 +91,18 @@ object TokenManager {
     }
 
     fun clearTokens(context: Context) {
+        Log.d("TokenManager", "=== CLEARING TOKENS ===")
+        Log.d("TokenManager", "Biometric enabled before clear: ${BiometricAuthManager.isBiometricEnabled(context)}")
+
         getPreferences(context).edit().clear().apply()
+
+        // 🎯 FIX: DON'T clear biometric tokens on logout - let them persist for next login
+        // if (BiometricAuthManager.isBiometricEnabled(context)) {
+        //     Log.d("TokenManager", "Clearing biometric stored tokens but keeping biometric enabled")
+        //     BiometricAuthManager.clearStoredTokensOnly(context)
+        // }
+
+        Log.d("TokenManager", "Biometric enabled after clear: ${BiometricAuthManager.isBiometricEnabled(context)}")
+        Log.d("TokenManager", "Biometric tokens preserved for next login")
     }
 }

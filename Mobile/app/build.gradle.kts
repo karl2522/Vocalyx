@@ -107,4 +107,8 @@ dependencies {
     implementation("androidx.compose.runtime:runtime-livedata:1.5.4")
 
     implementation("com.google.accompanist:accompanist-swiperefresh:0.32.0")
+
+    implementation("androidx.biometric:biometric:1.1.0")
+
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
 }

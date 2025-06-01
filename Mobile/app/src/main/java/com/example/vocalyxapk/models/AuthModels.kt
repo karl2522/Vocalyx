@@ -1,5 +1,7 @@
 package com.example.vocalyxapk.models
 
+import com.google.firebase.auth.UserInfo
+
 data class LoginRequest(
     val email: String,
     val password: String
@@ -55,3 +57,13 @@ data class MicrosoftAuthRequest(
     val access_token: String,
     val id_token: String? = null
 )
+
+data class TokenValidationResponse(
+    val valid: Boolean,
+    val user: User? = null,
+    val error: String? = null
+)
+data class TokenRefreshResponse(
+    val access: String
+)
+

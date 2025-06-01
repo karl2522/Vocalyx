@@ -10,6 +10,8 @@ import androidx.lifecycle.viewModelScope
 import com.example.vocalyxapk.R
 import com.example.vocalyxapk.repository.AuthRepository
 import com.example.vocalyxapk.utils.AuthStateManager
+import com.example.vocalyxapk.utils.TokenManager
+import com.example.vocalyxapk.utils.BiometricAuthManager
 import com.google.firebase.auth.AuthCredential
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
@@ -55,7 +57,6 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
 
     @SuppressLint("StaticFieldLeak")
     private val context = getApplication<Application>().applicationContext
-
 
     private val _uiState = MutableStateFlow<LoginUIState>(LoginUIState.Idle)
     val uiState: StateFlow<LoginUIState> = _uiState
@@ -193,7 +194,6 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-
     private fun processAuthenticationResult(authResult: IAuthenticationResult) {
         viewModelScope.launch {
             try {
@@ -259,6 +259,82 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
         } catch (e: Exception) {
             println("Backend communication failed: ${e.message}")
             _uiState.value = LoginUIState.Error(e.message ?: "Backend communication failed")
+        }
+    }
+
+    // 🎯 FIXED: Complete implementation of biometric login
+    suspend fun loginWithStoredTokens(accessToken: String, refreshToken: String, userEmail: String) {
+        try {
+            _uiState.value = LoginUIState.Loading
+            Log.d("BiometricAuth", "Starting biometric login for user: $userEmail")
+
+            // 🎯 NEW: Validate tokens with backend before proceeding
+            val isValid = authRepository.validateTokens(accessToken, refreshToken)
+
+            if (isValid) {
+                TokenManager.saveTokens(context, accessToken, refreshToken)
+
+
+                // Try to get user info from current TokenManager first
+                val existingUserId = TokenManager.getUserId(context)
+                val existingFirstName = TokenManager.getFirstName(context)
+                val existingLastName = TokenManager.getLastName(context)
+
+                if (existingFirstName.isNullOrEmpty() || existingLastName.isNullOrEmpty()) {
+                    val emailName = userEmail.split("@")[0]
+                    val fallbackName = emailName.split(".").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
+
+                    Log.d("BiometricAuth", "Using fallback name: $fallbackName for $userEmail")
+
+                    TokenManager.saveUserInfo(
+                        context,
+                        existingUserId ?: "unknown",
+                        userEmail,
+                        fallbackName.split(" ").getOrNull(0) ?: fallbackName,
+                        fallbackName.split(" ").getOrNull(1) ?: ""
+                    )
+                } else {
+                    TokenManager.saveUserInfo(
+                        context,
+                        existingUserId ?: "unknown",
+                        userEmail,
+                        existingFirstName,
+                        existingLastName
+                    )
+                }
+
+                // Update auth state
+                AuthStateManager.setLoggedIn(context)
+
+                Log.d("BiometricAuth", "Biometric login successful for user: $userEmail")
+                _uiState.value = LoginUIState.Success("Welcome back!")
+            } else {
+                // Tokens are invalid - disable biometric and force regular login
+                Log.w("BiometricAuth", "Stored tokens are invalid, disabling biometric login")
+                BiometricAuthManager.disableBiometricLogin(context)
+                _uiState.value = LoginUIState.Error("Your session has expired. Please sign in again.")
+            }
+
+        } catch (e: Exception) {
+            Log.e("BiometricAuth", "Biometric login failed", e)
+            // Disable biometric on error to prevent repeated failures
+            BiometricAuthManager.disableBiometricLogin(context)
+            _uiState.value = LoginUIState.Error("Biometric login failed. Please sign in with your credentials.")
+        }
+    }
+
+    // 🎯 NEW: Method to offer biometric setup after successful login
+    fun offerBiometricSetup(): Boolean {
+        return authRepository.shouldOfferBiometricSetup(context)
+    }
+
+    // 🎯 NEW: Enable biometric login for current user
+    fun enableBiometricLogin() {
+        try {
+            authRepository.enableBiometricForUser(context)
+            Log.d("BiometricAuth", "Biometric login enabled for current user")
+        } catch (e: Exception) {
+            Log.e("BiometricAuth", "Failed to enable biometric login", e)
         }
     }
 }

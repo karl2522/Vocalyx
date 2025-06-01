@@ -26,6 +26,8 @@ import com.example.vocalyxapk.models.TeamCourseItem
 import com.example.vocalyxapk.models.TeamInvitationItem
 import com.example.vocalyxapk.models.TeamItem
 import com.example.vocalyxapk.models.TeamMemberItem
+import com.example.vocalyxapk.models.TokenRefreshResponse
+import com.example.vocalyxapk.models.TokenValidationResponse
 import com.example.vocalyxapk.models.UpdateMemberPermissionsRequest
 import com.example.vocalyxapk.models.UpdateProfileRequest
 import com.example.vocalyxapk.models.UpdateProfileResponse
@@ -36,6 +38,7 @@ import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.Header
 import retrofit2.http.Multipart
 import retrofit2.http.PATCH
 import retrofit2.http.POST
@@ -197,4 +200,10 @@ interface ApiService {
 
     @GET("api/profile/")
     suspend fun getProfile(): Response<GetProfileResponse>
+
+    @GET("api/validate-token/")
+    suspend fun validateToken(@Header("Authorization") authorization: String): Response<TokenValidationResponse>
+
+    @POST("api/token/refresh/")
+    suspend fun refreshToken(@Body request: Map<String, String>): Response<TokenRefreshResponse>
 }
