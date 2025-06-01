@@ -11,7 +11,8 @@ enum class RecordingState {
     SHOWING_DUPLICATE_SELECTION,
     SHOWING_OVERRIDE_CONFIRMATION,
     SESSION_SUMMARY,
-    FINAL_VALIDATION
+    FINAL_VALIDATION,
+    SCORE_KEPT,
 }
 
 enum class SpeechEngine {

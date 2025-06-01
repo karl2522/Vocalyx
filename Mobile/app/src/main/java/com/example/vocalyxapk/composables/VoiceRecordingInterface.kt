@@ -279,11 +279,12 @@ fun VoiceRecordingInterface(
             val entry = currentOverrideEntry ?: return@remember Unit
 
             if (override) {
+                // User chose to override - existing logic
                 val confirmedEntry = entry.copy(confirmed = true)
                 Log.d("VoiceRecording", "Adding entry from override confirmation: ${confirmedEntry.fullStudentName} - ${confirmedEntry.score} - Confirmed: ${confirmedEntry.confirmed}")
                 voiceEntries = voiceEntries + confirmedEntry
 
-                // 🎯 NEW: Actually save to backend immediately
+                // Save to backend immediately
                 Log.d("VoiceRecording", "Saving override entry to backend: ${confirmedEntry.fullStudentName} -> ${confirmedEntry.score} in column: $columnName")
                 excelViewModel.updateStudentValue(
                     studentName = confirmedEntry.fullStudentName,
@@ -293,24 +294,38 @@ fun VoiceRecordingInterface(
                     coroutineScope.launch {
                         if (success) {
                             Log.d("VoiceRecording", "✅ Override entry saved successfully to backend!")
-                            // Show success message in TTS or UI if needed
                         } else {
                             Log.e("VoiceRecording", "❌ Failed to save override entry to backend")
-                            // Show error message if needed
                         }
                     }
                 }
+
+                // Show success screen for override
+                recordingState = RecordingState.SPEECH_RECOGNIZED
+
+                // Auto-continue after showing success message
+                coroutineScope.launch {
+                    delay(1500)
+                    currentOverrideEntry = null  // ✅ Clear after delay
+                    recordingState = RecordingState.READY_TO_RECORD
+                }
+
             } else {
-                Log.d("VoiceRecording", "User chose not to override existing score for: ${entry.fullStudentName}")
-            }
+                // User chose to keep current score - show "Score Kept" screen
+                Log.d("VoiceRecording", "🔍 DEBUG: User clicked Keep Current button")
+                Log.d("VoiceRecording", "🔍 DEBUG: About to set state to SCORE_KEPT")
 
-            currentOverrideEntry = null
-            recordingState = RecordingState.SPEECH_RECOGNIZED
+                // Change to a new state that shows the "Score Kept" screen
+                recordingState = RecordingState.SCORE_KEPT
 
-            // Auto-continue after showing result
-            coroutineScope.launch {
-                delay(1500)
-                recordingState = RecordingState.READY_TO_RECORD
+                Log.d("VoiceRecording", "🔍 DEBUG: State set to: $recordingState")
+
+                // Auto-continue after showing "Score Kept" message (maybe longer delay)
+                coroutineScope.launch {
+                    delay(2000) // Give user more time to read the "Score Kept" message
+                    currentOverrideEntry = null  // ✅ Clear after delay
+                    recordingState = RecordingState.READY_TO_RECORD
+                }
             }
             Unit
         }
@@ -751,6 +766,15 @@ fun VoiceRecordingInterface(
                         OverrideConfirmationScreen(
                             entry = currentOverrideEntry,
                             onConfirm = handleOverrideConfirmation
+                        )
+                    }
+
+                    RecordingState.SCORE_KEPT -> {
+                        ScoreKeptScreen(
+                            entry = currentOverrideEntry,
+                            onContinue = {
+                                recordingState = RecordingState.READY_TO_RECORD
+                            }
                         )
                     }
                     

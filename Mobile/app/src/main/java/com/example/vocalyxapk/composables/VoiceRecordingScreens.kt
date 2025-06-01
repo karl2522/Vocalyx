@@ -766,14 +766,14 @@ fun OverrideConfirmationScreen(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             OutlinedButton(
-                onClick = { onConfirm(false) },
+                onClick = { onConfirm(false) }, // 🎯 This means "Keep Current" - don't override
                 modifier = Modifier.weight(1f)
             ) {
                 Text("Keep Current")
             }
 
             Button(
-                onClick = { onConfirm(true) },
+                onClick = { onConfirm(true) }, // 🎯 This means "Override" - replace with new score
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFFFF9800)
@@ -782,6 +782,101 @@ fun OverrideConfirmationScreen(
                 Text("Override")
             }
         }
+    }
+}
+
+@Composable
+fun ScoreKeptScreen(
+    entry: VoiceEntry?,
+    onContinue: () -> Unit
+) {
+    if (entry == null) return
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(100.dp)
+                .background(Color(0xFF2196F3).copy(alpha = 0.1f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Default.Shield,
+                contentDescription = "Protected",
+                tint = Color(0xFF2196F3),
+                modifier = Modifier.size(48.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(
+            text = "Score Preserved",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF2196F3)
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xFF2196F3).copy(alpha = 0.1f)
+            )
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = entry.fullStudentName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF333D79),
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    text = "Current score (${entry.existingScore}) was kept",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFF666666),
+                    textAlign = TextAlign.Center
+                )
+
+                Text(
+                    text = "New score (${entry.score}) was discarded",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF999999),
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(
+            text = "No changes were made to the spreadsheet",
+            style = MaterialTheme.typography.bodyMedium,
+            color = Color(0xFF666666),
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "Continuing in a moment...",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color(0xFF999999),
+            textAlign = TextAlign.Center
+        )
     }
 }
 
