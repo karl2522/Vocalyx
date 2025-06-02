@@ -31,6 +31,8 @@ const UpdateFileModal = ({
   const [availableColumns, setAvailableColumns] = useState([]);
   const [categoryColumnMapping, setCategoryColumnMapping] = useState({});
   const [draggedColumn, setDraggedColumn] = useState(null);
+
+  const [ignoredColumns, setIgnoredColumns] = useState([]);
   
   // 🆕 New states for expanded sections
   const [expandedSections, setExpandedSections] = useState({
@@ -89,6 +91,33 @@ const UpdateFileModal = ({
       [section]: !prev[section]
     }));
   };
+
+  const handleDropIgnore = (e) => {
+    e.preventDefault();
+    
+    if (!draggedColumn) return;
+    
+    // Remove from any category mapping
+    const newMapping = { ...categoryColumnMapping };
+    Object.keys(newMapping).forEach(catId => {
+      newMapping[catId] = newMapping[catId].filter(col => col !== draggedColumn);
+    });
+    setCategoryColumnMapping(newMapping);
+    
+    // Add to ignored list
+    if (!ignoredColumns.includes(draggedColumn)) {
+      setIgnoredColumns(prev => [...prev, draggedColumn]);
+    }
+    
+    setDraggedColumn(null);
+    
+    console.log("Column ignored:", draggedColumn);
+  };
+
+  const handleRemoveFromIgnored = (column) => {
+    setIgnoredColumns(prev => prev.filter(col => col !== column));
+  };
+
 
   // 🔍 Helper function to extract student name from record
   const getStudentName = (record, columnMapping) => {
@@ -444,14 +473,15 @@ const UpdateFileModal = ({
               console.log(`    Columns: ${JSON.stringify(cat.columns)}`);
           });
           
-          const response = await classService.executeMerge(
+           const response = await classService.executeMerge(
               selectedFile,
               currentFile?.class_id || 1,
               conflictResolutions || {},
               finalBulkActions,
               columnMapping || {},
-              updatedCategoryMappings  // ✅ Send updated category mappings!
-          );
+              updatedCategoryMappings, // ✅ Send updated category mappings!
+              ignoredColumns // 🆕 Send ignored columns as 7th parameter
+            );
           
           console.log("Execute merge response:", response.data);
           
@@ -480,6 +510,7 @@ const UpdateFileModal = ({
     setAvailableColumns([]);
     setCategoryColumnMapping({});
     setDraggedColumn(null);
+    setIgnoredColumns([]); // 🆕 Reset ignored columns
     setExpandedSections({
       exactMatches: false,
       newStudents: false,
@@ -641,166 +672,213 @@ const UpdateFileModal = ({
   );
 
   const renderColumnMapping = () => {
-    const allCategories = [
-      ...categoryOptions.filter(cat => cat.id !== 'create_new'),
-      ...customCategories
-    ];
-    
-    const selectedCategoryData = allCategories.find(cat => cat.id === selectedCategory);
-    
-    return (
-      <>
-        <div className="text-center mb-4">
-          <h4 className="text-lg font-medium text-gray-800 mb-2">Map Your Columns</h4>
-          <p className="text-sm text-gray-600">
-            Drag columns from your file to the <span className="font-semibold text-[#333D79]">
-              {selectedCategoryData?.name}
-            </span> category
-          </p>
-        </div>
+  const allCategories = [
+    ...categoryOptions.filter(cat => cat.id !== 'create_new'),
+    ...customCategories
+  ];
+  
+  const selectedCategoryData = allCategories.find(cat => cat.id === selectedCategory);
+  
+  return (
+    <>
+      <div className="text-center mb-4">
+        <h4 className="text-lg font-medium text-gray-800 mb-2">Map Your Columns</h4>
+        <p className="text-sm text-gray-600">
+          Drag columns from your file to the <span className="font-semibold text-[#333D79]">
+            {selectedCategoryData?.name}
+          </span> category or ignore them completely
+        </p>
+      </div>
 
-        {/* File Info */}
-        {previewData && (
-          <div className="mb-6 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-            <div className="flex items-center">
-              <BsFileEarmarkSpreadsheet className="h-5 w-5 text-[#333D79] mr-2" />
-              <div>
-                <p className="text-sm font-medium text-gray-800">{previewData.name}</p>
-                <p className="text-xs text-gray-600">{availableColumns.length} columns available for mapping</p>
-              </div>
+      {/* File Info */}
+      {previewData && (
+        <div className="mb-6 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+          <div className="flex items-center">
+            <BsFileEarmarkSpreadsheet className="h-5 w-5 text-[#333D79] mr-2" />
+            <div>
+              <p className="text-sm font-medium text-gray-800">{previewData.name}</p>
+              <p className="text-xs text-gray-600">{availableColumns.length} columns available for mapping</p>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Available Columns */}
-          <div className="space-y-4">
-            <h5 className="text-sm font-medium text-gray-800 flex items-center">
-              <FiUpload className="h-4 w-4 mr-2" />
-              Available Columns ({availableColumns.length})
-            </h5>
-            
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 min-h-[200px]">
-              {availableColumns.length > 0 ? (
-                <div className="space-y-2">
-                  {availableColumns.map((column, index) => {
-                    const isAssigned = Object.values(categoryColumnMapping).some(cols => cols.includes(column));
-                    
-                    return (
-                      <div
-                        key={index}
-                        draggable={!isAssigned}
-                        onDragStart={(e) => handleDragStart(e, column)}
-                        className={`p-3 rounded-lg border transition-all cursor-move ${
-                          isAssigned 
-                            ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed opacity-50' 
-                            : draggedColumn === column
-                              ? 'bg-blue-100 border-blue-300 shadow-md'
-                              : 'bg-white border-gray-200 hover:border-[#333D79] hover:shadow-sm'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium">{column}</span>
-                          {isAssigned && (
-                            <span className="text-xs text-gray-500">✓ Assigned</span>
-                          )}
-                        </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6"> {/* Changed to 3 columns */}
+        {/* Available Columns */}
+        <div className="space-y-4">
+          <h5 className="text-sm font-medium text-gray-800 flex items-center">
+            <FiUpload className="h-4 w-4 mr-2" />
+            Available Columns ({availableColumns.length})
+          </h5>
+          
+          <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 min-h-[200px]">
+            {availableColumns.length > 0 ? (
+              <div className="space-y-2">
+                {availableColumns.map((column, index) => {
+                  const isAssigned = Object.values(categoryColumnMapping).some(cols => cols.includes(column));
+                  const isIgnored = ignoredColumns.includes(column);
+                  
+                  if (isAssigned || isIgnored) return null; // Don't show assigned or ignored columns
+                  
+                  return (
+                    <div
+                      key={index}
+                      draggable={true}
+                      onDragStart={(e) => handleDragStart(e, column)}
+                      className={`p-3 rounded-lg border transition-all cursor-move ${
+                        draggedColumn === column
+                          ? 'bg-blue-100 border-blue-300 shadow-md'
+                          : 'bg-white border-gray-200 hover:border-[#333D79] hover:shadow-sm'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">{column}</span>
                       </div>
-                    );
-                  })}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-full text-gray-500">
+                <div className="text-center">
+                  <FiAlertCircle className="h-8 w-8 mx-auto mb-2" />
+                  <p className="text-sm">No columns available for mapping</p>
                 </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Target Category */}
+        <div className="space-y-4">
+          <h5 className="text-sm font-medium text-gray-800 flex items-center">
+            {selectedCategoryData && React.createElement(selectedCategoryData.icon, {
+              className: "h-4 w-4 mr-2"
+            })}
+            {selectedCategoryData?.name} Category
+          </h5>
+          
+          <div 
+            className={`border-2 border-dashed rounded-lg p-4 min-h-[200px] transition-all ${
+              draggedColumn 
+                ? 'border-[#333D79] bg-[#EEF0F8]' 
+                : 'border-gray-300'
+            }`}
+            onDragOver={handleDragOver}
+            onDrop={(e) => handleDrop(e, selectedCategory)}
+          >
+            <div className="space-y-2">
+              {categoryColumnMapping[selectedCategory]?.length > 0 ? (
+                categoryColumnMapping[selectedCategory].map((column, index) => (
+                  <div
+                    key={index}
+                    className="p-3 bg-[#333D79] text-white rounded-lg flex items-center justify-between"
+                  >
+                    <span className="text-sm font-medium">{column}</span>
+                    <button
+                      onClick={() => handleRemoveColumnFromCategory(selectedCategory, column)}
+                      className="text-white hover:text-red-200 transition-colors"
+                    >
+                      <FiX className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))
               ) : (
                 <div className="flex items-center justify-center h-full text-gray-500">
                   <div className="text-center">
-                    <FiAlertCircle className="h-8 w-8 mx-auto mb-2" />
-                    <p className="text-sm">No columns available for mapping</p>
+                    <FiChevronDown className="h-8 w-8 mx-auto mb-2" />
+                    <p className="text-sm">
+                      {draggedColumn 
+                        ? 'Drop column here' 
+                        : 'Drag columns here to assign to this category'
+                      }
+                    </p>
                   </div>
                 </div>
               )}
             </div>
           </div>
+        </div>
 
-          {/* Target Category */}
-          <div className="space-y-4">
-            <h5 className="text-sm font-medium text-gray-800 flex items-center">
-              {selectedCategoryData && React.createElement(selectedCategoryData.icon, {
-                className: "h-4 w-4 mr-2"
-              })}
-              {selectedCategoryData?.name} Category
-            </h5>
-            
-            <div 
-              className={`border-2 border-dashed rounded-lg p-4 min-h-[200px] transition-all ${
-                draggedColumn 
-                  ? 'border-[#333D79] bg-[#EEF0F8]' 
-                  : 'border-gray-300'
-              }`}
-              onDragOver={handleDragOver}
-              onDrop={(e) => handleDrop(e, selectedCategory)}
-            >
-              <div className="space-y-2">
-                {categoryColumnMapping[selectedCategory]?.length > 0 ? (
-                  categoryColumnMapping[selectedCategory].map((column, index) => (
-                    <div
-                      key={index}
-                      className="p-3 bg-[#333D79] text-white rounded-lg flex items-center justify-between"
+        {/* 🆕 NEW: Ignored Columns */}
+        <div className="space-y-4">
+          <h5 className="text-sm font-medium text-gray-800 flex items-center">
+            <FiX className="h-4 w-4 mr-2 text-red-500" />
+            Ignore These Columns
+          </h5>
+          
+          <div 
+            className={`border-2 border-dashed rounded-lg p-4 min-h-[200px] transition-all ${
+              draggedColumn 
+                ? 'border-red-500 bg-red-50' 
+                : 'border-red-300'
+            }`}
+            onDragOver={handleDragOver}
+            onDrop={(e) => handleDropIgnore(e)}
+          >
+            <div className="space-y-2">
+              {ignoredColumns.length > 0 ? (
+                ignoredColumns.map((column, index) => (
+                  <div
+                    key={index}
+                    className="p-3 bg-red-100 text-red-800 rounded-lg flex items-center justify-between"
+                  >
+                    <span className="text-sm font-medium">{column}</span>
+                    <button
+                      onClick={() => handleRemoveFromIgnored(column)}
+                      className="text-red-600 hover:text-red-800 transition-colors"
                     >
-                      <span className="text-sm font-medium">{column}</span>
-                      <button
-                        onClick={() => handleRemoveColumnFromCategory(selectedCategory, column)}
-                        className="text-white hover:text-red-200 transition-colors"
-                      >
-                        <FiX className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ))
-                ) : (
-                  <div className="flex items-center justify-center h-full text-gray-500">
-                    <div className="text-center">
-                      <FiChevronDown className="h-8 w-8 mx-auto mb-2" />
-                      <p className="text-sm">
-                        {draggedColumn 
-                          ? 'Drop column here' 
-                          : 'Drag columns here to assign to this category'
-                        }
-                      </p>
-                    </div>
+                      <FiX className="h-4 w-4" />
+                    </button>
                   </div>
-                )}
-              </div>
+                ))
+              ) : (
+                <div className="flex items-center justify-center h-full text-red-500">
+                  <div className="text-center">
+                    <FiX className="h-8 w-8 mx-auto mb-2" />
+                    <p className="text-sm">
+                      {draggedColumn 
+                        ? 'Drop column here to ignore it' 
+                        : 'Drag columns here to ignore them completely'
+                      }
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Student Data Preview (existing code) */}
-        {conflictData && (
-          <div className="mt-6 space-y-4">
-            <h5 className="text-sm font-medium text-gray-800">Student Data Preview</h5>
-            
-            {/* Overview Stats */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="p-3 bg-green-50 rounded-lg text-center">
-                <div className="text-lg font-bold text-green-600">{conflictData.statistics?.exact_matches || 0}</div>
-                <div className="text-xs text-green-700">Exact Matches</div>
-              </div>
-              <div className="p-3 bg-yellow-50 rounded-lg text-center">
-                <div className="text-lg font-bold text-yellow-600">{conflictData.statistics?.fuzzy_matches || 0}</div>
-                <div className="text-xs text-yellow-700">Similar Names</div>
-              </div>
-              <div className="p-3 bg-red-50 rounded-lg text-center">
-                <div className="text-lg font-bold text-red-600">{conflictData.statistics?.conflicts || 0}</div>
-                <div className="text-xs text-red-700">Conflicts</div>
-              </div>
-              <div className="p-3 bg-blue-50 rounded-lg text-center">
-                <div className="text-lg font-bold text-blue-600">{conflictData.statistics?.new_students || 0}</div>
-                <div className="text-xs text-blue-700">New Students</div>
-              </div>
+      {/* Student Data Preview (existing code) */}
+      {conflictData && (
+        <div className="mt-6 space-y-4">
+          <h5 className="text-sm font-medium text-gray-800">Student Data Preview</h5>
+          
+          {/* Overview Stats */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-3 bg-green-50 rounded-lg text-center">
+              <div className="text-lg font-bold text-green-600">{conflictData.statistics?.exact_matches || 0}</div>
+              <div className="text-xs text-green-700">Exact Matches</div>
+            </div>
+            <div className="p-3 bg-yellow-50 rounded-lg text-center">
+              <div className="text-lg font-bold text-yellow-600">{conflictData.statistics?.fuzzy_matches || 0}</div>
+              <div className="text-xs text-yellow-700">Similar Names</div>
+            </div>
+            <div className="p-3 bg-red-50 rounded-lg text-center">
+              <div className="text-lg font-bold text-red-600">{conflictData.statistics?.conflicts || 0}</div>
+              <div className="text-xs text-red-700">Conflicts</div>
+            </div>
+            <div className="p-3 bg-blue-50 rounded-lg text-center">
+              <div className="text-lg font-bold text-blue-600">{conflictData.statistics?.new_students || 0}</div>
+              <div className="text-xs text-blue-700">New Students</div>
             </div>
           </div>
-        )}
-      </>
-    );
-  };
+        </div>
+      )}
+    </>
+  );
+};
 
   const renderConflictResolution = () => (
     <>

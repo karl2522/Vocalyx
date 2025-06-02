@@ -794,7 +794,8 @@ class ExcelViewSet(viewsets.ModelViewSet):
                     'bulk_actions': {'type': 'string'},  # JSON string
                     'matching_threshold': {'type': 'number'},
                     'column_mapping': {'type': 'string'},
-                    'category_mappings': {'type': 'string'}  # JSON string
+                    'category_mappings': {'type': 'string'},  # JSON string
+                    'ignored_columns': {'type': 'string'}
                 }
             }
         },
@@ -947,15 +948,19 @@ class ExcelViewSet(viewsets.ModelViewSet):
             }
 
         def process_smart_column_mapping(imported_headers, imported_records, category_mappings, existing_data,
-                                         existing_category_mappings, max_columns_per_category=10):
+                                         existing_category_mappings, ignored_columns=None, max_columns_per_category=10):
             """
             Process imported columns with smart replacement/addition logic
+            NOW WITH IGNORED COLUMNS SUPPORT! 🚫
             """
             print("\n🧠 PROCESSING SMART COLUMN MAPPING")
 
+            # 🆕 NEW: Handle ignored columns first
+            if ignored_columns is None:
+                ignored_columns = []
+
+            print(f"🚫 IGNORED COLUMNS: {ignored_columns}")
             print(f"🔍 DEBUG: Frontend sent category_mappings: {category_mappings}")
-            for i, cat in enumerate(category_mappings):
-                print(f"  Category {i}: {cat.get('id')} → columns: {cat.get('columns', [])}")
 
             column_operations = []
 
@@ -965,9 +970,8 @@ class ExcelViewSet(viewsets.ModelViewSet):
                 final_category_mappings.append({
                     'id': cat.get('id'),
                     'name': cat.get('name'),
-                    'columns': cat.get('columns', []).copy(),  # Keep existing columns
+                    'columns': cat.get('columns', []).copy(),
                     'imported_column_mapping': cat.get('imported_column_mapping', {}).copy()
-                    # ✅ PRESERVE EXISTING MAPPINGS!
                 })
 
             # 🆕 ONLY PROCESS EXPLICITLY MAPPED COLUMNS (USER'S DRAG & DROP CHOICES)
@@ -982,14 +986,24 @@ class ExcelViewSet(viewsets.ModelViewSet):
             # 🔧 NEW: Track which columns have been assigned during this operation
             already_assigned_columns = set()
 
-            # Process each imported column ONLY IF IT WAS EXPLICITLY MAPPED
+            # Process each imported column
             for header in imported_headers:
-                # 🆕 SKIP UNMAPPED COLUMNS - Let them stay as uncategorized
+                # 🆕 STEP 1: CHECK IF COLUMN IS IGNORED FIRST!
+                if header in ignored_columns:
+                    print(f"  🚫 IGNORING {header} - explicitly ignored by user")
+                    column_operations.append({
+                        'imported_column': header,
+                        'action': 'ignored',
+                        'reason': 'Column explicitly ignored by user'
+                    })
+                    continue  # Skip all further processing for this column
+
+                # 🆕 STEP 2: Skip unmapped columns (but don't ignore them completely)
                 if header not in explicitly_mapped_columns:
                     print(f"  ⏭️ SKIPPING {header} - not explicitly mapped by user")
                     continue
 
-                # Find which category this column belongs to
+                # STEP 3: Find which category this column belongs to
                 target_category = None
                 for category in category_mappings:
                     if header in category.get('columns', []):
@@ -997,7 +1011,6 @@ class ExcelViewSet(viewsets.ModelViewSet):
                         break
 
                 if not target_category:
-                    # This shouldn't happen since we filtered for explicitly mapped columns
                     column_operations.append({
                         'imported_column': header,
                         'action': 'keep',
@@ -1029,15 +1042,13 @@ class ExcelViewSet(viewsets.ModelViewSet):
                     column_data,
                     existing_data,
                     existing_category_mappings,
-                    already_assigned_columns,  # 🆕 Pass the tracking set
+                    already_assigned_columns,
                     max_columns_per_category
                 )
 
+                # Process the strategy (same as before...)
                 if strategy['action'] == 'replace':
-                    # Replace existing empty column
                     target_column = strategy['target_column']
-
-                    # 🔧 TRACK the assigned column to prevent conflicts
                     already_assigned_columns.add(target_column)
 
                     column_operations.append({
@@ -1049,22 +1060,16 @@ class ExcelViewSet(viewsets.ModelViewSet):
                     })
                     print(f"  🔄 {header} → {target_column} (replace)")
 
-                    # 🔧 CRITICAL FIX: PRESERVE existing imported_column_mapping
+                    # Update category mappings...
                     for final_cat in final_category_mappings:
                         if final_cat['id'] == category_id:
-                            # Initialize if doesn't exist
                             if 'imported_column_mapping' not in final_cat:
                                 final_cat['imported_column_mapping'] = {}
-
-                            # 🆕 PRESERVE existing mappings and add new one
                             existing_mapping = final_cat.get('imported_column_mapping', {})
                             final_cat['imported_column_mapping'] = {**existing_mapping, target_column: header}
-                            print(
-                                f"🔧 Updated imported_column_mapping for {category_id}: {final_cat['imported_column_mapping']}")
                             break
 
                 elif strategy['action'] == 'add_new':
-                    # Add as new column
                     column_operations.append({
                         'imported_column': header,
                         'action': 'add_new',
@@ -1074,21 +1079,15 @@ class ExcelViewSet(viewsets.ModelViewSet):
                     })
                     print(f"  ➕ {header} → {header} (new)")
 
-                    # 🔧 CRITICAL FIX: PRESERVE existing imported_column_mapping
+                    # Update category mappings...
                     for final_cat in final_category_mappings:
                         if final_cat['id'] == category_id:
                             if header not in final_cat['columns']:
                                 final_cat['columns'].append(header)
-
-                            # Initialize if doesn't exist
                             if 'imported_column_mapping' not in final_cat:
                                 final_cat['imported_column_mapping'] = {}
-
-                            # 🆕 PRESERVE existing mappings and add new one
                             existing_mapping = final_cat.get('imported_column_mapping', {})
                             final_cat['imported_column_mapping'] = {**existing_mapping, header: header}
-                            print(
-                                f"🔧 Updated imported_column_mapping for {category_id}: {final_cat['imported_column_mapping']}")
                             break
 
                 else:  # reject
@@ -1099,8 +1098,8 @@ class ExcelViewSet(viewsets.ModelViewSet):
                     })
                     print(f"  ❌ {header} → REJECTED ({strategy['reason']})")
 
-            # 🆕 HANDLE UNMAPPED COLUMNS - But check if they were already imported before
-            unmapped_columns = set(imported_headers) - explicitly_mapped_columns
+            # 🆕 HANDLE UNMAPPED COLUMNS - But exclude ignored ones!
+            unmapped_columns = set(imported_headers) - explicitly_mapped_columns - set(ignored_columns)
 
             # 🚫 Get list of previously imported column names to avoid duplicates
             previously_imported_columns = set()
@@ -1227,13 +1226,23 @@ class ExcelViewSet(viewsets.ModelViewSet):
             existing_headers = existing_file.all_sheets[active_sheet]['headers']
             existing_category_mappings = existing_file.all_sheets.get('category_mappings', [])
 
+            ignored_columns = []
+            if 'ignored_columns' in request.data:
+                try:
+                    ignored_columns = json.loads(request.data.get('ignored_columns'))
+                    print(f"Parsed ignored columns: {ignored_columns}")
+                except Exception as e:
+                    print(f"Error parsing ignored columns: {str(e)}")
+
             # 🆕 SMART COLUMN MAPPING INSTEAD OF SIMPLE FILTERING
             column_operations, updated_category_mappings = process_smart_column_mapping(
                 imported_headers,
                 imported_records,
                 category_mappings,
                 existing_data,
-                existing_category_mappings
+                existing_category_mappings,
+                ignored_columns,
+                max_columns_per_category=10
             )
 
             # Check for rejected columns
@@ -1258,9 +1267,16 @@ class ExcelViewSet(viewsets.ModelViewSet):
 
             # Track new columns that are actually added (not replaced)
             new_columns_added = []
+            ignored_columns_count = 0
 
             for operation in column_operations:
-                if operation['action'] in ['keep', 'add_new', 'replace', 'keep_unmapped']:  # 🆕 Add keep_unmapped
+                if operation['action'] == 'ignored':
+                    # 🆕 Just log ignored columns, don't process them
+                    ignored_columns_count += 1
+                    print(f"  🚫 IGNORED: {operation['imported_column']} - {operation['reason']}")
+                    continue
+
+                elif operation['action'] in ['keep', 'add_new', 'replace', 'keep_unmapped']:
                     imported_column = operation['imported_column']
                     final_column = operation['final_column']
 
@@ -1269,7 +1285,7 @@ class ExcelViewSet(viewsets.ModelViewSet):
                     # Add column to headers if new
                     if final_column not in merged_data['headers']:
                         merged_data['headers'].append(final_column)
-                        if operation['action'] in ['add_new', 'keep_unmapped']:  # 🆕 Count unmapped as new
+                        if operation['action'] in ['add_new', 'keep_unmapped']:
                             new_columns_added.append(final_column)
 
                     # Initialize column in existing records if new
@@ -1278,6 +1294,7 @@ class ExcelViewSet(viewsets.ModelViewSet):
                             record[final_column] = None
 
             print(f"✅ Applied column operations successfully")
+            print(f"🚫 Ignored {ignored_columns_count} columns as requested")
 
             # Use provided column mapping or detect automatically
             if not column_mapping:
@@ -1516,16 +1533,18 @@ class ExcelViewSet(viewsets.ModelViewSet):
                     'skipped_count': skipped_count,
                     'columns_replaced': replaced_columns,
                     'new_columns_added': added_columns,
+                    'columns_ignored': ignored_columns_count,  # 🆕 NEW!
                     'total_records': len(merged_data['data']),
                     'bulk_actions_applied': list(bulk_actions.keys()) if bulk_actions else [],
                     'column_operations': [
                         {
                             'imported': op['imported_column'],
-                            'final': op['final_column'],
+                            'final': op.get('final_column', op['imported_column']),  # ✅ Safe access with fallback
                             'action': op['action']
-                        } for op in column_operations if op['action'] != 'reject'
+                        } for op in column_operations if op['action'] not in ['reject', 'ignored']  # ✅ Exclude both reject AND ignored
                     ],
-                    'summary': f"Successfully merged file with {exact_matches_processed + fuzzy_matches_processed + new_students_added} records processed, {replaced_columns} columns replaced, {added_columns} new columns added"
+                    'ignored_columns': [op['imported_column'] for op in column_operations if op['action'] == 'ignored'],
+                    'summary': f"Successfully merged file with {exact_matches_processed + fuzzy_matches_processed + new_students_added} records processed, {replaced_columns} columns replaced, {added_columns} new columns added, {ignored_columns_count} columns ignored"
                 }
             })
 

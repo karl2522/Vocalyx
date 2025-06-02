@@ -216,7 +216,7 @@ export const classService = {
     },
     
     // 🆕 NEW: Execute merge with conflict resolutions
-    executeMerge: (file, classId, conflictResolutions = {}, bulkActions = {}, columnMapping = null, categoryMappings = null) => {
+    executeMerge: (file, classId, conflictResolutions = {}, bulkActions = {}, columnMapping = null, categoryMappings = null, ignoredColumns = []) => {
         const formData = new FormData();
         formData.append('file', file);
         formData.append('class_id', String(classId));
@@ -229,6 +229,11 @@ export const classService = {
         
         if (categoryMappings) {
             formData.append('category_mappings', JSON.stringify(categoryMappings));
+        }
+        
+        // 🆕 Add ignored columns support
+        if (ignoredColumns && ignoredColumns.length > 0) {
+            formData.append('ignored_columns', JSON.stringify(ignoredColumns));
         }
         
         return api.post('/excel/execute_merge/', formData, {

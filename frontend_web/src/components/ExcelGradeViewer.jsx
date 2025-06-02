@@ -25,12 +25,15 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
   const [categoryMapping, setCategoryMapping] = useState(null);
   const [hasChanges, setHasChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [saveStatus, setSaveStatus] = useState(null); // 'success' | 'error' | null
+  const [saveStatus, setSaveStatus] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [lastSaveTime, setLastSaveTime] = useState(null);
+  
+  // 🆕 NEW: Track current headers state to sync with Handsontable
+  const [currentHeaders, setCurrentHeaders] = useState([]);
+  const [updatedFileData, setUpdatedFileData] = useState(null);
 
-  // ... (keeping all the existing useEffect hooks and functions exactly the same)
   // Enhanced loading with progress
   useEffect(() => {
     let mounted = true;
@@ -108,37 +111,19 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
     console.log("fileData received:", fileData);
     
     if (fileData && fileData.all_sheets) {
-      console.log("=== FILE DATA STRUCTURE ANALYSIS ===");
-      console.log("all_sheets keys:", Object.keys(fileData.all_sheets));
-      
       const activeSheet = fileData.active_sheet;
-      console.log("active_sheet:", activeSheet);
+      const sheetData = fileData.all_sheets[activeSheet];
       
-      if (fileData.all_sheets[activeSheet]) {
-        console.log(`Sheet '${activeSheet}' data:`, fileData.all_sheets[activeSheet]);
-        console.log(`Headers in '${activeSheet}':`, fileData.all_sheets[activeSheet].headers);
-        console.log(`Data rows in '${activeSheet}':`, fileData.all_sheets[activeSheet].data?.length || 0);
-      }
+      // 🆕 NEW: Initialize current headers
+      setCurrentHeaders(sheetData?.headers || []);
+      setUpdatedFileData(fileData);
       
-      if (fileData.all_sheets.category_mappings) {
-        console.log("=== STORED CATEGORY MAPPINGS ===");
-        console.log("Category mappings found:", fileData.all_sheets.category_mappings);
-        fileData.all_sheets.category_mappings.forEach((category, index) => {
-          console.log(`[${index}] Category: ${category.name} (${category.id})`);
-          console.log(`  Columns (${category.columns?.length || 0}):`, category.columns);
-        });
-      } else {
-        console.log("❌ No category_mappings found in all_sheets");
-      }
-      
-      console.log("=== GENERATING CATEGORY MAPPINGS ===");
       const mappings = generateCategoryMappings(fileData);
-      console.log("Generated mappings result:", mappings);
       setCategoryMapping(mappings);
       setHasChanges(false);
       setSaveStatus(null);
     } else {
-      console.log("=== NO FILE DATA - USING DEFAULT MAPPINGS ===");
+      setCurrentHeaders([]);
       setCategoryMapping({
         student: [0],
         laboratory: [],
@@ -149,36 +134,115 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
     }
   }, [fileData]);
 
+  // 🆕 NEW: Auto-categorize new columns
+  const autoCategorizeSingleColumn = (headerName, columnIndex) => {
+    const headerLower = headerName.toString().toLowerCase();
+    
+    // Student info patterns
+    if (headerLower.includes('name') || headerLower.includes('student') || headerLower.includes('no.')) {
+      return 'student';
+    }
+    // Quiz patterns
+    else if (headerLower.includes('quiz')) {
+      return 'quiz';
+    }
+    // Lab patterns
+    else if (headerLower.includes('lab') || headerLower.includes('laboratory')) {
+      return 'laboratory';
+    }
+    // Exam patterns
+    else if (headerLower.includes('exam') || headerLower.includes('prelim') || headerLower.includes('midterm') || headerLower.includes('final')) {
+      return 'exams';
+    }
+    // Default to 'other'
+    else {
+      return 'other';
+    }
+  };
+
+  // 🆕 NEW: Update category mappings when columns change
+  const updateCategoryMappingsAfterColumnChange = (newHeaders, changeType, changeIndex) => {
+    console.log("=== UPDATING CATEGORY MAPPINGS ===");
+    console.log("Change type:", changeType, "at index:", changeIndex);
+    console.log("New headers:", newHeaders);
+    
+    if (!categoryMapping) return;
+
+    const newCategoryMapping = { ...categoryMapping };
+    
+    if (changeType === 'add') {
+      // Shift all column indices after the insertion point
+      Object.keys(newCategoryMapping).forEach(categoryId => {
+        if (categoryId !== '_categoryNames' && Array.isArray(newCategoryMapping[categoryId])) {
+          newCategoryMapping[categoryId] = newCategoryMapping[categoryId].map(colIndex => {
+            return colIndex >= changeIndex ? colIndex + 1 : colIndex;
+          });
+        }
+      });
+      
+      // Auto-categorize the new column
+      const newColumnName = newHeaders[changeIndex] || `New Column ${changeIndex + 1}`;
+      const autoCategory = autoCategorizeSingleColumn(newColumnName, changeIndex);
+      
+      console.log(`Auto-categorizing new column "${newColumnName}" as "${autoCategory}"`);
+      
+      if (!newCategoryMapping[autoCategory]) {
+        newCategoryMapping[autoCategory] = [];
+      }
+      newCategoryMapping[autoCategory].push(changeIndex);
+      newCategoryMapping[autoCategory].sort((a, b) => a - b);
+      
+    } else if (changeType === 'remove') {
+      // Remove the deleted column from all categories and shift indices
+      Object.keys(newCategoryMapping).forEach(categoryId => {
+        if (categoryId !== '_categoryNames' && Array.isArray(newCategoryMapping[categoryId])) {
+          newCategoryMapping[categoryId] = newCategoryMapping[categoryId]
+            .filter(colIndex => colIndex !== changeIndex) // Remove the deleted column
+            .map(colIndex => colIndex > changeIndex ? colIndex - 1 : colIndex); // Shift remaining columns
+        }
+      });
+    }
+    
+    console.log("Updated category mappings:", newCategoryMapping);
+    setCategoryMapping(newCategoryMapping);
+  };
+
+  // 🆕 NEW: Sync data structure after column/row changes
+  const syncDataStructure = (newHeaders, newData) => {
+    if (!updatedFileData) return;
+
+    const activeSheet = updatedFileData.active_sheet;
+    const newFileData = {
+      ...updatedFileData,
+      all_sheets: {
+        ...updatedFileData.all_sheets,
+        [activeSheet]: {
+          ...updatedFileData.all_sheets[activeSheet],
+          headers: newHeaders,
+          data: newData
+        }
+      }
+    };
+
+    setUpdatedFileData(newFileData);
+    setCurrentHeaders(newHeaders);
+    setHasChanges(true);
+    setSaveStatus(null);
+    
+    console.log("=== DATA STRUCTURE SYNCED ===");
+    console.log("New headers:", newHeaders);
+    console.log("New data rows:", newData.length);
+  };
+
   // Enhanced save handler with better feedback
   const handleSave = useCallback(async () => {
-    if (!hasChanges || !hotInstanceRef.current || !fileData) return;
+    if (!hasChanges || !hotInstanceRef.current || !updatedFileData) return;
     
     setIsSaving(true);
     setSaveStatus(null);
     
     try {
-      const currentData = hotInstanceRef.current.getData();
-      const headers = fileData.all_sheets[fileData.active_sheet].headers;
-      
-      const updatedData = currentData.map(row => {
-        const recordObj = {};
-        headers.forEach((header, index) => {
-          recordObj[header] = row[index];
-        });
-        return recordObj;
-      });
-      
-      const updatedFileData = {
-        ...fileData,
-        all_sheets: {
-          ...fileData.all_sheets,
-          [fileData.active_sheet]: {
-            ...fileData.all_sheets[fileData.active_sheet],
-            data: updatedData
-          }
-        }
-      };
-      
+      // Use the already synced data structure
       if (onSave) {
         await onSave(updatedFileData);
         setHasChanges(false);
@@ -195,7 +259,7 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
     } finally {
       setIsSaving(false);
     }
-  }, [hasChanges, fileData, onSave]);
+  }, [hasChanges, updatedFileData, onSave]);
 
   // Auto-save functionality
   useEffect(() => {
@@ -531,18 +595,17 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
     return categories;
   };
 
-  // Generate nested headers based on categories (keeping original logic)
   // Generate nested headers based on categories - FIXED VERSION
   const generateNestedHeaders = () => {
-    if (!fileData || !fileData.all_sheets || !categoryMapping) {
+    if (!updatedFileData || !updatedFileData.all_sheets || !categoryMapping) {
       return [[], []];
     }
 
-    const activeSheet = fileData.active_sheet;
-    const sheetData = fileData.all_sheets[activeSheet];
+    const activeSheet = updatedFileData.active_sheet;
+    const sheetData = updatedFileData.all_sheets[activeSheet];
     const headers = sheetData.headers || [];
 
-    console.log("=== FIXED NESTED HEADERS GENERATION ===");
+    console.log("=== NESTED HEADERS GENERATION ===");
     console.log("Headers:", headers);
     console.log("Category mapping:", categoryMapping);
 
@@ -612,14 +675,6 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
     }
 
     console.log("=== FINAL CATEGORY ROW STRUCTURE ===");
-    categoryRow.forEach((item, idx) => {
-      if (typeof item === 'object' && item !== null) {
-        console.log(`[${idx}] Category: "${item.label}" (colspan: ${item.colspan})`);
-      } else {
-        console.log(`[${idx}] Empty: "${item}"`);
-      }
-    });
-
     console.log("Category row length:", categoryRow.length);
     console.log("Column headers length:", columnHeaders.length);
 
@@ -628,12 +683,12 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
 
   // Process data for Handsontable (keeping original logic)
   const processData = () => {
-    if (!fileData || !fileData.all_sheets) {
+    if (!updatedFileData || !updatedFileData.all_sheets) {
       return [];
     }
 
-    const activeSheet = fileData.active_sheet;
-    const sheetData = fileData.all_sheets[activeSheet];
+    const activeSheet = updatedFileData.active_sheet;
+    const sheetData = updatedFileData.all_sheets[activeSheet];
     
     if (!sheetData || !sheetData.data) {
       return [];
@@ -652,9 +707,9 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
     }
   };
 
-  // Initialize Handsontable when data is ready - FIXED VERSION
-    useEffect(() => {
-    if (isHandsontableLoaded && hotTableRef.current && window.Handsontable && fileData && categoryMapping) {
+  // 🆕 FIXED: Initialize Handsontable with proper event handlers
+  useEffect(() => {
+    if (isHandsontableLoaded && hotTableRef.current && window.Handsontable && updatedFileData && categoryMapping) {
       // Destroy existing instance safely
       if (hotInstanceRef.current) {
         try {
@@ -667,7 +722,6 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
         hotInstanceRef.current = null;
       }
 
-      // Add safety check for DOM element
       if (!hotTableRef.current) {
         console.warn("Table ref not available, skipping initialization");
         return;
@@ -682,10 +736,9 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
       console.log("Table data rows:", tableData.length);
       console.log("Nested headers:", nestedHeaders);
 
-      // Safety checks
       const fixedColumns = categoryMapping?.student?.length || 1;
-      const activeSheet = fileData?.active_sheet;
-      const headers = fileData?.all_sheets?.[activeSheet]?.headers;
+      const activeSheet = updatedFileData?.active_sheet;
+      const headers = updatedFileData?.all_sheets?.[activeSheet]?.headers;
       
       const colWidths = Array.isArray(headers)
           ? headers.map((_, idx) => {
@@ -707,7 +760,22 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
         autoColumnSize: false,
         manualColumnResize: true,
         manualRowResize: false,
-        contextMenu: ['copy', 'cut', 'paste', '---------', 'undo', 'redo'],
+        contextMenu: [
+          'row_above',
+          'row_below', 
+          'col_left', 
+          'col_right',
+          '---------',
+          'remove_row',
+          'remove_col',
+          '---------',
+          'copy', 
+          'cut', 
+          'paste', 
+          '---------', 
+          'undo', 
+          'redo'
+        ],
         filters: true,
         dropdownMenu: true,
         fixedColumnsLeft: fixedColumns,
@@ -726,62 +794,133 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
           }
           return cellProperties;
         },
-        afterInit: function() {
-          console.log("=== HANDSONTABLE INITIALIZED SUCCESSFULLY ===");
-          console.log("Headers should now be properly aligned");
-
-          // Safe DOM inspection with proper checks
+        
+        // 🆕 NEW: Hook into column creation events
+        afterCreateCol: function(index, amount, source) {
+          console.log("=== COLUMN ADDED ===");
+          console.log("Index:", index, "Amount:", amount, "Source:", source);
+          
+          if (source === 'ContextMenu.columnLeft' || source === 'ContextMenu.columnRight') {
+            setTimeout(() => {
+              try {
+                const hotData = this.getData();
+                const hotHeaders = this.getColHeader();
+                
+                // Generate new headers for added columns
+                const newHeaders = [...currentHeaders];
+                for (let i = 0; i < amount; i++) {
+                  const columnName = `New Column ${index + i + 1}`;
+                  newHeaders.splice(index + i, 0, columnName);
+                  
+                  // Update the Handsontable column header
+                  this.updateSettings({
+                    colHeaders: function(col) {
+                      return newHeaders[col] || `Column ${col + 1}`;
+                    }
+                  });
+                }
+                
+                console.log("New headers after column addition:", newHeaders);
+                
+                // Convert data back to object format
+                const newData = hotData.map(row => {
+                  const recordObj = {};
+                  newHeaders.forEach((header, headerIndex) => {
+                    recordObj[header] = row[headerIndex] || null;
+                  });
+                  return recordObj;
+                });
+                
+                // Update category mappings
+                updateCategoryMappingsAfterColumnChange(newHeaders, 'add', index);
+                
+                // Sync data structure
+                syncDataStructure(newHeaders, newData);
+                
+                console.log("✅ Column addition handled successfully");
+              } catch (error) {
+                console.error("Error handling column addition:", error);
+              }
+            }, 100);
+          }
+        },
+        
+        // 🆕 NEW: Hook into column removal events
+        afterRemoveCol: function(index, amount, physicalColumns, source) {
+          console.log("=== COLUMN REMOVED ===");
+          console.log("Index:", index, "Amount:", amount, "Source:", source);
+          
           setTimeout(() => {
             try {
-              // Check if rootElement exists and is still valid
-              if (!this.rootElement) {
-                console.warn("Root element not available yet");
-                return;
-              }
-
-              const headerTable = this.rootElement.querySelector('.handsontable thead');
-              if (!headerTable) {
-                console.warn("Header table not found in DOM");
-                return;
-              }
-
-              const rows = headerTable.querySelectorAll('tr');
-              if (!rows || rows.length === 0) {
-                console.warn("No header rows found");
-                return;
-              }
-
-              console.log(`Final header structure: ${rows.length} rows`);
-
-              // Safely check first row (categories)
-              if (rows[0]) {
-                const categoryHeaders = rows[0].querySelectorAll('th');
-                console.log(`=== FINAL CATEGORY HEADERS (${categoryHeaders.length}) ===`);
-                categoryHeaders.forEach((th, index) => {
-                  if (th) {
-                    const colspan = th.getAttribute('colspan') || '1';
-                    const text = th.textContent ? th.textContent.trim() : '';
-                    console.log(`[${index}] "${text}" (colspan: ${colspan})`);
-                  }
+              const hotData = this.getData();
+              
+              // Remove headers for deleted columns
+              const newHeaders = [...currentHeaders];
+              newHeaders.splice(index, amount);
+              
+              console.log("New headers after column removal:", newHeaders);
+              
+              // Convert data back to object format
+              const newData = hotData.map(row => {
+                const recordObj = {};
+                newHeaders.forEach((header, headerIndex) => {
+                  recordObj[header] = row[headerIndex] || null;
                 });
+                return recordObj;
+              });
+              
+              // Update category mappings (for each removed column)
+              for (let i = 0; i < amount; i++) {
+                updateCategoryMappingsAfterColumnChange(newHeaders, 'remove', index);
               }
-
-              // Safely check second row (column headers)
-              if (rows[1]) {
-                const columnHeaders = rows[1].querySelectorAll('th');
-                console.log(`=== FINAL COLUMN HEADERS (${columnHeaders.length}) ===`);
-                columnHeaders.forEach((th, index) => {
-                  if (th) {
-                    const text = th.textContent ? th.textContent.trim() : '';
-                    console.log(`[${index}] "${text}"`);
-                  }
-                });
-              }
+              
+              // Sync data structure
+              syncDataStructure(newHeaders, newData);
+              
+              console.log("✅ Column removal handled successfully");
             } catch (error) {
-              console.error("Error during DOM inspection:", error);
+              console.error("Error handling column removal:", error);
             }
-          }, 250);
+          }, 100);
         },
+        
+        // 🆕 NEW: Hook into row addition/removal
+        afterCreateRow: function(index, amount, source) {
+          console.log("=== ROW ADDED ===");
+          setTimeout(() => {
+            const hotData = this.getData();
+            const newData = hotData.map(row => {
+              const recordObj = {};
+              currentHeaders.forEach((header, headerIndex) => {
+                recordObj[header] = row[headerIndex] || null;
+              });
+              return recordObj;
+            });
+            
+            syncDataStructure(currentHeaders, newData);
+          }, 100);
+        },
+        
+        afterRemoveRow: function(index, amount, physicalRows, source) {
+          console.log("=== ROW REMOVED ===");
+          setTimeout(() => {
+            const hotData = this.getData();
+            const newData = hotData.map(row => {
+              const recordObj = {};
+              currentHeaders.forEach((header, headerIndex) => {
+                recordObj[header] = row[headerIndex] || null;
+              });
+              return recordObj;
+            });
+            
+            syncDataStructure(currentHeaders, newData);
+          }, 100);
+        },
+        
+        afterInit: function() {
+          console.log("=== HANDSONTABLE INITIALIZED SUCCESSFULLY ===");
+        },
+        
         afterChange: function(changes, source) {
           if (source !== 'loadData') {
             setHasChanges(true);
@@ -811,14 +950,11 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
         }
       }
     };
-  }, [isHandsontableLoaded, fileData, categoryMapping, searchTerm]);
+  }, [isHandsontableLoaded, updatedFileData, categoryMapping, searchTerm, currentHeaders]);
 
   // Enhanced search functionality
   useEffect(() => {
     if (hotInstanceRef.current && searchTerm) {
-      // Temporarily disabled to avoid getPlugin errors
-      // const searchPlugin = hotInstanceRef.current.getPlugin('search');
-      // searchPlugin.query(searchTerm);
       hotInstanceRef.current.render();
     }
   }, [searchTerm]);
@@ -838,7 +974,7 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
     };
   }, []);
 
-  // Enhanced custom styles
+  // Enhanced custom styles (keeping the same)
   const addCustomStyles = () => {
     if (!document.querySelector('#custom-excel-styles')) {
       const style = document.createElement('style');
@@ -957,21 +1093,21 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
 
   // Extract stats with memoization
   const stats = useMemo(() => {
-    if (!fileData || !fileData.all_sheets) {
+    if (!updatedFileData || !updatedFileData.all_sheets) {
       return { rows: 0, cols: 0, students: 0 };
     }
     
-    const activeSheet = fileData.active_sheet;
-    const sheetData = fileData.all_sheets[activeSheet];
+    const activeSheet = updatedFileData.active_sheet;
+    const sheetData = updatedFileData.all_sheets[activeSheet];
     
     return {
       rows: sheetData?.data?.length || 0,
       cols: sheetData?.headers?.length || 0,
       students: sheetData?.data?.length || 0
     };
-  }, [fileData]);
+  }, [updatedFileData]);
 
-  // Status message component
+  // Status message component (keeping the same)
   const StatusMessage = ({ status, type }) => {
     if (!status) return null;
 
