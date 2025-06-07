@@ -13,7 +13,6 @@ import Login from './components/Login'
 import Profile from './components/Profile'
 import ProtectedRoute from './components/ProtectedRoute'
 import PublicRoute from './components/PublicRoute'
-import Recordings from './components/Recordings'
 import Schedule from './components/Schedule'
 import Signup from './components/Signup'
 import Team from './components/Team'
@@ -136,11 +135,6 @@ function App() {
                     <ClassAccessGuard>
                       <ClassDetails />
                     </ClassAccessGuard>
-                  </ProtectedRoute>
-                } />
-                <Route path="/dashboard/recordings" element={
-                  <ProtectedRoute>
-                    <Recordings />
                   </ProtectedRoute>
                 } />
                 <Route path="/dashboard/profile" element={

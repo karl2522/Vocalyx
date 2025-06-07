@@ -45,7 +45,10 @@ function Login() {
 
     const handleGoogleLogin = async (credentialResponse) => {
       try {
+        console.log('Current URL:', window.location.href);
+        console.log('Current Origin:', window.location.origin);
         console.log('Google Response:', credentialResponse);
+        
         if (credentialResponse.credential) {
           const authResult = await googleLogin(credentialResponse);
           if (authResult && authResult.token) {
@@ -58,6 +61,7 @@ function Login() {
           throw new Error('No credential received from Google');
         }
       } catch (error) {
+        console.error('Google login error:', error);
         showToast.error(error.message || "Google login failed");
       }
     };

@@ -46,6 +46,8 @@ fun audioToByteArray(pcmBytes: ByteArray, sampleRate: Int = 16000): ByteArray {
 
 class AudioRecorder(private val context: Context) {
     private var recorder: AudioRecord? = null
+    private var isRecorderInitialized = false
+    private var isRecorderStarted = false
     var isRecording = false
         private set
     private val sampleRate = 16000 // 16kHz
@@ -90,6 +92,9 @@ class AudioRecorder(private val context: Context) {
             lastSoundTime = System.currentTimeMillis()
             recordingStartTime = System.currentTimeMillis()
 
+            // Clean up any existing recorder first
+            cleanupRecorder()
+
             recorder = AudioRecord(
                 MediaRecorder.AudioSource.VOICE_RECOGNITION,
                 sampleRate,
@@ -102,10 +107,22 @@ class AudioRecorder(private val context: Context) {
 
             if (recorder?.state != AudioRecord.STATE_INITIALIZED) {
                 Log.e("AudioRecorder", "AudioRecord not initialized")
+                cleanupRecorder()
                 return false
             }
 
+            isRecorderInitialized = true
+
             recorder?.startRecording()
+
+            // Check if recording actually started
+            if (recorder?.recordingState != AudioRecord.RECORDSTATE_RECORDING) {
+                Log.e("AudioRecorder", "AudioRecord failed to start recording")
+                cleanupRecorder()
+                return false
+            }
+
+            isRecorderStarted = true
             isRecording = true
 
             // Start recording thread
@@ -113,28 +130,34 @@ class AudioRecorder(private val context: Context) {
                 val buffer = ByteArray(bufferSize)
 
                 while (isRecording) {
-                    val read = recorder?.read(buffer, 0, bufferSize) ?: -1
-                    if (read > 0) {
-                        audioData.write(buffer, 0, read)
+                    try {
+                        val read = recorder?.read(buffer, 0, bufferSize) ?: -1
+                        if (read > 0) {
+                            audioData.write(buffer, 0, read)
 
-                        // Check for audio activity (non-silence)
-                        val isAudioActive = containsAudio(buffer, read)
-                        val currentTime = System.currentTimeMillis()
+                            // Check for audio activity (non-silence)
+                            val isAudioActive = containsAudio(buffer, read)
+                            val currentTime = System.currentTimeMillis()
 
-                        if (isAudioActive) {
-                            lastSoundTime = currentTime
-                        } else {
-                            // Auto-stop if silence is detected for too long
-                            // but only after we've captured at least some sound
-                            // and after minimum recording time
-                            if (audioData.size() > 10000 && // At least 10KB of audio data
-                                currentTime - recordingStartTime > minimumRecordingTime &&
-                                currentTime - lastSoundTime > silenceTimeout) {
-                                Log.d("AudioRecorder", "Silence detected, auto-stopping after ${currentTime - lastSoundTime}ms")
-                                isRecording = false
-                                break
+                            if (isAudioActive) {
+                                lastSoundTime = currentTime
+                            } else {
+                                // Auto-stop if silence is detected for too long
+                                // but only after we've captured at least some sound
+                                // and after minimum recording time
+                                if (audioData.size() > 10000 && // At least 10KB of audio data
+                                    currentTime - recordingStartTime > minimumRecordingTime &&
+                                    currentTime - lastSoundTime > silenceTimeout) {
+                                    Log.d("AudioRecorder", "Silence detected, auto-stopping after ${currentTime - lastSoundTime}ms")
+                                    isRecording = false
+                                    break
+                                }
                             }
                         }
+                    } catch (e: Exception) {
+                        Log.e("AudioRecorder", "Error reading audio data", e)
+                        isRecording = false
+                        break
                     }
                 }
             }
@@ -144,9 +167,11 @@ class AudioRecorder(private val context: Context) {
             return true
         } catch (e: SecurityException) {
             Log.e("AudioRecorder", "Security exception when starting recording", e)
+            cleanupRecorder()
             return false
         } catch (e: Exception) {
             Log.e("AudioRecorder", "Exception when starting recording", e)
+            cleanupRecorder()
             return false
         }
     }
@@ -177,9 +202,14 @@ class AudioRecorder(private val context: Context) {
             isRecording = false
             recordingThread?.join(500) // Wait for recording thread to finish
 
-            recorder?.stop()
-            recorder?.release()
-            recorder = null
+            // Only stop if recorder was actually started
+            if (isRecorderStarted && recorder?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                recorder?.stop()
+                Log.d("AudioRecorder", "AudioRecord stopped")
+            }
+
+            // Clean up recorder
+            cleanupRecorder()
 
             // Get the recorded data
             val rawData = audioData.toByteArray()
@@ -197,12 +227,51 @@ class AudioRecorder(private val context: Context) {
             return wavData
         } catch (e: Exception) {
             Log.e("AudioRecorder", "Error stopping recording", e)
+            cleanupRecorder()
             return null
+        }
+    }
+
+    // Safe cleanup method
+    private fun cleanupRecorder() {
+        try {
+            recorder?.let { rec ->
+                // Only stop if it was started and is still recording
+                if (isRecorderStarted && rec.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                    rec.stop()
+                    Log.d("AudioRecorder", "AudioRecord stopped in cleanup")
+                }
+
+                // Only release if it was initialized
+                if (isRecorderInitialized && rec.state == AudioRecord.STATE_INITIALIZED) {
+                    rec.release()
+                    Log.d("AudioRecorder", "AudioRecord released in cleanup")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("AudioRecorder", "Error during cleanup", e)
+        } finally {
+            recorder = null
+            isRecorderInitialized = false
+            isRecorderStarted = false
         }
     }
 
     // Force stop recording (call from another thread if needed)
     fun forceStop() {
         isRecording = false
+    }
+
+    // Add this method to be called from onDispose
+    fun dispose() {
+        Log.d("AudioRecorder", "Disposing AudioRecorder")
+        forceStop()
+        recordingThread?.interrupt()
+        try {
+            recordingThread?.join(1000) // Wait up to 1 second for thread to finish
+        } catch (e: InterruptedException) {
+            Log.d("AudioRecorder", "Recording thread interrupted during disposal")
+        }
+        cleanupRecorder()
     }
 }

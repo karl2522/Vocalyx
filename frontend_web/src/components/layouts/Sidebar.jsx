@@ -175,11 +175,6 @@ const Sidebar = ({ onCollapse }) => {
       path: '/dashboard/schedule'
     },
     {
-      name: 'Recordings',
-      icon: <RiSoundModuleLine size={22} />,
-      path: '/dashboard/recordings'
-    },
-    {
       name: 'Team',
       icon: <HiOutlineUserGroup size={22} />,
       path: '/dashboard/team',

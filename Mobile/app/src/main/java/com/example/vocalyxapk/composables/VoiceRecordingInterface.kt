@@ -81,17 +81,17 @@ fun VoiceRecordingInterface(
         val sheetData = excelViewModel.getSelectedSheetDataAsMap()
         val headers = sheetData["headers"] as? List<String> ?: emptyList()
         val data = sheetData["data"] as? List<Map<String, String>> ?: emptyList()
-        
+
         // Find name columns
         val firstNameCol = headers.find { it.contains("first", ignoreCase = true) && it.contains("name", ignoreCase = true) }
         val lastNameCol = headers.find { it.contains("last", ignoreCase = true) && it.contains("name", ignoreCase = true) }
         val fullNameCol = headers.find { it.contains("name", ignoreCase = true) && !it.contains("first", ignoreCase = true) && !it.contains("last", ignoreCase = true) }
-        
+
         data.mapNotNull { row ->
             val firstName = row[firstNameCol]?.trim() ?: ""
             val lastName = row[lastNameCol]?.trim() ?: ""
             val fullName = row[fullNameCol]?.trim() ?: "${firstName} ${lastName}".trim()
-            
+
             if (fullName.isNotBlank()) {
                 StudentData(
                     firstName = firstName,
@@ -99,7 +99,9 @@ fun VoiceRecordingInterface(
                     fullName = fullName,
                     rowData = row
                 )
-            } else null
+            } else {
+                null
+            }
         }
     }
 
@@ -120,10 +122,11 @@ fun VoiceRecordingInterface(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         permissionGranted = isGranted
-        if (isGranted) {
-            recordingState = RecordingState.READY_TO_RECORD
+        recordingState = if (isGranted) {
+            RecordingState.READY_TO_RECORD
         } else {
             errorMessage = "Microphone permission is required for voice recording"
+            RecordingState.REQUESTING_PERMISSION
         }
     }
 
@@ -132,7 +135,10 @@ fun VoiceRecordingInterface(
         { studentRowData: Map<String, String> ->
             val existingScore = studentRowData[columnName]?.trim()
             Log.d("VoiceRecording", "Checking existing score for column '$columnName': $existingScore")
-            if (existingScore.isNullOrBlank()) null else existingScore
+            when {
+                existingScore.isNullOrBlank() -> null
+                else -> existingScore
+            }
         }
     }
 
@@ -140,85 +146,97 @@ fun VoiceRecordingInterface(
     val processRecognizedSpeech = remember {
         { transcription: String ->
             // Check if user said "done" to end the session
-            if (transcription.lowercase().contains("done") || transcription.lowercase().contains("finish")) {
-                Log.d("VoiceRecording", "User said 'done' or 'finish', ending session with ${voiceEntries.size} entries")
-                recordingState = RecordingState.SESSION_SUMMARY
-                return@remember Unit
-            }
+            when {
+                transcription.lowercase().contains("done") || transcription.lowercase().contains("finish") -> {
+                    Log.d("VoiceRecording", "User said 'done' or 'finish', ending session with ${voiceEntries.size} entries")
+                    recordingState = RecordingState.SESSION_SUMMARY
+                }
+                else -> {
+                    // Parse the transcription for name and score
+                    val parseResult = parseTranscription(transcription)
 
-            // Parse the transcription for name and score
-            val parseResult = parseTranscription(transcription)
-            
-            if (parseResult.recognizedName == null || parseResult.score == null) {
-                errorMessage = "Could not understand name and score. Please try again."
-                recordingState = RecordingState.READY_TO_RECORD
-                return@remember Unit
-            }
+                    when {
+                        parseResult.recognizedName == null || parseResult.score == null -> {
+                            errorMessage = "Could not understand name and score. Please try again."
+                            recordingState = RecordingState.READY_TO_RECORD
+                        }
+                        else -> {
+                            // Find matching students
+                            val matches = findStudentMatches(parseResult.recognizedName, studentData)
 
-            // Find matching students
-            val matches = findStudentMatches(parseResult.recognizedName, studentData)
-            
-            if (matches.isEmpty()) {
-                errorMessage = "No matching student found for '${parseResult.recognizedName}'. Please try again."
-                recordingState = RecordingState.READY_TO_RECORD
-                return@remember Unit
-            }
+                            when {
+                                matches.isEmpty() -> {
+                                    errorMessage = "No matching student found for '${parseResult.recognizedName}'. Please try again."
+                                    recordingState = RecordingState.READY_TO_RECORD
+                                }
+                                else -> {
+                                    val speech = RecognizedSpeech(
+                                        fullText = transcription,
+                                        recognizedName = parseResult.recognizedName,
+                                        score = parseResult.score,
+                                        studentMatches = matches
+                                    )
 
-            val speech = RecognizedSpeech(
-                fullText = transcription,
-                recognizedName = parseResult.recognizedName,
-                score = parseResult.score,
-                studentMatches = matches
-            )
+                                    recognizedSpeech = speech
 
-            recognizedSpeech = speech
+                                    when {
+                                        matches.size == 1 -> {
+                                            // Single match - check for existing score
+                                            val match = matches[0]
+                                            val existingScore = checkExistingScore(match.rowData)
 
-            if (matches.size == 1) {
-                // Single match - check for existing score
-                val match = matches[0]
-                val existingScore = checkExistingScore(match.rowData)
-                
-                Log.d("VoiceRecording", "Single match found: ${match.fullName}, checking for existing score in column '$columnName'")
-                Log.d("VoiceRecording", "Student row data keys: ${match.rowData.keys}")
-                Log.d("VoiceRecording", "Existing score result: $existingScore")
-                
-                if (existingScore != null) {
-                    // Student already has a score - show override confirmation
-                    Log.d("VoiceRecording", "Student ${match.fullName} has existing score '$existingScore' in column '$columnName', showing override dialog")
-                    val entry = VoiceEntry(
-                        studentName = parseResult.recognizedName,
-                        score = parseResult.score,
-                        fullStudentName = match.fullName,
-                        originalRecognition = transcription,
-                        hasExistingScore = true,
-                        existingScore = existingScore
-                    )
-                    currentOverrideEntry = entry
-                    recordingState = RecordingState.SHOWING_OVERRIDE_CONFIRMATION
-                } else {
-                    // No existing score - add entry directly
-                    Log.d("VoiceRecording", "Student ${match.fullName} has no existing score in column '$columnName', adding entry directly")
-                    val entry = VoiceEntry(
-                        studentName = parseResult.recognizedName,
-                        score = parseResult.score,
-                        fullStudentName = match.fullName,
-                        originalRecognition = transcription,
-                        confirmed = true
-                    )
-                    Log.d("VoiceRecording", "Adding entry directly: ${entry.fullStudentName} - ${entry.score} - Confirmed: ${entry.confirmed}")
-                    voiceEntries = voiceEntries + entry
-                    recordingState = RecordingState.SPEECH_RECOGNIZED
-                    
-                    // Auto-continue after showing success message
-                    coroutineScope.launch {
-                        delay(1500)
-                        recordingState = RecordingState.READY_TO_RECORD
+                                            Log.d("VoiceRecording", "Single match found: ${match.fullName}, checking for existing score in column '$columnName'")
+                                            Log.d("VoiceRecording", "Student row data keys: ${match.rowData.keys}")
+                                            Log.d("VoiceRecording", "Existing score result: $existingScore")
+
+                                            when {
+                                                existingScore != null -> {
+                                                    // Student already has a score - show override confirmation
+                                                    Log.d("VoiceRecording", "Student ${match.fullName} has existing score '$existingScore' in column '$columnName', showing override dialog")
+                                                    val entry = VoiceEntry(
+                                                        studentName = parseResult.recognizedName,
+                                                        score = parseResult.score,
+                                                        fullStudentName = match.fullName,
+                                                        originalRecognition = transcription,
+                                                        hasExistingScore = true,
+                                                        existingScore = existingScore
+                                                    )
+                                                    currentOverrideEntry = entry
+                                                    recordingState = RecordingState.SHOWING_OVERRIDE_CONFIRMATION
+                                                }
+                                                else -> {
+                                                    // No existing score - add entry directly
+                                                    Log.d("VoiceRecording", "Student ${match.fullName} has no existing score in column '$columnName', adding entry directly")
+                                                    val entry = VoiceEntry(
+                                                        studentName = parseResult.recognizedName,
+                                                        score = parseResult.score,
+                                                        fullStudentName = match.fullName,
+                                                        originalRecognition = transcription,
+                                                        confirmed = true
+                                                    )
+                                                    Log.d("VoiceRecording", "Adding entry directly: ${entry.fullStudentName} - ${entry.score} - Confirmed: ${entry.confirmed}")
+                                                    voiceEntries = voiceEntries + entry
+                                                    recordingState = RecordingState.SPEECH_RECOGNIZED
+
+                                                    // Auto-continue after showing success message
+                                                    coroutineScope.launch {
+                                                        delay(1500)
+                                                        recordingState = RecordingState.READY_TO_RECORD
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        else -> {
+                                            // Multiple matches - show selection dialog
+                                            currentDuplicateMatches = matches
+                                            recordingState = RecordingState.SHOWING_DUPLICATE_SELECTION
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
-            } else {
-                // Multiple matches - show selection dialog
-                currentDuplicateMatches = matches
-                recordingState = RecordingState.SHOWING_DUPLICATE_SELECTION
             }
             Unit
         }
@@ -227,48 +245,56 @@ fun VoiceRecordingInterface(
     // Handle duplicate selection - Create stable reference
     val handleDuplicateSelection = remember {
         { selectedMatch: StudentMatch ->
-            val speech = recognizedSpeech ?: return@remember Unit
-            val existingScore = checkExistingScore(selectedMatch.rowData)
-            
-            Log.d("VoiceRecording", "Duplicate selection: ${selectedMatch.fullName}, checking for existing score in column '$columnName'")
-            Log.d("VoiceRecording", "Student row data keys: ${selectedMatch.rowData.keys}")
-            Log.d("VoiceRecording", "Existing score result: $existingScore")
-            
-            if (existingScore != null) {
-                // Student already has a score - show override confirmation
-                Log.d("VoiceRecording", "Student ${selectedMatch.fullName} has existing score '$existingScore' in column '$columnName', showing override dialog")
-                val entry = VoiceEntry(
-                    studentName = speech.recognizedName ?: "",
-                    score = speech.score ?: "",
-                    fullStudentName = selectedMatch.fullName,
-                    originalRecognition = speech.fullText,
-                    hasExistingScore = true,
-                    existingScore = existingScore
-                )
-                currentOverrideEntry = entry
-                recordingState = RecordingState.SHOWING_OVERRIDE_CONFIRMATION
-            } else {
-                // No existing score - add entry directly
-                Log.d("VoiceRecording", "Student ${selectedMatch.fullName} has no existing score in column '$columnName', adding entry directly")
-                val entry = VoiceEntry(
-                    studentName = speech.recognizedName ?: "",
-                    score = speech.score ?: "",
-                    fullStudentName = selectedMatch.fullName,
-                    originalRecognition = speech.fullText,
-                    confirmed = true
-                )
-                Log.d("VoiceRecording", "Adding entry from duplicate selection: ${entry.fullStudentName} - ${entry.score} - Confirmed: ${entry.confirmed}")
-                voiceEntries = voiceEntries + entry
-                recordingState = RecordingState.SPEECH_RECOGNIZED
-                
-                // Auto-continue after showing success message
-                coroutineScope.launch {
-                    delay(1500)
-                    recordingState = RecordingState.READY_TO_RECORD
+            val speech = recognizedSpeech
+            when {
+                speech == null -> Unit
+                else -> {
+                    val existingScore = checkExistingScore(selectedMatch.rowData)
+
+                    Log.d("VoiceRecording", "Duplicate selection: ${selectedMatch.fullName}, checking for existing score in column '$columnName'")
+                    Log.d("VoiceRecording", "Student row data keys: ${selectedMatch.rowData.keys}")
+                    Log.d("VoiceRecording", "Existing score result: $existingScore")
+
+                    when {
+                        existingScore != null -> {
+                            // Student already has a score - show override confirmation
+                            Log.d("VoiceRecording", "Student ${selectedMatch.fullName} has existing score '$existingScore' in column '$columnName', showing override dialog")
+                            val entry = VoiceEntry(
+                                studentName = speech.recognizedName ?: "",
+                                score = speech.score ?: "",
+                                fullStudentName = selectedMatch.fullName,
+                                originalRecognition = speech.fullText,
+                                hasExistingScore = true,
+                                existingScore = existingScore
+                            )
+                            currentOverrideEntry = entry
+                            recordingState = RecordingState.SHOWING_OVERRIDE_CONFIRMATION
+                        }
+                        else -> {
+                            // No existing score - add entry directly
+                            Log.d("VoiceRecording", "Student ${selectedMatch.fullName} has no existing score in column '$columnName', adding entry directly")
+                            val entry = VoiceEntry(
+                                studentName = speech.recognizedName ?: "",
+                                score = speech.score ?: "",
+                                fullStudentName = selectedMatch.fullName,
+                                originalRecognition = speech.fullText,
+                                confirmed = true
+                            )
+                            Log.d("VoiceRecording", "Adding entry from duplicate selection: ${entry.fullStudentName} - ${entry.score} - Confirmed: ${entry.confirmed}")
+                            voiceEntries = voiceEntries + entry
+                            recordingState = RecordingState.SPEECH_RECOGNIZED
+
+                            // Auto-continue after showing success message
+                            coroutineScope.launch {
+                                delay(1500)
+                                recordingState = RecordingState.READY_TO_RECORD
+                            }
+                        }
+                    }
+
+                    currentDuplicateMatches = emptyList()
                 }
             }
-            
-            currentDuplicateMatches = emptyList()
             Unit
         }
     }
@@ -276,55 +302,64 @@ fun VoiceRecordingInterface(
     // Handle override confirmation - Create stable reference
     val handleOverrideConfirmation = remember {
         { override: Boolean ->
-            val entry = currentOverrideEntry ?: return@remember Unit
+            val entry = currentOverrideEntry
+            when {
+                entry == null -> Unit
+                else -> {
+                    when {
+                        override -> {
+                            // User chose to override - existing logic
+                            val confirmedEntry = entry.copy(confirmed = true)
+                            Log.d("VoiceRecording", "Adding entry from override confirmation: ${confirmedEntry.fullStudentName} - ${confirmedEntry.score} - Confirmed: ${confirmedEntry.confirmed}")
+                            voiceEntries = voiceEntries + confirmedEntry
 
-            if (override) {
-                // User chose to override - existing logic
-                val confirmedEntry = entry.copy(confirmed = true)
-                Log.d("VoiceRecording", "Adding entry from override confirmation: ${confirmedEntry.fullStudentName} - ${confirmedEntry.score} - Confirmed: ${confirmedEntry.confirmed}")
-                voiceEntries = voiceEntries + confirmedEntry
+                            // Save to backend immediately
+                            Log.d("VoiceRecording", "Saving override entry to backend: ${confirmedEntry.fullStudentName} -> ${confirmedEntry.score} in column: $columnName")
+                            excelViewModel.updateStudentValue(
+                                studentName = confirmedEntry.fullStudentName,
+                                columnName = columnName,
+                                value = confirmedEntry.score
+                            ) { success ->
+                                coroutineScope.launch {
+                                    when {
+                                        success -> {
+                                            Log.d("VoiceRecording", "✅ Override entry saved successfully to backend!")
+                                        }
+                                        else -> {
+                                            Log.e("VoiceRecording", "❌ Failed to save override entry to backend")
+                                        }
+                                    }
+                                }
+                            }
 
-                // Save to backend immediately
-                Log.d("VoiceRecording", "Saving override entry to backend: ${confirmedEntry.fullStudentName} -> ${confirmedEntry.score} in column: $columnName")
-                excelViewModel.updateStudentValue(
-                    studentName = confirmedEntry.fullStudentName,
-                    columnName = columnName,
-                    value = confirmedEntry.score
-                ) { success ->
-                    coroutineScope.launch {
-                        if (success) {
-                            Log.d("VoiceRecording", "✅ Override entry saved successfully to backend!")
-                        } else {
-                            Log.e("VoiceRecording", "❌ Failed to save override entry to backend")
+                            // Show success screen for override
+                            recordingState = RecordingState.SPEECH_RECOGNIZED
+
+                            // Auto-continue after showing success message
+                            coroutineScope.launch {
+                                delay(1500)
+                                currentOverrideEntry = null  // ✅ Clear after delay
+                                recordingState = RecordingState.READY_TO_RECORD
+                            }
+                        }
+                        else -> {
+                            // User chose to keep current score - show "Score Kept" screen
+                            Log.d("VoiceRecording", "🔍 DEBUG: User clicked Keep Current button")
+                            Log.d("VoiceRecording", "🔍 DEBUG: About to set state to SCORE_KEPT")
+
+                            // Change to a new state that shows the "Score Kept" screen
+                            recordingState = RecordingState.SCORE_KEPT
+
+                            Log.d("VoiceRecording", "🔍 DEBUG: State set to: $recordingState")
+
+                            // Auto-continue after showing "Score Kept" message (maybe longer delay)
+                            coroutineScope.launch {
+                                delay(2000) // Give user more time to read the "Score Kept" message
+                                currentOverrideEntry = null  // ✅ Clear after delay
+                                recordingState = RecordingState.READY_TO_RECORD
+                            }
                         }
                     }
-                }
-
-                // Show success screen for override
-                recordingState = RecordingState.SPEECH_RECOGNIZED
-
-                // Auto-continue after showing success message
-                coroutineScope.launch {
-                    delay(1500)
-                    currentOverrideEntry = null  // ✅ Clear after delay
-                    recordingState = RecordingState.READY_TO_RECORD
-                }
-
-            } else {
-                // User chose to keep current score - show "Score Kept" screen
-                Log.d("VoiceRecording", "🔍 DEBUG: User clicked Keep Current button")
-                Log.d("VoiceRecording", "🔍 DEBUG: About to set state to SCORE_KEPT")
-
-                // Change to a new state that shows the "Score Kept" screen
-                recordingState = RecordingState.SCORE_KEPT
-
-                Log.d("VoiceRecording", "🔍 DEBUG: State set to: $recordingState")
-
-                // Auto-continue after showing "Score Kept" message (maybe longer delay)
-                coroutineScope.launch {
-                    delay(2000) // Give user more time to read the "Score Kept" message
-                    currentOverrideEntry = null  // ✅ Clear after delay
-                    recordingState = RecordingState.READY_TO_RECORD
                 }
             }
             Unit
@@ -338,89 +373,99 @@ fun VoiceRecordingInterface(
                 try {
                     isSaving = true
                     val totalEntries = voiceEntries.filter { it.confirmed }
-                    
+
                     Log.d("VoiceRecording", "=== SAVE DEBUG ===")
                     Log.d("VoiceRecording", "Total voice entries: ${voiceEntries.size}")
                     Log.d("VoiceRecording", "Confirmed entries: ${totalEntries.size}")
                     voiceEntries.forEachIndexed { index, entry ->
                         Log.d("VoiceRecording", "Entry $index: ${entry.fullStudentName} - ${entry.score} - Confirmed: ${entry.confirmed}")
                     }
-                    
-                    if (totalEntries.isEmpty()) {
-                        Log.w("VoiceRecording", "No confirmed entries to save!")
-                        isSaving = false
-                        sessionComplete = true
-                        // Still call onSaveCompleted with 0 to show the message
-                        onSaveCompleted(0)
-                        return@launch
-                    }
-                    
-                    Log.d("VoiceRecording", "Starting to save ${totalEntries.size} entries")
-                    
-                    // Use a counter that's properly synchronized
-                    var successCount = 0
-                    var completedCount = 0
-                    
-                    totalEntries.forEach { entry ->
-                        try {
-                            Log.d("VoiceRecording", "Attempting to save: ${entry.fullStudentName} -> ${entry.score} in column: $columnName")
-                            
-                            excelViewModel.updateStudentValue(
-                                studentName = entry.fullStudentName,
-                                columnName = columnName,
-                                value = entry.score
-                            ) { success ->
-                                // This callback might be called from different threads
-                                coroutineScope.launch {
-                                    completedCount++
-                                    if (success) {
-                                        successCount++
-                                        Log.d("VoiceRecording", "Successfully saved: ${entry.fullStudentName} -> ${entry.score} in column: $columnName")
-                                    } else {
-                                        Log.e("VoiceRecording", "Failed to save: ${entry.fullStudentName} -> ${entry.score} in column: $columnName")
+
+                    when {
+                        totalEntries.isEmpty() -> {
+                            Log.w("VoiceRecording", "No confirmed entries to save!")
+                            isSaving = false
+                            sessionComplete = true
+                            // Still call onSaveCompleted with 0 to show the message
+                            onSaveCompleted(0)
+                        }
+                        else -> {
+                            Log.d("VoiceRecording", "Starting to save ${totalEntries.size} entries")
+
+                            // Use a counter that's properly synchronized
+                            var successCount = 0
+                            var completedCount = 0
+
+                            totalEntries.forEach { entry ->
+                                try {
+                                    Log.d("VoiceRecording", "Attempting to save: ${entry.fullStudentName} -> ${entry.score} in column: $columnName")
+
+                                    excelViewModel.updateStudentValue(
+                                        studentName = entry.fullStudentName,
+                                        columnName = columnName,
+                                        value = entry.score
+                                    ) { success ->
+                                        // This callback might be called from different threads
+                                        coroutineScope.launch {
+                                            completedCount++
+                                            when {
+                                                success -> {
+                                                    successCount++
+                                                    Log.d("VoiceRecording", "Successfully saved: ${entry.fullStudentName} -> ${entry.score} in column: $columnName")
+                                                }
+                                                else -> {
+                                                    Log.e("VoiceRecording", "Failed to save: ${entry.fullStudentName} -> ${entry.score} in column: $columnName")
+                                                }
+                                            }
+
+                                            // Check if all entries have been processed
+                                            when {
+                                                completedCount >= totalEntries.size -> {
+                                                    Log.d("VoiceRecording", "All entries processed. Success: $successCount, Total: ${totalEntries.size}")
+                                                    withContext(Dispatchers.Main) {
+                                                        isSaving = false
+                                                        sessionComplete = true
+
+                                                        // Notify parent screen that saving is complete
+                                                        onSaveCompleted(successCount)
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
-                                    
-                                    // Check if all entries have been processed
-                                    if (completedCount >= totalEntries.size) {
-                                        Log.d("VoiceRecording", "All entries processed. Success: $successCount, Total: ${totalEntries.size}")
+                                } catch (e: Exception) {
+                                    Log.e("VoiceRecording", "Exception saving entry: ${entry.fullStudentName} -> ${entry.score} in column: $columnName", e)
+                                    coroutineScope.launch {
+                                        completedCount++
+                                        when {
+                                            completedCount >= totalEntries.size -> {
+                                                withContext(Dispatchers.Main) {
+                                                    isSaving = false
+                                                    sessionComplete = true
+                                                    onSaveCompleted(successCount)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Add a timeout mechanism in case callbacks don't fire
+                            launch {
+                                delay(10000) // 10 second timeout
+                                when {
+                                    !sessionComplete && isSaving -> {
+                                        Log.w("VoiceRecording", "Timeout reached, forcing completion")
                                         withContext(Dispatchers.Main) {
                                             isSaving = false
                                             sessionComplete = true
-                                            
-                                            // Notify parent screen that saving is complete
                                             onSaveCompleted(successCount)
                                         }
                                     }
                                 }
                             }
-                        } catch (e: Exception) {
-                            Log.e("VoiceRecording", "Exception saving entry: ${entry.fullStudentName} -> ${entry.score} in column: $columnName", e)
-                            coroutineScope.launch {
-                                completedCount++
-                                if (completedCount >= totalEntries.size) {
-                                    withContext(Dispatchers.Main) {
-                                        isSaving = false
-                                        sessionComplete = true
-                                        onSaveCompleted(successCount)
-                                    }
-                                }
-                            }
                         }
                     }
-                    
-                    // Add a timeout mechanism in case callbacks don't fire
-                    launch {
-                        delay(10000) // 10 second timeout
-                        if (!sessionComplete && isSaving) {
-                            Log.w("VoiceRecording", "Timeout reached, forcing completion")
-                            withContext(Dispatchers.Main) {
-                                isSaving = false
-                                sessionComplete = true
-                                onSaveCompleted(successCount)
-                            }
-                        }
-                    }
-                    
                 } catch (e: Exception) {
                     Log.e("VoiceRecording", "Error in saveAllEntries", e)
                     isSaving = false
@@ -491,18 +536,21 @@ fun VoiceRecordingInterface(
 
                 override fun onResults(results: Bundle?) {
                     val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    if (!matches.isNullOrEmpty()) {
-                        val transcription = matches[0]
-                        Log.d("VoiceRecording", "Android STT Result: $transcription")
-                        Log.d("VoiceRecording", "All results: $matches") // Log all alternatives
+                    when {
+                        !matches.isNullOrEmpty() -> {
+                            val transcription = matches[0]
+                            Log.d("VoiceRecording", "Android STT Result: $transcription")
+                            Log.d("VoiceRecording", "All results: $matches") // Log all alternatives
 
-                        coroutineScope.launch {
-                            processRecognizedSpeech(transcription)
+                            coroutineScope.launch {
+                                processRecognizedSpeech(transcription)
+                            }
                         }
-                    } else {
-                        coroutineScope.launch {
-                            errorMessage = "No speech detected - please try again"
-                            recordingState = RecordingState.READY_TO_RECORD
+                        else -> {
+                            coroutineScope.launch {
+                                errorMessage = "No speech detected - please try again"
+                                recordingState = RecordingState.READY_TO_RECORD
+                            }
                         }
                     }
                 }
@@ -510,8 +558,10 @@ fun VoiceRecordingInterface(
                 override fun onPartialResults(partialResults: Bundle?) {
                     // Log partial results for debugging
                     val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    if (!matches.isNullOrEmpty()) {
-                        Log.d("VoiceRecording", "Partial result: ${matches[0]}")
+                    when {
+                        !matches.isNullOrEmpty() -> {
+                            Log.d("VoiceRecording", "Partial result: ${matches[0]}")
+                        }
                     }
                 }
 
@@ -524,9 +574,11 @@ fun VoiceRecordingInterface(
             // Add a safety timeout to stop listening after 5 seconds
             coroutineScope.launch {
                 delay(5000) // 5 seconds maximum
-                if (recordingState == RecordingState.LISTENING) {
-                    Log.d("VoiceRecording", "Forcing stop listening due to timeout")
-                    speechRecognizer?.stopListening()
+                when {
+                    recordingState == RecordingState.LISTENING -> {
+                        Log.d("VoiceRecording", "Forcing stop listening due to timeout")
+                        speechRecognizer?.stopListening()
+                    }
                 }
             }
 
@@ -546,6 +598,26 @@ fun VoiceRecordingInterface(
                 isRecording = true
                 errorMessage = null
 
+                // Clean up any existing AudioRecord first
+                audioRecord?.let { record ->
+                    try {
+                        when {
+                            record.recordingState == AudioRecord.RECORDSTATE_RECORDING -> {
+                                record.stop()
+                            }
+                        }
+                        when {
+                            record.state == AudioRecord.STATE_INITIALIZED -> {
+                                record.release()
+                            }
+
+                            else -> {}
+                        }
+                    } catch (e: Exception) {
+                        Log.e("VoiceRecording", "Error cleaning up previous AudioRecord", e)
+                    }
+                }
+
                 // Audio recording setup
                 val sampleRate = 16000
                 val channelConfig = AudioFormat.CHANNEL_IN_MONO
@@ -560,7 +632,27 @@ fun VoiceRecordingInterface(
                     minBufferSize
                 )
 
+                // Check if AudioRecord was initialized properly
+                when {
+                    audioRecord?.state != AudioRecord.STATE_INITIALIZED -> {
+                        Log.e("VoiceRecording", "AudioRecord failed to initialize")
+                        audioRecord?.release()
+                        audioRecord = null
+                        throw IllegalStateException("AudioRecord failed to initialize")
+                    }
+                }
+
                 audioRecord?.startRecording()
+
+                // Check if recording actually started
+                when {
+                    audioRecord?.recordingState != AudioRecord.RECORDSTATE_RECORDING -> {
+                        Log.e("VoiceRecording", "AudioRecord failed to start recording")
+                        audioRecord?.release()
+                        audioRecord = null
+                        throw IllegalStateException("AudioRecord failed to start recording")
+                    }
+                }
 
                 // Record for 3 seconds
                 val recordingDuration = 3000L
@@ -571,21 +663,40 @@ fun VoiceRecordingInterface(
                     val startTime = System.currentTimeMillis()
                     while (isRecording && (System.currentTimeMillis() - startTime) < recordingDuration) {
                         val readResult = audioRecord?.read(buffer, 0, buffer.size) ?: 0
-                        if (readResult > 0) {
-                            val byteBuffer = ByteArray(readResult * 2)
-                            for (i in 0 until readResult) {
-                                val sample = buffer[i]
-                                byteBuffer[i * 2] = (sample.toInt() and 0xFF).toByte()
-                                byteBuffer[i * 2 + 1] = ((sample.toInt() shr 8) and 0xFF).toByte()
+                        when {
+                            readResult > 0 -> {
+                                val byteBuffer = ByteArray(readResult * 2)
+                                for (i in 0 until readResult) {
+                                    val sample = buffer[i]
+                                    byteBuffer[i * 2] = (sample.toInt() and 0xFF).toByte()
+                                    byteBuffer[i * 2 + 1] = ((sample.toInt() shr 8) and 0xFF).toByte()
+                                }
+                                outputStream.write(byteBuffer)
                             }
-                            outputStream.write(byteBuffer)
                         }
                     }
                 }
 
-                audioRecord?.stop()
-                audioRecord?.release()
-                isRecording = false
+                // Safely stop and release AudioRecord
+                try {
+                    audioRecord?.let { record ->
+                        when {
+                            record.recordingState == AudioRecord.RECORDSTATE_RECORDING -> {
+                                record.stop()
+                            }
+                        }
+                        when {
+                            record.state == AudioRecord.STATE_INITIALIZED -> {
+                                record.release()
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("VoiceRecording", "Error stopping AudioRecord", e)
+                } finally {
+                    audioRecord = null
+                    isRecording = false
+                }
 
                 recordingState = RecordingState.PROCESSING
 
@@ -611,9 +722,27 @@ fun VoiceRecordingInterface(
                 Log.e("VoiceRecording", "Google Cloud recording failed", e)
                 errorMessage = "Recording failed: ${e.message}"
                 recordingState = RecordingState.READY_TO_RECORD
-                isRecording = false
-                audioRecord?.stop()
-                audioRecord?.release()
+
+                // Clean up on error
+                try {
+                    audioRecord?.let { record ->
+                        when {
+                            record.recordingState == AudioRecord.RECORDSTATE_RECORDING -> {
+                                record.stop()
+                            }
+                        }
+                        when {
+                            record.state == AudioRecord.STATE_INITIALIZED -> {
+                                record.release()
+                            }
+                        }
+                    }
+                } catch (cleanupError: Exception) {
+                    Log.e("VoiceRecording", "Error during cleanup", cleanupError)
+                } finally {
+                    audioRecord = null
+                    isRecording = false
+                }
             }
         }
     }
@@ -629,22 +758,28 @@ fun VoiceRecordingInterface(
     // Initialize TTS
     LaunchedEffect(Unit) {
         ttsEngine = TextToSpeech(context) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                ttsEngine?.language = Locale.US
-                Log.d("VoiceRecording", "TTS initialized successfully")
-            } else {
-                Log.e("VoiceRecording", "TTS initialization failed")
+            when {
+                status == TextToSpeech.SUCCESS -> {
+                    ttsEngine?.language = Locale.US
+                    Log.d("VoiceRecording", "TTS initialized successfully")
+                }
+                else -> {
+                    Log.e("VoiceRecording", "TTS initialization failed")
+                }
             }
         }
     }
 
     // Initialize Android SpeechRecognizer
     LaunchedEffect(Unit) {
-        if (SpeechRecognizer.isRecognitionAvailable(context)) {
-            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context)
-            Log.d("VoiceRecording", "Android SpeechRecognizer initialized")
-        } else {
-            Log.w("VoiceRecording", "Android SpeechRecognizer not available")
+        when {
+            SpeechRecognizer.isRecognitionAvailable(context) -> {
+                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context)
+                Log.d("VoiceRecording", "Android SpeechRecognizer initialized")
+            }
+            else -> {
+                Log.w("VoiceRecording", "Android SpeechRecognizer not available")
+            }
         }
     }
 
@@ -674,11 +809,43 @@ fun VoiceRecordingInterface(
     // Cleanup
     DisposableEffect(Unit) {
         onDispose {
-            audioRecord?.stop()
-            audioRecord?.release()
-            speechRecognizer?.destroy()
-            ttsEngine?.stop()
-            ttsEngine?.shutdown()
+            try {
+                // Safely stop AudioRecord if it exists and is recording
+                audioRecord?.let { record ->
+                    when {
+                        record.recordingState == AudioRecord.RECORDSTATE_RECORDING -> {
+                            record.stop()
+                            Log.d("VoiceRecording", "AudioRecord stopped")
+                        }
+                    }
+                    when {
+                        record.state == AudioRecord.STATE_INITIALIZED -> {
+                            record.release()
+                            Log.d("VoiceRecording", "AudioRecord released")
+                        }
+
+                        else -> {}
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("VoiceRecording", "Error disposing AudioRecord", e)
+            }
+
+            try {
+                speechRecognizer?.destroy()
+            } catch (e: Exception) {
+                Log.e("VoiceRecording", "Error destroying SpeechRecognizer", e)
+            }
+
+            try {
+                ttsEngine?.stop()
+                ttsEngine?.shutdown()
+            } catch (e: Exception) {
+                Log.e("VoiceRecording", "Error shutting down TTS", e)
+            }
+
+            // Clean up recording state
+            isRecording = false
         }
     }
 
@@ -717,7 +884,7 @@ fun VoiceRecordingInterface(
                     RecordingState.REQUESTING_PERMISSION -> {
                         PermissionRequestScreen()
                     }
-                    
+
                     RecordingState.READY_TO_RECORD -> {
                         MainRecordingScreen(
                             selectedEngine = selectedEngine,
@@ -731,37 +898,37 @@ fun VoiceRecordingInterface(
                             onClearError = { errorMessage = null }
                         )
                     }
-                    
+
                     RecordingState.LISTENING -> {
                         ListeningScreen(
                             selectedEngine = selectedEngine,
                             pulseScale = pulseScale
                         )
                     }
-                    
+
                     RecordingState.PROCESSING -> {
                         ProcessingScreen(selectedEngine = selectedEngine)
                     }
-                    
+
                     RecordingState.SPEECH_RECOGNIZED -> {
                         SpeechRecognizedScreen(
                             recognizedSpeech = recognizedSpeech,
                             onContinue = { recordingState = RecordingState.READY_TO_RECORD }
                         )
                     }
-                    
+
                     RecordingState.SHOWING_DUPLICATE_SELECTION -> {
                         DuplicateSelectionScreen(
                             matches = currentDuplicateMatches,
                             recognizedName = recognizedSpeech?.recognizedName ?: "",
                             onStudentSelected = handleDuplicateSelection,
-                            onCancel = { 
+                            onCancel = {
                                 currentDuplicateMatches = emptyList()
-                                recordingState = RecordingState.READY_TO_RECORD 
+                                recordingState = RecordingState.READY_TO_RECORD
                             }
                         )
                     }
-                    
+
                     RecordingState.SHOWING_OVERRIDE_CONFIRMATION -> {
                         OverrideConfirmationScreen(
                             entry = currentOverrideEntry,
@@ -777,7 +944,7 @@ fun VoiceRecordingInterface(
                             }
                         )
                     }
-                    
+
                     RecordingState.SESSION_SUMMARY -> {
                         Log.d("VoiceRecording", "=== SESSION SUMMARY ===")
                         Log.d("VoiceRecording", "Total entries: ${voiceEntries.size}")
@@ -785,26 +952,26 @@ fun VoiceRecordingInterface(
                         voiceEntries.forEachIndexed { index, entry ->
                             Log.d("VoiceRecording", "Entry $index: ${entry.fullStudentName} - ${entry.score} - Confirmed: ${entry.confirmed}")
                         }
-                        
+
                         SessionSummaryScreen(
                             voiceEntries = voiceEntries.filter { it.confirmed },
                             columnName = columnName,
                             onContinueRecording = { recordingState = RecordingState.READY_TO_RECORD },
-                            onFinalValidation = { 
+                            onFinalValidation = {
                                 Log.d("VoiceRecording", "Transitioning to FINAL_VALIDATION with ${voiceEntries.filter { it.confirmed }.size} confirmed entries")
-                                recordingState = RecordingState.FINAL_VALIDATION 
+                                recordingState = RecordingState.FINAL_VALIDATION
                             },
                             onRemoveEntry = { entryId ->
                                 voiceEntries = voiceEntries.filter { it.id != entryId }
                             }
                         )
                     }
-                    
+
                     RecordingState.FINAL_VALIDATION -> {
                         Log.d("VoiceRecording", "=== FINAL VALIDATION ===")
                         Log.d("VoiceRecording", "Total entries: ${voiceEntries.size}")
                         Log.d("VoiceRecording", "Confirmed entries: ${voiceEntries.filter { it.confirmed }.size}")
-                        
+
                         FinalValidationScreen(
                             voiceEntries = voiceEntries.filter { it.confirmed },
                             columnName = columnName,
