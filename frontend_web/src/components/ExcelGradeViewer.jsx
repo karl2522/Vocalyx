@@ -16,6 +16,7 @@ import {
 import PropTypes from 'prop-types';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatRelativeTime, getFullDateTime } from '../utils/dateUtils';
+import { classService } from '../services/api';
 
 const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, onExport, onSave }) => {
   const [isHandsontableLoaded, setIsHandsontableLoaded] = useState(false);
@@ -29,8 +30,14 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
   const [searchTerm, setSearchTerm] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [lastSaveTime, setLastSaveTime] = useState(null);
+  
+  // NEW STATE FOR COLUMN MANAGEMENT
+  const [showColumnManager, setShowColumnManager] = useState(false);
+  const [isAddingColumn, setIsAddingColumn] = useState(false);
 
-  // ... (keeping all the existing useEffect hooks and functions exactly the same)
+  const [showRowManager, setShowRowManager] = useState(false);
+  const [isAddingRow, setIsAddingRow] = useState(false);
+
   // Enhanced loading with progress
   useEffect(() => {
     let mounted = true;
@@ -149,6 +156,279 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
     }
   }, [fileData]);
 
+  // NEW FUNCTION: Save category mappings to backend using your API service
+  const saveCategoryMappings = useCallback(async (updatedCategoryMapping, newHeaders) => {
+  if (!fileData || !fileData.id) return false;
+  
+  try {
+    // Convert category mapping to the format your backend expects
+    const categoryMappingsArray = [];
+    
+    Object.keys(updatedCategoryMapping).forEach(categoryId => {
+      if (categoryId !== '_categoryNames' && Array.isArray(updatedCategoryMapping[categoryId])) {
+        const categoryName = updatedCategoryMapping._categoryNames?.[categoryId] ||
+          (categoryId === 'student' ? 'Student Info' :
+           categoryId === 'quiz' ? 'Quiz' :
+           categoryId === 'laboratory' ? 'Laboratory Activities' :
+           categoryId === 'exams' ? 'Exams' :
+           categoryId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()));
+        
+        // 🚨 FIX: Use the newHeaders parameter instead of fileData headers
+        const headers = newHeaders || fileData.all_sheets[fileData.active_sheet].headers;
+        const columnNames = updatedCategoryMapping[categoryId].map(index => headers[index]).filter(name => name);
+        
+        categoryMappingsArray.push({
+          id: categoryId,
+          name: categoryName,
+          columns: columnNames
+        });
+      }
+    });
+    
+    console.log("=== SAVING CATEGORY MAPPINGS TO BACKEND ===");
+    console.log("Using headers:", newHeaders || fileData.all_sheets[fileData.active_sheet].headers);
+    console.log("Category mappings array:", categoryMappingsArray);
+    
+    // Use your existing classService.updateCategoryMappings function
+    const response = await classService.updateCategoryMappings(fileData.id, {
+      all_sheets: {
+        category_mappings: categoryMappingsArray
+      }
+    });
+    
+    // 🚨 FIX: Update the local fileData.all_sheets.category_mappings immediately
+    fileData.all_sheets.category_mappings = categoryMappingsArray;
+    
+    console.log("Category mappings saved successfully:", response.data);
+    return true;
+  } catch (error) {
+    console.error('Error saving category mappings:', error);
+    return false;
+  }
+}, [fileData]);
+
+  const addRowToSpreadsheet = useCallback(async (position = 'end') => {
+  if (!hotInstanceRef.current || !fileData || isAddingRow) return;
+  
+  setIsAddingRow(true);
+  
+  try {
+    const headers = fileData.all_sheets[fileData.active_sheet].headers;
+    const currentData = fileData.all_sheets[fileData.active_sheet].data;
+    
+    // Create new empty row with proper structure
+    const newRow = {};
+    headers.forEach(header => {
+      newRow[header] = null; // Initialize all columns as empty
+    });
+    
+    // Determine insert position
+    let insertIndex;
+    if (position === 'end') {
+      insertIndex = currentData.length;
+    } else if (position === 'start') {
+      insertIndex = 0;
+    } else if (typeof position === 'number') {
+      insertIndex = Math.max(0, Math.min(position, currentData.length));
+    } else {
+      insertIndex = currentData.length; // Default to end
+    }
+    
+    // Update the data array
+    const updatedData = [...currentData];
+    updatedData.splice(insertIndex, 0, newRow);
+    
+    console.log(`Adding new row at position ${insertIndex}`);
+    console.log("New row structure:", newRow);
+    
+    // Update fileData structure
+    fileData.all_sheets[fileData.active_sheet].data = updatedData;
+    
+    // Save the updated data
+    if (onSave) {
+      const updatedFileData = {
+        ...fileData,
+        all_sheets: {
+          ...fileData.all_sheets,
+          [fileData.active_sheet]: {
+            headers: headers,
+            data: updatedData
+          }
+        }
+      };
+      
+      await onSave(updatedFileData);
+      console.log("✅ New row saved successfully");
+    }
+    
+    // Destroy and recreate the table to reflect changes
+    if (hotInstanceRef.current) {
+      hotInstanceRef.current.destroy();
+      hotInstanceRef.current = null;
+    }
+    
+    console.log(`Successfully added new row at position ${insertIndex}`);
+    
+    // Close the row manager
+    setShowRowManager(false);
+    
+  } catch (error) {
+    console.error('Error adding row:', error);
+    alert('Failed to add row. Please try again.');
+  } finally {
+    setIsAddingRow(false);
+  }
+}, [fileData, isAddingRow, onSave]);
+
+  // NEW FUNCTION: Add column to specific category
+  const addColumnToCategory = useCallback(async (categoryId, position = 'end') => {
+  if (!hotInstanceRef.current || !categoryMapping || !fileData || isAddingColumn) return;
+  
+  setIsAddingColumn(true);
+  
+  try {
+    const categoryColumns = categoryMapping[categoryId] || [];
+    const headers = [...fileData.all_sheets[fileData.active_sheet].headers];
+    
+    // Determine where to insert the new column - FIXED LOGIC
+    let insertIndex;
+    if (position === 'end' && categoryColumns.length > 0) {
+      // Insert right after the last column of this category
+      insertIndex = Math.max(...categoryColumns) + 1;
+    } else if (position === 'start' && categoryColumns.length > 0) {
+      // Insert at the beginning of this category
+      insertIndex = Math.min(...categoryColumns);
+    } else {
+      // If no columns in category, add at the END of the category's expected position
+      if (categoryId === 'quiz') {
+        const studentCols = categoryMapping.student || [];
+        // Add at the end of existing quiz columns, or after student columns
+        const existingQuizCols = categoryMapping.quiz || [];
+        if (existingQuizCols.length > 0) {
+          insertIndex = Math.max(...existingQuizCols) + 1;
+        } else {
+          insertIndex = studentCols.length > 0 ? Math.max(...studentCols) + 1 : 3; // Default after 3 student columns
+        }
+      } else if (categoryId === 'laboratory') {
+        const existingLabCols = categoryMapping.laboratory || [];
+        if (existingLabCols.length > 0) {
+          insertIndex = Math.max(...existingLabCols) + 1;
+        } else {
+          const quizCols = categoryMapping.quiz || [];
+          const studentCols = categoryMapping.student || [];
+          const allPrevious = [...studentCols, ...quizCols];
+          insertIndex = allPrevious.length > 0 ? Math.max(...allPrevious) + 1 : headers.length;
+        }
+      } else if (categoryId === 'exams') {
+        const existingExamCols = categoryMapping.exams || [];
+        if (existingExamCols.length > 0) {
+          insertIndex = Math.max(...existingExamCols) + 1;
+        } else {
+          const labCols = categoryMapping.laboratory || [];
+          const quizCols = categoryMapping.quiz || [];
+          const studentCols = categoryMapping.student || [];
+          const allPrevious = [...studentCols, ...quizCols, ...labCols];
+          insertIndex = allPrevious.length > 0 ? Math.max(...allPrevious) + 1 : headers.length;
+        }
+      } else {
+        insertIndex = headers.length;
+      }
+    }
+    
+    // Create new column name
+    const categoryName = categoryId === 'quiz' ? 'Quiz' : 
+                        categoryId === 'laboratory' ? 'Lab' :
+                        categoryId === 'exams' ? 'Exam' : 'Column';
+    
+    const existingCount = categoryColumns.length;
+    const newColumnName = `${categoryName} ${existingCount + 1}`;
+    
+    // Update headers array
+    const newHeaders = [...headers];
+    newHeaders.splice(insertIndex, 0, newColumnName);
+    
+    // Update the data to include the new column
+    const updatedData = fileData.all_sheets[fileData.active_sheet].data.map(row => {
+      const newRow = { ...row };
+      newRow[newColumnName] = null; // Add empty value for new column
+      return newRow;
+    });
+    
+    // 🚨 FIXED: Create updated category mapping with proper index adjustments
+    const updatedCategoryMapping = { ...categoryMapping };
+    
+    // STEP 1: Adjust all column indices after the insertion point for ALL categories
+    Object.keys(updatedCategoryMapping).forEach(catId => {
+      if (Array.isArray(updatedCategoryMapping[catId])) {
+        updatedCategoryMapping[catId] = updatedCategoryMapping[catId].map(colIndex => 
+          colIndex >= insertIndex ? colIndex + 1 : colIndex
+        );
+      }
+    });
+    
+    // STEP 2: Add the new column to the target category at the original insertIndex
+    if (!updatedCategoryMapping[categoryId]) {
+      updatedCategoryMapping[categoryId] = [];
+    }
+    
+    // Insert the new column at the correct position in the target category
+    updatedCategoryMapping[categoryId].push(insertIndex);
+    updatedCategoryMapping[categoryId].sort((a, b) => a - b);
+    
+    console.log("=== DEBUGGING CATEGORY MAPPING UPDATE ===");
+    console.log("Original category mapping:", categoryMapping);
+    console.log("Insert index:", insertIndex);
+    console.log("Updated category mapping:", updatedCategoryMapping);
+    console.log("New headers:", newHeaders);
+    
+    // Save category mappings to backend
+    const saveSuccess = await saveCategoryMappings(updatedCategoryMapping, newHeaders);
+    if (!saveSuccess) {
+      throw new Error('Failed to save category mappings to backend');
+    }
+    
+    // Update local state
+    setCategoryMapping(updatedCategoryMapping);
+    
+    // Update fileData structure
+    fileData.all_sheets[fileData.active_sheet].headers = newHeaders;
+    fileData.all_sheets[fileData.active_sheet].data = updatedData;
+
+    if (onSave) {
+      const updatedFileData = {
+        ...fileData,
+        all_sheets: {
+          ...fileData.all_sheets,
+          [fileData.active_sheet]: {
+            headers: newHeaders,
+            data: updatedData
+          }
+        }
+      };
+      
+      await onSave(updatedFileData);
+      console.log("✅ Data saved with new column");
+    }
+    
+    // Destroy and recreate the table
+    if (hotInstanceRef.current) {
+      hotInstanceRef.current.destroy();
+      hotInstanceRef.current = null;
+    }
+    
+    console.log(`Successfully added column "${newColumnName}" to ${categoryId} category`);
+    
+    // Close the column manager
+    setShowColumnManager(false);
+    
+  } catch (error) {
+    console.error('Error adding column:', error);
+    alert('Failed to add column. Please try again.');
+  } finally {
+    setIsAddingColumn(false);
+  }
+}, [categoryMapping, fileData, saveCategoryMappings, isAddingColumn]);
+
   // Enhanced save handler with better feedback
   const handleSave = useCallback(async () => {
     if (!hasChanges || !hotInstanceRef.current || !fileData) return;
@@ -233,6 +513,7 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
       if (e.key === 'Escape') {
         setSearchTerm('');
         setShowFilters(false);
+        setShowColumnManager(false); // NEW: Close column manager on Escape
       }
     };
 
@@ -531,7 +812,6 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
     return categories;
   };
 
-  // Generate nested headers based on categories (keeping original logic)
   // Generate nested headers based on categories - FIXED VERSION
   const generateNestedHeaders = () => {
     if (!fileData || !fileData.all_sheets || !categoryMapping) {
@@ -707,7 +987,23 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
         autoColumnSize: false,
         manualColumnResize: true,
         manualRowResize: false,
-        contextMenu: ['copy', 'cut', 'paste', '---------', 'undo', 'redo'],
+        // MODIFIED: Updated context menu to discourage manual column insertion
+        contextMenu: {
+          items: {
+            'copy': { name: 'Copy' },
+            'cut': { name: 'Cut' },
+            'paste': { name: 'Paste' },
+            'sp1': '---------',
+            'undo': { name: 'Undo' },
+            'redo': { name: 'Redo' },
+            'sp2': '---------',
+            'custom_add_column': {
+              name: '⚠️ Use "Manage Columns" button above',
+              disabled: true,
+              disableSelection: true
+            }
+          }
+        },
         filters: true,
         dropdownMenu: true,
         fixedColumnsLeft: fixedColumns,
@@ -1005,6 +1301,138 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
     type: PropTypes.oneOf(['success', 'error'])
   };
 
+  const RowManager = () => {
+  if (!showRowManager || !fileData) return null;
+  
+  const currentRowCount = fileData.all_sheets[fileData.active_sheet]?.data?.length || 0;
+  
+  return (
+    <div className="absolute top-16 right-4 bg-white rounded-lg shadow-xl border border-gray-200 p-4 z-50 min-w-80">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-semibold text-gray-900 flex items-center space-x-2">
+          <span>👥</span>
+          <span>Add Student Rows</span>
+        </h3>
+        <button
+          onClick={() => setShowRowManager(false)}
+          className="text-gray-400 hover:text-gray-600 p-1 rounded"
+        >
+          <X size={16} />
+        </button>
+      </div>
+      
+      <div className="space-y-3">
+        <div className="p-3 rounded-lg border bg-blue-50 border-blue-200">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <span className="text-lg">👤</span>
+              <div>
+                <div className="text-sm font-medium text-gray-900">Add Student Row</div>
+                <div className="text-xs text-gray-500">{currentRowCount} students currently</div>
+              </div>
+            </div>
+            <div className="flex space-x-2">
+              <button
+                onClick={() => addRowToSpreadsheet('start')}
+                disabled={isAddingRow}
+                className={`px-3 py-1 ${isAddingRow ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'} text-white text-xs rounded transition-all flex items-center space-x-1`}
+                title="Add row at the beginning"
+              >
+                {isAddingRow ? <Loader2 size={12} className="animate-spin" /> : <span>⬆️</span>}
+                <span>Add First</span>
+              </button>
+              
+              <button
+                onClick={() => addRowToSpreadsheet('end')}
+                disabled={isAddingRow}
+                className={`px-3 py-1 ${isAddingRow ? 'bg-gray-400' : 'bg-green-600 hover:bg-green-700'} text-white text-xs rounded transition-all flex items-center space-x-1`}
+                title="Add row at the end"
+              >
+                {isAddingRow ? <Loader2 size={12} className="animate-spin" /> : <span>⬇️</span>}
+                <span>Add Last</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+        <div className="flex items-start space-x-2">
+          <Info size={16} className="text-green-600 mt-0.5" />
+          <div className="text-xs text-green-700">
+            <strong>Tip:</strong> New rows will be added with empty values. You can then fill in student information and grades as needed.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+  // NEW COMPONENT: Category Column Manager
+  const CategoryColumnManager = () => {
+    if (!showColumnManager || !categoryMapping) return null;
+    
+    const categories = [
+      { id: 'quiz', name: 'Quiz', icon: '📝', color: 'bg-blue-50 border-blue-200' },
+      { id: 'laboratory', name: 'Laboratory Activities', icon: '🧪', color: 'bg-green-50 border-green-200' },
+      { id: 'exams', name: 'Exams', icon: '📋', color: 'bg-purple-50 border-purple-200' }
+    ];
+    
+    return (
+      <div className="absolute top-16 right-4 bg-white rounded-lg shadow-xl border border-gray-200 p-4 z-50 min-w-80">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-gray-900 flex items-center space-x-2">
+            <span>📊</span>
+            <span>Add Columns to Categories</span>
+          </h3>
+          <button
+            onClick={() => setShowColumnManager(false)}
+            className="text-gray-400 hover:text-gray-600 p-1 rounded"
+          >
+            <X size={16} />
+          </button>
+        </div>
+        
+        <div className="space-y-3">
+          {categories.map(category => {
+            const columnCount = categoryMapping[category.id]?.length || 0;
+            return (
+              <div key={category.id} className={`p-3 rounded-lg border ${category.color}`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <span className="text-lg">{category.icon}</span>
+                    <div>
+                      <div className="text-sm font-medium text-gray-900">{category.name}</div>
+                      <div className="text-xs text-gray-500">{columnCount} columns currently</div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => addColumnToCategory(category.id)}
+                    disabled={isAddingColumn}
+                    className={`px-3 py-1 ${isAddingColumn ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'} text-white text-xs rounded transition-all flex items-center space-x-1`}
+                  >
+                    {isAddingColumn ? <Loader2 size={12} className="animate-spin" /> : <span>+</span>}
+                    <span>{isAddingColumn ? 'Adding...' : 'Add Column'}</span>
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        
+        <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <div className="flex items-start space-x-2">
+            <AlertCircle size={16} className="text-yellow-600 mt-0.5" />
+            <div className="text-xs text-yellow-700">
+              <strong>Note:</strong> Use these buttons instead of right-clicking to add columns. 
+              This ensures proper category alignment and prevents header misalignment issues.
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="w-full h-full flex flex-col bg-gray-50">
       {/* Enhanced Header - Only show in fullscreen mode */}
@@ -1078,6 +1506,26 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
               )}
             </div>
 
+            {/* NEW: Manage Rows button */}
+            <button
+              onClick={() => setShowRowManager(!showRowManager)}
+              className="px-3 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center space-x-2 transition-all shadow-sm"
+              title="Add student rows"
+            >
+              <span>👥</span>
+              <span className="text-sm">Manage Rows</span>
+            </button>
+
+            {/* NEW: Manage Columns button */}
+            <button
+              onClick={() => setShowColumnManager(!showColumnManager)}
+              className="px-3 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center space-x-2 transition-all shadow-sm"
+              title="Add columns to categories"
+            >
+              <span>📊</span>
+              <span className="text-sm">Manage Columns</span>
+            </button>
+
             {/* Filters toggle */}
             <button
               onClick={() => setShowFilters(!showFilters)}
@@ -1131,6 +1579,12 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
           </div>
         </div>
       )}
+
+      {/* NEW: Row Manager Component */}
+      {showRowManager && <RowManager />}
+      
+      {/* NEW: Column Manager Component */}
+      {showColumnManager && <CategoryColumnManager />}
 
       {/* Enhanced Excel Container */}
       <div 
@@ -1204,7 +1658,7 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-2 text-xs text-gray-500">
             <Info size={12} />
-            <span>Double-click to edit • Right-click for options • Ctrl+S to save</span>
+            <span>Double-click to edit • Use "Manage Columns" for adding columns • Ctrl+S to save</span>
           </div>
           
           {/* Compact Save Button for footer */}

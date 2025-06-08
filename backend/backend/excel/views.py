@@ -1880,13 +1880,22 @@ class ExcelViewSet(viewsets.ModelViewSet):
                 else:
                     all_keys.update(row.keys())
 
-            new_headers = existing_headers.copy()
-            for key in all_keys:
-                if key not in new_headers:
-                    print(f"Adding new column: {key}")
-                    new_headers.append(key)
+            if 'headers' in request.data:
+                # Headers were explicitly provided (like from addColumnToCategory)
+                new_headers = request.data.get('headers')
+                excel_file.all_sheets[sheet_name]['headers'] = new_headers
+                print(f"Updated headers explicitly: {new_headers}")
+            else:
+                # Only add missing columns if headers weren't explicitly provided
+                existing_headers = excel_file.all_sheets[sheet_name]['headers']
+                new_headers = existing_headers.copy()
 
-            excel_file.all_sheets[sheet_name]['headers'] = new_headers
+                for key in all_keys:
+                    if key not in new_headers:
+                        print(f"Adding new column: {key}")
+                        new_headers.append(key)
+
+                excel_file.all_sheets[sheet_name]['headers'] = new_headers
 
             formatted_data = []
             for row in sheet_data:

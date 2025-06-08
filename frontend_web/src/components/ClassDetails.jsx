@@ -229,17 +229,20 @@ const ClassDetails = ({ accessInfo }) => {
     // Get the active sheet data
     const activeSheet = updatedFileData.active_sheet;
     const sheetData = updatedFileData.all_sheets[activeSheet].data;
+    const headers = updatedFileData.all_sheets[activeSheet].headers; // ← GET HEADERS
     
     // Debug logging to see data structure
     console.log("Sheet data type:", typeof sheetData);
     console.log("Is array:", Array.isArray(sheetData));
     console.log("First row sample:", sheetData[0]);
+    console.log("Headers being sent:", headers); // ← ADD DEBUG LOG
 
-    // Call your API to save the updated file data
+    // Call your API to save the updated file data - PASS HEADERS!
     await classService.updateExcelData(
       updatedFileData.id,
-      sheetData,  // Just pass the actual data array
-      activeSheet // Pass the sheet name separately
+      sheetData,  
+      activeSheet,
+      headers  // ← ADD THIS LINE!
     );
     
     // Increment update counter
