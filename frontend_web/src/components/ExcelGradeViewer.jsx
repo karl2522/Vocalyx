@@ -30,6 +30,10 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
   const [searchTerm, setSearchTerm] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [lastSaveTime, setLastSaveTime] = useState(null);
+  const [isDeletingRow, setIsDeletingRow] = useState(false);
+  const [selectedRowIndex, setSelectedRowIndex] = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeletingColumn, setIsDeletingColumn] = useState(false);
   
   // NEW STATE FOR COLUMN MANAGEMENT
   const [showColumnManager, setShowColumnManager] = useState(false);
@@ -279,6 +283,318 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
     setIsAddingRow(false);
   }
 }, [fileData, isAddingRow, onSave]);
+
+  const deleteRowFromSpreadsheet = useCallback(async (rowIndex) => {
+  if (!hotInstanceRef.current || !fileData || isDeletingRow) return;
+  
+  setIsDeletingRow(true);
+  
+  try {
+    const headers = fileData.all_sheets[fileData.active_sheet].headers;
+    const currentData = fileData.all_sheets[fileData.active_sheet].data;
+    
+    // Validate row index
+    if (rowIndex < 0 || rowIndex >= currentData.length) {
+      throw new Error('Invalid row index');
+    }
+    
+    // Remove the row
+    const updatedData = [...currentData];
+    const deletedRow = updatedData.splice(rowIndex, 1)[0];
+    
+    console.log(`Deleting row at index ${rowIndex}`);
+    console.log("Deleted row data:", deletedRow);
+    
+    // Update fileData structure
+    fileData.all_sheets[fileData.active_sheet].data = updatedData;
+    
+    // Save the updated data
+    if (onSave) {
+      const updatedFileData = {
+        ...fileData,
+        all_sheets: {
+          ...fileData.all_sheets,
+          [fileData.active_sheet]: {
+            headers: headers,
+            data: updatedData
+          }
+        }
+      };
+      
+      await onSave(updatedFileData);
+      console.log("✅ Row deleted and saved successfully");
+    }
+    
+    // Destroy and recreate the table to reflect changes
+    if (hotInstanceRef.current) {
+      hotInstanceRef.current.destroy();
+      hotInstanceRef.current = null;
+    }
+    
+    console.log(`Successfully deleted row at index ${rowIndex}`);
+    
+    // Close any open modals
+    setShowDeleteConfirm(false);
+    setSelectedRowIndex(null);
+    
+  } catch (error) {
+    console.error('Error deleting row:', error);
+    alert('Failed to delete row. Please try again.');
+  } finally {
+    setIsDeletingRow(false);
+  }
+}, [fileData, isDeletingRow, onSave]);
+
+  const deleteLastRow = useCallback(async () => {
+  if (!fileData) return;
+  
+  const currentData = fileData.all_sheets[fileData.active_sheet].data;
+  if (currentData.length === 0) {
+    alert('No rows to delete!');
+    return;
+  }
+  
+  const lastRowIndex = currentData.length - 1;
+  await deleteRowFromSpreadsheet(lastRowIndex);
+}, [fileData, deleteRowFromSpreadsheet]);
+
+  const deleteEmptyRows = useCallback(async () => {
+  if (!fileData || isDeletingRow) return;
+  
+  setIsDeletingRow(true);
+  
+  try {
+    const headers = fileData.all_sheets[fileData.active_sheet].headers;
+    const currentData = fileData.all_sheets[fileData.active_sheet].data;
+    
+    // Find empty rows (all values are null, undefined, or empty string)
+    const nonEmptyRows = currentData.filter(row => {
+      return headers.some(header => {
+        const value = row[header];
+        return value !== null && value !== undefined && value !== '';
+      });
+    });
+    
+    const deletedCount = currentData.length - nonEmptyRows.length;
+    
+    if (deletedCount === 0) {
+      alert('No empty rows found!');
+      setIsDeletingRow(false);
+      return;
+    }
+    
+    console.log(`Deleting ${deletedCount} empty rows`);
+    
+    // Update fileData structure
+    fileData.all_sheets[fileData.active_sheet].data = nonEmptyRows;
+    
+    // Save the updated data
+    if (onSave) {
+      const updatedFileData = {
+        ...fileData,
+        all_sheets: {
+          ...fileData.all_sheets,
+          [fileData.active_sheet]: {
+            headers: headers,
+            data: nonEmptyRows
+          }
+        }
+      };
+      
+      await onSave(updatedFileData);
+      console.log(`✅ ${deletedCount} empty rows deleted successfully`);
+    }
+    
+    // Destroy and recreate the table
+    if (hotInstanceRef.current) {
+      hotInstanceRef.current.destroy();
+      hotInstanceRef.current = null;
+    }
+    
+    alert(`Successfully deleted ${deletedCount} empty rows!`);
+    
+  } catch (error) {
+    console.error('Error deleting empty rows:', error);
+    alert('Failed to delete empty rows. Please try again.');
+  } finally {
+    setIsDeletingRow(false);
+  }
+}, [fileData, isDeletingRow, onSave]);
+
+  const deleteColumnFromCategory = useCallback(async (categoryId, columnIndex = 'last') => {
+  if (!hotInstanceRef.current || !categoryMapping || !fileData || isDeletingColumn) return;
+  
+  setIsDeletingColumn(true);
+  
+  try {
+    const categoryColumns = categoryMapping[categoryId] || [];
+    const headers = [...fileData.all_sheets[fileData.active_sheet].headers];
+    
+    if (categoryColumns.length === 0) {
+      alert(`No columns in ${categoryId} category to delete!`);
+      setIsDeletingColumn(false);
+      return;
+    }
+    
+    // Determine which column to delete
+    let targetColumnIndex;
+    if (columnIndex === 'last') {
+      targetColumnIndex = Math.max(...categoryColumns);
+    } else if (columnIndex === 'first') {
+      targetColumnIndex = Math.min(...categoryColumns);
+    } else if (typeof columnIndex === 'number') {
+      targetColumnIndex = columnIndex;
+    } else {
+      targetColumnIndex = Math.max(...categoryColumns); // Default to last
+    }
+    
+    // Validate the column index
+    if (!categoryColumns.includes(targetColumnIndex)) {
+      alert('Invalid column selection!');
+      setIsDeletingColumn(false);
+      return;
+    }
+    
+    const columnName = headers[targetColumnIndex];
+    console.log(`Deleting column "${columnName}" at index ${targetColumnIndex} from ${categoryId} category`);
+    
+    // Remove column from headers
+    const newHeaders = [...headers];
+    newHeaders.splice(targetColumnIndex, 1);
+    
+    // Remove column from data
+    const updatedData = fileData.all_sheets[fileData.active_sheet].data.map(row => {
+      const newRow = { ...row };
+      delete newRow[columnName];
+      return newRow;
+    });
+    
+    // 🚨 CRITICAL: Update category mapping with proper index adjustments
+    const updatedCategoryMapping = { ...categoryMapping };
+    
+    // STEP 1: Remove the deleted column from its category
+    updatedCategoryMapping[categoryId] = updatedCategoryMapping[categoryId].filter(
+      colIndex => colIndex !== targetColumnIndex
+    );
+    
+    // STEP 2: Adjust all column indices after the deletion point for ALL categories
+    Object.keys(updatedCategoryMapping).forEach(catId => {
+      if (Array.isArray(updatedCategoryMapping[catId])) {
+        updatedCategoryMapping[catId] = updatedCategoryMapping[catId].map(colIndex => 
+          colIndex > targetColumnIndex ? colIndex - 1 : colIndex
+        );
+      }
+    });
+    
+    console.log("=== DEBUGGING COLUMN DELETION ===");
+    console.log("Original category mapping:", categoryMapping);
+    console.log("Deleted column index:", targetColumnIndex);
+    console.log("Updated category mapping:", updatedCategoryMapping);
+    console.log("New headers:", newHeaders);
+    
+    // Save category mappings to backend
+    const saveSuccess = await saveCategoryMappings(updatedCategoryMapping, newHeaders);
+    if (!saveSuccess) {
+      throw new Error('Failed to save category mappings to backend');
+    }
+    
+    // Update local state
+    setCategoryMapping(updatedCategoryMapping);
+    
+    // Update fileData structure
+    fileData.all_sheets[fileData.active_sheet].headers = newHeaders;
+    fileData.all_sheets[fileData.active_sheet].data = updatedData;
+
+    if (onSave) {
+      const updatedFileData = {
+        ...fileData,
+        all_sheets: {
+          ...fileData.all_sheets,
+          [fileData.active_sheet]: {
+            headers: newHeaders,
+            data: updatedData
+          }
+        }
+      };
+      
+      await onSave(updatedFileData);
+      console.log("✅ Data saved after column deletion");
+    }
+    
+    // Destroy and recreate the table
+    if (hotInstanceRef.current) {
+      hotInstanceRef.current.destroy();
+      hotInstanceRef.current = null;
+    }
+    
+    console.log(`Successfully deleted column "${columnName}" from ${categoryId} category`);
+    
+  } catch (error) {
+    console.error('Error deleting column:', error);
+    alert('Failed to delete column. Please try again.');
+  } finally {
+    setIsDeletingColumn(false);
+  }
+}, [categoryMapping, fileData, saveCategoryMappings, isDeletingColumn, onSave]);
+
+  const deleteEmptyColumnsFromCategory = useCallback(async (categoryId) => {
+  if (!hotInstanceRef.current || !categoryMapping || !fileData || isDeletingColumn) return;
+  
+  setIsDeletingColumn(true);
+  
+  try {
+    const categoryColumns = categoryMapping[categoryId] || [];
+    const headers = fileData.all_sheets[fileData.active_sheet].headers;
+    const currentData = fileData.all_sheets[fileData.active_sheet].data;
+    
+    if (categoryColumns.length === 0) {
+      alert(`No columns in ${categoryId} category!`);
+      setIsDeletingColumn(false);
+      return;
+    }
+    
+    // Find empty columns in this category
+    const emptyColumns = [];
+    
+    categoryColumns.forEach(columnIndex => {
+      const columnName = headers[columnIndex];
+      
+      // Check if column is empty (all values are null, undefined, or empty)
+      const isEmpty = currentData.every(row => {
+        const value = row[columnName];
+        return value === null || value === undefined || value === '' || value === 0;
+      });
+      
+      if (isEmpty) {
+        emptyColumns.push(columnIndex);
+      }
+    });
+    
+    if (emptyColumns.length === 0) {
+      alert(`No empty columns found in ${categoryId} category!`);
+      setIsDeletingColumn(false);
+      return;
+    }
+    
+    console.log(`Found ${emptyColumns.length} empty columns in ${categoryId}:`, emptyColumns);
+    
+    // Sort in descending order to delete from right to left (prevents index shifting issues)
+    emptyColumns.sort((a, b) => b - a);
+    
+    // Delete each empty column
+    for (const columnIndex of emptyColumns) {
+      await deleteColumnFromCategory(categoryId, columnIndex);
+    }
+    
+    alert(`Successfully deleted ${emptyColumns.length} empty columns from ${categoryId} category!`);
+    
+  } catch (error) {
+    console.error('Error deleting empty columns:', error);
+    alert('Failed to delete empty columns. Please try again.');
+  } finally {
+    setIsDeletingColumn(false);
+  }
+}, [categoryMapping, fileData, isDeletingColumn, deleteColumnFromCategory]);
 
   // NEW FUNCTION: Add column to specific category
   const addColumnToCategory = useCallback(async (categoryId, position = 'end') => {
@@ -1302,33 +1618,35 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
   };
 
   const RowManager = () => {
-  if (!showRowManager || !fileData) return null;
-  
-  const currentRowCount = fileData.all_sheets[fileData.active_sheet]?.data?.length || 0;
-  
-  return (
-    <div className="absolute top-16 right-4 bg-white rounded-lg shadow-xl border border-gray-200 p-4 z-50 min-w-80">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-gray-900 flex items-center space-x-2">
-          <span>👥</span>
-          <span>Add Student Rows</span>
-        </h3>
-        <button
-          onClick={() => setShowRowManager(false)}
-          className="text-gray-400 hover:text-gray-600 p-1 rounded"
-        >
-          <X size={16} />
-        </button>
-      </div>
-      
-      <div className="space-y-3">
-        <div className="p-3 rounded-lg border bg-blue-50 border-blue-200">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <span className="text-lg">👤</span>
-              <div>
-                <div className="text-sm font-medium text-gray-900">Add Student Row</div>
-                <div className="text-xs text-gray-500">{currentRowCount} students currently</div>
+    if (!showRowManager || !fileData) return null;
+    
+    const currentRowCount = fileData.all_sheets[fileData.active_sheet]?.data?.length || 0;
+    
+    return (
+      <div className="absolute top-16 right-4 bg-white rounded-lg shadow-xl border border-gray-200 p-4 z-50 min-w-80">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-gray-900 flex items-center space-x-2">
+            <span>👥</span>
+            <span>Manage Student Rows</span>
+          </h3>
+          <button
+            onClick={() => setShowRowManager(false)}
+            className="text-gray-400 hover:text-gray-600 p-1 rounded"
+          >
+            <X size={16} />
+          </button>
+        </div>
+        
+        <div className="space-y-3">
+          {/* Add Row Section */}
+          <div className="p-3 rounded-lg border bg-blue-50 border-blue-200">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center space-x-3">
+                <span className="text-lg">➕</span>
+                <div>
+                  <div className="text-sm font-medium text-gray-900">Add Student Row</div>
+                  <div className="text-xs text-gray-500">{currentRowCount} students currently</div>
+                </div>
               </div>
             </div>
             <div className="flex space-x-2">
@@ -1353,85 +1671,167 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
               </button>
             </div>
           </div>
-        </div>
-      </div>
-      
-      <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-        <div className="flex items-start space-x-2">
-          <Info size={16} className="text-green-600 mt-0.5" />
-          <div className="text-xs text-green-700">
-            <strong>Tip:</strong> New rows will be added with empty values. You can then fill in student information and grades as needed.
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-  // NEW COMPONENT: Category Column Manager
-  const CategoryColumnManager = () => {
-    if (!showColumnManager || !categoryMapping) return null;
-    
-    const categories = [
-      { id: 'quiz', name: 'Quiz', icon: '📝', color: 'bg-blue-50 border-blue-200' },
-      { id: 'laboratory', name: 'Laboratory Activities', icon: '🧪', color: 'bg-green-50 border-green-200' },
-      { id: 'exams', name: 'Exams', icon: '📋', color: 'bg-purple-50 border-purple-200' }
-    ];
-    
-    return (
-      <div className="absolute top-16 right-4 bg-white rounded-lg shadow-xl border border-gray-200 p-4 z-50 min-w-80">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-gray-900 flex items-center space-x-2">
-            <span>📊</span>
-            <span>Add Columns to Categories</span>
-          </h3>
-          <button
-            onClick={() => setShowColumnManager(false)}
-            className="text-gray-400 hover:text-gray-600 p-1 rounded"
-          >
-            <X size={16} />
-          </button>
-        </div>
-        
-        <div className="space-y-3">
-          {categories.map(category => {
-            const columnCount = categoryMapping[category.id]?.length || 0;
-            return (
-              <div key={category.id} className={`p-3 rounded-lg border ${category.color}`}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <span className="text-lg">{category.icon}</span>
-                    <div>
-                      <div className="text-sm font-medium text-gray-900">{category.name}</div>
-                      <div className="text-xs text-gray-500">{columnCount} columns currently</div>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => addColumnToCategory(category.id)}
-                    disabled={isAddingColumn}
-                    className={`px-3 py-1 ${isAddingColumn ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'} text-white text-xs rounded transition-all flex items-center space-x-1`}
-                  >
-                    {isAddingColumn ? <Loader2 size={12} className="animate-spin" /> : <span>+</span>}
-                    <span>{isAddingColumn ? 'Adding...' : 'Add Column'}</span>
-                  </button>
+          
+          {/* Delete Row Section */}
+          <div className="p-3 rounded-lg border bg-red-50 border-red-200">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center space-x-3">
+                <span className="text-lg">🗑️</span>
+                <div>
+                  <div className="text-sm font-medium text-gray-900">Delete Rows</div>
+                  <div className="text-xs text-gray-500">Remove unwanted rows</div>
                 </div>
               </div>
-            );
-          })}
+            </div>
+            <div className="flex space-x-2">
+              <button
+                onClick={deleteLastRow}
+                disabled={isDeletingRow || currentRowCount === 0}
+                className={`px-3 py-1 ${isDeletingRow || currentRowCount === 0 ? 'bg-gray-400' : 'bg-red-600 hover:bg-red-700'} text-white text-xs rounded transition-all flex items-center space-x-1`}
+                title="Delete the last row"
+              >
+                {isDeletingRow ? <Loader2 size={12} className="animate-spin" /> : <span>🔻</span>}
+                <span>Delete Last</span>
+              </button>
+              
+              <button
+                onClick={deleteEmptyRows}
+                disabled={isDeletingRow || currentRowCount === 0}
+                className={`px-3 py-1 ${isDeletingRow || currentRowCount === 0 ? 'bg-gray-400' : 'bg-orange-600 hover:bg-orange-700'} text-white text-xs rounded transition-all flex items-center space-x-1`}
+                title="Delete all empty rows"
+              >
+                {isDeletingRow ? <Loader2 size={12} className="animate-spin" /> : <span>🧹</span>}
+                <span>Clear Empty</span>
+              </button>
+            </div>
+          </div>
         </div>
         
         <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
           <div className="flex items-start space-x-2">
-            <AlertCircle size={16} className="text-yellow-600 mt-0.5" />
+            <Info size={16} className="text-yellow-600 mt-0.5" />
             <div className="text-xs text-yellow-700">
-              <strong>Note:</strong> Use these buttons instead of right-clicking to add columns. 
-              This ensures proper category alignment and prevents header misalignment issues.
+              <strong>Tips:</strong> 
+              <ul className="mt-1 space-y-1">
+                <li>• "Delete Last" removes the bottom row</li>
+                <li>• "Clear Empty" removes rows with no data</li>
+                <li>• Changes are auto-saved</li>
+              </ul>
             </div>
           </div>
         </div>
       </div>
     );
   };
+
+  // NEW COMPONENT: Category Column Manager
+  const CategoryColumnManager = () => {
+  if (!showColumnManager || !categoryMapping) return null;
+  
+  const categories = [
+    { id: 'quiz', name: 'Quiz', icon: '📝', color: 'bg-blue-50 border-blue-200' },
+    { id: 'laboratory', name: 'Laboratory Activities', icon: '🧪', color: 'bg-green-50 border-green-200' },
+    { id: 'exams', name: 'Exams', icon: '📋', color: 'bg-purple-50 border-purple-200' }
+  ];
+  
+  return (
+    <div className="absolute top-16 right-4 bg-white rounded-lg shadow-xl border border-gray-200 p-4 z-50 min-w-96">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-semibold text-gray-900 flex items-center space-x-2">
+          <span>📊</span>
+          <span>Manage Columns by Category</span>
+        </h3>
+        <button
+          onClick={() => setShowColumnManager(false)}
+          className="text-gray-400 hover:text-gray-600 p-1 rounded"
+        >
+          <X size={16} />
+        </button>
+      </div>
+      
+      <div className="space-y-3">
+        {categories.map(category => {
+          const columnCount = categoryMapping[category.id]?.length || 0;
+          return (
+            <div key={category.id} className={`p-3 rounded-lg border ${category.color}`}>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center space-x-3">
+                  <span className="text-lg">{category.icon}</span>
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">{category.name}</div>
+                    <div className="text-xs text-gray-500">{columnCount} columns currently</div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Add Column Section */}
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-xs font-medium text-gray-700 flex items-center space-x-1">
+                  <span>➕</span>
+                  <span>Add Column</span>
+                </div>
+                <button
+                  onClick={() => addColumnToCategory(category.id)}
+                  disabled={isAddingColumn}
+                  className={`px-3 py-1 ${isAddingColumn ? 'bg-gray-400' : 'bg-green-600 hover:bg-green-700'} text-white text-xs rounded transition-all flex items-center space-x-1`}
+                >
+                  {isAddingColumn ? <Loader2 size={12} className="animate-spin" /> : <span>+</span>}
+                  <span>{isAddingColumn ? 'Adding...' : 'Add'}</span>
+                </button>
+              </div>
+              
+              {/* Delete Column Section */}
+              {columnCount > 0 && (
+                <div className="border-t pt-2">
+                  <div className="text-xs font-medium text-gray-700 flex items-center space-x-1 mb-2">
+                    <span>🗑️</span>
+                    <span>Delete Columns</span>
+                  </div>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => deleteColumnFromCategory(category.id, 'last')}
+                      disabled={isDeletingColumn || columnCount === 0}
+                      className={`px-2 py-1 ${isDeletingColumn || columnCount === 0 ? 'bg-gray-400' : 'bg-red-600 hover:bg-red-700'} text-white text-xs rounded transition-all flex items-center space-x-1`}
+                      title="Delete the last column in this category"
+                    >
+                      {isDeletingColumn ? <Loader2 size={10} className="animate-spin" /> : <span>🔻</span>}
+                      <span>Delete Last</span>
+                    </button>
+                    
+                    <button
+                      onClick={() => deleteEmptyColumnsFromCategory(category.id)}
+                      disabled={isDeletingColumn || columnCount === 0}
+                      className={`px-2 py-1 ${isDeletingColumn || columnCount === 0 ? 'bg-gray-400' : 'bg-orange-600 hover:bg-orange-700'} text-white text-xs rounded transition-all flex items-center space-x-1`}
+                      title="Delete all empty columns in this category"
+                    >
+                      {isDeletingColumn ? <Loader2 size={10} className="animate-spin" /> : <span>🧹</span>}
+                      <span>Clear Empty</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      
+      <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+        <div className="flex items-start space-x-2">
+          <AlertCircle size={16} className="text-yellow-600 mt-0.5" />
+          <div className="text-xs text-yellow-700">
+            <strong>Column Management Tips:</strong>
+            <ul className="mt-1 space-y-1">
+              <li>• <strong>Add:</strong> Creates new column at the end of category</li>
+              <li>• <strong>Delete Last:</strong> Removes the rightmost column in category</li>
+              <li>• <strong>Clear Empty:</strong> Removes columns with no data</li>
+              <li>• Categories stay properly aligned and headers update automatically</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
   return (
     <div className="w-full h-full flex flex-col bg-gray-50">
