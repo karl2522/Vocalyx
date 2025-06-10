@@ -34,6 +34,12 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
   const [selectedRowIndex, setSelectedRowIndex] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeletingColumn, setIsDeletingColumn] = useState(false);
+  const [selectedRows, setSelectedRows] = useState(new Set());
+  const [showAdvancedRowOptions, setShowAdvancedRowOptions] = useState(false);
+  const [specificRowIndex, setSpecificRowIndex] = useState('');
+  const [insertAtIndex, setInsertAtIndex] = useState('');
+  const [duplicateRowIndex, setDuplicateRowIndex] = useState('');
+
   
   // NEW STATE FOR COLUMN MANAGEMENT
   const [showColumnManager, setShowColumnManager] = useState(false);
@@ -595,6 +601,211 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
     setIsDeletingColumn(false);
   }
 }, [categoryMapping, fileData, isDeletingColumn, deleteColumnFromCategory]);
+
+  const deleteSpecificRow = useCallback(async () => {
+  if (!specificRowIndex || isDeletingRow) return;
+  
+  const rowIndex = parseInt(specificRowIndex) - 1; // Convert to 0-based index
+  const currentData = fileData.all_sheets[fileData.active_sheet].data;
+  
+  if (rowIndex < 0 || rowIndex >= currentData.length) {
+    alert(`Invalid row number! Please enter a number between 1 and ${currentData.length}`);
+    return;
+  }
+  
+  const studentName = getStudentNameFromRow(currentData[rowIndex]);
+  const confirmDelete = window.confirm(
+    `Are you sure you want to delete Row ${parseInt(specificRowIndex)}?\n\nStudent: ${studentName}\n\nThis action cannot be undone.`
+  );
+  
+  if (confirmDelete) {
+    await deleteRowFromSpreadsheet(rowIndex);
+    setSpecificRowIndex('');
+    alert(`Row ${parseInt(specificRowIndex)} (${studentName}) has been deleted successfully!`);
+  }
+}, [specificRowIndex, fileData, isDeletingRow, deleteRowFromSpreadsheet]);
+
+  const getStudentNameFromRow = useCallback((row) => {
+  if (!categoryMapping || !fileData) return 'Unknown Student';
+  
+  const headers = fileData.all_sheets[fileData.active_sheet].headers;
+  const studentColumns = categoryMapping.student || [];
+  
+  // Try to find name in student columns
+  for (const colIndex of studentColumns) {
+    const header = headers[colIndex];
+    const value = row[header];
+    if (value && typeof value === 'string' && value.trim()) {
+      // If it looks like a name (contains letters)
+      if (/[a-zA-Z]/.test(value)) {
+        return value.trim();
+      }
+    }
+  }
+  
+  // Fallback: return first non-empty student column value
+  for (const colIndex of studentColumns) {
+    const header = headers[colIndex];
+    const value = row[header];
+    if (value && value.toString().trim()) {
+      return value.toString().trim();
+    }
+  }
+  
+  return 'Unnamed Student';
+}, [categoryMapping, fileData]);
+
+  const deleteSelectedRows = useCallback(async () => {
+  if (selectedRows.size === 0 || isDeletingRow) return;
+  
+  const currentData = fileData.all_sheets[fileData.active_sheet].data;
+  const rowsToDelete = Array.from(selectedRows).sort((a, b) => a - b);
+  
+  // Show confirmation with student names
+  const studentNames = rowsToDelete.map(rowIndex => {
+    const studentName = getStudentNameFromRow(currentData[rowIndex]);
+    return `Row ${rowIndex + 1}: ${studentName}`;
+  }).join('\n');
+  
+  const confirmDelete = window.confirm(
+    `Are you sure you want to delete ${rowsToDelete.length} selected rows?\n\n${studentNames}\n\nThis action cannot be undone.`
+  );
+  
+  if (!confirmDelete) return;
+  
+  setIsDeletingRow(true);
+  
+  try {
+    // Delete rows from highest index to lowest to avoid index shifting
+    for (let i = rowsToDelete.length - 1; i >= 0; i--) {
+      const rowIndex = rowsToDelete[i];
+      await deleteRowFromSpreadsheet(rowIndex);
+    }
+    
+    setSelectedRows(new Set());
+    alert(`Successfully deleted ${rowsToDelete.length} student rows!`);
+    
+  } catch (error) {
+    console.error('Error deleting selected rows:', error);
+    alert('Failed to delete some rows. Please try again.');
+  } finally {
+    setIsDeletingRow(false);
+  }
+}, [selectedRows, fileData, isDeletingRow, deleteRowFromSpreadsheet, getStudentNameFromRow]);
+
+  const duplicateRow = useCallback(async () => {
+  if (!duplicateRowIndex || isAddingRow) return;
+  
+  const rowIndex = parseInt(duplicateRowIndex) - 1; // Convert to 0-based index
+  const currentData = fileData.all_sheets[fileData.active_sheet].data;
+  
+  if (rowIndex < 0 || rowIndex >= currentData.length) {
+    alert(`Invalid row number! Please enter a number between 1 and ${currentData.length}`);
+    return;
+  }
+  
+  setIsAddingRow(true);
+  
+  try {
+    const headers = fileData.all_sheets[fileData.active_sheet].headers;
+    const sourceRow = currentData[rowIndex];
+    const studentName = getStudentNameFromRow(sourceRow);
+    
+    // Create duplicate row
+    const duplicatedRow = { ...sourceRow };
+    
+    // Clear grade columns but keep student info
+    const studentColumns = categoryMapping?.student || [];
+    headers.forEach((header, index) => {
+      if (!studentColumns.includes(index)) {
+        duplicatedRow[header] = null; // Clear non-student columns
+      }
+    });
+    
+    // Insert duplicate right after the original row
+    const insertIndex = rowIndex + 1;
+    const updatedData = [...currentData];
+    updatedData.splice(insertIndex, 0, duplicatedRow);
+    
+    console.log(`Duplicating row ${rowIndex + 1} (${studentName}) at position ${insertIndex + 1}`);
+    
+    // Update fileData structure
+    fileData.all_sheets[fileData.active_sheet].data = updatedData;
+    
+    // Save the updated data
+    if (onSave) {
+      const updatedFileData = {
+        ...fileData,
+        all_sheets: {
+          ...fileData.all_sheets,
+          [fileData.active_sheet]: {
+            headers: headers,
+            data: updatedData
+          }
+        }
+      };
+      
+      await onSave(updatedFileData);
+      console.log("✅ Row duplicated and saved successfully");
+    }
+    
+    // Destroy and recreate the table
+    if (hotInstanceRef.current) {
+      hotInstanceRef.current.destroy();
+      hotInstanceRef.current = null;
+    }
+    
+    setDuplicateRowIndex('');
+    alert(`Row ${parseInt(duplicateRowIndex)} (${studentName}) has been duplicated successfully!\n\nStudent info copied, grades cleared for new entry.`);
+    
+  } catch (error) {
+    console.error('Error duplicating row:', error);
+    alert('Failed to duplicate row. Please try again.');
+  } finally {
+    setIsAddingRow(false);
+  }
+}, [duplicateRowIndex, fileData, isAddingRow, onSave, categoryMapping, getStudentNameFromRow]);
+
+  const insertRowAtPosition = useCallback(async () => {
+  if (!insertAtIndex || isAddingRow) return;
+  
+  const insertPosition = parseInt(insertAtIndex) - 1; // Convert to 0-based index
+  const currentData = fileData.all_sheets[fileData.active_sheet].data;
+  
+  if (insertPosition < 0 || insertPosition > currentData.length) {
+    alert(`Invalid position! Please enter a number between 1 and ${currentData.length + 1}`);
+    return;
+  }
+  
+  await addRowToSpreadsheet(insertPosition);
+  setInsertAtIndex('');
+  
+  const positionText = insertPosition === 0 ? 'at the beginning' : 
+                     insertPosition === currentData.length ? 'at the end' : 
+                     `at position ${parseInt(insertAtIndex)}`;
+  
+  alert(`New row inserted ${positionText} successfully!`);
+}, [insertAtIndex, isAddingRow, addRowToSpreadsheet]);
+
+  const toggleRowSelection = useCallback((rowIndex) => {
+    const newSelectedRows = new Set(selectedRows);
+    if (newSelectedRows.has(rowIndex)) {
+      newSelectedRows.delete(rowIndex);
+    } else {
+      newSelectedRows.add(rowIndex);
+    }
+    setSelectedRows(newSelectedRows);
+  }, [selectedRows]);
+
+  const selectAllRows = useCallback(() => {
+    const currentData = fileData.all_sheets[fileData.active_sheet].data;
+    const allRowIndices = Array.from({ length: currentData.length }, (_, i) => i);
+    setSelectedRows(new Set(allRowIndices));
+  }, [fileData]);
+
+  const clearRowSelection = useCallback(() => {
+    setSelectedRows(new Set());
+  }, []);
 
   // NEW FUNCTION: Add column to specific category
   const addColumnToCategory = useCallback(async (categoryId, position = 'end') => {
@@ -1618,111 +1829,265 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
   };
 
   const RowManager = () => {
-    if (!showRowManager || !fileData) return null;
-    
-    const currentRowCount = fileData.all_sheets[fileData.active_sheet]?.data?.length || 0;
-    
-    return (
-      <div className="absolute top-16 right-4 bg-white rounded-lg shadow-xl border border-gray-200 p-4 z-50 min-w-80">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-gray-900 flex items-center space-x-2">
-            <span>👥</span>
-            <span>Manage Student Rows</span>
-          </h3>
+  if (!showRowManager || !fileData) return null;
+  
+  const currentRowCount = fileData.all_sheets[fileData.active_sheet]?.data?.length || 0;
+  
+  return (
+    <div 
+      className="fixed top-20 right-4 bg-white rounded-lg shadow-2xl border border-gray-200 p-4 min-w-96 max-h-[80vh] overflow-y-auto"
+      style={{ zIndex: 9999 }} // 🔧 FORCE HIGH Z-INDEX
+    >
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-semibold text-gray-900 flex items-center space-x-2">
+          <span>👥</span>
+          <span>Advanced Row Management</span>
+        </h3>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => {
+              console.log("Toggle clicked, current state:", showAdvancedRowOptions); // 🔍 DEBUG
+              setShowAdvancedRowOptions(!showAdvancedRowOptions);
+            }}
+            className={`px-3 py-1 text-xs rounded font-medium transition-all ${
+              showAdvancedRowOptions 
+                ? 'bg-blue-600 text-white shadow-md' 
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            {showAdvancedRowOptions ? '🔽 Hide Advanced' : '🔼 Show Advanced'}
+          </button>
           <button
             onClick={() => setShowRowManager(false)}
-            className="text-gray-400 hover:text-gray-600 p-1 rounded"
+            className="text-gray-400 hover:text-gray-600 p-1 rounded hover:bg-gray-100"
           >
             <X size={16} />
           </button>
         </div>
-        
-        <div className="space-y-3">
-          {/* Add Row Section */}
-          <div className="p-3 rounded-lg border bg-blue-50 border-blue-200">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center space-x-3">
-                <span className="text-lg">➕</span>
-                <div>
-                  <div className="text-sm font-medium text-gray-900">Add Student Row</div>
-                  <div className="text-xs text-gray-500">{currentRowCount} students currently</div>
+      </div>
+      
+      <div className="space-y-4">
+        {/* Quick Add/Delete Section */}
+        <div className="p-3 rounded-lg border bg-blue-50 border-blue-200">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center space-x-3">
+              <span className="text-lg">⚡</span>
+              <div>
+                <div className="text-sm font-medium text-gray-900">Quick Actions</div>
+                <div className="text-xs text-gray-500">
+                  {currentRowCount} students • {selectedRows.size} selected
                 </div>
               </div>
-            </div>
-            <div className="flex space-x-2">
-              <button
-                onClick={() => addRowToSpreadsheet('start')}
-                disabled={isAddingRow}
-                className={`px-3 py-1 ${isAddingRow ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'} text-white text-xs rounded transition-all flex items-center space-x-1`}
-                title="Add row at the beginning"
-              >
-                {isAddingRow ? <Loader2 size={12} className="animate-spin" /> : <span>⬆️</span>}
-                <span>Add First</span>
-              </button>
-              
-              <button
-                onClick={() => addRowToSpreadsheet('end')}
-                disabled={isAddingRow}
-                className={`px-3 py-1 ${isAddingRow ? 'bg-gray-400' : 'bg-green-600 hover:bg-green-700'} text-white text-xs rounded transition-all flex items-center space-x-1`}
-                title="Add row at the end"
-              >
-                {isAddingRow ? <Loader2 size={12} className="animate-spin" /> : <span>⬇️</span>}
-                <span>Add Last</span>
-              </button>
             </div>
           </div>
-          
-          {/* Delete Row Section */}
-          <div className="p-3 rounded-lg border bg-red-50 border-red-200">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center space-x-3">
-                <span className="text-lg">🗑️</span>
-                <div>
-                  <div className="text-sm font-medium text-gray-900">Delete Rows</div>
-                  <div className="text-xs text-gray-500">Remove unwanted rows</div>
-                </div>
-              </div>
-            </div>
-            <div className="flex space-x-2">
-              <button
-                onClick={deleteLastRow}
-                disabled={isDeletingRow || currentRowCount === 0}
-                className={`px-3 py-1 ${isDeletingRow || currentRowCount === 0 ? 'bg-gray-400' : 'bg-red-600 hover:bg-red-700'} text-white text-xs rounded transition-all flex items-center space-x-1`}
-                title="Delete the last row"
-              >
-                {isDeletingRow ? <Loader2 size={12} className="animate-spin" /> : <span>🔻</span>}
-                <span>Delete Last</span>
-              </button>
-              
-              <button
-                onClick={deleteEmptyRows}
-                disabled={isDeletingRow || currentRowCount === 0}
-                className={`px-3 py-1 ${isDeletingRow || currentRowCount === 0 ? 'bg-gray-400' : 'bg-orange-600 hover:bg-orange-700'} text-white text-xs rounded transition-all flex items-center space-x-1`}
-                title="Delete all empty rows"
-              >
-                {isDeletingRow ? <Loader2 size={12} className="animate-spin" /> : <span>🧹</span>}
-                <span>Clear Empty</span>
-              </button>
-            </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => addRowToSpreadsheet('end')}
+              disabled={isAddingRow}
+              className={`px-2 py-1 ${isAddingRow ? 'bg-gray-400' : 'bg-green-600 hover:bg-green-700'} text-white text-xs rounded transition-all flex items-center justify-center space-x-1`}
+            >
+              {isAddingRow ? <Loader2 size={10} className="animate-spin" /> : <span>➕</span>}
+              <span>Add Last</span>
+            </button>
+            
+            <button
+              onClick={deleteLastRow}
+              disabled={isDeletingRow || currentRowCount === 0}
+              className={`px-2 py-1 ${isDeletingRow || currentRowCount === 0 ? 'bg-gray-400' : 'bg-red-600 hover:bg-red-700'} text-white text-xs rounded transition-all flex items-center justify-center space-x-1`}
+            >
+              {isDeletingRow ? <Loader2 size={10} className="animate-spin" /> : <span>🗑️</span>}
+              <span>Delete Last</span>
+            </button>
+            
+            <button
+              onClick={deleteEmptyRows}
+              disabled={isDeletingRow || currentRowCount === 0}
+              className={`px-2 py-1 ${isDeletingRow || currentRowCount === 0 ? 'bg-gray-400' : 'bg-orange-600 hover:bg-orange-700'} text-white text-xs rounded transition-all flex items-center justify-center space-x-1 col-span-2`}
+            >
+              {isDeletingRow ? <Loader2 size={10} className="animate-spin" /> : <span>🧹</span>}
+              <span>Clear Empty Rows</span>
+            </button>
           </div>
         </div>
-        
-        <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-          <div className="flex items-start space-x-2">
-            <Info size={16} className="text-yellow-600 mt-0.5" />
-            <div className="text-xs text-yellow-700">
-              <strong>Tips:</strong> 
-              <ul className="mt-1 space-y-1">
-                <li>• "Delete Last" removes the bottom row</li>
-                <li>• "Clear Empty" removes rows with no data</li>
-                <li>• Changes are auto-saved</li>
-              </ul>
+
+        {/* 🔧 DEBUG: Show current state */}
+        <div className="text-xs text-gray-500 bg-gray-100 p-2 rounded">
+          Debug: Advanced options {showAdvancedRowOptions ? 'SHOWN' : 'HIDDEN'}
+        </div>
+
+        {/* Advanced Options - 🔧 FORCED VISIBILITY FOR TESTING */}
+        {showAdvancedRowOptions && (
+          <div className="space-y-4 border-t pt-4">
+            {/* Multi-Select Section */}
+            <div className="p-3 rounded-lg border bg-purple-50 border-purple-200">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center space-x-2">
+                  <span className="text-lg">🎯</span>
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">Multi-Select Actions</div>
+                    <div className="text-xs text-gray-500">{selectedRows.size} rows selected</div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => {
+                      console.log("Select All clicked"); // 🔍 DEBUG
+                      selectAllRows();
+                    }}
+                    disabled={currentRowCount === 0}
+                    className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition-all flex-1"
+                  >
+                    Select All ({currentRowCount})
+                  </button>
+                  <button
+                    onClick={() => {
+                      console.log("Clear Selection clicked"); // 🔍 DEBUG
+                      clearRowSelection();
+                    }}
+                    disabled={selectedRows.size === 0}
+                    className="px-2 py-1 bg-gray-600 hover:bg-gray-700 text-white text-xs rounded transition-all flex-1"
+                  >
+                    Clear Selection
+                  </button>
+                </div>
+                
+                {selectedRows.size > 0 && (
+                  <button
+                    onClick={deleteSelectedRows}
+                    disabled={isDeletingRow}
+                    className={`w-full px-2 py-1 ${isDeletingRow ? 'bg-gray-400' : 'bg-red-600 hover:bg-red-700'} text-white text-xs rounded transition-all flex items-center justify-center space-x-1`}
+                  >
+                    {isDeletingRow ? <Loader2 size={10} className="animate-spin" /> : <span>🗑️</span>}
+                    <span>Delete Selected ({selectedRows.size})</span>
+                  </button>
+                )}
+              </div>
             </div>
+
+            {/* Specific Row Actions */}
+            <div className="p-3 rounded-lg border bg-green-50 border-green-200">
+              <div className="flex items-center space-x-2 mb-3">
+                <span className="text-lg">🔧</span>
+                <div className="text-sm font-medium text-gray-900">Specific Row Actions</div>
+              </div>
+              
+              <div className="space-y-3">
+                {/* Delete Specific Row */}
+                <div className="space-y-1">
+                  <label className="text-xs text-gray-600 font-medium">Delete Specific Row:</label>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="number"
+                      min="1"
+                      max={currentRowCount}
+                      value={specificRowIndex}
+                      onChange={(e) => {
+                        console.log("Specific row input:", e.target.value); // 🔍 DEBUG
+                        setSpecificRowIndex(e.target.value);
+                      }}
+                      placeholder={`1-${currentRowCount}`}
+                      className="w-20 px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <button
+                      onClick={() => {
+                        console.log("Delete specific row clicked:", specificRowIndex); // 🔍 DEBUG
+                        deleteSpecificRow();
+                      }}
+                      disabled={!specificRowIndex || isDeletingRow || currentRowCount === 0}
+                      className={`px-3 py-1 ${!specificRowIndex || isDeletingRow || currentRowCount === 0 ? 'bg-gray-400' : 'bg-red-600 hover:bg-red-700'} text-white text-xs rounded transition-all flex items-center space-x-1 flex-1`}
+                    >
+                      <span>🗑️</span>
+                      <span>Delete Row #{specificRowIndex || '?'}</span>
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Duplicate Row */}
+                <div className="space-y-1">
+                  <label className="text-xs text-gray-600 font-medium">Duplicate Row:</label>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="number"
+                      min="1"
+                      max={currentRowCount}
+                      value={duplicateRowIndex}
+                      onChange={(e) => {
+                        console.log("Duplicate row input:", e.target.value); // 🔍 DEBUG
+                        setDuplicateRowIndex(e.target.value);
+                      }}
+                      placeholder={`1-${currentRowCount}`}
+                      className="w-20 px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <button
+                      onClick={() => {
+                        console.log("Duplicate row clicked:", duplicateRowIndex); // 🔍 DEBUG
+                        duplicateRow();
+                      }}
+                      disabled={!duplicateRowIndex || isAddingRow || currentRowCount === 0}
+                      className={`px-3 py-1 ${!duplicateRowIndex || isAddingRow || currentRowCount === 0 ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'} text-white text-xs rounded transition-all flex items-center space-x-1 flex-1`}
+                    >
+                      <span>📋</span>
+                      <span>Copy Row #{duplicateRowIndex || '?'}</span>
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Insert at Position */}
+                <div className="space-y-1">
+                  <label className="text-xs text-gray-600 font-medium">Insert New Row at Position:</label>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="number"
+                      min="1"
+                      max={currentRowCount + 1}
+                      value={insertAtIndex}
+                      onChange={(e) => {
+                        console.log("Insert position input:", e.target.value); // 🔍 DEBUG
+                        setInsertAtIndex(e.target.value);
+                      }}
+                      placeholder={`1-${currentRowCount + 1}`}
+                      className="w-20 px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <button
+                      onClick={() => {
+                        console.log("Insert at position clicked:", insertAtIndex); // 🔍 DEBUG
+                        insertRowAtPosition();
+                      }}
+                      disabled={!insertAtIndex || isAddingRow}
+                      className={`px-3 py-1 ${!insertAtIndex || isAddingRow ? 'bg-gray-400' : 'bg-green-600 hover:bg-green-700'} text-white text-xs rounded transition-all flex items-center space-x-1 flex-1`}
+                    >
+                      <span>📍</span>
+                      <span>Insert at #{insertAtIndex || '?'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+      
+      {/* Instructions */}
+      <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+        <div className="flex items-start space-x-2">
+          <Info size={14} className="text-yellow-600 mt-0.5" />
+          <div className="text-xs text-yellow-700">
+            <strong>Row Management Guide:</strong>
+            <ul className="mt-1 space-y-1">
+              <li>• <strong>Quick Actions:</strong> Fast add/delete operations</li>
+              <li>• <strong>Advanced:</strong> Click "Show Advanced" for precise controls</li>
+              <li>• <strong>Multi-Select:</strong> Select multiple rows for batch operations</li>
+              <li>• <strong>Specific Actions:</strong> Target exact rows by number</li>
+            </ul>
           </div>
         </div>
       </div>
-    );
-  };
+    </div>
+  );
+};
 
   // NEW COMPONENT: Category Column Manager
   const CategoryColumnManager = () => {
@@ -1735,7 +2100,10 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
   ];
   
   return (
-    <div className="absolute top-16 right-4 bg-white rounded-lg shadow-xl border border-gray-200 p-4 z-50 min-w-96">
+    <div 
+      className="fixed top-20 right-4 bg-white rounded-lg shadow-2xl border border-gray-200 p-4 min-w-96 max-h-[80vh] overflow-y-auto"
+      style={{ zIndex: 9999 }} // 🔧 FORCE HIGH Z-INDEX
+    >
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold text-gray-900 flex items-center space-x-2">
           <span>📊</span>
@@ -1743,7 +2111,7 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
         </h3>
         <button
           onClick={() => setShowColumnManager(false)}
-          className="text-gray-400 hover:text-gray-600 p-1 rounded"
+          className="text-gray-400 hover:text-gray-600 p-1 rounded hover:bg-gray-100"
         >
           <X size={16} />
         </button>
@@ -1771,9 +2139,12 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
                   <span>Add Column</span>
                 </div>
                 <button
-                  onClick={() => addColumnToCategory(category.id)}
+                  onClick={() => {
+                    console.log(`Adding column to ${category.id} category`); // 🔍 DEBUG
+                    addColumnToCategory(category.id);
+                  }}
                   disabled={isAddingColumn}
-                  className={`px-3 py-1 ${isAddingColumn ? 'bg-gray-400' : 'bg-green-600 hover:bg-green-700'} text-white text-xs rounded transition-all flex items-center space-x-1`}
+                  className={`px-3 py-1 ${isAddingColumn ? 'bg-gray-400' : 'bg-green-600 hover:bg-green-700'} text-white text-xs rounded transition-all flex items-center space-x-1 shadow-sm`}
                 >
                   {isAddingColumn ? <Loader2 size={12} className="animate-spin" /> : <span>+</span>}
                   <span>{isAddingColumn ? 'Adding...' : 'Add'}</span>
@@ -1782,16 +2153,19 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
               
               {/* Delete Column Section */}
               {columnCount > 0 && (
-                <div className="border-t pt-2">
+                <div className="border-t pt-2 mt-2">
                   <div className="text-xs font-medium text-gray-700 flex items-center space-x-1 mb-2">
                     <span>🗑️</span>
                     <span>Delete Columns</span>
                   </div>
                   <div className="flex space-x-2">
                     <button
-                      onClick={() => deleteColumnFromCategory(category.id, 'last')}
+                      onClick={() => {
+                        console.log(`Deleting last column from ${category.id} category`); // 🔍 DEBUG
+                        deleteColumnFromCategory(category.id, 'last');
+                      }}
                       disabled={isDeletingColumn || columnCount === 0}
-                      className={`px-2 py-1 ${isDeletingColumn || columnCount === 0 ? 'bg-gray-400' : 'bg-red-600 hover:bg-red-700'} text-white text-xs rounded transition-all flex items-center space-x-1`}
+                      className={`px-2 py-1 ${isDeletingColumn || columnCount === 0 ? 'bg-gray-400' : 'bg-red-600 hover:bg-red-700'} text-white text-xs rounded transition-all flex items-center space-x-1 shadow-sm`}
                       title="Delete the last column in this category"
                     >
                       {isDeletingColumn ? <Loader2 size={10} className="animate-spin" /> : <span>🔻</span>}
@@ -1799,9 +2173,12 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
                     </button>
                     
                     <button
-                      onClick={() => deleteEmptyColumnsFromCategory(category.id)}
+                      onClick={() => {
+                        console.log(`Clearing empty columns from ${category.id} category`); // 🔍 DEBUG
+                        deleteEmptyColumnsFromCategory(category.id);
+                      }}
                       disabled={isDeletingColumn || columnCount === 0}
-                      className={`px-2 py-1 ${isDeletingColumn || columnCount === 0 ? 'bg-gray-400' : 'bg-orange-600 hover:bg-orange-700'} text-white text-xs rounded transition-all flex items-center space-x-1`}
+                      className={`px-2 py-1 ${isDeletingColumn || columnCount === 0 ? 'bg-gray-400' : 'bg-orange-600 hover:bg-orange-700'} text-white text-xs rounded transition-all flex items-center space-x-1 shadow-sm`}
                       title="Delete all empty columns in this category"
                     >
                       {isDeletingColumn ? <Loader2 size={10} className="animate-spin" /> : <span>🧹</span>}
@@ -1825,6 +2202,7 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
               <li>• <strong>Delete Last:</strong> Removes the rightmost column in category</li>
               <li>• <strong>Clear Empty:</strong> Removes columns with no data</li>
               <li>• Categories stay properly aligned and headers update automatically</li>
+              <li>• Student info columns are protected from deletion</li>
             </ul>
           </div>
         </div>
