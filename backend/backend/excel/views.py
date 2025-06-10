@@ -1560,39 +1560,76 @@ class ExcelViewSet(viewsets.ModelViewSet):
         if not class_id:
             return Response({'error': 'class_id is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        custom_columns = []
-        if 'custom_columns' in request.data:
-            try:
-                import json
-                custom_columns = json.loads(request.data.get('custom_columns'))
-                print(f"Received {len(custom_columns)} custom columns")
-            except Exception as e:
-                print("Error parsing custom columns:", str(e))
-                # Continue processing even if custom columns parsing fails
+        # SMART STUDENT EXTRACTION LOGIC
+        def extract_student_info_only(df, sheet_name):
+            """Extract only student information columns from the imported Excel"""
+            print(f"=== EXTRACTING STUDENT INFO FROM SHEET: {sheet_name} ===")
 
-        # Process category mappings if provided
-        category_mappings = []
-        if 'category_mappings' in request.data:
-            try:
-                import json
-                category_mappings_str = request.data.get('category_mappings')
-                print(f"Raw category mappings from request: {category_mappings_str[:100] if category_mappings_str else 'None'}...")
+            # Define patterns to detect student info columns
+            student_patterns = [
+                # Specific patterns (higher priority)
+                'no. last name, first name',
+                'no. lastname, firstname',
+                'student no. last name, first name',
+                'number last name first name',
+                'no lastname firstname',
 
-                if category_mappings_str:
-                    category_mappings_data = json.loads(category_mappings_str)
-                    print(f"Parsed category mappings - type: {type(category_mappings_data)}")
+                # General patterns
+                'no.', 'number', 'num',
+                'last name', 'lastname', 'surname', 'family name',
+                'first name', 'firstname', 'given name',
+                'name', 'student name', 'full name',
+                'student', 'learner', 'pupil',
+                'id', 'student id', 'student number'
+            ]
 
-                    # Handle array format with 'id', 'name', and 'columns' properties
-                    if isinstance(category_mappings_data, list):
-                        category_mappings = category_mappings_data
-                        print(f"Processed {len(category_mappings)} category mappings from array format")
+            original_columns = df.columns.tolist()
+            student_columns = []
+
+            print(f"Original columns ({len(original_columns)}): {original_columns}")
+
+            # Find student info columns
+            for col in original_columns:
+                col_str = str(col).strip().lower()
+
+                # Check if this column matches student patterns
+                is_student_col = any(pattern in col_str for pattern in student_patterns)
+
+                if is_student_col:
+                    student_columns.append(col)
+                    print(f"✅ Detected student column: '{col}'")
+                else:
+                    print(f"❌ Ignoring non-student column: '{col}'")
+
+            # If no student columns detected, take first 3 columns as fallback
+            if not student_columns:
+                student_columns = original_columns[:min(3, len(original_columns))]
+                print(f"⚠️ No student columns detected, using first {len(student_columns)} columns as student info")
+
+            # Extract only student columns from dataframe
+            student_df = df[student_columns].copy()
+
+            # Clean the student data
+            student_df = student_df.replace({pd.NA: None})
+            student_df = student_df.fillna("")
+
+            # Convert to records
+            student_records = []
+            for record in student_df.to_dict('records'):
+                cleaned_record = {}
+                for key, value in record.items():
+                    if pd.isna(value):
+                        cleaned_record[key] = None
+                    elif isinstance(value, (pd.Timestamp, pd.DatetimeTZDtype, datetime.datetime, datetime.date)):
+                        cleaned_record[key] = value.isoformat()
                     else:
-                        print("Category mappings data is not in expected array format")
-            except Exception as e:
-                print("Error parsing category mappings:", str(e))
-                import traceback
-                print("Traceback:", traceback.format_exc())
-                # Continue processing even if category mappings parsing fails
+                        cleaned_record[key] = value
+                student_records.append(cleaned_record)
+
+            print(f"✅ Extracted {len(student_columns)} student columns with {len(student_records)} rows")
+            print(f"Student columns: {student_columns}")
+
+            return student_columns, student_records
 
         try:
             from classes.models import Class
@@ -1618,26 +1655,23 @@ class ExcelViewSet(viewsets.ModelViewSet):
             print(f"Excel file contains {len(excel_data)} sheets")
 
             all_sheets_data = {}
+            student_headers = []  # Store student headers for category mapping
 
+            # Process each sheet with student extraction
             for sheet_name, df in excel_data.items():
                 print(f"Processing sheet: {sheet_name}, shape: {df.shape}")
 
-                # Remove columns that are completely empty or have unnamed/null column names
-                # This fixes the issue with extra blank columns appearing
+                # Remove completely empty or unnamed columns first
                 original_columns = df.columns.tolist()
-
-                # Filter out columns that are:
-                # 1. Completely empty (all NaN/null values)
-                # 2. Have unnamed/generic column names like 'Unnamed: X'
-                # 3. Have null/empty column names
                 columns_to_keep = []
+
                 for col in original_columns:
                     col_str = str(col).strip()
 
                     # Skip columns with generic/unnamed headers
                     if (col_str.startswith('Unnamed:') or
-                        col_str in ['', 'nan', 'NaN', 'None'] or
-                        col_str.lower() == 'null'):
+                            col_str in ['', 'nan', 'NaN', 'None'] or
+                            col_str.lower() == 'null'):
                         print(f"Removing column with generic/empty name: '{col_str}'")
                         continue
 
@@ -1652,48 +1686,77 @@ class ExcelViewSet(viewsets.ModelViewSet):
                 df = df[columns_to_keep]
                 print(f"Filtered columns from {len(original_columns)} to {len(columns_to_keep)}")
 
-                df = df.replace({pd.NA: None})
-                df = df.fillna("")
+                # STEP 1: Extract ONLY student info from imported file
+                sheet_student_headers, student_records = extract_student_info_only(df, sheet_name)
 
-                for column in df.select_dtypes(include=['float64', 'int64']).columns:
-                    df[column] = df[column].apply(
-                        lambda x: None if pd.isna(x) else float(x) if isinstance(x, float) else int(x))
+                # Store student headers for the first sheet (for category mapping)
+                if not student_headers:
+                    student_headers = sheet_student_headers
 
-                records = []
-                for record in df.to_dict('records'):
-                    cleaned_record = {}
-                    for key, value in record.items():
-                        if pd.isna(value):
-                            cleaned_record[key] = None
-                        elif isinstance(value, (pd.Timestamp, pd.DatetimeTZDtype, datetime.datetime, datetime.date)):
-                            cleaned_record[key] = value.isoformat()
-                        else:
-                            cleaned_record[key] = value
-                    records.append(cleaned_record)
+                # STEP 2: Create template structure with predefined categories
+                template_headers = sheet_student_headers + [
+                    # Quiz columns
+                    'Quiz 1', 'Quiz 2', 'Quiz 3', 'Quiz 4', 'Quiz 5',
+                    # Lab columns
+                    'Lab 1', 'Lab 2', 'Lab 3', 'Lab 4', 'Lab 5',
+                    # Exam columns
+                    'PE - Prelim Exam', 'ME - Midterm Exam', 'PFE - PreFinal Exam', 'FE - Final Exam'
+                ]
 
-                headers = df.columns.tolist()
+                # STEP 3: Add template columns to student records (empty values)
+                template_records = []
+                for student_record in student_records:
+                    template_record = student_record.copy()  # Keep student info
 
-                # Add custom columns if provided
-                if custom_columns and sheet_name == list(excel_data.keys())[0]:  # Apply to first sheet only
-                    # Filter out header-type columns for adding to data
-                    custom_column_headers = [col['name'] for col in custom_columns if col.get('type') != 'header']
-                    headers.extend(custom_column_headers)
+                    # Add empty template columns
+                    for header in template_headers:
+                        if header not in template_record:
+                            template_record[header] = None
 
-                    for record in records:
-                        for header in custom_column_headers:
-                            record[header] = None
+                    template_records.append(template_record)
+
+                print(f"✅ Created template with {len(template_headers)} columns for {len(template_records)} students")
 
                 all_sheets_data[sheet_name] = {
-                    'headers': headers,
-                    'data': records
+                    'headers': template_headers,
+                    'data': template_records
                 }
 
-            # Add category mappings to the data structure if provided
-            if category_mappings:
-                all_sheets_data['category_mappings'] = category_mappings
-                print(f"Added category mappings to file data: {len(category_mappings)} categories")
-                for cat in category_mappings:
-                    print(f"  Category '{cat.get('name')}' ({cat.get('id')}): {len(cat.get('columns', []))} columns")
+            # STEP 4: Add predefined category mappings
+            predefined_categories = [
+                {
+                    'id': 'student',
+                    'name': 'Student Info',
+                    'columns': student_headers  # Only the detected student columns
+                },
+                {
+                    'id': 'quiz',
+                    'name': 'Quiz',
+                    'columns': ['Quiz 1', 'Quiz 2', 'Quiz 3', 'Quiz 4', 'Quiz 5']
+                },
+                {
+                    'id': 'laboratory',
+                    'name': 'Laboratory Activities',
+                    'columns': ['Lab 1', 'Lab 2', 'Lab 3', 'Lab 4', 'Lab 5']
+                },
+                {
+                    'id': 'exams',
+                    'name': 'Exams',
+                    'columns': ['PE - Prelim Exam', 'ME - Midterm Exam', 'PFE - PreFinal Exam', 'FE - Final Exam']
+                },
+                {
+                    'id': 'other',
+                    'name': 'Other',
+                    'columns': []
+                }
+            ]
+
+            # Add predefined categories to the data structure
+            all_sheets_data['category_mappings'] = predefined_categories
+
+            print("✅ Added predefined category mappings:")
+            for cat in predefined_categories:
+                print(f"  Category '{cat['name']}' ({cat['id']}): {len(cat['columns'])} columns")
 
             first_sheet_name = list(all_sheets_data.keys())[0] if all_sheets_data else 'Sheet1'
 
