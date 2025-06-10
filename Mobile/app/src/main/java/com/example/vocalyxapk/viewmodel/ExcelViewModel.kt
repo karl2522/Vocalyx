@@ -199,12 +199,29 @@ class ExcelViewModel : ViewModel() {
         val sheet = selectedSheetName ?: return mapOf("headers" to emptyList<String>(), "data" to emptyList<Map<String, String>>())
         val sheetContent = file.getSheetContent(sheet) ?: return mapOf("headers" to emptyList<String>(), "data" to emptyList<Map<String, String>>())
         
+        // Add debug logging
+        Log.d("ExcelViewModel", "=== getSelectedSheetDataAsMap DEBUG ===")
+        Log.d("ExcelViewModel", "Selected file: ${file.file_name}")
+        Log.d("ExcelViewModel", "Selected sheet: $sheet")
+        Log.d("ExcelViewModel", "Sheet content headers: ${sheetContent.headers}")
+        Log.d("ExcelViewModel", "Sheet content data rows: ${sheetContent.data.size}")
+        
+        // Check for exam-related columns specifically
+        val examColumns = sheetContent.headers.filter { header ->
+            val lowerHeader = header.lowercase()
+            listOf("prelim", "midterm", "prefinal", "pre-final", "final", "finals", "exam", "examination", "test").any { keyword ->
+                lowerHeader.contains(keyword)
+            }
+        }
+        Log.d("ExcelViewModel", "Exam-related columns found: $examColumns")
+        
         // Ensure all data values are properly converted to strings
         val safeData = try {
             sheetContent.data.map { row ->
                 row.mapValues { it.value?.toString() ?: "" }
             }
         } catch (e: Exception) {
+            Log.e("ExcelViewModel", "Error converting data to strings", e)
             // If there's any issue with data conversion, return empty data but keep headers
             emptyList<Map<String, String>>()
         }

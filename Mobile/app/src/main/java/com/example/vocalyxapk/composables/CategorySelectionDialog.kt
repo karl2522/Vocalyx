@@ -46,17 +46,40 @@ fun CategorySelectionDialog(
     val sheetData = excelViewModel.getSelectedSheetDataAsMap()
     val headers = (sheetData["headers"] as? List<String>) ?: emptyList()
     
+    // Add debug logging to help investigate data fetching issues
+    Log.d("CategorySelectionDialog", "=== DEBUGGING EXAM COLUMNS ===")
+    Log.d("CategorySelectionDialog", "Total headers received: ${headers.size}")
+    Log.d("CategorySelectionDialog", "Headers: $headers")
+    
     // Function to get existing subcategories for a category
     fun getExistingSubcategories(category: RecordingCategory): List<String> {
         return when (category) {
             RecordingCategory.EXAM -> {
-                // Fixed exam types
-                val examTypes = listOf("Prelim Exam", "Midterm Exam", "Prefinal Exam", "Final Exam")
-                examTypes.filter { examType ->
-                    headers.any { header -> 
-                        header.equals(examType, ignoreCase = true)
+                // More flexible exam detection
+                val examKeywords = listOf(
+                    "prelim", "midterm", "prefinal", "pre-final", "final", "finals",
+                    "exam", "examination", "test"
+                )
+                
+                val matchingColumns = headers.filter { header ->
+                    val lowerHeader = header.lowercase()
+                    examKeywords.any { keyword ->
+                        lowerHeader.contains(keyword)
+                    }
+                }.sortedBy { header ->
+                    // Sort by predefined order for exams
+                    when {
+                        header.contains("prelim", ignoreCase = true) -> 1
+                        header.contains("midterm", ignoreCase = true) -> 2
+                        header.contains("prefinal", ignoreCase = true) || 
+                        header.contains("pre-final", ignoreCase = true) -> 3
+                        header.contains("final", ignoreCase = true) -> 4
+                        else -> 5
                     }
                 }
+                
+                Log.d("CategorySelectionDialog", "Found exam columns: $matchingColumns")
+                matchingColumns
             }
             else -> {
                 // For Quiz and Lab, find incrementally numbered columns
@@ -74,6 +97,7 @@ fun CategorySelectionDialog(
                     match?.value?.toIntOrNull() ?: 0
                 }
                 
+                Log.d("CategorySelectionDialog", "Found ${category.displayName} columns: $matchingColumns")
                 matchingColumns
             }
         }
@@ -86,8 +110,16 @@ fun CategorySelectionDialog(
         return when (category) {
             RecordingCategory.EXAM -> {
                 val examTypes = listOf("Prelim Exam", "Midterm Exam", "Prefinal Exam", "Final Exam")
+                val existingLower = existing.map { it.lowercase() }
+                
                 examTypes.firstOrNull { examType -> 
-                    !existing.any { it.equals(examType, ignoreCase = true) }
+                    val examTypeLower = examType.lowercase()
+                    !existingLower.any { existing ->
+                        existing.contains("prelim") && examTypeLower.contains("prelim") ||
+                        existing.contains("midterm") && examTypeLower.contains("midterm") ||
+                        (existing.contains("prefinal") || existing.contains("pre-final")) && examTypeLower.contains("prefinal") ||
+                        existing.contains("final") && !existing.contains("prefinal") && examTypeLower.contains("final") && !examTypeLower.contains("prefinal")
+                    }
                 } ?: "Final Exam"
             }
             RecordingCategory.LAB -> {

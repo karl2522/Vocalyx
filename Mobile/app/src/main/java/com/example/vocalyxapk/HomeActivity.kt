@@ -9,6 +9,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,6 +27,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -51,6 +53,9 @@ class HomeActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Add debug logging
+        android.util.Log.d("HomeActivity", "HomeActivity onCreate called")
 
         setContent {
             VOCALYXAPKTheme {
@@ -67,6 +72,9 @@ class HomeActivity : ComponentActivity() {
                     // 🎯 NEW: Add notification state and ViewModel
                     var showNotifications by remember { mutableStateOf(false) }
                     val notificationViewModel: NotificationViewModel = viewModel()
+                    
+                    // Logout dialog state
+                    var showLogoutDialog by remember { mutableStateOf(false) }
 
                     val navigationItems = listOf(
                         Triple("Dashboard", Icons.Filled.Dashboard, "Dashboard"),
@@ -382,31 +390,7 @@ class HomeActivity : ComponentActivity() {
                                     },
                                     selected = false,
                                     onClick = {
-                                        val authRepository = AuthRepository(context)
-
-                                        scope.launch {
-                                            try {
-                                                Toast.makeText(context, "Logging out...", Toast.LENGTH_SHORT).show()
-
-                                                val result = authRepository.logout()
-
-                                                AuthStateManager.setLoggedOut(context)
-
-                                                val intent = Intent(this@HomeActivity, LoginActivity::class.java)
-                                                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                                                startActivity(intent)
-                                                finish()
-                                            } catch (e: Exception) {
-                                                AuthStateManager.setLoggedOut(context)
-
-                                                Toast.makeText(context, "Logout failed on server but you're logged out locally", Toast.LENGTH_SHORT).show()
-
-                                                val intent = Intent(this@HomeActivity, LoginActivity::class.java)
-                                                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                                                startActivity(intent)
-                                                finish()
-                                            }
-                                        }
+                                        showLogoutDialog = true
                                     },
                                     colors = NavigationDrawerItemDefaults.colors(
                                         selectedContainerColor = Color(0xFFFFECEC),
@@ -613,6 +597,37 @@ class HomeActivity : ComponentActivity() {
                             }
                         }
                     }
+
+                    // Modern Logout Confirmation Dialog
+                    if (showLogoutDialog) {
+                        ModernLogoutDialog(
+                            onConfirm = {
+                                showLogoutDialog = false
+                                val authRepository = AuthRepository(context)
+                                scope.launch {
+                                    try {
+                                        Toast.makeText(context, "Logging out...", Toast.LENGTH_SHORT).show()
+                                        val result = authRepository.logout()
+                                        AuthStateManager.setLoggedOut(context)
+                                        val intent = Intent(this@HomeActivity, LoginActivity::class.java)
+                                        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                                        startActivity(intent)
+                                        finish()
+                                    } catch (e: Exception) {
+                                        AuthStateManager.setLoggedOut(context)
+                                        Toast.makeText(context, "Logout failed on server but you're logged out locally", Toast.LENGTH_SHORT).show()
+                                        val intent = Intent(this@HomeActivity, LoginActivity::class.java)
+                                        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                                        startActivity(intent)
+                                        finish()
+                                    }
+                                }
+                            },
+                            onDismiss = {
+                                showLogoutDialog = false
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -742,6 +757,126 @@ fun HomeScreen() {
             1 -> CoursesTab(modifier = Modifier.padding(paddingValues))
             2 -> ScheduleTab(modifier = Modifier.padding(paddingValues))
             3 -> TeamsTab(modifier = Modifier.padding(paddingValues))
+        }
+    }
+}
+
+@Composable
+fun ModernLogoutDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.5f))
+            .clickable(enabled = false) { }, // Prevent click-through
+        contentAlignment = Alignment.Center
+    ) {
+        Card(
+            modifier = Modifier
+                .wrapContentSize()
+                .padding(32.dp),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Icon
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .background(
+                            Color(0xFFFFECEC),
+                            CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Rounded.Logout,
+                        contentDescription = "Logout",
+                        tint = Color(0xFFE53935),
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Title
+                Text(
+                    text = "Sign Out",
+                    style = MaterialTheme.typography.headlineSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = DMSans
+                    ),
+                    color = Color(0xFF1A1A1A)
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // Message
+                Text(
+                    text = "Are you sure you want to sign out of your account?",
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontFamily = DMSans
+                    ),
+                    color = Color(0xFF666666),
+                    textAlign = TextAlign.Center
+                )
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                // Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Cancel button
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = Color(0xFF333D79)
+                        ),
+                        border = BorderStroke(1.5.dp, Color(0xFF333D79))
+                    ) {
+                        Text(
+                            "Cancel",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                fontFamily = DMSans
+                            )
+                        )
+                    }
+                    
+                    // Sign out button
+                    Button(
+                        onClick = onConfirm,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFE53935)
+                        )
+                    ) {
+                        Text(
+                            "Sign Out",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                fontFamily = DMSans
+                            ),
+                            color = Color.White
+                        )
+                    }
+                }
+            }
         }
     }
 }

@@ -36,7 +36,7 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*', '10.0.165.206', '192.168.1.10', '.herokuapp.com', "192.168.254.106"]
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*', '10.0.165.206', '192.168.1.10', '.herokuapp.com', "192.168.254.101"]
 
 FIREBASE_SERVICE_ACCOUNT_PATH = os.path.join(BASE_DIR.parent, 'firebase-service-account.json')
 
@@ -150,8 +150,8 @@ CORS_ALLOWED_ORIGINS = [
     "http://10.0.165.206:8080",
     "http://10.0.165.206",
     "https://vocalyx-frontend.vercel.app",
-    "http://192.168.254.106:8000",
-    "http://192.168.254.106"
+    "http://192.168.254.101:8000",
+    "http://192.168.254.101"
 ]
 
 CORS_ALLOW_CREDENTIALS = True
@@ -219,13 +219,17 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('DB_NAME'),
-        'USER': os.getenv('DB_USER'),
-        'PASSWORD': os.getenv('DB_PASSWORD'),
-        'HOST': os.getenv('DB_HOST'),
-        'PORT': os.getenv('DB_PORT'),
+        'NAME': 'dbvocalyx',
+        'USER': 'dbvocalyx_owner',
+        'PASSWORD': 'npg_kHaeUhGPX7f3',
+        'HOST': 'ep-wispy-breeze-a1djx2jd-pooler.ap-southeast-1.aws.neon.tech',
+        'PORT': '5432',  # standard for PostgreSQL
+        'OPTIONS': {
+            'sslmode': 'require',  # important for Neon
+        },
     }
 }
+
 
 SECURE_SSL_REDIRECT = False if DEBUG else True
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')

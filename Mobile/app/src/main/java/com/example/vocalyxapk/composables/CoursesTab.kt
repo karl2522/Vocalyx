@@ -68,18 +68,6 @@ fun CoursesTab(modifier: Modifier = Modifier) {
     val importedClasses = com.example.vocalyxapk.data.ClassRepository.getClasses()
     var courseToEdit by remember { mutableStateOf<CourseItem?>(null) }
 
-    // File picker launcher
-    val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri?.let {
-            val intent = Intent(context, FileViewerActivity::class.java).apply {
-                data = uri
-            }
-            context.startActivity(intent)
-        }
-    }
-
     LaunchedEffect(courseUpdateState) {
         when (courseUpdateState) {
             is CourseUpdateState.Success -> {
@@ -614,10 +602,13 @@ fun CoursesTab(modifier: Modifier = Modifier) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 16.dp)
+                    .padding(bottom = 16.dp, end = 8.dp)
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // Add start spacer to prevent edge cutting
+                Spacer(modifier = Modifier.width(0.dp))
+                
                 statusFilters.forEach { status ->
                     val isSelected = selectedStatusFilter == status
                     val displayName = when(status) {
@@ -698,6 +689,9 @@ fun CoursesTab(modifier: Modifier = Modifier) {
                         modifier = Modifier.animateContentSize()
                     )
                 }
+                
+                // Add end spacer to ensure no overlap with any UI elements on the right
+                Spacer(modifier = Modifier.width(16.dp))
             }
 
             // Loading indicator
@@ -848,7 +842,7 @@ fun CoursesTab(modifier: Modifier = Modifier) {
         FloatingActionButton(
             onClick = { showAddCourseDialog = true },
             modifier = Modifier
-                .align(Alignment.BottomStart)
+                .align(Alignment.BottomEnd)
                 .padding(16.dp),
             containerColor = Color(0xFF333D79)
         ) {
@@ -856,24 +850,6 @@ fun CoursesTab(modifier: Modifier = Modifier) {
                 imageVector = Icons.Rounded.Add,
                 contentDescription = "Add Course",
                 tint = Color.White
-            )
-        }
-
-        // Import FAB
-        FloatingActionButton(
-            onClick = { filePickerLauncher.launch("*/*") },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 20.dp, bottom = 20.dp)
-                .size(56.dp),
-            containerColor = Color(0xFF333D79),
-            shape = CircleShape
-        ) {
-            Icon(
-                Icons.Rounded.Upload,
-                contentDescription = "Import Excel/CSV",
-                tint = Color.White,
-                modifier = Modifier.size(24.dp)
             )
         }
     }
