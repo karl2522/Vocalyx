@@ -60,6 +60,8 @@ fun VoiceRecordingInterface(
     var sessionComplete by remember { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
 
+    var isBatchMode by remember { mutableStateOf(false) }
+
     // Speech Engine Toggle
     var selectedEngine by remember { mutableStateOf(SpeechEngine.ANDROID_NATIVE) }
 
@@ -69,6 +71,8 @@ fun VoiceRecordingInterface(
     // Audio recording variables (for Google Cloud)
     var audioRecord by remember { mutableStateOf<AudioRecord?>(null) }
     var isRecording by remember { mutableStateOf(false) }
+
+    var batchState by remember { mutableStateOf(BatchProcessingState()) }
 
     // Android SpeechRecognizer (for native)
     var speechRecognizer by remember { mutableStateOf<SpeechRecognizer?>(null) }
@@ -102,6 +106,26 @@ fun VoiceRecordingInterface(
             } else {
                 null
             }
+        }
+    }
+
+    val batchRecordingManager = remember {
+        BatchRecordingManager(context, coroutineScope, excelViewModel).apply {
+            onStateChanged = { newState -> recordingState = newState }
+            onErrorMessage = { message -> errorMessage = message }
+            onBatchStateUpdated = { newBatchState -> batchState = newBatchState }
+        }
+    }
+
+    LaunchedEffect(isBatchMode) {
+        if (isBatchMode) {
+            Log.d("VoiceRecording", "🎯 Initializing batch mode for column: $columnName")
+            excelViewModel.startBatchVoiceMode(columnName)
+            batchState = excelViewModel.batchProcessingState
+        } else {
+            Log.d("VoiceRecording", "🎯 Stopping batch mode")
+            excelViewModel.stopBatchVoiceMode()
+            batchState = BatchProcessingState()
         }
     }
 
@@ -749,9 +773,19 @@ fun VoiceRecordingInterface(
 
     fun startRecording() {
         errorMessage = null
-        when (selectedEngine) {
-            SpeechEngine.ANDROID_NATIVE -> startAndroidSpeechRecognition()
-            SpeechEngine.GOOGLE_CLOUD -> startGoogleCloudRecording()
+
+        if (isBatchMode) {
+            Log.d("VoiceRecording", "🎯 Starting batch recording mode")
+            when (selectedEngine) {
+                SpeechEngine.ANDROID_NATIVE -> batchRecordingManager.startBatchAndroidSpeechRecognition()
+                SpeechEngine.GOOGLE_CLOUD -> batchRecordingManager.startBatchGoogleCloudRecording(studentData)
+            }
+        } else {
+            Log.d("VoiceRecording", "🎯 Starting single recording mode")
+            when (selectedEngine) {
+                SpeechEngine.ANDROID_NATIVE -> startAndroidSpeechRecognition()
+                SpeechEngine.GOOGLE_CLOUD -> startGoogleCloudRecording()
+            }
         }
     }
 
@@ -846,6 +880,7 @@ fun VoiceRecordingInterface(
 
             // Clean up recording state
             isRecording = false
+            batchRecordingManager.destroy()
         }
     }
 
@@ -890,12 +925,19 @@ fun VoiceRecordingInterface(
                             selectedEngine = selectedEngine,
                             onEngineSelected = { selectedEngine = it },
                             onStartRecording = { startRecording() },
+                            onStartBatchRecording = { startRecording() }, // 🆕 For now, same as regular recording
                             voiceEntries = voiceEntries.filter { it.confirmed },
                             columnName = columnName,
                             onDismiss = onDismiss,
                             onViewSummary = { recordingState = RecordingState.SESSION_SUMMARY },
                             errorMessage = errorMessage,
-                            onClearError = { errorMessage = null }
+                            onClearError = { errorMessage = null },
+                            isBatchMode = isBatchMode, // 🎯 Use the actual state variable
+                            onBatchModeToggled = { newMode ->
+                                isBatchMode = newMode // 🎯 Update the state when toggled
+                                println("🎯 Batch mode toggled to: $newMode") // Debug log
+                            },
+                            batchState = batchState // 🆕 Empty state for now
                         )
                     }
 
@@ -986,6 +1028,62 @@ fun VoiceRecordingInterface(
                             isSaving = isSaving,
                             onDismiss = onDismiss,
                             excelViewModel = excelViewModel
+                        )
+                    }
+
+                    RecordingState.BATCH_LISTENING -> {
+                        BatchListeningScreen(
+                            selectedEngine = selectedEngine,
+                            pulseScale = pulseScale,
+                            batchState = batchState,
+                            onStopRecording = {
+                                // Stop current recording and show validation
+                                speechRecognizer?.stopListening()
+                                audioRecord?.stop()
+                                audioRecord?.release()
+                                audioRecord = null
+                                isRecording = false
+                                recordingState = RecordingState.BATCH_VALIDATION
+                            }
+                        )
+                    }
+
+                    RecordingState.BATCH_VALIDATION -> {
+                        BatchValidationScreen(
+                            batchState = batchState,
+                            columnName = columnName,
+                            onEditEntry = { entryId, newName, newScore ->
+                                excelViewModel.editBatchEntry(entryId, newName, newScore)
+                                batchState = excelViewModel.batchProcessingState
+                            },
+                            onRemoveEntry = { entryId ->
+                                excelViewModel.removeBatchEntry(entryId)
+                                batchState = excelViewModel.batchProcessingState
+                            },
+                            onConfirmEntry = { entryId ->
+                                excelViewModel.confirmBatchEntry(entryId)
+                                batchState = excelViewModel.batchProcessingState
+                            },
+                            onSaveAll = {
+                                Log.d("VoiceRecording", "🎯 Saving all batch entries")
+                                excelViewModel.saveBatchEntries(
+                                    onProgress = { current, total ->
+                                        Log.d("VoiceRecording", "Batch save progress: $current/$total")
+                                    },
+                                    onComplete = { successCount, failureCount ->
+                                        Log.d("VoiceRecording", "Batch save complete: $successCount successes, $failureCount failures")
+                                        // Reset batch mode and close
+                                        excelViewModel.stopBatchVoiceMode()
+                                        isBatchMode = false
+                                        batchState = BatchProcessingState()
+                                        onSaveCompleted(successCount)
+                                        onDismiss()
+                                    }
+                                )
+                            },
+                            onCancel = {
+                                recordingState = RecordingState.READY_TO_RECORD
+                            }
                         )
                     }
                 }

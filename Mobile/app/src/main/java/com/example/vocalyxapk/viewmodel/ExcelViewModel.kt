@@ -11,6 +11,9 @@ import com.example.vocalyxapk.api.SpeechApiService
 import com.example.vocalyxapk.api.SpeechApiServiceFactory
 import com.example.vocalyxapk.api.WhisperApiClient
 import com.example.vocalyxapk.models.BatchEntry
+import com.example.vocalyxapk.models.BatchEntryStatus
+import com.example.vocalyxapk.models.BatchProcessingState
+import com.example.vocalyxapk.models.BatchVoiceEntry
 import com.example.vocalyxapk.models.ExcelFileItem
 import com.example.vocalyxapk.models.SheetContent
 import com.example.vocalyxapk.models.VoiceEntry
@@ -56,6 +59,12 @@ class ExcelViewModel : ViewModel() {
     private val _batchEntries = mutableListOf<BatchEntry>()
     val batchEntries: List<BatchEntry> get() = _batchEntries.toList()
 
+    private var _batchProcessingState = mutableStateOf(BatchProcessingState())
+    val batchProcessingState: BatchProcessingState by _batchProcessingState
+
+    private var _currentBatchColumn: String? = null
+    val currentBatchColumn: String? get() = _currentBatchColumn
+
     var isInBatchMode by mutableStateOf(false)
         private set
 
@@ -93,6 +102,232 @@ class ExcelViewModel : ViewModel() {
         } catch (e: Exception) {
             Log.e("ExcelViewModel", "Advanced speech recognition failed", e)
             Result.failure(e)
+        }
+    }
+
+    fun startBatchVoiceMode(columnName: String) {
+        Log.d("ExcelViewModel", "🎤 Starting batch voice mode for column: $columnName")
+        _currentBatchColumn = columnName
+        _batchProcessingState.value = BatchProcessingState(
+            isRecording = false,
+            entries = emptyList()
+        )
+    }
+
+    fun stopBatchVoiceMode() {
+        Log.d("ExcelViewModel", "🛑 Stopping batch voice mode")
+        _currentBatchColumn = null
+        _batchProcessingState.value = BatchProcessingState()
+    }
+
+    fun processBatchSpeechInput(fullSpeechText: String) {
+        Log.d("ExcelViewModel", "🎯 Processing batch speech: '$fullSpeechText'")
+
+        _batchProcessingState.value = _batchProcessingState.value.copy(isProcessing = true)
+
+        viewModelScope.launch {
+            try {
+                val newEntries = parseBatchVoiceInput(fullSpeechText)
+
+                val currentEntries = _batchProcessingState.value.entries.toMutableList()
+                currentEntries.addAll(newEntries)
+
+                // Update statistics
+                val validCount = currentEntries.count { it.isValidStudent }
+                val invalidCount = currentEntries.count { !it.isValidStudent }
+                val confirmedCount = currentEntries.count {
+                    it.status == BatchEntryStatus.CONFIRMED || it.status == BatchEntryStatus.VALIDATED
+                }
+
+                _batchProcessingState.value = _batchProcessingState.value.copy(
+                    isProcessing = false,
+                    entries = currentEntries,
+                    validEntries = validCount,
+                    invalidEntries = invalidCount,
+                    confirmedEntries = confirmedCount
+                )
+
+                Log.d("ExcelViewModel", "✅ Processed ${newEntries.size} new entries. Total: ${currentEntries.size}")
+
+            } catch (e: Exception) {
+                Log.e("ExcelViewModel", "❌ Error processing batch speech", e)
+                _batchProcessingState.value = _batchProcessingState.value.copy(isProcessing = false)
+            }
+        }
+    }
+
+    private fun parseBatchVoiceInput(fullText: String): List<BatchVoiceEntry> {
+        Log.d("ExcelViewModel", "🔍 Parsing batch voice input: '$fullText'")
+
+        // Enhanced splitting - handle multiple formats
+        val segments = fullText
+            .replace("\\band\\b".toRegex(RegexOption.IGNORE_CASE), ",")
+            .replace("\\bnext\\b".toRegex(RegexOption.IGNORE_CASE), ",")
+            .replace("\\bthen\\b".toRegex(RegexOption.IGNORE_CASE), ",")
+            .split(",", ";")
+            .map { it.trim() }
+            .filter { it.isNotBlank() && !it.equals("done", ignoreCase = true) }
+
+        Log.d("ExcelViewModel", "🔪 Split into ${segments.size} segments: $segments")
+
+        return segments.mapIndexedNotNull { index, segment ->
+            val parseResult = parseVoiceInput(segment)
+
+            if (!parseResult.studentName.isNullOrBlank() && !parseResult.value.isNullOrBlank()) {
+                Log.d("ExcelViewModel", "📝 Parsing segment $index: '$segment' -> '${parseResult.studentName}' = '${parseResult.value}'")
+
+                // Find matching students using existing fuzzy logic
+                val fuzzyMatches = findMatchingStudentsWithFuzzy(parseResult.studentName, 0.6)
+                val bestMatch = fuzzyMatches.firstOrNull()
+
+                val isValid = bestMatch != null && bestMatch.second >= 0.6
+                val confidence = bestMatch?.second ?: 0.0
+
+                Log.d("ExcelViewModel", "🎯 Student match: ${parseResult.studentName} -> ${bestMatch?.first} (confidence: ${(confidence * 100).toInt()}%)")
+
+                BatchVoiceEntry(
+                    recognizedText = segment,
+                    parsedName = parseResult.studentName,
+                    parsedScore = parseResult.value,
+                    matchedStudentName = bestMatch?.first,
+                    isValidStudent = isValid,
+                    confidence = confidence,
+                    status = if (isValid) BatchEntryStatus.VALIDATED else BatchEntryStatus.INVALID,
+                    originalIndex = index
+                )
+            } else {
+                Log.w("ExcelViewModel", "⚠️ Could not parse segment $index: '$segment'")
+                null
+            }
+        }
+    }
+
+    fun confirmBatchEntry(entryId: String) {
+        val currentEntries = _batchProcessingState.value.entries.toMutableList()
+        val entryIndex = currentEntries.indexOfFirst { it.id == entryId }
+
+        if (entryIndex >= 0) {
+            currentEntries[entryIndex] = currentEntries[entryIndex].copy(
+                status = BatchEntryStatus.CONFIRMED
+            )
+
+            updateBatchStatistics(currentEntries)
+            Log.d("ExcelViewModel", "✅ Confirmed entry: ${currentEntries[entryIndex].parsedName}")
+        }
+    }
+
+    fun editBatchEntry(entryId: String, newName: String, newScore: String) {
+        val currentEntries = _batchProcessingState.value.entries.toMutableList()
+        val entryIndex = currentEntries.indexOfFirst { it.id == entryId }
+
+        if (entryIndex >= 0) {
+            // Re-validate with new name
+            val fuzzyMatches = findMatchingStudentsWithFuzzy(newName, 0.6)
+            val bestMatch = fuzzyMatches.firstOrNull()
+            val isValid = bestMatch != null && bestMatch.second >= 0.6
+
+            currentEntries[entryIndex] = currentEntries[entryIndex].copy(
+                parsedName = newName,
+                parsedScore = newScore,
+                matchedStudentName = bestMatch?.first,
+                isValidStudent = isValid,
+                confidence = bestMatch?.second ?: 0.0,
+                status = BatchEntryStatus.EDITED
+            )
+
+            updateBatchStatistics(currentEntries)
+            Log.d("ExcelViewModel", "✏️ Edited entry: $newName = $newScore")
+        }
+    }
+
+    fun removeBatchEntry(entryId: String) {
+        val currentEntries = _batchProcessingState.value.entries.toMutableList()
+        currentEntries.removeIf { it.id == entryId }
+        updateBatchStatistics(currentEntries)
+        Log.d("ExcelViewModel", "🗑️ Removed batch entry")
+    }
+
+    private fun updateBatchStatistics(entries: List<BatchVoiceEntry>) {
+        val validCount = entries.count { it.isValidStudent }
+        val invalidCount = entries.count { !it.isValidStudent }
+        val confirmedCount = entries.count {
+            it.status == BatchEntryStatus.CONFIRMED ||
+                    it.status == BatchEntryStatus.VALIDATED ||
+                    it.status == BatchEntryStatus.EDITED
+        }
+
+        _batchProcessingState.value = _batchProcessingState.value.copy(
+            entries = entries,
+            validEntries = validCount,
+            invalidEntries = invalidCount,
+            confirmedEntries = confirmedCount
+        )
+    }
+
+    fun saveBatchEntries(onProgress: (Int, Int) -> Unit, onComplete: (Int, Int) -> Unit) {
+        val columnName = _currentBatchColumn
+        if (columnName == null) {
+            Log.e("ExcelViewModel", "❌ No column selected for batch save")
+            onComplete(0, 0)
+            return
+        }
+
+        val entriesToSave = _batchProcessingState.value.entries.filter {
+            it.status == BatchEntryStatus.CONFIRMED ||
+                    it.status == BatchEntryStatus.VALIDATED ||
+                    it.status == BatchEntryStatus.EDITED
+        }
+
+        if (entriesToSave.isEmpty()) {
+            Log.w("ExcelViewModel", "⚠️ No confirmed entries to save")
+            onComplete(0, 0)
+            return
+        }
+
+        Log.d("ExcelViewModel", "💾 Saving ${entriesToSave.size} batch entries to column: $columnName")
+
+        var successCount = 0
+        var failureCount = 0
+
+        viewModelScope.launch {
+            entriesToSave.forEachIndexed { index, entry ->
+                val studentName = entry.matchedStudentName ?: entry.parsedName
+
+                try {
+                    var updateSuccess = false
+
+                    updateStudentValue(
+                        studentName = studentName,
+                        columnName = columnName,
+                        value = entry.parsedScore
+                    ) { success ->
+                        updateSuccess = success
+                        if (success) {
+                            successCount++
+                            Log.d("ExcelViewModel", "✅ Batch save success: $studentName = ${entry.parsedScore}")
+                        } else {
+                            failureCount++
+                            Log.e("ExcelViewModel", "❌ Batch save failed: $studentName = ${entry.parsedScore}")
+                        }
+                    }
+
+                    // Small delay between saves
+                    delay(200)
+
+                } catch (e: Exception) {
+                    failureCount++
+                    Log.e("ExcelViewModel", "❌ Exception saving batch entry: $studentName", e)
+                }
+
+                // Report progress
+                onProgress(index + 1, entriesToSave.size)
+            }
+
+            Log.d("ExcelViewModel", "🎯 Batch save complete: $successCount successes, $failureCount failures")
+            onComplete(successCount, failureCount)
+
+            // Reset batch mode after saving
+            stopBatchVoiceMode()
         }
     }
 
@@ -786,11 +1021,6 @@ class ExcelViewModel : ViewModel() {
             value = parseResult.value,
             suggestedName = suggestedName
         ))
-    }
-
-
-    fun removeBatchEntry(id: String) {
-        _batchEntries.removeIf { it.id == id }
     }
 
     fun updateBatchEntry(id: String, studentName: String, value: String) {
