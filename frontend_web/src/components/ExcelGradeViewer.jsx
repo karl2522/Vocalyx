@@ -39,6 +39,9 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
   const [specificRowIndex, setSpecificRowIndex] = useState('');
   const [insertAtIndex, setInsertAtIndex] = useState('');
   const [duplicateRowIndex, setDuplicateRowIndex] = useState('');
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
 
   
   // NEW STATE FOR COLUMN MANAGEMENT
@@ -863,12 +866,24 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
     }
     
     // Create new column name
-    const categoryName = categoryId === 'quiz' ? 'Quiz' : 
-                        categoryId === 'laboratory' ? 'Lab' :
-                        categoryId === 'exams' ? 'Exam' : 'Column';
-    
+    let categoryName;
+
+    if (categoryId === 'quiz') {
+      categoryName = 'Quiz';
+    } else if (categoryId === 'laboratory') {
+      categoryName = 'Lab';
+    } else if (categoryId === 'exams') {
+      categoryName = 'Exam';
+    } else {
+      // 🔧 USE ACTUAL CATEGORY NAME from _categoryNames
+      categoryName = categoryMapping._categoryNames?.[categoryId] || 
+                    categoryId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    }
+
     const existingCount = categoryColumns.length;
     const newColumnName = `${categoryName} ${existingCount + 1}`;
+
+    console.log(`🔧 Creating column for category "${categoryId}" with name "${categoryName}" -> "${newColumnName}"`);
     
     // Update headers array
     const newHeaders = [...headers];
@@ -955,6 +970,106 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
     setIsAddingColumn(false);
   }
 }, [categoryMapping, fileData, saveCategoryMappings, isAddingColumn]);
+
+
+  const addNewCategory = useCallback(async () => {
+  if (!categoryMapping || !fileData || isAddingCategory || !newCategoryName.trim()) return;
+  
+  setIsAddingCategory(true);
+  
+  try {
+    const categoryName = newCategoryName.trim();
+    const categoryId = categoryName.toLowerCase()
+      .replace(/[^a-z0-9\s]/g, '')
+      .replace(/\s+/g, '_')
+      .substring(0, 20);
+    
+    if (categoryMapping[categoryId]) {
+      alert(`A category with similar name already exists!`);
+      setIsAddingCategory(false);
+      return;
+    }
+    
+    console.log(`Creating new category: "${categoryName}" with ID: "${categoryId}"`);
+    
+    // 🔧 CREATE A PLACEHOLDER COLUMN for the new category
+    const headers = [...fileData.all_sheets[fileData.active_sheet].headers];
+    const placeholderColumnName = `${categoryName} 1`; // e.g., "Participation 1"
+    
+    // Add the placeholder column to headers
+    headers.push(placeholderColumnName);
+    
+    // Add the placeholder column to all existing data rows
+    const updatedData = fileData.all_sheets[fileData.active_sheet].data.map(row => ({
+      ...row,
+      [placeholderColumnName]: null // Empty value
+    }));
+    
+    // Create updated category mapping with new category containing the placeholder column
+    const updatedCategoryMapping = { ...categoryMapping };
+    const newColumnIndex = headers.length - 1; // Index of the new column
+    
+    // Add the new category with the placeholder column
+    updatedCategoryMapping[categoryId] = [newColumnIndex];
+    
+    if (!updatedCategoryMapping._categoryNames) {
+      updatedCategoryMapping._categoryNames = {};
+    }
+    updatedCategoryMapping._categoryNames[categoryId] = categoryName;
+    
+    console.log("Updated category mapping:", updatedCategoryMapping);
+    console.log("New headers:", headers);
+    
+    // 🔧 UPDATE FILEDATA STRUCTURE FIRST
+    fileData.all_sheets[fileData.active_sheet].headers = headers;
+    fileData.all_sheets[fileData.active_sheet].data = updatedData;
+    
+    // Save category mappings to backend with new headers
+    const saveSuccess = await saveCategoryMappings(updatedCategoryMapping, headers);
+    if (!saveSuccess) {
+      throw new Error('Failed to save new category to backend');
+    }
+    
+    // 🔧 SAVE THE UPDATED DATA TO BACKEND TOO
+    if (onSave) {
+      const updatedFileData = {
+        ...fileData,
+        all_sheets: {
+          ...fileData.all_sheets,
+          [fileData.active_sheet]: {
+            headers: headers,
+            data: updatedData
+          }
+        }
+      };
+      
+      await onSave(updatedFileData);
+      console.log("✅ Data saved with new category column");
+    }
+    
+    // Update local state
+    setCategoryMapping(updatedCategoryMapping);
+    
+    // Destroy and recreate the table to reflect changes
+    if (hotInstanceRef.current) {
+      hotInstanceRef.current.destroy();
+      hotInstanceRef.current = null;
+    }
+    
+    console.log(`✅ Successfully created category "${categoryName}" with placeholder column "${placeholderColumnName}"`);
+    
+    setNewCategoryName('');
+    setShowCategoryManager(false);
+    
+    alert(`Category "${categoryName}" created successfully!\n\nA placeholder column "${placeholderColumnName}" was added. You can rename it or add more columns using "Manage Columns".`);
+    
+  } catch (error) {
+    console.error('Error adding new category:', error);
+    alert('Failed to create new category. Please try again.');
+  } finally {
+    setIsAddingCategory(false);
+  }
+}, [categoryMapping, fileData, isAddingCategory, newCategoryName, saveCategoryMappings, onSave]);
 
   // Enhanced save handler with better feedback
   const handleSave = useCallback(async () => {
@@ -1188,8 +1303,21 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
       console.log("Custom categories:", customCategories);
       
       // If we found stored mappings, use them and return early
-      const result = { ...categories, ...customCategories };
-      console.log("Final result:", result);
+      const result = { ...categories };
+
+      // 🔧 ADD CUSTOM CATEGORIES PROPERLY
+      Object.keys(customCategories).forEach(catId => {
+        result[catId] = customCategories[catId].columns;
+      });
+
+      // 🔧 ADD _categoryNames PROPERLY
+      result._categoryNames = {};
+      Object.keys(customCategories).forEach(catId => {
+        result._categoryNames[catId] = customCategories[catId].name;
+      });
+
+      console.log("🔧 FIXED Final result:", result);
+      console.log("🔧 FIXED _categoryNames:", result._categoryNames);
       return result;
     }
     
@@ -1349,9 +1477,14 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
     const sheetData = fileData.all_sheets[activeSheet];
     const headers = sheetData.headers || [];
 
-    console.log("=== FIXED NESTED HEADERS GENERATION ===");
+    console.log("=== DEBUG NESTED HEADERS FOR ATTENDANCE ===");
     console.log("Headers:", headers);
     console.log("Category mapping:", categoryMapping);
+    
+    // 🔍 SPECIFIC DEBUG FOR ATTENDANCE
+    console.log("Attendance category data:", categoryMapping.attendance);
+    console.log("Attendance category name:", categoryMapping._categoryNames?.attendance);
+    console.log("All _categoryNames:", categoryMapping._categoryNames);
 
     // Create the column headers (second row)
     const columnHeaders = [...headers];
@@ -1372,16 +1505,25 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
                         categoryId === 'exams' ? 'Exams' :
                             categoryId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()));
 
+        console.log(`🔍 Processing category: ${categoryId} -> ${categoryName}`);
+        console.log(`🔍 Category columns:`, categoryMapping[categoryId]);
+
         categoryMapping[categoryId].forEach(columnIndex => {
           columnToCategory[columnIndex] = {
             id: categoryId,
             name: categoryName
           };
+          console.log(`🔍 Mapped column ${columnIndex} (${headers[columnIndex]}) to ${categoryName}`);
         });
       }
     });
 
     console.log("Column to category mapping:", columnToCategory);
+    
+    // Check specifically for the last column (should be Attendance 1)
+    const lastColumnIndex = headers.length - 1;
+    console.log(`🔍 Last column index ${lastColumnIndex}: ${headers[lastColumnIndex]}`);
+    console.log(`🔍 Last column category:`, columnToCategory[lastColumnIndex]);
 
     // Build category row by processing columns in order
     let processedColumns = 0;
@@ -1426,9 +1568,6 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
         console.log(`[${idx}] Empty: "${item}"`);
       }
     });
-
-    console.log("Category row length:", categoryRow.length);
-    console.log("Column headers length:", columnHeaders.length);
 
     return [categoryRow, columnHeaders];
   };
@@ -2093,16 +2232,58 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
   const CategoryColumnManager = () => {
   if (!showColumnManager || !categoryMapping) return null;
   
-  const categories = [
-    { id: 'quiz', name: 'Quiz', icon: '📝', color: 'bg-blue-50 border-blue-200' },
-    { id: 'laboratory', name: 'Laboratory Activities', icon: '🧪', color: 'bg-green-50 border-green-200' },
-    { id: 'exams', name: 'Exams', icon: '📋', color: 'bg-purple-50 border-purple-200' }
-  ];
+  // 🔧 DYNAMIC CATEGORIES instead of hardcoded
+  const categories = [];
+  
+  // Build categories from actual categoryMapping
+  Object.keys(categoryMapping).forEach(categoryId => {
+    if (categoryId !== '_categoryNames' && Array.isArray(categoryMapping[categoryId])) {
+      const categoryName = categoryMapping._categoryNames?.[categoryId] ||
+        (categoryId === 'student' ? 'Student Info' :
+         categoryId === 'quiz' ? 'Quiz' :
+         categoryId === 'laboratory' ? 'Laboratory Activities' :
+         categoryId === 'exams' ? 'Exams' :
+         categoryId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()));
+      
+      // Skip student category in column manager
+      if (categoryId === 'student') return;
+      
+      // Assign icons and colors
+      let icon = '📁';
+      let color = 'bg-gray-50 border-gray-200';
+      
+      if (categoryId === 'quiz') {
+        icon = '📝';
+        color = 'bg-blue-50 border-blue-200';
+      } else if (categoryId === 'laboratory') {
+        icon = '🧪';
+        color = 'bg-green-50 border-green-200';
+      } else if (categoryId === 'exams') {
+        icon = '📋';
+        color = 'bg-purple-50 border-purple-200';
+      } else if (categoryId === 'attendance') {
+        icon = '📊';
+        color = 'bg-orange-50 border-orange-200';
+      } else if (categoryId === 'other') {
+        icon = '📂';
+        color = 'bg-yellow-50 border-yellow-200';
+      }
+      
+      categories.push({
+        id: categoryId,
+        name: categoryName,
+        icon: icon,
+        color: color
+      });
+    }
+  });
+  
+  console.log("🔍 Dynamic categories for column manager:", categories);
   
   return (
     <div 
       className="fixed top-20 right-4 bg-white rounded-lg shadow-2xl border border-gray-200 p-4 min-w-96 max-h-[80vh] overflow-y-auto"
-      style={{ zIndex: 9999 }} // 🔧 FORCE HIGH Z-INDEX
+      style={{ zIndex: 9999 }}
     >
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold text-gray-900 flex items-center space-x-2">
@@ -2140,7 +2321,7 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
                 </div>
                 <button
                   onClick={() => {
-                    console.log(`Adding column to ${category.id} category`); // 🔍 DEBUG
+                    console.log(`Adding column to ${category.id} category`);
                     addColumnToCategory(category.id);
                   }}
                   disabled={isAddingColumn}
@@ -2161,7 +2342,7 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
                   <div className="flex space-x-2">
                     <button
                       onClick={() => {
-                        console.log(`Deleting last column from ${category.id} category`); // 🔍 DEBUG
+                        console.log(`Deleting last column from ${category.id} category`);
                         deleteColumnFromCategory(category.id, 'last');
                       }}
                       disabled={isDeletingColumn || columnCount === 0}
@@ -2174,7 +2355,7 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
                     
                     <button
                       onClick={() => {
-                        console.log(`Clearing empty columns from ${category.id} category`); // 🔍 DEBUG
+                        console.log(`Clearing empty columns from ${category.id} category`);
                         deleteEmptyColumnsFromCategory(category.id);
                       }}
                       disabled={isDeletingColumn || columnCount === 0}
@@ -2302,6 +2483,17 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
             >
               <span>📊</span>
               <span className="text-sm">Manage Columns</span>
+            </button>
+
+            <button
+              onClick={() => setShowCategoryManager(true)}
+              className="inline-flex items-center px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-colors duration-200"
+              title="Manage Categories"
+            >
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14-7l2 2-2 2m0 11l2-2-2-2M9 7l-2 2 2 2m0 11l-2-2 2-2" />
+              </svg>
+              Manage Categories
             </button>
 
             {/* Filters toggle */}
@@ -2457,6 +2649,121 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
           )}
         </div>
       </div>
+
+      {/* Category Manager Modal */}
+        {showCategoryManager && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Category Manager
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowCategoryManager(false);
+                    setNewCategoryName('');
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Current Categories List */}
+              <div className="mb-6">
+                <h4 className="text-sm font-medium text-gray-700 mb-3">Current Categories:</h4>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {categoryMapping && Object.keys(categoryMapping).filter(key => key !== '_categoryNames').map(categoryId => {
+                    const categoryName = categoryMapping._categoryNames?.[categoryId] ||
+                      (categoryId === 'student' ? 'Student Info' :
+                      categoryId === 'quiz' ? 'Quiz' :
+                      categoryId === 'laboratory' ? 'Laboratory Activities' :
+                      categoryId === 'exams' ? 'Exams' :
+                      categoryId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()));
+                    
+                    const columnCount = categoryMapping[categoryId]?.length || 0;
+                    
+                    return (
+                      <div key={categoryId} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div>
+                          <span className="font-medium text-gray-900">{categoryName}</span>
+                          <span className="text-sm text-gray-500 ml-2">({columnCount} columns)</span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <span className={`px-2 py-1 text-xs rounded-full ${
+                            columnCount === 0 ? 'bg-gray-200 text-gray-600' :
+                            columnCount < 3 ? 'bg-yellow-200 text-yellow-800' :
+                            'bg-green-200 text-green-800'
+                          }`}>
+                            {columnCount === 0 ? 'Empty' : `${columnCount} cols`}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Add New Category Form */}
+              <div className="border-t pt-4">
+                <h4 className="text-sm font-medium text-gray-700 mb-3">Add New Category:</h4>
+                
+                <div className="space-y-4">
+                  <div>
+                    <label htmlFor="categoryName" className="block text-sm font-medium text-gray-700 mb-1">
+                      Category Name
+                    </label>
+                    <input
+                      type="text"
+                      id="categoryName"
+                      value={newCategoryName}
+                      onChange={(e) => setNewCategoryName(e.target.value)}
+                      placeholder="e.g., Projects, Attendance, Participation"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      disabled={isAddingCategory}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      The category will be created empty. Use "Manage Columns" to add columns to it.
+                    </p>
+                  </div>
+
+                  <div className="flex space-x-3">
+                    <button
+                      onClick={() => {
+                        setShowCategoryManager(false);
+                        setNewCategoryName('');
+                      }}
+                      className="flex-1 px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                      disabled={isAddingCategory}
+                    >
+                      Cancel
+                    </button>
+                    
+                    <button
+                      onClick={addNewCategory}
+                      disabled={isAddingCategory || !newCategoryName.trim()}
+                      className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isAddingCategory ? (
+                        <span className="flex items-center justify-center">
+                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Adding...
+                        </span>
+                      ) : (
+                        'Add Category'
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
     </div>
   );
 };
