@@ -39,7 +39,7 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
   const [specificRowIndex, setSpecificRowIndex] = useState('');
   const [insertAtIndex, setInsertAtIndex] = useState('');
   const [duplicateRowIndex, setDuplicateRowIndex] = useState('');
-
+  const [deleteConfirmData, setDeleteConfirmData] = useState(null);
   
   // NEW STATE FOR COLUMN MANAGEMENT
   const [showColumnManager, setShowColumnManager] = useState(false);
@@ -427,6 +427,36 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
   }
 }, [fileData, isDeletingRow, onSave]);
 
+   const getStudentNameFromRow = useCallback((row) => {
+  if (!categoryMapping || !fileData) return 'Unknown Student';
+  
+  const headers = fileData.all_sheets[fileData.active_sheet].headers;
+  const studentColumns = categoryMapping.student || [];
+  
+  // Try to find name in student columns
+  for (const colIndex of studentColumns) {
+    const header = headers[colIndex];
+    const value = row[header];
+    if (value && typeof value === 'string' && value.trim()) {
+      // If it looks like a name (contains letters)
+      if (/[a-zA-Z]/.test(value)) {
+        return value.trim();
+      }
+    }
+  }
+  
+  // Fallback: return first non-empty student column value
+  for (const colIndex of studentColumns) {
+    const header = headers[colIndex];
+    const value = row[header];
+    if (value && value.toString().trim()) {
+      return value.toString().trim();
+    }
+  }
+  
+  return 'Unnamed Student';
+}, [categoryMapping, fileData]);
+
   const deleteColumnFromCategory = useCallback(async (categoryId, columnIndex = 'last') => {
   if (!hotInstanceRef.current || !categoryMapping || !fileData || isDeletingColumn) return;
   
@@ -605,7 +635,7 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
   const deleteSpecificRow = useCallback(async () => {
   if (!specificRowIndex || isDeletingRow) return;
   
-  const rowIndex = parseInt(specificRowIndex) - 1; // Convert to 0-based index
+  const rowIndex = parseInt(specificRowIndex) - 1;
   const currentData = fileData.all_sheets[fileData.active_sheet].data;
   
   if (rowIndex < 0 || rowIndex >= currentData.length) {
@@ -614,46 +644,22 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
   }
   
   const studentName = getStudentNameFromRow(currentData[rowIndex]);
-  const confirmDelete = window.confirm(
-    `Are you sure you want to delete Row ${parseInt(specificRowIndex)}?\n\nStudent: ${studentName}\n\nThis action cannot be undone.`
-  );
   
-  if (confirmDelete) {
-    await deleteRowFromSpreadsheet(rowIndex);
-    setSpecificRowIndex('');
-    alert(`Row ${parseInt(specificRowIndex)} (${studentName}) has been deleted successfully!`);
-  }
-}, [specificRowIndex, fileData, isDeletingRow, deleteRowFromSpreadsheet]);
-
-  const getStudentNameFromRow = useCallback((row) => {
-  if (!categoryMapping || !fileData) return 'Unknown Student';
-  
-  const headers = fileData.all_sheets[fileData.active_sheet].headers;
-  const studentColumns = categoryMapping.student || [];
-  
-  // Try to find name in student columns
-  for (const colIndex of studentColumns) {
-    const header = headers[colIndex];
-    const value = row[header];
-    if (value && typeof value === 'string' && value.trim()) {
-      // If it looks like a name (contains letters)
-      if (/[a-zA-Z]/.test(value)) {
-        return value.trim();
-      }
+  // 🔧 SHOW CUSTOM MODAL instead of window.confirm
+  setDeleteConfirmData({
+    type: 'single',
+    title: 'Delete Student Row',
+    message: `Are you sure you want to delete Row ${parseInt(specificRowIndex)}?`,
+    studentInfo: studentName,
+    onConfirm: async () => {
+      await deleteRowFromSpreadsheet(rowIndex);
+      setSpecificRowIndex('');
+      setShowDeleteConfirm(false);
+      setDeleteConfirmData(null);
     }
-  }
-  
-  // Fallback: return first non-empty student column value
-  for (const colIndex of studentColumns) {
-    const header = headers[colIndex];
-    const value = row[header];
-    if (value && value.toString().trim()) {
-      return value.toString().trim();
-    }
-  }
-  
-  return 'Unnamed Student';
-}, [categoryMapping, fileData]);
+  });
+  setShowDeleteConfirm(true);
+}, [specificRowIndex, fileData, isDeletingRow, deleteRowFromSpreadsheet, getStudentNameFromRow]);
 
   const deleteSelectedRows = useCallback(async () => {
   if (selectedRows.size === 0 || isDeletingRow) return;
@@ -661,36 +667,35 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
   const currentData = fileData.all_sheets[fileData.active_sheet].data;
   const rowsToDelete = Array.from(selectedRows).sort((a, b) => a - b);
   
-  // Show confirmation with student names
   const studentNames = rowsToDelete.map(rowIndex => {
     const studentName = getStudentNameFromRow(currentData[rowIndex]);
     return `Row ${rowIndex + 1}: ${studentName}`;
-  }).join('\n');
+  });
   
-  const confirmDelete = window.confirm(
-    `Are you sure you want to delete ${rowsToDelete.length} selected rows?\n\n${studentNames}\n\nThis action cannot be undone.`
-  );
-  
-  if (!confirmDelete) return;
-  
-  setIsDeletingRow(true);
-  
-  try {
-    // Delete rows from highest index to lowest to avoid index shifting
-    for (let i = rowsToDelete.length - 1; i >= 0; i--) {
-      const rowIndex = rowsToDelete[i];
-      await deleteRowFromSpreadsheet(rowIndex);
+  setDeleteConfirmData({
+    type: 'multiple',
+    title: 'Delete Multiple Rows',
+    message: `Are you sure you want to delete ${rowsToDelete.length} selected rows?`,
+    studentList: studentNames,
+    onConfirm: async () => {
+      setIsDeletingRow(true);
+      try {
+        for (let i = rowsToDelete.length - 1; i >= 0; i--) {
+          const rowIndex = rowsToDelete[i];
+          await deleteRowFromSpreadsheet(rowIndex);
+        }
+        setSelectedRows(new Set());
+        setShowDeleteConfirm(false);
+        setDeleteConfirmData(null);
+      } catch (error) {
+        console.error('Error deleting selected rows:', error);
+        alert('Failed to delete some rows. Please try again.');
+      } finally {
+        setIsDeletingRow(false);
+      }
     }
-    
-    setSelectedRows(new Set());
-    alert(`Successfully deleted ${rowsToDelete.length} student rows!`);
-    
-  } catch (error) {
-    console.error('Error deleting selected rows:', error);
-    alert('Failed to delete some rows. Please try again.');
-  } finally {
-    setIsDeletingRow(false);
-  }
+  });
+  setShowDeleteConfirm(true);
 }, [selectedRows, fileData, isDeletingRow, deleteRowFromSpreadsheet, getStudentNameFromRow]);
 
   const duplicateRow = useCallback(async () => {
@@ -2264,26 +2269,6 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
 
           {/* Enhanced toolbar */}
           <div className="flex items-center space-x-2">
-            {/* Search bar */}
-            <div className="relative">
-              <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search in spreadsheet... (Ctrl+F)"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#333D79] focus:border-transparent w-64"
-              />
-              {searchTerm && (
-                <button
-                  onClick={() => setSearchTerm('')}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-
             {/* NEW: Manage Rows button */}
             <button
               onClick={() => setShowRowManager(!showRowManager)}
@@ -2302,16 +2287,6 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
             >
               <span>📊</span>
               <span className="text-sm">Manage Columns</span>
-            </button>
-
-            {/* Filters toggle */}
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className={`px-3 py-2 ${showFilters ? 'bg-[#333D79] text-white' : 'text-gray-700 border border-gray-300'} rounded-lg hover:bg-[#2a3168] hover:text-white flex items-center space-x-2 transition-all`}
-              title="Toggle filters (Ctrl+F)"
-            >
-              <Filter size={16} />
-              <span className="text-sm">Filters</span>
             </button>
 
             {/* Status messages */}
@@ -2457,6 +2432,101 @@ const ExcelGradeViewer = ({ fileData, classData, isFullScreen, setIsFullScreen, 
           )}
         </div>
       </div>
+
+      {showDeleteConfirm && deleteConfirmData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-2xl p-6 w-full max-w-md mx-4 transform transition-all">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                  <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">{deleteConfirmData.title}</h3>
+                  <p className="text-sm text-gray-500">This action cannot be undone</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setDeleteConfirmData(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="mb-6">
+              <p className="text-gray-700 mb-4">{deleteConfirmData.message}</p>
+              
+              {deleteConfirmData.type === 'single' && deleteConfirmData.studentInfo && (
+                <div className="bg-gray-50 rounded-lg p-3 border-l-4 border-red-400">
+                  <div className="flex items-center space-x-2">
+                    <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    <span className="font-medium text-gray-900">Student: {deleteConfirmData.studentInfo}</span>
+                  </div>
+                </div>
+              )}
+
+              {deleteConfirmData.type === 'multiple' && deleteConfirmData.studentList && (
+                <div className="bg-gray-50 rounded-lg p-3 border-l-4 border-red-400 max-h-48 overflow-y-auto">
+                  <div className="space-y-2">
+                    {deleteConfirmData.studentList.map((student, index) => (
+                      <div key={index} className="flex items-center space-x-2">
+                        <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                        <span className="text-sm text-gray-900">{student}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex space-x-3">
+              <button
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setDeleteConfirmData(null);
+                }}
+                className="flex-1 px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
+                disabled={isDeletingRow}
+              >
+                Cancel
+              </button>
+              
+              <button
+                onClick={deleteConfirmData.onConfirm}
+                disabled={isDeletingRow}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {isDeletingRow ? (
+                  <span className="flex items-center justify-center">
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Deleting...
+                  </span>
+                ) : (
+                  'Delete'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
