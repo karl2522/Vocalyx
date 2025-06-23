@@ -325,6 +325,15 @@ fun MainRecordingScreen(
                 }
             }
         }
+        if (isBatchMode) {
+            Text(
+                text = "🎤 Ready for next entry...",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF4CAF50),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(8.dp)
+            )
+        }
     }
 }
 

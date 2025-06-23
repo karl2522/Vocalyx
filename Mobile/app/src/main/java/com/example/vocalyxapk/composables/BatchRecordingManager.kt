@@ -18,6 +18,7 @@ import com.example.vocalyxapk.models.*
 import com.example.vocalyxapk.viewmodel.ExcelViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -40,6 +41,9 @@ class BatchRecordingManager(
     private var audioRecord: AudioRecord? = null
     private var isRecording = false
 
+    private var timeoutJob: Job? = null
+    private var isRestarting = false
+
     // WhisperAPI
     private val whisperClient = WhisperApiClient(context)
 
@@ -51,101 +55,161 @@ class BatchRecordingManager(
     }
 
     fun startBatchAndroidSpeechRecognition() {
-        try {
-            onStateChanged?.invoke(RecordingState.BATCH_LISTENING)
-            onErrorMessage?.invoke(null)
+        // 🔧 PREVENT MULTIPLE CONCURRENT STARTS
+        if (isRestarting) {
+            Log.w("BatchRecordingManager", "Already restarting, skipping...")
+            return
+        }
 
-            // 🎯 Clean destroy and recreate
-            speechRecognizer?.destroy()
-            Thread.sleep(500)
-            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context)
+        isRestarting = true
+        onStateChanged?.invoke(RecordingState.BATCH_LISTENING)
+        onErrorMessage?.invoke(null)
 
-            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
-                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
-                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L)
-                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
-                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 3000L)
-                putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
-            }
+        // 🔧 CANCEL ANY EXISTING TIMEOUT
+        timeoutJob?.cancel()
+        timeoutJob = null
 
-            val recognitionListener = object : RecognitionListener {
-                override fun onReadyForSpeech(params: Bundle?) {
-                    Log.d("BatchRecordingManager", "Ready for speech")
+        // 🔧 DO CLEANUP IN BACKGROUND COROUTINE - DON'T BLOCK MAIN THREAD!
+        coroutineScope.launch(Dispatchers.IO) {
+            try {
+                // Cleanup old recognizer
+                try {
+                    speechRecognizer?.stopListening()
+                    delay(200)
+                    speechRecognizer?.destroy()
+                    speechRecognizer = null
+                } catch (e: Exception) {
+                    Log.w("BatchRecordingManager", "Error destroying previous recognizer: ${e.message}")
                 }
 
-                override fun onBeginningOfSpeech() {
-                    Log.d("BatchRecordingManager", "Beginning of speech")
-                }
+                // Wait for cleanup to complete
+                delay(1000) // Use delay() instead of Thread.sleep()
 
-                override fun onRmsChanged(rmsdB: Float) {}
-                override fun onBufferReceived(buffer: ByteArray?) {}
+                // Switch back to main thread for UI operations
+                withContext(Dispatchers.Main) {
+                    try {
+                        // Create new recognizer on main thread
+                        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context)
 
-                override fun onEndOfSpeech() {
-                    Log.d("BatchRecordingManager", "End of speech")
-                    onStateChanged?.invoke(RecordingState.PROCESSING)
-                }
+                        if (speechRecognizer == null) {
+                            Log.e("BatchRecordingManager", "Failed to create SpeechRecognizer")
+                            onErrorMessage?.invoke("Speech recognition unavailable")
+                            isRestarting = false
+                            return@withContext
+                        }
 
-                override fun onError(error: Int) {
-                    val errorMsg = when (error) {
-                        SpeechRecognizer.ERROR_NO_MATCH -> "No speech detected"
-                        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Speech timeout"
-                        SpeechRecognizer.ERROR_CLIENT -> "Recognition busy"
-                        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Recognition busy"
-                        else -> "Recognition error"
-                    }
-                    Log.e("BatchRecordingManager", "STT Error: $errorMsg (code: $error)")
+                        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+                            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+                            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L)
+                            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
+                            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 3000L)
+                            putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
+                        }
 
-                    coroutineScope.launch {
-                        onErrorMessage?.invoke("Error - Try speaking again")
+                        val recognitionListener = object : RecognitionListener {
+                            override fun onReadyForSpeech(params: Bundle?) {
+                                Log.d("BatchRecordingManager", "Ready for speech")
+                                isRestarting = false // 🔧 RESET FLAG HERE
+                            }
+
+                            override fun onBeginningOfSpeech() {
+                                Log.d("BatchRecordingManager", "Beginning of speech")
+                                timeoutJob?.cancel()
+                            }
+
+                            override fun onRmsChanged(rmsdB: Float) {}
+                            override fun onBufferReceived(buffer: ByteArray?) {}
+
+                            override fun onEndOfSpeech() {
+                                Log.d("BatchRecordingManager", "End of speech")
+                                onStateChanged?.invoke(RecordingState.PROCESSING)
+                            }
+
+                            override fun onError(error: Int) {
+                                val errorMsg = when (error) {
+                                    SpeechRecognizer.ERROR_NO_MATCH -> "No speech detected"
+                                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Speech timeout"
+                                    SpeechRecognizer.ERROR_CLIENT -> "Recognition busy"
+                                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Recognition busy"
+                                    else -> "Recognition error"
+                                }
+                                Log.e("BatchRecordingManager", "STT Error: $errorMsg (code: $error)")
+
+                                isRestarting = false
+                                timeoutJob?.cancel()
+
+                                coroutineScope.launch {
+                                    delay(2000)
+                                    onErrorMessage?.invoke("Error - Try speaking again")
+                                    onStateChanged?.invoke(RecordingState.BATCH_LISTENING)
+                                }
+                            }
+
+                            override fun onResults(results: Bundle?) {
+                                val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+
+                                timeoutJob?.cancel()
+                                isRestarting = false
+
+                                when {
+                                    !matches.isNullOrEmpty() -> {
+                                        val transcription = matches[0]
+                                        Log.d("BatchRecordingManager", "STT Result: $transcription")
+
+                                        coroutineScope.launch {
+                                            processBatchSpeech(transcription)
+                                        }
+                                    }
+                                    else -> {
+                                        coroutineScope.launch {
+                                            onErrorMessage?.invoke("No speech detected")
+                                            onStateChanged?.invoke(RecordingState.BATCH_LISTENING)
+                                        }
+                                    }
+                                }
+                            }
+
+                            override fun onPartialResults(partialResults: Bundle?) {}
+                            override fun onEvent(eventType: Int, params: Bundle?) {}
+                        }
+
+                        speechRecognizer?.setRecognitionListener(recognitionListener)
+                        speechRecognizer?.startListening(intent)
+
+                        // 🔧 TIMEOUT JOB
+                        timeoutJob = coroutineScope.launch {
+                            delay(6000)
+                            if (!isRestarting) {
+                                Log.d("BatchRecordingManager", "Recording timeout")
+                                try {
+                                    speechRecognizer?.stopListening()
+                                } catch (e: Exception) {
+                                    Log.w("BatchRecordingManager", "Error stopping on timeout: ${e.message}")
+                                }
+                            }
+                        }
+
+                    } catch (e: Exception) {
+                        Log.e("BatchRecordingManager", "Setup Error", e)
+                        isRestarting = false
+                        timeoutJob?.cancel()
+                        onErrorMessage?.invoke("Setup failed: ${e.message}")
                         onStateChanged?.invoke(RecordingState.BATCH_LISTENING)
                     }
                 }
 
-                override fun onResults(results: Bundle?) {
-                    val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    when {
-                        !matches.isNullOrEmpty() -> {
-                            val transcription = matches[0]
-                            Log.d("BatchRecordingManager", "STT Result: $transcription")
-
-                            coroutineScope.launch {
-                                processBatchSpeech(transcription)
-                            }
-                        }
-                        else -> {
-                            coroutineScope.launch {
-                                onErrorMessage?.invoke("No speech detected")
-                                onStateChanged?.invoke(RecordingState.BATCH_LISTENING)
-                            }
-                        }
-                    }
+            } catch (e: Exception) {
+                Log.e("BatchRecordingManager", "Background setup error", e)
+                // Switch back to main thread to update UI
+                withContext(Dispatchers.Main) {
+                    isRestarting = false
+                    timeoutJob?.cancel()
+                    onErrorMessage?.invoke("Setup failed: ${e.message}")
+                    onStateChanged?.invoke(RecordingState.BATCH_LISTENING)
                 }
-
-                override fun onPartialResults(partialResults: Bundle?) {}
-                override fun onEvent(eventType: Int, params: Bundle?) {}
-            }
-
-            speechRecognizer?.setRecognitionListener(recognitionListener)
-            speechRecognizer?.startListening(intent)
-
-            // Simple timeout
-            coroutineScope.launch {
-                delay(6000) // 6 seconds
-                if (speechRecognizer != null) {
-                    Log.d("BatchRecordingManager", "Recording timeout")
-                    speechRecognizer?.stopListening()
-                    onErrorMessage?.invoke("Timeout - try again")
-                }
-            }
-
-        } catch (e: Exception) {
-            Log.e("BatchRecordingManager", "Setup Error", e)
-            coroutineScope.launch {
-                onErrorMessage?.invoke("Setup failed: ${e.message}")
-                onStateChanged?.invoke(RecordingState.BATCH_LISTENING)
             }
         }
     }
@@ -287,24 +351,17 @@ class BatchRecordingManager(
                 // Update batch state
                 onBatchStateUpdated?.invoke(excelViewModel.batchProcessingState)
 
-                // 🎯 AUTO-RESTART FOR CONTINUOUS RECORDING!
-                delay(1500) // Brief pause to show the entry was added
+                // 🔧 LONGER delay before auto-restart
+                delay(2000)
 
                 Log.d("BatchRecordingManager", "🎯 Auto-restarting batch recording...")
 
-                // Clean restart for next entry
+                // 🔧 CLEAN restart
                 try {
-                    speechRecognizer?.destroy()
-                    delay(300)
-                    speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context)
-                    delay(200)
-
-                    // 🎯 Automatically start listening again!
                     startBatchAndroidSpeechRecognition()
-
                 } catch (e: Exception) {
                     Log.e("BatchRecordingManager", "Error auto-restarting", e)
-                    onErrorMessage?.invoke("Auto-restart failed")
+                    onErrorMessage?.invoke("Auto-restart failed - tap to continue")
                     onStateChanged?.invoke(RecordingState.BATCH_LISTENING)
                 }
             }
@@ -312,6 +369,8 @@ class BatchRecordingManager(
     }
 
     fun stopRecording() {
+        timeoutJob?.cancel()
+        isRestarting = false
         speechRecognizer?.stopListening()
         audioRecord?.stop()
         audioRecord?.release()
@@ -321,6 +380,8 @@ class BatchRecordingManager(
 
     fun destroy() {
         try {
+            timeoutJob?.cancel()
+            isRestarting = false
             speechRecognizer?.destroy()
             audioRecord?.release()
         } catch (e: Exception) {
