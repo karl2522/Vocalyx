@@ -54,6 +54,15 @@ object BiometricAuthManager {
      * Check if user has enabled biometric login
      */
     fun isBiometricEnabled(context: Context): Boolean {
+        // First check if we've recorded a forced reset
+        val resetCompleted = context.getSharedPreferences("BiometricFallback", Context.MODE_PRIVATE)
+            .getBoolean("reset_completed", false)
+            
+        if (resetCompleted) {
+            Log.d("BiometricAuth", "Detected previous forced reset, biometric is disabled")
+            return false
+        }
+        
         return try {
             val prefs = getEncryptedPreferences(context)
             val isEnabled = prefs.getBoolean(KEY_BIOMETRIC_ENABLED, false)
@@ -61,6 +70,17 @@ object BiometricAuthManager {
             isEnabled
         } catch (e: Exception) {
             Log.e("BiometricAuth", "Error checking biometric enabled status", e)
+            
+            // Handle decryption errors by performing emergency reset
+            if (e.cause is javax.crypto.AEADBadTagException || 
+                e.toString().contains("AEADBadTagException") ||
+                e.toString().contains("KeyStoreException")) {
+                
+                Log.w("BiometricAuth", "Encryption key seems to be invalid, performing emergency reset")
+                // Call our emergency reset method instead of trying to use the corrupted preferences
+                forceResetBiometricState(context)
+            }
+            
             false
         }
     }
@@ -72,8 +92,41 @@ object BiometricAuthManager {
     fun enableBiometricLogin(context: Context, accessToken: String, refreshToken: String, userEmail: String) {
         try {
             Log.d("BiometricAuth", "=== ENABLING BIOMETRIC LOGIN ===")
+            
+            // Clear any forced reset flags
+            context.getSharedPreferences("BiometricFallback", Context.MODE_PRIVATE)
+                .edit()
+                .remove("reset_completed")
+                .apply()
 
-            // 🎯 NEW: Get current user info from TokenManager
+            // First check if the encrypted preferences are accessible and clear them
+            try {
+                val testPrefs = getEncryptedPreferences(context)
+                testPrefs.edit().clear().apply()
+            } catch (clearEx: Exception) {
+                if (clearEx.cause is javax.crypto.AEADBadTagException || 
+                    clearEx.toString().contains("AEADBadTagException") ||
+                    clearEx.toString().contains("KeyStoreException")) {
+                    
+                    Log.w("BiometricAuth", "Detected corrupted encrypted preferences during enabling")
+                    
+                    // Use our emergency reset method
+                    forceResetBiometricState(context)
+                    
+                    // Try one more time after reset
+                    try {
+                        val testPrefsAfterReset = getEncryptedPreferences(context)
+                        if (testPrefsAfterReset != null) {
+                            Log.d("BiometricAuth", "Successfully created fresh encrypted preferences after reset")
+                        }
+                    } catch (retryEx: Exception) {
+                        Log.e("BiometricAuth", "Still cannot access encrypted preferences after reset", retryEx)
+                        return
+                    }
+                }
+            }
+
+            // Get current user info from TokenManager
             val userId = TokenManager.getUserId(context) ?: "unknown"
             val firstName = TokenManager.getFirstName(context) ?: ""
             val lastName = TokenManager.getLastName(context) ?: ""
@@ -85,7 +138,7 @@ object BiometricAuthManager {
                 putString(KEY_ENCRYPTED_ACCESS_TOKEN, accessToken)
                 putString(KEY_ENCRYPTED_REFRESH_TOKEN, refreshToken)
                 putString(KEY_ENCRYPTED_USER_EMAIL, userEmail)
-                // 🎯 NEW: Store user info too
+                // Store user info too
                 putString(KEY_ENCRYPTED_USER_ID, userId)
                 putString(KEY_ENCRYPTED_FIRST_NAME, firstName)
                 putString(KEY_ENCRYPTED_LAST_NAME, lastName)
@@ -95,6 +148,15 @@ object BiometricAuthManager {
             Log.d("BiometricAuth", "Biometric login enabled successfully with user info")
         } catch (e: Exception) {
             Log.e("BiometricAuth", "Error enabling biometric login", e)
+            
+            // Handle encryption errors with our emergency reset method
+            if (e.cause is javax.crypto.AEADBadTagException || 
+                e.toString().contains("AEADBadTagException") ||
+                e.toString().contains("KeyStoreException")) {
+                
+                forceResetBiometricState(context)
+                Log.w("BiometricAuth", "Keystore corruption detected, performed emergency reset")
+            }
         }
     }
 
@@ -107,6 +169,45 @@ object BiometricAuthManager {
             Log.d("BiometricAuth", "Biometric login disabled successfully")
         } catch (e: Exception) {
             Log.e("BiometricAuth", "Error disabling biometric login", e)
+            
+            // Force reset if encrypted preferences are corrupted
+            if (e.cause is javax.crypto.AEADBadTagException || 
+                e.toString().contains("AEADBadTagException") ||
+                e.toString().contains("KeyStoreException")) {
+                
+                forceResetBiometricState(context)
+            }
+        }
+    }
+    
+    /**
+     * Emergency method to forcibly reset biometric state when the encrypted preferences are corrupted
+     * This bypasses the EncryptedSharedPreferences completely
+     */
+    private fun forceResetBiometricState(context: Context) {
+        Log.w("BiometricAuth", "Performing emergency biometric state reset")
+        
+        try {
+            // 1. Delete the encrypted shared preferences file directly
+            val encryptedPrefsFile = context.getSharedPreferences(BIOMETRIC_PREFS, Context.MODE_PRIVATE)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                context.deleteSharedPreferences(BIOMETRIC_PREFS)
+                Log.d("BiometricAuth", "Deleted encrypted shared preferences file")
+            } else {
+                // For older Android versions
+                encryptedPrefsFile.edit().clear().apply()
+            }
+            
+            // 2. Mark the reset in regular preferences so UI can respond accordingly
+            context.getSharedPreferences("BiometricFallback", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("reset_completed", true)
+                .putLong("reset_timestamp", System.currentTimeMillis())
+                .apply()
+                
+            Log.d("BiometricAuth", "Biometric state reset complete")
+        } catch (ex: Exception) {
+            Log.e("BiometricAuth", "Failed to force reset biometric state", ex)
         }
     }
 
