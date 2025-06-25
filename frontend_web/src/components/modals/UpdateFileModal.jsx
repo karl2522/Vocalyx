@@ -10,7 +10,8 @@ const UpdateFileModal = ({
   onClose, 
   currentFile,
   onSave,
-  teamAccess 
+  teamAccess,
+  classId
 }) => {
   const [step, setStep] = useState('selectCategory');
   const [selectedCategory, setSelectedCategory] = useState('');
@@ -446,7 +447,7 @@ const UpdateFileModal = ({
           
           const response = await classService.executeMerge(
               selectedFile,
-              currentFile?.class_id || 1,
+              classId,
               conflictResolutions || {},
               finalBulkActions,
               columnMapping || {},

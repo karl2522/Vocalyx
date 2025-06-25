@@ -17,14 +17,48 @@ class ExcelRepository {
 
     suspend fun getExcelFiles(classId: Int): Result<List<ExcelFileItem>> = withContext(Dispatchers.IO) {
         try {
+            Log.d("ExcelRepository", "=== FETCHING EXCEL FILES ===")
+            Log.d("ExcelRepository", "Class ID: $classId")
+            
             val response = apiService.getExcelFiles(classId)
+            Log.d("ExcelRepository", "API response successful: ${response.isSuccessful}")
+            Log.d("ExcelRepository", "Response code: ${response.code()}")
+            
             if (response.isSuccessful && response.body() != null) {
+                val excelFiles = response.body()!!
+                Log.d("ExcelRepository", "Received ${excelFiles.size} Excel files")
+                
+                // Debug each file
+                excelFiles.forEachIndexed { index, file ->
+                    Log.d("ExcelRepository", "File $index: ${file.file_name}")
+                    Log.d("ExcelRepository", "  Sheets: ${file.sheet_names}")
+                    Log.d("ExcelRepository", "  All sheets keys: ${file.all_sheets.keys}")
+                    
+                    // Check for exam columns in each sheet
+                    file.sheet_names.forEach { sheetName ->
+                        val sheetContent = file.getSheetContent(sheetName)
+                        if (sheetContent != null) {
+                            val examColumns = sheetContent.headers.filter { header ->
+                                val lowerHeader = header.lowercase()
+                                listOf("prelim", "midterm", "prefinal", "pre-final", "final", "finals", "exam", "examination", "test").any { keyword ->
+                                    lowerHeader.contains(keyword)
+                                }
+                            }
+                            Log.d("ExcelRepository", "  Sheet '$sheetName' exam columns: $examColumns")
+                        }
+                    }
+                }
+                
                 // The API returns a direct list, not a paginated response
-                Result.success(response.body()!!)
+                Result.success(excelFiles)
             } else {
-                Result.failure(Exception("Failed to fetch Excel files: ${response.message()}"))
+                val errorMsg = "Failed to fetch Excel files: ${response.message()}"
+                Log.e("ExcelRepository", errorMsg)
+                Log.e("ExcelRepository", "Response body: ${response.errorBody()?.string()}")
+                Result.failure(Exception(errorMsg))
             }
         } catch (e: Exception) {
+            Log.e("ExcelRepository", "Exception fetching Excel files", e)
             Result.failure(e)
         }
     }

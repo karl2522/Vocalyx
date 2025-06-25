@@ -94,14 +94,15 @@ fun CourseCard(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(12.dp),
+                    .padding(12.dp)
+                    .padding(end = 40.dp), // Add right padding to avoid overlap with menu
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
                 // Top row with course code and status badge
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top
+                    horizontalArrangement = Arrangement.Start,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     // Course code
                     Text(
@@ -109,8 +110,11 @@ fun CourseCard(
                         style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
                         color = Color(0xFF666666)
                     )
+                    
+                    // Add spacing between course code and status badge
+                    Spacer(modifier = Modifier.width(8.dp))
 
-                    // Status badge - smaller and more subtle
+                    // Status badge - positioned beside course code
                     Box(
                         modifier = Modifier
                             .background(

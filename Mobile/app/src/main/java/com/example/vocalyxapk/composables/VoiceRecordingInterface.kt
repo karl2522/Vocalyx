@@ -39,6 +39,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.util.*
+import java.util.concurrent.atomic.AtomicInteger
 
 @Composable
 fun VoiceRecordingInterface(
@@ -60,6 +61,8 @@ fun VoiceRecordingInterface(
     var sessionComplete by remember { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
 
+    var isBatchMode by remember { mutableStateOf(false) }
+
     // Speech Engine Toggle
     var selectedEngine by remember { mutableStateOf(SpeechEngine.ANDROID_NATIVE) }
 
@@ -69,6 +72,8 @@ fun VoiceRecordingInterface(
     // Audio recording variables (for Google Cloud)
     var audioRecord by remember { mutableStateOf<AudioRecord?>(null) }
     var isRecording by remember { mutableStateOf(false) }
+
+    var batchState by remember { mutableStateOf(BatchProcessingState()) }
 
     // Android SpeechRecognizer (for native)
     var speechRecognizer by remember { mutableStateOf<SpeechRecognizer?>(null) }
@@ -102,6 +107,26 @@ fun VoiceRecordingInterface(
             } else {
                 null
             }
+        }
+    }
+
+    val batchRecordingManager = remember {
+        BatchRecordingManager(context, coroutineScope, excelViewModel).apply {
+            onStateChanged = { newState -> recordingState = newState }
+            onErrorMessage = { message -> errorMessage = message }
+            onBatchStateUpdated = { newBatchState -> batchState = newBatchState }
+        }
+    }
+
+    LaunchedEffect(isBatchMode) {
+        if (isBatchMode) {
+            Log.d("VoiceRecording", "🎯 Initializing batch mode for column: $columnName")
+            excelViewModel.startBatchVoiceMode(columnName)
+            batchState = excelViewModel.batchProcessingState
+        } else {
+            Log.d("VoiceRecording", "🎯 Stopping batch mode")
+            excelViewModel.stopBatchVoiceMode()
+            batchState = BatchProcessingState()
         }
     }
 
@@ -377,103 +402,61 @@ fun VoiceRecordingInterface(
                     Log.d("VoiceRecording", "=== SAVE DEBUG ===")
                     Log.d("VoiceRecording", "Total voice entries: ${voiceEntries.size}")
                     Log.d("VoiceRecording", "Confirmed entries: ${totalEntries.size}")
-                    voiceEntries.forEachIndexed { index, entry ->
-                        Log.d("VoiceRecording", "Entry $index: ${entry.fullStudentName} - ${entry.score} - Confirmed: ${entry.confirmed}")
-                    }
 
                     when {
                         totalEntries.isEmpty() -> {
                             Log.w("VoiceRecording", "No confirmed entries to save!")
                             isSaving = false
                             sessionComplete = true
-                            // Still call onSaveCompleted with 0 to show the message
                             onSaveCompleted(0)
                         }
                         else -> {
-                            Log.d("VoiceRecording", "Starting to save ${totalEntries.size} entries")
+                            Log.d("VoiceRecording", "Starting to save ${totalEntries.size} entries using suspend function")
 
-                            // Use a counter that's properly synchronized
                             var successCount = 0
-                            var completedCount = 0
 
-                            totalEntries.forEach { entry ->
+                            totalEntries.forEachIndexed { index, entry ->
                                 try {
-                                    Log.d("VoiceRecording", "Attempting to save: ${entry.fullStudentName} -> ${entry.score} in column: $columnName")
+                                    Log.d("VoiceRecording", "Processing entry ${index + 1}/${totalEntries.size}: ${entry.fullStudentName} -> ${entry.score}")
 
-                                    excelViewModel.updateStudentValue(
+                                    // Use the suspend function
+                                    val success = excelViewModel.updateStudentValueSuspend(
                                         studentName = entry.fullStudentName,
                                         columnName = columnName,
                                         value = entry.score
-                                    ) { success ->
-                                        // This callback might be called from different threads
-                                        coroutineScope.launch {
-                                            completedCount++
-                                            when {
-                                                success -> {
-                                                    successCount++
-                                                    Log.d("VoiceRecording", "Successfully saved: ${entry.fullStudentName} -> ${entry.score} in column: $columnName")
-                                                }
-                                                else -> {
-                                                    Log.e("VoiceRecording", "Failed to save: ${entry.fullStudentName} -> ${entry.score} in column: $columnName")
-                                                }
-                                            }
+                                    )
 
-                                            // Check if all entries have been processed
-                                            when {
-                                                completedCount >= totalEntries.size -> {
-                                                    Log.d("VoiceRecording", "All entries processed. Success: $successCount, Total: ${totalEntries.size}")
-                                                    withContext(Dispatchers.Main) {
-                                                        isSaving = false
-                                                        sessionComplete = true
-
-                                                        // Notify parent screen that saving is complete
-                                                        onSaveCompleted(successCount)
-                                                    }
-                                                }
-                                            }
-                                        }
+                                    if (success) {
+                                        successCount++
+                                        Log.d("VoiceRecording", "✅ Successfully saved: ${entry.fullStudentName} -> ${entry.score}")
+                                    } else {
+                                        Log.e("VoiceRecording", "❌ Failed to save: ${entry.fullStudentName} -> ${entry.score}")
                                     }
+
+                                    delay(300) // Small delay between saves
+
                                 } catch (e: Exception) {
-                                    Log.e("VoiceRecording", "Exception saving entry: ${entry.fullStudentName} -> ${entry.score} in column: $columnName", e)
-                                    coroutineScope.launch {
-                                        completedCount++
-                                        when {
-                                            completedCount >= totalEntries.size -> {
-                                                withContext(Dispatchers.Main) {
-                                                    isSaving = false
-                                                    sessionComplete = true
-                                                    onSaveCompleted(successCount)
-                                                }
-                                            }
-                                        }
-                                    }
+                                    Log.e("VoiceRecording", "❌ Exception saving entry: ${entry.fullStudentName}", e)
                                 }
                             }
 
-                            // Add a timeout mechanism in case callbacks don't fire
-                            launch {
-                                delay(10000) // 10 second timeout
-                                when {
-                                    !sessionComplete && isSaving -> {
-                                        Log.w("VoiceRecording", "Timeout reached, forcing completion")
-                                        withContext(Dispatchers.Main) {
-                                            isSaving = false
-                                            sessionComplete = true
-                                            onSaveCompleted(successCount)
-                                        }
-                                    }
-                                }
+                            Log.d("VoiceRecording", "🎯 All entries processed. Final success count: $successCount")
+
+                            withContext(Dispatchers.Main) {
+                                isSaving = false
+                                sessionComplete = true
+                                onSaveCompleted(successCount) // This should now be correct!
                             }
                         }
                     }
                 } catch (e: Exception) {
                     Log.e("VoiceRecording", "Error in saveAllEntries", e)
                     isSaving = false
-                    sessionComplete = true // Complete even on error to prevent hanging
+                    sessionComplete = true
                     onSaveCompleted(0)
                 }
             }
-            Unit // Explicitly return Unit to fix type mismatch
+            Unit
         }
     }
 
@@ -749,9 +732,19 @@ fun VoiceRecordingInterface(
 
     fun startRecording() {
         errorMessage = null
-        when (selectedEngine) {
-            SpeechEngine.ANDROID_NATIVE -> startAndroidSpeechRecognition()
-            SpeechEngine.GOOGLE_CLOUD -> startGoogleCloudRecording()
+
+        if (isBatchMode) {
+            Log.d("VoiceRecording", "🎯 Starting batch recording mode")
+            when (selectedEngine) {
+                SpeechEngine.ANDROID_NATIVE -> batchRecordingManager.startBatchAndroidSpeechRecognition()
+                SpeechEngine.GOOGLE_CLOUD -> batchRecordingManager.startBatchGoogleCloudRecording(studentData)
+            }
+        } else {
+            Log.d("VoiceRecording", "🎯 Starting single recording mode")
+            when (selectedEngine) {
+                SpeechEngine.ANDROID_NATIVE -> startAndroidSpeechRecognition()
+                SpeechEngine.GOOGLE_CLOUD -> startGoogleCloudRecording()
+            }
         }
     }
 
@@ -846,6 +839,7 @@ fun VoiceRecordingInterface(
 
             // Clean up recording state
             isRecording = false
+            batchRecordingManager.destroy()
         }
     }
 
@@ -890,12 +884,19 @@ fun VoiceRecordingInterface(
                             selectedEngine = selectedEngine,
                             onEngineSelected = { selectedEngine = it },
                             onStartRecording = { startRecording() },
+                            onStartBatchRecording = { startRecording() }, // 🆕 For now, same as regular recording
                             voiceEntries = voiceEntries.filter { it.confirmed },
                             columnName = columnName,
                             onDismiss = onDismiss,
                             onViewSummary = { recordingState = RecordingState.SESSION_SUMMARY },
                             errorMessage = errorMessage,
-                            onClearError = { errorMessage = null }
+                            onClearError = { errorMessage = null },
+                            isBatchMode = isBatchMode, // 🎯 Use the actual state variable
+                            onBatchModeToggled = { newMode ->
+                                isBatchMode = newMode // 🎯 Update the state when toggled
+                                println("🎯 Batch mode toggled to: $newMode") // Debug log
+                            },
+                            batchState = batchState // 🆕 Empty state for now
                         )
                     }
 
@@ -986,6 +987,62 @@ fun VoiceRecordingInterface(
                             isSaving = isSaving,
                             onDismiss = onDismiss,
                             excelViewModel = excelViewModel
+                        )
+                    }
+
+                    RecordingState.BATCH_LISTENING -> {
+                        BatchListeningScreen(
+                            selectedEngine = selectedEngine,
+                            pulseScale = pulseScale,
+                            batchState = batchState,
+                            onStopRecording = {
+                                // Stop current recording and show validation
+                                speechRecognizer?.stopListening()
+                                audioRecord?.stop()
+                                audioRecord?.release()
+                                audioRecord = null
+                                isRecording = false
+                                recordingState = RecordingState.BATCH_VALIDATION
+                            }
+                        )
+                    }
+
+                    RecordingState.BATCH_VALIDATION -> {
+                        BatchValidationScreen(
+                            batchState = batchState,
+                            columnName = columnName,
+                            onEditEntry = { entryId, newName, newScore ->
+                                excelViewModel.editBatchEntry(entryId, newName, newScore)
+                                batchState = excelViewModel.batchProcessingState
+                            },
+                            onRemoveEntry = { entryId ->
+                                excelViewModel.removeBatchEntry(entryId)
+                                batchState = excelViewModel.batchProcessingState
+                            },
+                            onConfirmEntry = { entryId ->
+                                excelViewModel.confirmBatchEntry(entryId)
+                                batchState = excelViewModel.batchProcessingState
+                            },
+                            onSaveAll = {
+                                Log.d("VoiceRecording", "🎯 Saving all batch entries")
+                                excelViewModel.saveBatchEntries(
+                                    onProgress = { current, total ->
+                                        Log.d("VoiceRecording", "Batch save progress: $current/$total")
+                                    },
+                                    onComplete = { successCount, failureCount ->
+                                        Log.d("VoiceRecording", "Batch save complete: $successCount successes, $failureCount failures")
+                                        // Reset batch mode and close
+                                        excelViewModel.stopBatchVoiceMode()
+                                        isBatchMode = false
+                                        batchState = BatchProcessingState()
+                                        onSaveCompleted(successCount)
+                                        onDismiss()
+                                    }
+                                )
+                            },
+                            onCancel = {
+                                recordingState = RecordingState.READY_TO_RECORD
+                            }
                         )
                     }
                 }

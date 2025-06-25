@@ -102,20 +102,25 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
 
     fun login(email: String, password: String) {
         viewModelScope.launch {
+            Log.d("LoginViewModel", "Starting login process")
             _uiState.value = LoginUIState.Loading
 
             try {
                 val result = authRepository.login(email, password)
                 result.fold(
                     onSuccess = {
+                        Log.d("LoginViewModel", "Login successful, setting auth state")
                         AuthStateManager.setLoggedIn(getApplication())
                         _uiState.value = LoginUIState.Success("Login successful")
+                        Log.d("LoginViewModel", "UI state set to Success")
                     },
                     onFailure = { exception ->
+                        Log.e("LoginViewModel", "Login failed: ${exception.message}")
                         _uiState.value = LoginUIState.Error(exception.message ?: "Unknown error")
                     }
                 )
             } catch (e: Exception) {
+                Log.e("LoginViewModel", "Login exception: ${e.message}")
                 _uiState.value = LoginUIState.Error(e.message ?: "Unknown error")
             }
         }

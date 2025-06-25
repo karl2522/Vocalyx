@@ -24,8 +24,19 @@ data class ExcelFileItem(
     fun getSheetContent(sheetName: String): SheetContent? {
         val sheet = all_sheets[sheetName] ?: return null
         
+        // Add debug logging
+        android.util.Log.d("ExcelModels", "=== getSheetContent DEBUG ===")
+        android.util.Log.d("ExcelModels", "Requested sheet: $sheetName")
+        android.util.Log.d("ExcelModels", "Available sheets: ${all_sheets.keys}")
+        android.util.Log.d("ExcelModels", "Sheet type: ${sheet.javaClass.simpleName}")
+        
         // Skip sheets that are not regular data sheets (like category_mappings)
-        if (sheet !is Map<*, *>) return null
+        if (sheet !is Map<*, *>) {
+            android.util.Log.w("ExcelModels", "Sheet '$sheetName' is not a Map, skipping")
+            return null
+        }
+        
+        android.util.Log.d("ExcelModels", "Sheet keys: ${sheet.keys}")
         
         val data = try {
             @Suppress("UNCHECKED_CAST")
@@ -35,6 +46,8 @@ data class ExcelFileItem(
         } catch (e: Exception) {
             // Log the error for debugging but don't crash
             android.util.Log.w("ExcelModels", "Error parsing sheet data: ${e.message}")
+            android.util.Log.w("ExcelModels", "Sheet data type: ${sheet["data"]?.javaClass?.simpleName}")
+            android.util.Log.w("ExcelModels", "Sheet data content: ${sheet["data"]}")
             emptyList()
         }
         
@@ -44,8 +57,22 @@ data class ExcelFileItem(
         } catch (e: Exception) {
             // Log the error for debugging but don't crash
             android.util.Log.w("ExcelModels", "Error parsing sheet headers: ${e.message}")
+            android.util.Log.w("ExcelModels", "Sheet headers type: ${sheet["headers"]?.javaClass?.simpleName}")
+            android.util.Log.w("ExcelModels", "Sheet headers content: ${sheet["headers"]}")
             emptyList()
         }
+        
+        android.util.Log.d("ExcelModels", "Parsed headers (${headers.size}): $headers")
+        android.util.Log.d("ExcelModels", "Parsed data rows: ${data.size}")
+        
+        // Check specifically for exam columns
+        val examColumns = headers.filter { header ->
+            val lowerHeader = header.lowercase()
+            listOf("prelim", "midterm", "prefinal", "pre-final", "final", "finals", "exam", "examination", "test").any { keyword ->
+                lowerHeader.contains(keyword)
+            }
+        }
+        android.util.Log.d("ExcelModels", "Exam columns in headers: $examColumns")
         
         return SheetContent(data, headers)
     }
@@ -85,3 +112,37 @@ data class BatchEntry(
     val suggestedName: String? = null,
     val confirmed: Boolean = false
 )
+
+data class BatchVoiceEntry(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val recognizedText: String,           // Original speech: "Capuras 50"
+    val parsedName: String,               // Extracted: "Capuras"
+    val parsedScore: String,              // Extracted: "50"
+    val matchedStudentName: String?,      // Fuzzy matched: "Capuras, John"
+    val isValidStudent: Boolean,          // ✅ or ❌
+    val confidence: Double,               // 0.0 to 1.0
+    val status: BatchEntryStatus = BatchEntryStatus.PENDING,
+    val originalIndex: Int = 0            // Order in speech
+)
+
+enum class BatchEntryStatus {
+    PENDING,     // Just parsed from speech
+    VALIDATED,   // ✅ Student found and matched
+    INVALID,     // ❌ Student not found
+    CONFIRMED,   // ✅ Teacher confirmed this entry
+    EDITED       // ✏️ Teacher manually edited
+}
+
+data class BatchProcessingState(
+    val isRecording: Boolean = false,
+    val isProcessing: Boolean = false,
+    val entries: List<BatchVoiceEntry> = emptyList(),
+    val validEntries: Int = 0,
+    val invalidEntries: Int = 0,
+    val confirmedEntries: Int = 0
+) {
+    val totalEntries: Int get() = entries.size
+    val readyToSave: Boolean get() = entries.isNotEmpty() && entries.all {
+        it.status == BatchEntryStatus.CONFIRMED || it.status == BatchEntryStatus.VALIDATED
+    }
+}

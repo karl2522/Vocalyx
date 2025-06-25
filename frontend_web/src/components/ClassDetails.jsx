@@ -229,17 +229,20 @@ const ClassDetails = ({ accessInfo }) => {
     // Get the active sheet data
     const activeSheet = updatedFileData.active_sheet;
     const sheetData = updatedFileData.all_sheets[activeSheet].data;
+    const headers = updatedFileData.all_sheets[activeSheet].headers; // ← GET HEADERS
     
     // Debug logging to see data structure
     console.log("Sheet data type:", typeof sheetData);
     console.log("Is array:", Array.isArray(sheetData));
     console.log("First row sample:", sheetData[0]);
+    console.log("Headers being sent:", headers); // ← ADD DEBUG LOG
 
-    // Call your API to save the updated file data
+    // Call your API to save the updated file data - PASS HEADERS!
     await classService.updateExcelData(
       updatedFileData.id,
-      sheetData,  // Just pass the actual data array
-      activeSheet // Pass the sheet name separately
+      sheetData,  
+      activeSheet,
+      headers  // ← ADD THIS LINE!
     );
     
     // Increment update counter
@@ -398,280 +401,153 @@ const ClassDetails = ({ accessInfo }) => {
   }, [currentFileData]);
 
   const processSelectedFile = async () => {
-    if (!selectedFile) return;
+  if (!selectedFile) return;
 
-    setFileLoading(true);
-    setShowPreview(false);
+  setFileLoading(true);
+  setShowPreview(false);
 
-    // Initialize progress tracking
-    setImportProgress(0);
-    setImportStage('Reading file...');
+  // Initialize progress tracking
+  setImportProgress(0);
+  setImportStage('Reading file...');
+  
+  // Set up progress animation
+  const progressStages = [
+    { stage: 'Reading file...', targetProgress: 20 },
+    { stage: 'Extracting student info...', targetProgress: 40 },
+    { stage: 'Creating template structure...', targetProgress: 60 },
+    { stage: 'Setting up categories...', targetProgress: 80 },
+    { stage: 'Finalizing import...', targetProgress: 95 }
+  ];
+
+  let currentStageIndex = 0;
+  const animateProgress = () => {
+    const currentStage = progressStages[currentStageIndex];
+    const nextProgress = Math.min(
+        currentStage.targetProgress,
+        importProgress + Math.random() * 2
+    );
+
+    setImportProgress(nextProgress);
+
+    if (nextProgress >= currentStage.targetProgress && currentStageIndex < progressStages.length - 1) {
+      currentStageIndex++;
+      setImportStage(progressStages[currentStageIndex].stage);
+    }
+
+    if (nextProgress < 100) {
+      setTimeout(animateProgress, 100);
+    }
+  };
+
+  animateProgress();
+
+  try {
+    console.log("processSelectedFile - File details:", {
+      name: selectedFile.name,
+      type: selectedFile.type,
+      size: selectedFile.size,
+      lastModified: selectedFile.lastModified,
+      isFile: selectedFile instanceof File
+    });
+
+    if (!(selectedFile instanceof File)) {
+      console.error("Selected file is not a File object:", selectedFile);
+      throw new Error("Invalid file selected. Please try selecting the file again.");
+    }
+
+    // File size validation
+    const maxFileSizeMB = 10;
+    const maxFileSizeBytes = maxFileSizeMB * 1024 * 1024;
+
+    if (selectedFile.size > maxFileSizeBytes) {
+      throw new Error(`File size exceeds ${maxFileSizeMB}MB limit. Please select a smaller file.`);
+    }
+
+    // File type validation
+    const fileExtension = selectedFile.name.split('.').pop().toLowerCase();
+    const validExtensions = ['xlsx', 'xls', 'csv'];
+
+    if (!validExtensions.includes(fileExtension)) {
+      throw new Error(`File type not supported. Please select an Excel (.xlsx, .xls) or CSV file.`);
+    }
+
+    setImportStage('Creating template structure...');
     
-    // Set up progress animation
-    const progressStages = [
-      { stage: 'Reading file...', targetProgress: 20 },
-      { stage: 'Processing data...', targetProgress: 40 },
-      { stage: 'Analyzing columns...', targetProgress: 60 },
-      { stage: 'Preparing spreadsheet...', targetProgress: 80 },
-      { stage: 'Finalizing import...', targetProgress: 95 }
-    ];
+    console.log("🎯 Using smart student extraction - backend will handle everything!");
+    console.log("✅ Only student info will be extracted");
+    console.log("✅ Template structure will be created automatically");
+    console.log("✅ Categories will be predefined and organized");
 
-    let currentStageIndex = 0;
-    const animateProgress = () => {
-      const currentStage = progressStages[currentStageIndex];
-      const nextProgress = Math.min(
-          currentStage.targetProgress,
-          importProgress + Math.random() * 2
-      );
+    setImportStage('Uploading file...');
 
-      setImportProgress(nextProgress);
+    // Simple API call - backend handles all the logic now!
+    const response = await classService.uploadExcel(
+        selectedFile,
+        id,
+        null, // No custom columns needed - template handles this
+        null  // No category mappings needed - backend creates them
+    );
 
-      if (nextProgress >= currentStage.targetProgress && currentStageIndex < progressStages.length - 1) {
-        currentStageIndex++;
-        setImportStage(progressStages[currentStageIndex].stage);
-      }
+    const responseData = response.data;
+    console.log("Upload response:", responseData);
 
-      if (nextProgress < 100) {
-        setTimeout(animateProgress, 100);
-      }
-    };
-
-    animateProgress();
-
-    try {
-      console.log("processSelectedFile - File details:", {
-        name: selectedFile.name,
-        type: selectedFile.type,
-        size: selectedFile.size,
-        lastModified: selectedFile.lastModified,
-        isFile: selectedFile instanceof File
+    if (responseData) {
+      setSelectedFile({
+        name: responseData.file_name,
+        id: responseData.id,
       });
-
-      if (!(selectedFile instanceof File)) {
-        console.error("Selected file is not a File object:", selectedFile);
-        throw new Error("Invalid file selected. Please try selecting the file again.");
-      }
-
-      // File size validation
-      const maxFileSizeMB = 10;
-      const maxFileSizeBytes = maxFileSizeMB * 1024 * 1024;
-
-      if (selectedFile.size > maxFileSizeBytes) {
-        throw new Error(`File size exceeds ${maxFileSizeMB}MB limit. Please select a smaller file.`);
-      }
-
-      // File type validation
-      const fileExtension = selectedFile.name.split('.').pop().toLowerCase();
-      const validExtensions = ['xlsx', 'xls', 'csv'];
-
-      if (!validExtensions.includes(fileExtension)) {
-        throw new Error(`File type not supported. Please select an Excel (.xlsx, .xls) or CSV file.`);
-      }
-
-      setImportStage('Processing custom columns...');
-
-      // Process custom columns
-      let validatedColumns = [];
-      if (customColumns && customColumns.length > 0) {
-        validatedColumns = customColumns.filter(col => {
-          return col && col.name && typeof col.name === 'string' &&
-              (col.type === 'text' || col.type === 'number' || col.type === 'header');
-        }).map(col => {
-          return {
-            id: col.id || `col_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            name: col.name.trim(),
-            type: col.type,
-            ...(col.maxScore && col.type === 'number' ? { maxScore: Number(col.maxScore) } : {})
-          };
+      setCurrentFileData(responseData);
+      
+      // Log the clean structure we got back
+      console.log("✅ Clean template structure created:");
+      if (responseData.all_sheets && responseData.all_sheets.category_mappings) {
+        responseData.all_sheets.category_mappings.forEach(cat => {
+          console.log(`  📊 ${cat.name}: ${cat.columns.length} columns`);
         });
-
-        console.log("Sanitized custom columns for upload:", validatedColumns);
       }
+    }
 
-      setImportStage('Analyzing columns and creating categories...');
+    setImportStage('Finalizing import...');
+    setImportProgress(100);
 
-      // Create category mappings for the imported data
-      let categoryMappings = [];
-      
-      // If we have preview data, automatically categorize the imported columns
-      if (previewData && previewData.headers) {
-        const importedHeaders = previewData.headers;
-        
-        // Enhanced Auto-detect name column - specifically look for "No. Last Name, First Name" pattern
-        const specificNamePatterns = [
-          'no. last name, first name',
-          'no. lastname, firstname', 
-          'number last name first name',
-          'no lastname firstname',
-          'student no. last name, first name',
-          'student number last name first name'
-        ];
-        
-        const generalNamePatterns = ['name', 'student', 'learner', 'pupil', 'full name', 'first name', 'last name', 'no.'];
-        
-        // Find columns that should be categorized as "Student Info"
-        const studentInfoColumns = [];
-        
-        importedHeaders.forEach(header => {
-          const headerLower = String(header).toLowerCase().trim();
-          
-          // Check for specific patterns first
-          const isSpecificMatch = specificNamePatterns.some(pattern => 
-            headerLower.includes(pattern.toLowerCase())
-          );
-          
-          // Check for general patterns
-          const isGeneralMatch = generalNamePatterns.some(pattern => 
-            headerLower.includes(pattern.toLowerCase())
-          );
-          
-          // Add to student info if it matches any pattern
-          if (isSpecificMatch || isGeneralMatch) {
-            studentInfoColumns.push(header);
-            console.log(`Detected student info column: "${header}" (${isSpecificMatch ? 'specific' : 'general'} match)`);
-          }
-        });
-        
-        // If no specific student columns found, use first few columns as student info
-        if (studentInfoColumns.length === 0 && importedHeaders.length > 0) {
-          // Take first 3 columns as student info by default
-          const defaultStudentColumns = importedHeaders.slice(0, Math.min(3, importedHeaders.length));
-          studentInfoColumns.push(...defaultStudentColumns);
-          console.log(`No student columns detected, using first columns as Student Info: ${defaultStudentColumns}`);
-        }
-        
-        // Create "Student Info" category for detected columns
-        if (studentInfoColumns.length > 0) {
-          categoryMappings.push({
-            id: 'student',
-            name: 'Student Info',
-            columns: [...studentInfoColumns] // All detected student columns
-          });
-          console.log(`Created Student Info category with ${studentInfoColumns.length} columns:`, studentInfoColumns);
-        }
-        
-        // Add remaining imported columns to "Other Activities" category if any
-        const remainingColumns = importedHeaders.filter(header => 
-          !studentInfoColumns.includes(header)
-        );
-        
-        if (remainingColumns.length > 0) {
-          categoryMappings.push({
-            id: 'other',
-            name: 'Other Activities',
-            columns: [...remainingColumns]
-          });
-          console.log(`Created Other Activities category with ${remainingColumns.length} columns:`, remainingColumns);
-        }
-      }
-      
-      // Add categories for the default quiz/lab/exam columns
-      if (validatedColumns.length > 0) {
-        // Group custom columns by category
-        const quizColumns = validatedColumns
-          .filter(col => col.name.toLowerCase().includes('quiz') && col.type !== 'header')
-          .map(col => col.name);
-          
-        const labColumns = validatedColumns
-          .filter(col => col.name.toLowerCase().includes('lab') && col.type !== 'header')
-          .map(col => col.name);
-          
-        const examColumns = validatedColumns
-          .filter(col => (col.name.toLowerCase().includes('exam') || col.name.includes('PE -') || col.name.includes('ME -') || col.name.includes('PFE -') || col.name.includes('FE -')) && col.type !== 'header')
-          .map(col => col.name);
-        
-        // Add quiz category if we have quiz columns
-        if (quizColumns.length > 0) {
-          categoryMappings.push({
-            id: 'quiz',
-            name: 'Quiz',
-            columns: quizColumns
-          });
-        }
-        
-        // Add laboratory category if we have lab columns
-        if (labColumns.length > 0) {
-          categoryMappings.push({
-            id: 'laboratory',
-            name: 'Laboratory Activities',
-            columns: labColumns
-          });
-        }
-        
-        // Add exam category if we have exam columns
-        if (examColumns.length > 0) {
-          categoryMappings.push({
-            id: 'exams',
-            name: 'Exams',
-            columns: examColumns
-          });
-        }
-      }
-      
-      console.log("Auto-generated category mappings:", categoryMappings);
+    // Show success notification
+    showToast.imported();
 
-      setImportStage('Uploading file...');
-
-      // Make the API call with the real implementation, including category mappings
-      const response = await classService.uploadExcel(
-          selectedFile,
-          id,
-          validatedColumns.length > 0 ? validatedColumns : null,
-          categoryMappings.length > 0 ? categoryMappings : null // Pass category mappings
-      );
-
-      const responseData = response.data;
-      console.log("Upload response:", responseData);
-
-      if (responseData) {
-        setSelectedFile({
-          name: responseData.file_name,
-          id: responseData.id,
-        });
-        setCurrentFileData(responseData);
-      }
-
-      setImportStage('Finalizing import...');
-      setImportProgress(100);
-
-      // Show success notification
-      showToast.imported();
-
-      setTimeout(() => {
-        setFileLoading(false);
-        setImportProgress(0);
-        setImportStage('');
-        setCustomColumns([]);
-      }, 500);
-
-    } catch (error) {
-      console.error("File upload error:", error);
-
-      // Handle different error scenarios
-      let errorMessage = 'Failed to upload file';
-      if (error.response) {
-        if (error.response.data) {
-          console.log("Server error details:", error.response.data);
-          if (typeof error.response.data === 'object') {
-            errorMessage = error.response.data.message || error.response.data.error || error.response.data.detail || `Server error: ${error.response.status}`;
-          } else if (typeof error.response.data === 'string') {
-            errorMessage = error.response.data;
-          }
-        }
-      } else if (error.request) {
-        errorMessage = 'No response from server. Please check your connection.';
-      } else {
-        errorMessage = error.message || 'An error occurred during file upload';
-      }
-
-      setError(errorMessage);
-      showToast.error(errorMessage);
-      
+    setTimeout(() => {
       setFileLoading(false);
       setImportProgress(0);
       setImportStage('');
+      setCustomColumns([]);
+    }, 500);
+
+  } catch (error) {
+    console.error("File upload error:", error);
+
+    // Handle different error scenarios
+    let errorMessage = 'Failed to upload file';
+    if (error.response) {
+      if (error.response.data) {
+        console.log("Server error details:", error.response.data);
+        if (typeof error.response.data === 'object') {
+          errorMessage = error.response.data.message || error.response.data.error || error.response.data.detail || `Server error: ${error.response.status}`;
+        } else if (typeof error.response.data === 'string') {
+          errorMessage = error.response.data;
+        }
+      }
+    } else if (error.request) {
+      errorMessage = 'No response from server. Please check your connection.';
+    } else {
+      errorMessage = error.message || 'An error occurred during file upload';
     }
-  };
+
+    setError(errorMessage);
+    showToast.error(errorMessage);
+    
+    setFileLoading(false);
+    setImportProgress(0);
+    setImportStage('');
+  }
+};
 
   const cancelImport = () => {
     setSelectedFile(null);
@@ -1452,7 +1328,7 @@ const exportDirectlyFromData = () => {
                               <label htmlFor="file-upload" className="cursor-pointer w-full sm:w-auto">
                                 <div className="bg-[#333D79] hover:bg-[#4A5491] text-white px-3 py-2 rounded-lg flex items-center justify-center gap-2 transition-colors shadow-sm font-medium text-sm w-full">
                                   <FiUpload size={16} />
-                                  <span className="whitespace-nowrap">Import Files</span>
+                                  <span className="whitespace-nowrap">Import File</span>
                                 </div>
                                 <input
                                     id="file-upload"
@@ -1684,6 +1560,7 @@ const exportDirectlyFromData = () => {
           currentFile={currentFileData}
           onSave={handleFileUpdateSave}
           teamAccess={teamAccess}
+          classId={id}  // ← ADD THIS LINE!
         />
 
         {/* Loading Overlay for Export */}

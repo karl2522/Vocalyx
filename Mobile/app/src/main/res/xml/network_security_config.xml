@@ -7,6 +7,6 @@
         <domain includeSubdomains="true">localhost</domain>
         <domain includeSubdomains="true">10.0.165.206</domain>
         <domain includeSubdomains="true">vocalyx-c61a072bf25a.herokuapp.com</domain>
-        <domain includeSubdomains="true">192.168.254.106</domain>
+        <domain includeSubdomains="true">192.168.254.101</domain>
     </domain-config>
 </network-security-config>

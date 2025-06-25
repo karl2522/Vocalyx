@@ -64,12 +64,16 @@ fun MainRecordingScreen(
     selectedEngine: SpeechEngine,
     onEngineSelected: (SpeechEngine) -> Unit,
     onStartRecording: () -> Unit,
+    onStartBatchRecording: () -> Unit,
     voiceEntries: List<VoiceEntry>,
     columnName: String,
     onDismiss: () -> Unit,
     onViewSummary: () -> Unit,
     errorMessage: String?,
-    onClearError: () -> Unit
+    onClearError: () -> Unit,
+    isBatchMode: Boolean = false, // 🆕 NEW
+    onBatchModeToggled: (Boolean) -> Unit, // 🆕 NEW
+    batchState: BatchProcessingState = BatchProcessingState() // 🆕 NEW
 ) {
     Column(
         modifier = Modifier
@@ -110,6 +114,13 @@ fun MainRecordingScreen(
                 )
             }
         }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        BatchRecordingModeSelector(
+            isBatchMode = isBatchMode,
+            onBatchModeToggled = onBatchModeToggled
+        )
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -168,11 +179,10 @@ fun MainRecordingScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.Center
                 ) {
-                    // Start Recording button
                     Button(
-                        onClick = onStartRecording,
+                        onClick = if (isBatchMode) onStartBatchRecording else onStartRecording,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = when (selectedEngine) {
+                            containerColor = if (isBatchMode) Color(0xFF4CAF50) else when (selectedEngine) {
                                 SpeechEngine.ANDROID_NATIVE -> Color(0xFF4CAF50)
                                 SpeechEngine.GOOGLE_CLOUD -> Color(0xFF333D79)
                             }
@@ -187,7 +197,7 @@ fun MainRecordingScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            "Start Recording",
+                            if (isBatchMode) "Start Batch Recording" else "Start Recording",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -197,32 +207,38 @@ fun MainRecordingScreen(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 Text(
-                    text = "Tap to Start Recording",
+                    text = if (isBatchMode) "Tap to Start Batch Recording" else "Tap to Start Recording",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = Color(0xFF333D79)
                 )
 
                 Text(
-                    text = "Say: \"[Student Name] [Score]\"",
+                    text = if (isBatchMode) {
+                        "Say multiple students: \"Capuras 50, John Doe 45, Maria 38\""
+                    } else {
+                        "Say: \"[Student Name] [Score]\""
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color(0xFF666666),
                     textAlign = TextAlign.Center
                 )
 
-                Text(
-                    text = "Examples: \"John Doe 85\" or \"85 John Doe\"",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF999999),
-                    textAlign = TextAlign.Center
-                )
-
-                Text(
-                    text = "Speak clearly and pause after speaking",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF999999),
-                    textAlign = TextAlign.Center
-                )
+                if (isBatchMode) {
+                    Text(
+                        text = "Separate entries with commas or \"and\"",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF999999),
+                        textAlign = TextAlign.Center
+                    )
+                } else {
+                    Text(
+                        text = "Examples: \"John Doe 85\" or \"85 John Doe\"",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF999999),
+                        textAlign = TextAlign.Center
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -236,7 +252,13 @@ fun MainRecordingScreen(
         }
 
         // Quick summary of recorded entries
-        if (voiceEntries.isNotEmpty()) {
+        if (isBatchMode && batchState.entries.isNotEmpty()) {
+            BatchEntrySummaryCard(
+                batchState = batchState,
+                onViewDetails = onViewSummary
+            )
+        } else if (!isBatchMode && voiceEntries.isNotEmpty()) {
+            // Keep existing single mode summary
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
@@ -302,6 +324,15 @@ fun MainRecordingScreen(
                     }
                 }
             }
+        }
+        if (isBatchMode) {
+            Text(
+                text = "🎤 Ready for next entry...",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF4CAF50),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(8.dp)
+            )
         }
     }
 }
