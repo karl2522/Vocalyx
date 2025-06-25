@@ -279,42 +279,7 @@ fun StudentsScreen(
                                                     { Icon(imageVector = Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
                                                 } else null,
                                             )
-
-                                            IconButton(
-                                                onClick = {
-                                                    excelFileToDelete = excelFile.id
-                                                    showDeleteConfirmation = true
-                                                },
-                                                modifier = Modifier
-                                                    .size(24.dp)
-                                                    .align(Alignment.TopEnd)
-                                                    .offset(x = 12.dp, y = (-6).dp)
-                                                    .alpha(0.7f)
-                                            ) {
-                                                Icon(
-                                                    Icons.Default.Delete,
-                                                    contentDescription = "Delete Excel File",
-                                                    tint = Color.Red,
-                                                    modifier = Modifier.size(16.dp)
-                                                )
-                                            }
                                         }
-                                    }
-                                    
-                                    // Import new file button
-                                    Button(
-                                        onClick = { showImportModal = true },
-                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF333D79)),
-                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                                        modifier = Modifier.height(32.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Add,
-                                            contentDescription = "Import New",
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Import New")
                                     }
                                 }
                             }

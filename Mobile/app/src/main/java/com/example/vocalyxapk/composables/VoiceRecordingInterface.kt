@@ -39,6 +39,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.util.*
+import java.util.concurrent.atomic.AtomicInteger
 
 @Composable
 fun VoiceRecordingInterface(
@@ -401,103 +402,61 @@ fun VoiceRecordingInterface(
                     Log.d("VoiceRecording", "=== SAVE DEBUG ===")
                     Log.d("VoiceRecording", "Total voice entries: ${voiceEntries.size}")
                     Log.d("VoiceRecording", "Confirmed entries: ${totalEntries.size}")
-                    voiceEntries.forEachIndexed { index, entry ->
-                        Log.d("VoiceRecording", "Entry $index: ${entry.fullStudentName} - ${entry.score} - Confirmed: ${entry.confirmed}")
-                    }
 
                     when {
                         totalEntries.isEmpty() -> {
                             Log.w("VoiceRecording", "No confirmed entries to save!")
                             isSaving = false
                             sessionComplete = true
-                            // Still call onSaveCompleted with 0 to show the message
                             onSaveCompleted(0)
                         }
                         else -> {
-                            Log.d("VoiceRecording", "Starting to save ${totalEntries.size} entries")
+                            Log.d("VoiceRecording", "Starting to save ${totalEntries.size} entries using suspend function")
 
-                            // Use a counter that's properly synchronized
                             var successCount = 0
-                            var completedCount = 0
 
-                            totalEntries.forEach { entry ->
+                            totalEntries.forEachIndexed { index, entry ->
                                 try {
-                                    Log.d("VoiceRecording", "Attempting to save: ${entry.fullStudentName} -> ${entry.score} in column: $columnName")
+                                    Log.d("VoiceRecording", "Processing entry ${index + 1}/${totalEntries.size}: ${entry.fullStudentName} -> ${entry.score}")
 
-                                    excelViewModel.updateStudentValue(
+                                    // Use the suspend function
+                                    val success = excelViewModel.updateStudentValueSuspend(
                                         studentName = entry.fullStudentName,
                                         columnName = columnName,
                                         value = entry.score
-                                    ) { success ->
-                                        // This callback might be called from different threads
-                                        coroutineScope.launch {
-                                            completedCount++
-                                            when {
-                                                success -> {
-                                                    successCount++
-                                                    Log.d("VoiceRecording", "Successfully saved: ${entry.fullStudentName} -> ${entry.score} in column: $columnName")
-                                                }
-                                                else -> {
-                                                    Log.e("VoiceRecording", "Failed to save: ${entry.fullStudentName} -> ${entry.score} in column: $columnName")
-                                                }
-                                            }
+                                    )
 
-                                            // Check if all entries have been processed
-                                            when {
-                                                completedCount >= totalEntries.size -> {
-                                                    Log.d("VoiceRecording", "All entries processed. Success: $successCount, Total: ${totalEntries.size}")
-                                                    withContext(Dispatchers.Main) {
-                                                        isSaving = false
-                                                        sessionComplete = true
-
-                                                        // Notify parent screen that saving is complete
-                                                        onSaveCompleted(successCount)
-                                                    }
-                                                }
-                                            }
-                                        }
+                                    if (success) {
+                                        successCount++
+                                        Log.d("VoiceRecording", "✅ Successfully saved: ${entry.fullStudentName} -> ${entry.score}")
+                                    } else {
+                                        Log.e("VoiceRecording", "❌ Failed to save: ${entry.fullStudentName} -> ${entry.score}")
                                     }
+
+                                    delay(300) // Small delay between saves
+
                                 } catch (e: Exception) {
-                                    Log.e("VoiceRecording", "Exception saving entry: ${entry.fullStudentName} -> ${entry.score} in column: $columnName", e)
-                                    coroutineScope.launch {
-                                        completedCount++
-                                        when {
-                                            completedCount >= totalEntries.size -> {
-                                                withContext(Dispatchers.Main) {
-                                                    isSaving = false
-                                                    sessionComplete = true
-                                                    onSaveCompleted(successCount)
-                                                }
-                                            }
-                                        }
-                                    }
+                                    Log.e("VoiceRecording", "❌ Exception saving entry: ${entry.fullStudentName}", e)
                                 }
                             }
 
-                            // Add a timeout mechanism in case callbacks don't fire
-                            launch {
-                                delay(10000) // 10 second timeout
-                                when {
-                                    !sessionComplete && isSaving -> {
-                                        Log.w("VoiceRecording", "Timeout reached, forcing completion")
-                                        withContext(Dispatchers.Main) {
-                                            isSaving = false
-                                            sessionComplete = true
-                                            onSaveCompleted(successCount)
-                                        }
-                                    }
-                                }
+                            Log.d("VoiceRecording", "🎯 All entries processed. Final success count: $successCount")
+
+                            withContext(Dispatchers.Main) {
+                                isSaving = false
+                                sessionComplete = true
+                                onSaveCompleted(successCount) // This should now be correct!
                             }
                         }
                     }
                 } catch (e: Exception) {
                     Log.e("VoiceRecording", "Error in saveAllEntries", e)
                     isSaving = false
-                    sessionComplete = true // Complete even on error to prevent hanging
+                    sessionComplete = true
                     onSaveCompleted(0)
                 }
             }
-            Unit // Explicitly return Unit to fix type mismatch
+            Unit
         }
     }
 

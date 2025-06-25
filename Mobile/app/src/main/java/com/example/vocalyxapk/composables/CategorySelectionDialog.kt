@@ -353,49 +353,8 @@ fun SubcategorySelection(
         }
         
         Spacer(modifier = Modifier.height(16.dp))
-        
-        // Create new column option (always first)
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { 
-                    Log.d("CategorySelectionDialog", "User selected 'Create New' for category: ${category.displayName}, next column name: $nextColumnName")
-                    onSubcategorySelected(null) 
-                },
-            colors = CardDefaults.cardColors(
-                containerColor = category.color.copy(alpha = 0.1f)
-            ),
-            elevation = CardDefaults.cardElevation(2.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    Icons.Default.Add,
-                    contentDescription = null,
-                    tint = category.color,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "Create New: $nextColumnName",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = category.color
-                    )
-                    Text(
-                        "Add a new column for recording",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF666666)
-                    )
-                }
-            }
-        }
-        
+
+
         // Existing subcategories
         if (existingSubcategories.isNotEmpty()) {
             Spacer(modifier = Modifier.height(16.dp))

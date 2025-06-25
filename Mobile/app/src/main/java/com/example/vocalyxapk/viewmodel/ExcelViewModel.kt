@@ -286,41 +286,42 @@ class ExcelViewModel : ViewModel() {
 
         Log.d("ExcelViewModel", "💾 Saving ${entriesToSave.size} batch entries to column: $columnName")
 
-        var successCount = 0
-        var failureCount = 0
-
         viewModelScope.launch {
+            var successCount = 0
+            var failureCount = 0
+
             entriesToSave.forEachIndexed { index, entry ->
                 val studentName = entry.matchedStudentName ?: entry.parsedName
 
                 try {
-                    var updateSuccess = false
+                    Log.d("ExcelViewModel", "Processing batch entry ${index + 1}/${entriesToSave.size}: $studentName = ${entry.parsedScore}")
 
-                    updateStudentValue(
+                    // Use the suspend function - this will wait for completion
+                    val success = updateStudentValueSuspend(
                         studentName = studentName,
                         columnName = columnName,
                         value = entry.parsedScore
-                    ) { success ->
-                        updateSuccess = success
-                        if (success) {
-                            successCount++
-                            Log.d("ExcelViewModel", "✅ Batch save success: $studentName = ${entry.parsedScore}")
-                        } else {
-                            failureCount++
-                            Log.e("ExcelViewModel", "❌ Batch save failed: $studentName = ${entry.parsedScore}")
-                        }
+                    )
+
+                    if (success) {
+                        successCount++
+                        Log.d("ExcelViewModel", "✅ Batch save success: $studentName = ${entry.parsedScore}")
+                    } else {
+                        failureCount++
+                        Log.e("ExcelViewModel", "❌ Batch save failed: $studentName = ${entry.parsedScore}")
                     }
 
+                    // Report progress
+                    onProgress(index + 1, entriesToSave.size)
+
                     // Small delay between saves
-                    delay(200)
+                    delay(300)
 
                 } catch (e: Exception) {
                     failureCount++
                     Log.e("ExcelViewModel", "❌ Exception saving batch entry: $studentName", e)
+                    onProgress(index + 1, entriesToSave.size)
                 }
-
-                // Report progress
-                onProgress(index + 1, entriesToSave.size)
             }
 
             Log.d("ExcelViewModel", "🎯 Batch save complete: $successCount successes, $failureCount failures")
@@ -614,21 +615,21 @@ class ExcelViewModel : ViewModel() {
         var studentRowIndex = -1
         var bestMatch: Map<String, String>? = null
         var bestSimilarity = 0.0
-        
+
         Log.d("ExcelViewModel", "Looking for student: '$studentName'")
         Log.d("ExcelViewModel", "Available students:")
-        
+
         sheetContent.data.forEachIndexed { index, student ->
             // Get the full name from the student data
             val fullNameInData = nameColumns.mapNotNull { col -> student[col] }.joinToString(" ").trim()
             Log.d("ExcelViewModel", "  $index: '$fullNameInData'")
-            
+
             // Calculate similarity for different name combinations
             val similarities = mutableListOf<Double>()
-            
+
             // Direct comparison
             similarities.add(calculateNameSimilarity(studentName, fullNameInData))
-            
+
             // Try reversing the name format (First Last <-> Last First)
             val nameParts = studentName.split(" ").filter { it.isNotBlank() }
             if (nameParts.size >= 2) {
@@ -636,7 +637,7 @@ class ExcelViewModel : ViewModel() {
                 similarities.add(calculateNameSimilarity(reversedName, fullNameInData))
                 Log.d("ExcelViewModel", "    Trying reversed: '$reversedName' vs '$fullNameInData'")
             }
-            
+
             // Try individual name parts
             nameParts.forEach { part ->
                 if (part.length > 2) { // Avoid matching single letters or very short names
@@ -645,10 +646,10 @@ class ExcelViewModel : ViewModel() {
                     }
                 }
             }
-            
+
             val maxSimilarity = similarities.maxOrNull() ?: 0.0
             Log.d("ExcelViewModel", "    Best similarity: $maxSimilarity")
-            
+
             if (maxSimilarity > bestSimilarity && maxSimilarity > 0.6) { // Threshold for matching
                 bestSimilarity = maxSimilarity
                 bestMatch = student
@@ -656,13 +657,13 @@ class ExcelViewModel : ViewModel() {
                 Log.d("ExcelViewModel", "    New best match: '$fullNameInData' (similarity: $maxSimilarity)")
             }
         }
-        
+
         if (studentRowIndex == -1 || bestMatch == null) {
             Log.e("ExcelViewModel", "updateStudentValue failed: student '$studentName' not found in data (best similarity: $bestSimilarity)")
             onComplete(false)
             return
         }
-        
+
         Log.d("ExcelViewModel", "Found student match at index $studentRowIndex with similarity $bestSimilarity")
 
         // Update the data locally first (optimistic update)
@@ -672,60 +673,154 @@ class ExcelViewModel : ViewModel() {
         updatedData[studentRowIndex] = studentRow
 
         Log.d("ExcelViewModel", "Updated '$columnName' from '${bestMatch[columnName]}' to '$value' for student '$studentName'")
-        Log.d("ExcelViewModel", "Student row after update: ${studentRow.entries.take(5)}")
-        Log.d("ExcelViewModel", "Updated data row at index $studentRowIndex: ${updatedData[studentRowIndex].entries.take(5)}")
 
-        // We'll need to update the all_sheets map manually
-        // This is a temporary solution - ideally we'd update the backend
+        // Update local file immediately
         val updatedSheetsMap = (file.all_sheets[sheet] as? Map<String, Any>)?.toMutableMap() ?: mutableMapOf<String, Any>()
         updatedSheetsMap["headers"] = sheetContent.headers
         updatedSheetsMap["data"] = updatedData
-        
-        // Update the file's sheets
         val updatedSheets = file.all_sheets.toMutableMap()
         updatedSheets[sheet] = updatedSheetsMap
-
-        // Create updated file object
         val updatedFile = file.copy(all_sheets = updatedSheets)
-
-        // Update the selected file immediately for this instance
         selectedExcelFile = updatedFile
-        Log.d("ExcelViewModel", "Local file updated, verifying column '$columnName' exists in headers: ${sheetContent.headers.contains(columnName)}")
-        Log.d("ExcelViewModel", "Local file updated, verifying student value in updated file: ${updatedFile.getSheetContent(sheet)?.data?.get(studentRowIndex)?.get(columnName)}")
 
-        // Save changes to backend and wait for result
+        // Save changes to backend
         isSaving = true
-        
+
         viewModelScope.launch {
             try {
+                Log.d("ExcelViewModel", "Starting backend update for: $studentName")
                 val result = excelRepository.updateExcelData(file.id, sheet, updatedData)
-                
+
                 result.fold(
                     onSuccess = {
-                        Log.d("ExcelViewModel", "Backend update successful for student: $studentName")
-                        // Backend update successful - now refetch data to ensure all instances get the update
+                        Log.d("ExcelViewModel", "✅ Backend update successful for student: $studentName")
+                        // Refetch data to ensure consistency
                         val classId = file.classId
                         if (classId != null) {
-                            // Refetch all files to ensure consistency across all ViewModels
                             fetchExcelFiles(classId)
                         }
+                        // ✅ CALL CALLBACK ON SUCCESS
                         onComplete(true)
                     },
                     onFailure = { error ->
-                        Log.e("ExcelViewModel", "Backend update failed for student: $studentName", error)
-                        // Backend update failed - revert local changes
-                        selectedExcelFile = file // Revert to original
+                        Log.e("ExcelViewModel", "❌ Backend update failed for student: $studentName", error)
+                        // Revert local changes
+                        selectedExcelFile = file
+                        // ✅ CALL CALLBACK ON FAILURE
                         onComplete(false)
                     }
                 )
             } catch (e: Exception) {
-                Log.e("ExcelViewModel", "Exception during backend update for student: $studentName", e)
-                // Exception occurred - revert local changes
-                selectedExcelFile = file // Revert to original
+                Log.e("ExcelViewModel", "❌ Exception during backend update for student: $studentName", e)
+                // Revert local changes
+                selectedExcelFile = file
+                // ✅ CALL CALLBACK ON EXCEPTION
                 onComplete(false)
             } finally {
                 isSaving = false
             }
+        }
+    }
+
+    suspend fun updateStudentValueSuspend(studentName: String, columnName: String, value: String): Boolean {
+        val file = selectedExcelFile ?: run {
+            Log.e("ExcelViewModel", "updateStudentValue failed: no selected file")
+            return false
+        }
+        val sheet = selectedSheetName ?: run {
+            Log.e("ExcelViewModel", "updateStudentValue failed: no selected sheet")
+            return false
+        }
+        val sheetContent = file.getSheetContent(sheet) ?: run {
+            Log.e("ExcelViewModel", "updateStudentValue failed: no sheet content")
+            return false
+        }
+
+        Log.d("ExcelViewModel", "=== UPDATE STUDENT VALUE SUSPEND DEBUG ===")
+        Log.d("ExcelViewModel", "Student name: '$studentName'")
+        Log.d("ExcelViewModel", "Column name: '$columnName'")
+        Log.d("ExcelViewModel", "Value: '$value'")
+
+        // [Keep all the same logic for finding the student...]
+        val columnIndex = sheetContent.headers.indexOf(columnName)
+        if (columnIndex == -1) {
+            Log.e("ExcelViewModel", "updateStudentValue failed: column '$columnName' not found in headers: ${sheetContent.headers}")
+            return false
+        }
+
+        val nameColumns = sheetContent.headers.filter { header ->
+            header.contains("name", ignoreCase = true) ||
+                    header.contains("last", ignoreCase = true) ||
+                    header.contains("first", ignoreCase = true)
+        }
+        val columnsToSearch = if (nameColumns.isEmpty()) listOf(sheetContent.headers[0]) else nameColumns
+
+        var studentRowIndex = -1
+        var bestMatch: Map<String, String>? = null
+        var bestSimilarity = 0.0
+
+        sheetContent.data.forEachIndexed { index, student ->
+            val fullNameInData = nameColumns.mapNotNull { col -> student[col] }.joinToString(" ").trim()
+            val similarities = mutableListOf<Double>()
+            similarities.add(calculateNameSimilarity(studentName, fullNameInData))
+
+            val nameParts = studentName.split(" ").filter { it.isNotBlank() }
+            if (nameParts.size >= 2) {
+                val reversedName = "${nameParts.last()} ${nameParts.dropLast(1).joinToString(" ")}"
+                similarities.add(calculateNameSimilarity(reversedName, fullNameInData))
+            }
+
+            val maxSimilarity = similarities.maxOrNull() ?: 0.0
+            if (maxSimilarity > bestSimilarity && maxSimilarity > 0.6) {
+                bestSimilarity = maxSimilarity
+                bestMatch = student
+                studentRowIndex = index
+            }
+        }
+
+        if (studentRowIndex == -1 || bestMatch == null) {
+            Log.e("ExcelViewModel", "updateStudentValue failed: student '$studentName' not found")
+            return false
+        }
+
+        // Update the data locally
+        val updatedData = sheetContent.data.toMutableList()
+        val studentRow = bestMatch.toMutableMap()
+        studentRow[columnName] = value
+        updatedData[studentRowIndex] = studentRow
+
+        // Update local file
+        val updatedSheetsMap = (file.all_sheets[sheet] as? Map<String, Any>)?.toMutableMap() ?: mutableMapOf<String, Any>()
+        updatedSheetsMap["headers"] = sheetContent.headers
+        updatedSheetsMap["data"] = updatedData
+        val updatedSheets = file.all_sheets.toMutableMap()
+        updatedSheets[sheet] = updatedSheetsMap
+        val updatedFile = file.copy(all_sheets = updatedSheets)
+        selectedExcelFile = updatedFile
+
+        Log.d("ExcelViewModel", "Starting backend update for: $studentName")
+
+        return try {
+            val result = excelRepository.updateExcelData(file.id, sheet, updatedData)
+            result.fold(
+                onSuccess = {
+                    Log.d("ExcelViewModel", "✅ Backend update successful for student: $studentName")
+                    val classId = file.classId
+                    if (classId != null) {
+                        fetchExcelFiles(classId)
+                    }
+                    true
+                },
+                onFailure = { error ->
+                    Log.e("ExcelViewModel", "❌ Backend update failed for student: $studentName", error)
+                    selectedExcelFile = file // Revert
+                    false
+                }
+            )
+        } catch (e: Exception) {
+            Log.e("ExcelViewModel", "❌ Exception during backend update for student: $studentName", e)
+            selectedExcelFile = file // Revert
+            false
         }
     }
 
