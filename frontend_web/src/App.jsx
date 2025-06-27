@@ -21,6 +21,10 @@ import JoinedTeams from './components/JoinedTeams.jsx'
 import CourseAccessGuard from './components/CourseAccessGuard'
 import TeamDetail from './components/TeamDetail.jsx'
 import YourTeams from './components/YourTeams.jsx'
+import CreateClassRecord from './components/CreateClassRecords.jsx'
+import ViewClassRecords from './components/ViewClassRecords .jsx'
+import ClassRecordExcel from './components/ClassRecordExcel.jsx'
+import ClassRecordImport from './components/ClassRecordImport.jsx'
 import './index.css'
 import { enableHardwareAcceleration, preloadHeaderAssets } from './utils/preload.js'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -125,6 +129,36 @@ function App() {
                     </CourseAccessGuard>
                   </ProtectedRoute>
                 } />
+                
+                {/* Add Class Records Routes */}
+                <Route path="/dashboard/class-records" element={
+                  <ProtectedRoute>
+                    <CreateClassRecord />
+                  </ProtectedRoute>
+                } />
+                <Route path="/dashboard/class-records/create" element={
+                  <ProtectedRoute>
+                    <CreateClassRecord />
+                  </ProtectedRoute>
+                } />
+                <Route path="/dashboard/class-records/view" element={
+                  <ProtectedRoute>
+                    <ViewClassRecords />
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/dashboard/class-records/:id/excel" element={
+                  <ProtectedRoute>
+                    <ClassRecordExcel />
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/dashboard/class-records/:id/import" element={
+                  <ProtectedRoute>
+                    <ClassRecordImport />
+                  </ProtectedRoute>
+                } />
+                
                 <Route path="/dashboard/classes" element={
                   <ProtectedRoute>
                     <Classes />

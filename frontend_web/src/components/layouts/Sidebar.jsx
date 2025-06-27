@@ -143,7 +143,6 @@ const Sidebar = ({ onCollapse }) => {
     });
   }, [location.pathname]);
 
-
   const handleLogoutClick = (e) => {
     e.preventDefault();
     setShowLogoutModal(true);
@@ -168,6 +167,16 @@ const Sidebar = ({ onCollapse }) => {
       name: 'Courses',
       icon: <RiBookOpenLine size={22} />,
       path: '/dashboard/courses'
+    },
+    {
+      name: 'Class Records',
+      icon: <RiSoundModuleLine size={22} />,
+      path: '/dashboard/class-records',
+      hasSubmenu: true,
+      submenu: [
+        { name: 'Create Class Record', path: '/dashboard/class-records/create' },
+        { name: 'View Records', path: '/dashboard/class-records/view' }
+      ] 
     },
     {
       name: 'Schedule',

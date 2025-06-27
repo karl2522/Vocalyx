@@ -10,7 +10,6 @@ const api = axios.create({
     },
 });
 
-
 api.interceptors.request.use(
     (config) => {
         // Try to get token from both possible storage keys for backward compatibility
@@ -428,6 +427,134 @@ export const notificationService = {
   markAllAsRead: () => api.post('/notifications/mark_all_as_read/')
 };
 
+export const classRecordService = {
+    // Get all class records for the authenticated user
+    getClassRecords: () => api.get('/class-records/'),
+    
+    // Create a new class record
+    createClassRecord: (recordData) => api.post('/class-records/', recordData),
+    
+    // Get a specific class record by ID
+    getClassRecord: (id) => api.get(`/class-records/${id}/`),
+    
+    // Update a class record
+    updateClassRecord: (id, recordData) => api.patch(`/class-records/${id}/`, recordData),
+    
+    // Delete a class record
+    deleteClassRecord: (id) => api.delete(`/class-records/${id}/`),
+    
+    // Get students for a specific class record
+    getClassRecordStudents: (id) => api.get(`/class-records/${id}/students/`),
+    
+    // Add a student to a class record
+    addStudentToClassRecord: (classRecordId, studentData) => 
+        api.post(`/class-records/${classRecordId}/add_student/`, studentData),
+    
+    // Get grade categories for a class record
+    getClassRecordGradeCategories: (id) => api.get(`/class-records/${id}/grade_categories/`),
+    
+    // Add a grade category to a class record
+    addGradeCategoryToClassRecord: (classRecordId, categoryData) => 
+        api.post(`/class-records/${classRecordId}/add_grade_category/`, categoryData),
+
+    saveSpreadsheetData: (classRecordId, data) => 
+        api.post(`/class-records/${classRecordId}/save_spreadsheet/`, { spreadsheet_data: data }),
+    
+    // Load spreadsheet data
+    getSpreadsheetData: (classRecordId) => 
+        api.get(`/class-records/${classRecordId}/spreadsheet/`),
+    
+    // Save custom columns/categories
+    saveCustomColumns: (classRecordId, columns) => 
+        api.post(`/class-records/${classRecordId}/save_columns/`, { custom_columns: columns }),
+    
+    // Get custom columns/categories
+    getCustomColumns: (classRecordId) => 
+        api.get(`/class-records/${classRecordId}/columns/`),
+    
+    // Add column to specific category
+    addColumn: (classRecordId, category, columnName) => 
+        api.post(`/class-records/${classRecordId}/add_column/`, { 
+            category: category, 
+            column_name: columnName 
+        }),
+    
+    // Remove column from specific category
+    removeColumn: (classRecordId, category, columnName) => 
+        api.post(`/class-records/${classRecordId}/remove_column/`, { 
+            category: category, 
+            column_name: columnName 
+        }),
+
+    // 🔥 FIXED: Use the same 'api' instance instead of axiosInstance
+    saveImportedExcel: (id, data) => {
+        return api.post(`/class-records/${id}/save_imported_excel/`, data);
+    },
+
+    getImportedExcel: (id) => {
+        return api.get(`/class-records/${id}/get_imported_excel/`);
+    },
+
+    updateImportedExcel: (id, data) => {
+        return api.post(`/class-records/${id}/update_imported_excel/`, { data });
+    },
+
+    clearImportedExcel: (id) => {
+        return api.post(`/class-records/${id}/clear_imported_excel/`);
+    },
+};
+
+export const studentService = {
+    // Get all students
+    getStudents: () => api.get('/students/'),
+    
+    // Create a new student
+    createStudent: (studentData) => api.post('/students/', studentData),
+    
+    // Get a specific student
+    getStudent: (id) => api.get(`/students/${id}/`),
+    
+    // Update a student
+    updateStudent: (id, studentData) => api.patch(`/students/${id}/`, studentData),
+    
+    // Delete a student
+    deleteStudent: (id) => api.delete(`/students/${id}/`),
+};
+
+export const gradeCategoryService = {
+    // Get all grade categories
+    getGradeCategories: () => api.get('/grade-categories/'),
+    
+    // Create a new grade category
+    createGradeCategory: (categoryData) => api.post('/grade-categories/', categoryData),
+    
+    // Get a specific grade category
+    getGradeCategory: (id) => api.get(`/grade-categories/${id}/`),
+    
+    // Update a grade category
+    updateGradeCategory: (id, categoryData) => api.patch(`/grade-categories/${id}/`, categoryData),
+    
+    // Delete a grade category
+    deleteGradeCategory: (id) => api.delete(`/grade-categories/${id}/`),
+};
+
+export const gradeService = {
+    // Get all grades
+    getGrades: () => api.get('/grades/'),
+    
+    // Create a new grade
+    createGrade: (gradeData) => api.post('/grades/', gradeData),
+    
+    // Get a specific grade
+    getGrade: (id) => api.get(`/grades/${id}/`),
+    
+    // Update a grade
+    updateGrade: (id, gradeData) => api.patch(`/grades/${id}/`, gradeData),
+    
+    // Delete a grade
+    deleteGrade: (id) => api.delete(`/grades/${id}/`),
+};
+
 // Add default export
 const apiService = {
     register,
@@ -435,7 +562,11 @@ const apiService = {
     login,
     logout,
     refreshToken,
-    classService
+    classService,
+    classRecordService, // Add this
+    studentService,     // Add this
+    gradeCategoryService, // Add this
+    gradeService        // Add this
 };
 
 export default apiService;

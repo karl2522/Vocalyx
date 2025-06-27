@@ -33,6 +33,7 @@ urlpatterns = [
     path('api/', include(router.urls)),
     path('api/', include('classes.urls')),
     path('api/', include('teams.urls')),
+    path('api/', include('classrecord.urls')),
 
     path('api/', include('notifications.urls')),
 
