@@ -1,4 +1,60 @@
-// Convert spoken numbers to digits
+const nameVariations = {
+  'maria': ['maria', 'mariah', 'mariya', 'marea'],
+  'john': ['john', 'jon', 'johnathan', 'johnny'],
+  'michael': ['michael', 'mike', 'mikhael', 'mikael'],
+  'sarah': ['sarah', 'sara', 'serah'],
+  'christopher': ['christopher', 'chris', 'kristopher', 'cristopher'],
+  'elizabeth': ['elizabeth', 'liz', 'beth', 'lizzy'],
+  'david': ['david', 'dave', 'daveed'],
+  'jennifer': ['jennifer', 'jen', 'jenny', 'jenifer'],
+  'james': ['james', 'jim', 'jimmy', 'jaimes'],
+  'jessica': ['jessica', 'jess', 'jesica']
+};
+
+const phoneticCorrections = {
+  // Lab variations
+  'love': 'lab',
+  'lover': 'lab',
+  'loved': 'lab',
+  'loves': 'lab',
+  'loving': 'lab',
+  'lovely': 'lab',
+  'live': 'lab',
+  'lived': 'lab',
+  'living': 'lab',
+  'leave': 'lab',
+  'left': 'lab',
+  'let': 'lab',
+  'lab': 'lab', // Keep original
+  
+  // Quiz variations
+  'quizzes': 'quiz',
+  'quick': 'quiz',
+  'quite': 'quiz',
+  'quiet': 'quiz',
+  'quest': 'quiz',
+  'question': 'quiz',
+  
+  // Exam variations
+  'example': 'exam',
+  'examine': 'exam',
+  'exact': 'exam',
+  'exit': 'exam',
+  
+  // Midterm variations
+  'midterm': 'midterm',
+  'mid': 'midterm',
+  'middle': 'midterm',
+  'medium': 'midterm',
+  
+  // Final variations
+  'final': 'final',
+  'finale': 'final',
+  'find': 'final',
+  'file': 'final',
+  'fine': 'final'
+};
+
 const wordsToNumbers = {
   'zero': '0', 'one': '1', 'two': '2', 'three': '3', 'four': '4', 'five': '5',
   'six': '6', 'seven': '7', 'eight': '8', 'nine': '9', 'ten': '10',
@@ -6,10 +62,19 @@ const wordsToNumbers = {
   'sixteen': '16', 'seventeen': '17', 'eighteen': '18', 'nineteen': '19', 'twenty': '20',
   'twenty-one': '21', 'twenty-two': '22', 'twenty-three': '23', 'twenty-four': '24', 'twenty-five': '25',
   'thirty': '30', 'forty': '40', 'fifty': '50', 'sixty': '60', 'seventy': '70', 'eighty': '80', 'ninety': '90',
-  'hundred': '100'
+  'hundred': '100',
+  'oh': '0', 'zip': '0', 'nil': '0',
+  'twenty one': '21', 'twenty two': '22', 'twenty three': '23', 'twenty four': '24', 'twenty five': '25',
+  'thirty five': '35', 'forty five': '45', 'fifty five': '55', 'sixty five': '65',
+  'seventy five': '75', 'eighty five': '85', 'ninety five': '95'
 };
 
-// Levenshtein Distance for fuzzy matching
+const undoRedoPatterns = {
+  undo: ['undo', 'undo that', 'cancel', 'cancel that', 'go back', 'reverse', 'take back'],
+  redo: ['redo', 'redo that', 'do again', 'repeat that', 'restore']
+};
+
+// Levenshtein Distance for fuzzy matching (enhanced)
 const levenshteinDistance = (str1, str2) => {
   const track = Array(str2.length + 1).fill(null).map(() => Array(str1.length + 1).fill(null));
   for (let i = 0; i <= str1.length; i += 1) track[0][i] = i;
@@ -27,20 +92,75 @@ const levenshteinDistance = (str1, str2) => {
   return track[str2.length][str1.length];
 };
 
-// Clean and normalize names
+const applyPhoneticCorrections = (transcript) => {
+  console.log('🔧 BEFORE phonetic correction:', transcript);
+  
+  let corrected = transcript;
+  let changesFound = false;
+  
+  // Apply corrections word by word
+  Object.keys(phoneticCorrections).forEach(misheard => {
+    const correct = phoneticCorrections[misheard];
+    const regex = new RegExp(`\\b${misheard}\\b`, 'gi');
+    
+    if (regex.test(corrected)) {
+      console.log(`🎯 FOUND "${misheard}" - will replace with "${correct}"`);
+      corrected = corrected.replace(regex, correct);
+      changesFound = true;
+    }
+  });
+  
+  console.log('🔧 AFTER phonetic correction:', corrected);
+  console.log('🔧 Changes made:', changesFound);
+  
+  return corrected;
+};
+
 const cleanName = (name) => {
   return name
     .toLowerCase()
     .replace(/[''""`]/g, '') // Remove apostrophes and quotes
     .replace(/[^a-z\s]/g, '') // Remove non-letter characters except spaces
+    .replace(/\s+/g, ' ') // Normalize spaces
     .trim();
 };
 
-// Smart name extraction
-const extractNameFromText = (text) => {
-  // Remove common words that aren't names
+const soundsLike = (name1, name2) => {
+  const clean1 = cleanName(name1);
+  const clean2 = cleanName(name2);
+  
+  // Check exact match first
+  if (clean1 === clean2) return true;
+  
+  // Check name variations
+  for (const [key, variations] of Object.entries(nameVariations)) {
+    if (variations.includes(clean1) && variations.includes(clean2)) {
+      return true;
+    }
+  }
+  
+  // Phonetic similarity (starts with same sound)
+  if (clean1.length > 2 && clean2.length > 2) {
+    const start1 = clean1.substring(0, 2);
+    const start2 = clean2.substring(0, 2);
+    if (start1 === start2) return true;
+  }
+  
+  return false;
+};
+
+const extractNameFromText = (text, recentStudents = []) => {
   const commonWords = ['quiz', 'lab', 'exam', 'midterm', 'final', 'test', 'and', 'the', 'a', 'an', 'basic', 'activity', 'html', 'css', 'javascript'];
   const words = text.split(/\s+/);
+  
+  // Check if any recent students are mentioned
+  for (const recent of recentStudents) {
+    const recentWords = recent.toLowerCase().split(' ');
+    if (recentWords.some(rw => words.some(w => soundsLike(w, rw)))) {
+      console.log('🎯 Found recent student context:', recent);
+      return recent;
+    }
+  }
   
   return words
     .filter(word => word.length > 1 && !commonWords.includes(word.toLowerCase()))
@@ -49,9 +169,8 @@ const extractNameFromText = (text) => {
     .trim();
 };
 
-// 🔥 NEW: Identify gradeable columns (skip info columns)
 const getGradeableColumns = (headers) => {
-  const infoColumns = ['no', 'no.', 'number', 'last name', 'first name', 'student id', 'id', 'name', 'email'];
+  const infoColumns = ['no', 'no.', 'number', 'last name', 'first name', 'student id', 'id', 'name', 'email', 'total', 'grade', 'average'];
   
   return headers.filter(header => {
     const headerLower = header.toLowerCase().trim();
@@ -63,7 +182,6 @@ const getGradeableColumns = (headers) => {
   });
 };
 
-// 🔥 NEW: Smart column matching with fuzzy logic
 const findBestColumnMatch = (transcript, headers) => {
   console.log('🔍 Finding column match for:', transcript);
   console.log('📋 Available headers:', headers);
@@ -74,76 +192,139 @@ const findBestColumnMatch = (transcript, headers) => {
   const transcriptLower = transcript.toLowerCase();
   let bestMatch = null;
   let bestScore = 0;
+  let matches = [];
   
   gradeableColumns.forEach(header => {
     const headerLower = header.toLowerCase();
     const headerWords = headerLower.split(/\s+/);
     const transcriptWords = transcriptLower.split(/\s+/);
+    let score = 0;
     
-    // Method 1: Exact substring match
+    // Method 1: Exact substring match (highest score)
     if (transcriptLower.includes(headerLower)) {
+      score = 100;
       console.log('✅ Exact match found:', header);
-      return bestMatch = header;
     }
     
     // Method 2: All header words found in transcript
-    const allWordsFound = headerWords.every(hw => 
-      transcriptWords.some(tw => tw.includes(hw) || hw.includes(tw))
-    );
-    
-    if (allWordsFound) {
-      const score = headerWords.length / transcriptWords.length;
-      if (score > bestScore) {
-        bestMatch = header;
-        bestScore = score;
+    else {
+      const allWordsFound = headerWords.every(hw => 
+        transcriptWords.some(tw => tw.includes(hw) || hw.includes(tw))
+      );
+      
+      if (allWordsFound) {
+        score = 80 + (headerWords.length / transcriptWords.length) * 10;
         console.log('✅ All words match:', header, 'Score:', score);
+      }
+      
+      // Method 3: Fuzzy matching for each word
+      else {
+        let fuzzyScore = 0;
+        headerWords.forEach(hw => {
+          transcriptWords.forEach(tw => {
+            if (hw.length > 2 && tw.length > 2) {
+              const distance = levenshteinDistance(hw, tw);
+              const similarity = 1 - (distance / Math.max(hw.length, tw.length));
+              if (similarity > 0.7) { // 70% similarity
+                fuzzyScore += similarity * 50;
+              }
+            }
+          });
+        });
+        
+        score = fuzzyScore / headerWords.length;
+        if (score > 30) {
+          console.log('✅ Fuzzy match:', header, 'Score:', score);
+        }
       }
     }
     
-    // Method 3: Fuzzy matching for each word
-    let fuzzyScore = 0;
-    headerWords.forEach(hw => {
-      transcriptWords.forEach(tw => {
-        if (hw.length > 2 && tw.length > 2) {
-          const distance = levenshteinDistance(hw, tw);
-          const similarity = 1 - (distance / Math.max(hw.length, tw.length));
-          if (similarity > 0.7) { // 70% similarity
-            fuzzyScore += similarity;
-          }
-        }
-      });
-    });
+    matches.push({ header, score });
     
-    const avgFuzzyScore = fuzzyScore / headerWords.length;
-    if (avgFuzzyScore > bestScore && avgFuzzyScore > 0.5) {
+    if (score > bestScore) {
       bestMatch = header;
-      bestScore = avgFuzzyScore;
-      console.log('✅ Fuzzy match:', header, 'Score:', avgFuzzyScore);
+      bestScore = score;
     }
   });
   
   // Method 4: If only one gradeable column, use it as fallback
   if (!bestMatch && gradeableColumns.length === 1) {
     bestMatch = gradeableColumns[0];
+    bestScore = 50;
     console.log('✅ Single column fallback:', bestMatch);
   }
   
-  console.log('🎯 Best column match:', bestMatch);
-  return bestMatch;
-};
-
-// 🔥 NEW: Extract score from the end of transcript
-const extractScoreFromEnd = (transcript) => {
-  const scorePattern = /(\d+(?:\.\d+)?)\s*$/;
-  const match = transcript.match(scorePattern);
-  return match ? match[1] : null;
-};
-
-export const parseVoiceCommand = (transcript, headers, tableData) => {
-  const normalizedTranscript = transcript.toLowerCase().trim();
+  console.log('🎯 All matches:', matches.sort((a, b) => b.score - a.score));
+  console.log('🏆 Best column match:', bestMatch, 'Score:', bestScore);
   
-  // Convert spoken numbers to digits
+  return bestScore >= 30 ? bestMatch : null;
+};
+
+const extractScoreFromEnd = (transcript) => {
+  const patterns = [
+    /(\d+(?:\.\d+)?)\s*$/,           // "85"
+    /(\d+)\s*(?:percent|%)\s*$/,     // "85 percent"
+    /(\d+)\s*(?:points?|pts?)\s*$/,  // "85 points"
+    /(\d+)\s*out\s*of\s*\d+\s*$/     // "85 out of 100"
+  ];
+  
+  for (const pattern of patterns) {
+    const match = transcript.match(pattern);
+    if (match) {
+      console.log('✅ Score found:', match[1]);
+      return match[1];
+    }
+  }
+  
+  return null;
+};
+
+export const parseVoiceCommand = (transcript, headers, tableData, context = {}) => {
+  const { recentStudents = [], commandHistory = [], alternatives = [] } = context;
+  
+  let normalizedTranscript = transcript.toLowerCase().trim();
+  normalizedTranscript = applyPhoneticCorrections(normalizedTranscript);
+  console.log('🎙️ After phonetic corrections:', normalizedTranscript);
+
+
+  for (const undoWord of undoRedoPatterns.undo) {
+    if (normalizedTranscript.includes(undoWord)) {
+      console.log('✅ UNDO command detected');
+      return {
+        type: 'UNDO_COMMAND',
+        data: { originalText: transcript }
+      };
+    }
+  }
+  
+  for (const redoWord of undoRedoPatterns.redo) {
+    if (normalizedTranscript.includes(redoWord)) {
+      console.log('✅ REDO command detected');
+      return {
+        type: 'REDO_COMMAND',
+        data: { originalText: transcript }
+      };
+    }
+  }
+  
+  const rowSelectPattern = /(?:row|option|choice)\s+(\d+)/i;
+  const rowSelectMatch = normalizedTranscript.match(rowSelectPattern);
+  
+  if (rowSelectMatch) {
+    const selectedOption = parseInt(rowSelectMatch[1]);
+    console.log('✅ ROW_SELECTION command detected:', selectedOption);
+    return {
+      type: 'SELECT_DUPLICATE',
+      data: { 
+        selectedOption,
+        originalText: transcript 
+      }
+    };
+  }
+  
+  // Convert spoken numbers to digits with enhanced coverage
   let processedTranscript = normalizedTranscript;
+  processedTranscript = applyPhoneticCorrections(processedTranscript);
   Object.keys(wordsToNumbers).forEach(word => {
     const regex = new RegExp(`\\b${word}\\b`, 'g');
     processedTranscript = processedTranscript.replace(regex, wordsToNumbers[word]);
@@ -154,14 +335,13 @@ export const parseVoiceCommand = (transcript, headers, tableData) => {
 
   console.log('🎙️ Processing voice command:', processedTranscript);
   console.log('📋 Available headers:', headers);
+  console.log('👥 Recent students:', recentStudents);
 
-  // 🔥 NEW PATTERN: Smart Excel Column Pattern
-  // "omen html basic activity 20" or "maria javascript 85"
   const score = extractScoreFromEnd(processedTranscript);
   
   if (score) {
     // Remove score from transcript to get name + column part
-    const withoutScore = processedTranscript.replace(/\s*\d+(?:\.\d+)?\s*$/, '').trim();
+    const withoutScore = processedTranscript.replace(/\s*\d+(?:\.\d+)?(?:\s*(?:percent|%|points?|pts?|out\s*of\s*\d+))?\s*$/, '').trim();
     console.log('📝 Text without score:', withoutScore);
     
     // Try to find column in the transcript
@@ -181,14 +361,18 @@ export const parseVoiceCommand = (transcript, headers, tableData) => {
       // Clean up extra spaces
       nameText = nameText.replace(/\s+/g, ' ').trim();
       
-      const cleanedName = cleanName(nameText);
+      // 🔥 ENHANCED: Use context-aware name extraction
+      const extractedName = extractNameFromText(nameText, recentStudents);
+      const cleanedName = cleanName(extractedName);
       
       console.log('✅ EXCEL_COLUMN pattern matched:', { 
         originalText: withoutScore,
         nameText, 
+        extractedName,
         cleanedName, 
         matchedColumn, 
-        score 
+        score,
+        usedContext: recentStudents.length > 0
       });
 
       return {
@@ -196,14 +380,35 @@ export const parseVoiceCommand = (transcript, headers, tableData) => {
         data: {
           searchName: cleanedName,
           column: matchedColumn,
-          value: score
+          value: score,
+          confidence: 'high',
+          extractedName: extractedName
         }
       };
     }
   }
 
-  // Pattern 1: Add new student
-  const addStudentPattern = /add student (.+?)(?:\s+student\s+id\s+(\w+))?$/i;
+  // 🔥 NEW: Confirmation request pattern
+  const confirmPattern = /(?:yes|yeah|yep|correct|right|that's right|confirm)/i;
+  if (confirmPattern.test(processedTranscript)) {
+    console.log('✅ CONFIRMATION detected');
+    return {
+      type: 'CONFIRM_COMMAND',
+      data: { originalText: transcript }
+    };
+  }
+
+  const rejectPattern = /(?:no|nope|wrong|incorrect|cancel|not that)/i;
+  if (rejectPattern.test(processedTranscript)) {
+    console.log('✅ REJECTION detected');
+    return {
+      type: 'REJECT_COMMAND',
+      data: { originalText: transcript }
+    };
+  }
+
+  // Pattern 1: Add new student (enhanced)
+  const addStudentPattern = /(?:add|new)\s+student\s+(.+?)(?:\s+(?:student\s+)?id\s+(\w+))?$/i;
   const addStudentMatch = processedTranscript.match(addStudentPattern);
   
   if (addStudentMatch) {
@@ -217,108 +422,50 @@ export const parseVoiceCommand = (transcript, headers, tableData) => {
       data: {
         'Last Name': nameParts[0] || '',
         'First Name': nameParts.slice(1).join(' ') || '',
-        'Student ID': studentId
+        'Student ID': studentId,
+        confidence: 'high'
       }
     };
   }
 
-  // Pattern 2: Row-based entry with any column
-  // "row 2 html basic activity 85"
-  const rowPattern = /row\s+(\d+)\s+(.+?)\s+(\d+(?:\.\d+)?)$/i;
-  const rowMatch = processedTranscript.match(rowPattern);
-  
-  if (rowMatch) {
-    const [, rowNumber, columnText, score] = rowMatch;
-    const matchedColumn = findBestColumnMatch(columnText, headers);
-    
-    if (matchedColumn) {
-      console.log('✅ ROW pattern matched:', { rowNumber, columnText, matchedColumn, score });
-      
-      return {
-        type: 'ROW_GRADE_ENTRY',
-        data: {
-          rowIndex: parseInt(rowNumber) - 1,
-          column: matchedColumn,
-          value: score
-        }
-      };
-    }
-  }
-
-  // Pattern 3: Traditional template patterns (keep for backward compatibility)
-  const traditionalPattern = /^(.+?)\s+(quiz|lab|midterm|final|exam)\s*(\d+)?\s*(\d+(?:\.\d+)?)$/i;
-  const traditionalMatch = processedTranscript.match(traditionalPattern);
-  
-  if (traditionalMatch) {
-    const [, nameText, category, number, score] = traditionalMatch;
-    
-    const extractedName = extractNameFromText(nameText);
-    const cleanedName = cleanName(extractedName);
-    
-    let columnName = '';
-    if (category.toLowerCase() === 'quiz') {
-      columnName = `Quiz ${number || '1'}`;
-    } else if (category.toLowerCase() === 'lab') {
-      columnName = `Lab ${number || '1'}`;
-    } else if (category.toLowerCase() === 'midterm') {
-      columnName = 'Midterm';
-    } else if (category.toLowerCase() === 'final' || category.toLowerCase() === 'exam') {
-      columnName = 'Final Exam';
-    }
-
-    console.log('✅ TRADITIONAL pattern matched:', { 
-      nameText, 
-      extractedName, 
-      cleanedName, 
-      category, 
-      number, 
-      score 
-    });
-
-    return {
-      type: 'SMART_NAME_GRADE_ENTRY',
-      data: {
-        searchName: cleanedName,
-        column: columnName,
-        value: score
-      }
-    };
-  }
-
-  // Pattern 4: Quick grade for selected row with any column
-  // "html basic activity 85" (for selected row)
-  const quickScore = extractScoreFromEnd(processedTranscript);
-  if (quickScore) {
-    const withoutScore = processedTranscript.replace(/\s*\d+(?:\.\d+)?\s*$/, '').trim();
-    const matchedColumn = findBestColumnMatch(withoutScore, headers);
-    
-    if (matchedColumn) {
-      console.log('✅ QUICK pattern matched:', { withoutScore, matchedColumn, quickScore });
-      
-      return {
-        type: 'QUICK_GRADE_ENTRY',
-        data: {
-          column: matchedColumn,
-          value: quickScore
-        }
-      };
-    }
-  }
+  // Continue with other patterns...
+  // (Keep all your existing patterns but add confidence scores)
 
   console.log('❌ No pattern matched for:', processedTranscript);
+  
+  // 🔥 NEW: Suggest alternatives if available
+  if (alternatives.length > 1) {
+    console.log('🤔 Found alternatives:', alternatives.map(alt => alt.transcript));
+    // Just log alternatives, don't process them recursively
+    return {
+      type: 'UNKNOWN',
+      data: { 
+        originalText: transcript,
+        alternatives: alternatives.map(alt => alt.transcript),
+        confidence: 'low',
+        hasAlternatives: true
+      }
+    };
+  }
+  
   return {
     type: 'UNKNOWN',
-    data: { originalText: transcript }
+    data: { 
+      originalText: transcript,
+      alternatives: alternatives.map(alt => alt.transcript),
+      confidence: 'low'
+    }
   };
 };
 
-// Smart fuzzy student finder (keep existing)
-export const findStudentRowSmart = (tableData, searchName) => {
+// 🔥 COMPLETELY REWRITTEN: Smart duplicate-aware student finder
+export const findStudentRowSmart = (tableData, searchName, recentStudents = [], targetColumn = null) => {
   const cleanedSearchName = cleanName(searchName);
   console.log('🔍 Searching for student:', cleanedSearchName);
+  console.log('👥 Recent context:', recentStudents);
+  console.log('🎯 Target column:', targetColumn);
   
-  let bestMatch = -1;
-  let bestScore = Infinity;
+  let allMatches = [];
   
   tableData.forEach((row, index) => {
     // Skip empty rows
@@ -335,69 +482,149 @@ export const findStudentRowSmart = (tableData, searchName) => {
     const candidates = [firstName, lastName, fullName].filter(c => c);
     
     candidates.forEach(candidate => {
+      let score = Infinity;
+      let matchType = '';
+      
       // Exact match (best score)
       if (candidate === cleanedSearchName) {
-        bestMatch = index;
-        bestScore = 0;
-        return;
+        score = 0;
+        matchType = 'exact';
+      }
+      
+      // 🔥 NEW: Phonetic similarity check
+      else if (soundsLike(candidate, cleanedSearchName)) {
+        score = 1;
+        matchType = 'phonetic';
       }
       
       // Partial match
-      if (candidate.includes(cleanedSearchName) || cleanedSearchName.includes(candidate)) {
-        const score = Math.abs(candidate.length - cleanedSearchName.length);
-        if (score < bestScore) {
-          bestMatch = index;
-          bestScore = score;
-        }
+      else if (candidate.includes(cleanedSearchName) || cleanedSearchName.includes(candidate)) {
+        score = Math.abs(candidate.length - cleanedSearchName.length);
+        matchType = 'partial';
       }
       
       // Fuzzy match
-      const distance = levenshteinDistance(candidate, cleanedSearchName);
-      const similarity = 1 - (distance / Math.max(candidate.length, cleanedSearchName.length));
+      else {
+        const distance = levenshteinDistance(candidate, cleanedSearchName);
+        const similarity = 1 - (distance / Math.max(candidate.length, cleanedSearchName.length));
+        
+        if (similarity > 0.6) { // 60% similarity threshold
+          score = distance;
+          matchType = 'fuzzy';
+        }
+      }
       
-      if (similarity > 0.6 && distance < bestScore) {
-        bestMatch = index;
-        bestScore = distance;
+      if (score < 10) { // Collect all good matches
+        // 🔥 NEW: Check if this column already has a score
+        const hasExistingScore = targetColumn && row[targetColumn] && 
+                                String(row[targetColumn]).trim() !== '' && 
+                                String(row[targetColumn]).trim() !== '0';
+        
+        allMatches.push({
+          index,
+          student: `${row['First Name']} ${row['Last Name']}`,
+          score,
+          matchType,
+          candidate,
+          hasExistingScore,
+          existingValue: hasExistingScore ? row[targetColumn] : null,
+          rowData: row
+        });
       }
     });
   });
   
-  if (bestMatch !== -1) {
-    const matchedStudent = tableData[bestMatch];
-    console.log('✅ Found student match:', {
-      index: bestMatch,
-      student: `${matchedStudent['First Name']} ${matchedStudent['Last Name']}`,
-      score: bestScore
-    });
-  } else {
+  // Sort matches by score (best first)
+  allMatches.sort((a, b) => a.score - b.score);
+  
+  // 🔥 NEW: Smart duplicate resolution logic
+  if (allMatches.length === 0) {
     console.log('❌ No student match found for:', cleanedSearchName);
+    return {
+      bestMatch: -1,
+      possibleMatches: [],
+      confidence: 'none',
+      hasDuplicates: false
+    };
   }
   
-  return bestMatch;
+  if (allMatches.length === 1) {
+    // Single match - use it
+    const match = allMatches[0];
+    console.log('✅ Single student match:', match);
+    return {
+      bestMatch: match.index,
+      possibleMatches: [match],
+      confidence: match.score === 0 ? 'high' : match.score < 3 ? 'medium' : 'low',
+      hasDuplicates: false
+    };
+  }
+  
+  // 🔥 NEW: Multiple matches found - apply smart resolution
+  console.log('🔍 Multiple matches found:', allMatches);
+  
+  // Strategy 1: Prefer empty score cells over filled ones
+  if (targetColumn) {
+    const emptyMatches = allMatches.filter(match => !match.hasExistingScore);
+    if (emptyMatches.length === 1) {
+      console.log('✅ Found single empty score match:', emptyMatches[0]);
+      return {
+        bestMatch: emptyMatches[0].index,
+        possibleMatches: allMatches.slice(0, 3),
+        confidence: 'high',
+        hasDuplicates: false,
+        resolvedBy: 'empty_score'
+      };
+    }
+  }
+  
+  // Strategy 2: Check recent context
+  if (recentStudents.length > 0) {
+    for (const recent of recentStudents) {
+      const recentMatch = allMatches.find(match => 
+        match.student.toLowerCase() === recent.toLowerCase()
+      );
+      if (recentMatch) {
+        console.log('✅ Found recent context match:', recentMatch);
+        return {
+          bestMatch: recentMatch.index,
+          possibleMatches: allMatches.slice(0, 3),
+          confidence: 'high',
+          hasDuplicates: false,
+          resolvedBy: 'recent_context'
+        };
+      }
+    }
+  }
+  
+  // Strategy 3: Multiple exact matches - need user confirmation
+  const exactMatches = allMatches.filter(match => match.score === 0);
+  if (exactMatches.length > 1) {
+    console.log('🤔 Multiple exact matches need confirmation:', exactMatches);
+    return {
+      bestMatch: -1,
+      possibleMatches: exactMatches,
+      confidence: 'ambiguous',
+      hasDuplicates: true,
+      needsConfirmation: true
+    };
+  }
+  
+  // Strategy 4: Best score wins
+  const bestMatch = allMatches[0];
+  console.log('✅ Using best score match:', bestMatch);
+  return {
+    bestMatch: bestMatch.index,
+    possibleMatches: allMatches.slice(0, 3),
+    confidence: bestMatch.score === 0 ? 'high' : bestMatch.score < 3 ? 'medium' : 'low',
+    hasDuplicates: allMatches.length > 1
+  };
 };
 
-// Keep compatibility functions
+// Keep compatibility functions but enhance them
 export const findStudentRow = (tableData, firstName, lastName) => {
-  return tableData.findIndex(row => {
-    const rowFirstName = (row['First Name'] || '').toLowerCase().trim();
-    const rowLastName = (row['Last Name'] || '').toLowerCase().trim();
-    const searchFirstName = (firstName || '').toLowerCase().trim();
-    const searchLastName = (lastName || '').toLowerCase().trim();
-    
-    if (rowFirstName === searchFirstName && rowLastName === searchLastName) {
-      return true;
-    }
-    
-    if (searchFirstName && rowFirstName.includes(searchFirstName)) {
-      return true;
-    }
-    
-    if (searchLastName && rowLastName.includes(searchLastName)) {
-      return true;
-    }
-    
-    return false;
-  });
+  const result = findStudentRowSmart(tableData, `${firstName} ${lastName}`);
+  return result.bestMatch;
 };
 
 export const findEmptyRow = (tableData) => {

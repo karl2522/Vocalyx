@@ -19,17 +19,39 @@ const ClassRecordExcel = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
 
-  const { isListening, transcript, startListening, stopListening, isSupported, clearTranscript } = useVoiceRecognition();
+  const { 
+    isListening, 
+    transcript, 
+    startListening, 
+    stopListening, 
+    isSupported, 
+    clearTranscript,
+    recentStudents,
+    addRecentStudent,
+    addCommandHistory,
+    setAccuracyLevel: setVoiceAccuracy,
+    alternatives
+  } = useVoiceRecognition();
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [lastVoiceCommand, setLastVoiceCommand] = useState('');
   const [selectedRow, setSelectedRow] = useState(0);
+
+  const [commandHistory, setCommandHistory] = useState([]);
+  const [undoStack, setUndoStack] = useState([]);
+  const [redoStack, setRedoStack] = useState([]);
+  const [pendingConfirmation, setPendingConfirmation] = useState(null);
+  const [accuracyLevel, setAccuracyLevel] = useState('medium');
+
+  // 🔥 NEW: Duplicate handling state
+  const [duplicateOptions, setDuplicateOptions] = useState(null);
+  const [pendingCommand, setPendingCommand] = useState(null);
 
   // Column management state
   const [showAddColumnModal, setShowAddColumnModal] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('');
   const [newColumnName, setNewColumnName] = useState('');
 
-   useEffect(() => {
+  useEffect(() => {
     if (transcript && !isListening && transcript !== lastVoiceCommand) {
       handleVoiceCommand(transcript);
       setLastVoiceCommand(transcript);
@@ -82,71 +104,323 @@ const ClassRecordExcel = () => {
     }
   };
 
+  const handleAccuracyChange = (level) => {
+    setAccuracyLevel(level);
+    setVoiceAccuracy(level);
+    toast.success(`Voice accuracy set to ${level}`);
+  };
 
+  const handleRedo = () => {
+    if (redoStack.length > 0) {
+      const nextState = redoStack[redoStack.length - 1];
+      setUndoStack(prev => [...prev, JSON.parse(JSON.stringify(tableData))]);
+      setRedoStack(prev => prev.slice(0, -1));
+      setTableData(nextState);
+      
+      toast.success('↷ Redid last action');
+      if (voiceEnabled) {
+        speakText('Redid last action');
+      }
+    } else {
+      toast('Nothing to redo', { icon: 'ℹ️' });
+      if (voiceEnabled) {
+        speakText('Nothing to redo');
+      }
+    }
+  };
+
+  const saveStateForUndo = () => {
+    setUndoStack(prev => [...prev, JSON.parse(JSON.stringify(tableData))].slice(-10));
+    setRedoStack([]); // Clear redo stack when new action is performed
+  };
+
+  const handleUndo = () => {
+    if (undoStack.length > 0) {
+      const previousState = undoStack[undoStack.length - 1];
+      setRedoStack(prev => [...prev, JSON.parse(JSON.stringify(tableData))]);
+      setUndoStack(prev => prev.slice(0, -1));
+      setTableData(previousState);
+      
+      toast.success('↶ Undid last action');
+      if (voiceEnabled) {
+        speakText('Undid last action');
+      }
+    } else {
+      toast('Nothing to undo', { icon: 'ℹ️' });
+      if (voiceEnabled) {
+        speakText('Nothing to undo');
+      }
+    }
+  };
+
+  // 🔥 ENHANCED: Smart name handler with duplicate detection
   const handleSmartNameGradeEntryVoice = (data) => {
-  console.log('🎯 Smart name search for:', data);
-  
-  const targetRowIndex = findStudentRowSmart(tableData, data.searchName);
-  
-  if (targetRowIndex !== -1) {
-    handleCellChange(targetRowIndex, data.column, data.value);
-    setSelectedRow(targetRowIndex);
-    const student = tableData[targetRowIndex];
-    toast.success(`✅ ${student['First Name']} ${student['Last Name']} - ${data.column}: ${data.value}`);
-    if (voiceEnabled) {
-      speakText(`Updated ${data.column} to ${data.value} for ${student['First Name']} ${student['Last Name']}`);
+    console.log('🎯 Smart name search for:', data);
+    
+    const result = findStudentRowSmart(tableData, data.searchName, recentStudents, data.column);
+    
+    console.log('🔍 Search result:', result);
+
+    if (result.bestMatch !== -1 && !result.hasDuplicates) {
+      // Single clear match - execute immediately
+      saveStateForUndo();
+      handleCellChange(result.bestMatch, data.column, data.value);
+      setSelectedRow(result.bestMatch);
+      
+      const student = tableData[result.bestMatch];
+      const studentName = `${student['First Name']} ${student['Last Name']}`;
+      
+      // Add to recent students
+      addRecentStudent(studentName);
+      
+      toast.success(`✅ ${studentName} - ${data.column}: ${data.value}`);
+      if (voiceEnabled) {
+        speakText(`Updated ${data.column} to ${data.value} for ${studentName}`);
+      }
+    } else if (result.needsConfirmation && result.possibleMatches.length > 1) {
+      // 🔥 NEW: Handle duplicates
+      setDuplicateOptions({
+        matches: result.possibleMatches,
+        command: data,
+        searchName: data.searchName
+      });
+      setPendingCommand(data);
+      
+      // Create voice-friendly options list
+      const optionsText = result.possibleMatches
+        .map((match, index) => `Option ${index + 1}: ${match.student} in row ${match.index + 1}${match.hasExistingScore ? ` (current score: ${match.existingValue})` : ' (empty)'}`)
+        .join('. ');
+      
+      toast(
+        `🤔 Multiple students found named "${data.searchName}". Say "option 1", "option 2", etc. to choose.`,
+        { 
+          duration: 10000,
+          icon: '🤔',
+          style: {
+            background: '#fef3c7',
+            color: '#92400e',
+            border: '1px solid #f59e0b'
+          }
+        }
+      );
+      
+      if (voiceEnabled) {
+        speakText(`Found multiple students named ${data.searchName}. ${optionsText}. Say option 1, option 2, etc. to choose.`);
+      }
+    } else if (result.bestMatch !== -1) {
+      // Single match but might need confirmation for other reasons
+      saveStateForUndo();
+      handleCellChange(result.bestMatch, data.column, data.value);
+      setSelectedRow(result.bestMatch);
+      
+      const student = tableData[result.bestMatch];
+      const studentName = `${student['First Name']} ${student['Last Name']}`;
+      
+      addRecentStudent(studentName);
+      
+      toast.success(`✅ ${studentName} - ${data.column}: ${data.value}`);
+      if (voiceEnabled) {
+        speakText(`Updated ${data.column} to ${data.value} for ${studentName}`);
+      }
+    } else {
+      toast.error(`Student "${data.searchName}" not found`);
+      if (voiceEnabled) {
+        speakText(`Student ${data.searchName} not found`);
+      }
     }
-  } else {
-    toast.error(`Student "${data.searchName}" not found`);
-    if (voiceEnabled) {
-      speakText(`Student ${data.searchName} not found`);
+  };
+
+  // 🔥 NEW: Handle duplicate selection
+  const handleDuplicateSelection = (selectedOption) => {
+    if (!duplicateOptions || !pendingCommand) return;
+
+    const selectedMatch = duplicateOptions.matches[selectedOption - 1];
+    if (!selectedMatch) {
+      toast.error('Invalid option selected');
+      return;
     }
-  }
-};
+
+    // Execute the command with the selected student
+    saveStateForUndo();
+    handleCellChange(selectedMatch.index, pendingCommand.column, pendingCommand.value);
+    setSelectedRow(selectedMatch.index);
+
+    const studentName = selectedMatch.student;
+    addRecentStudent(studentName);
+
+    // Clear duplicate state
+    setDuplicateOptions(null);
+    setPendingCommand(null);
+
+    toast.success(`✅ ${studentName} - ${pendingCommand.column}: ${pendingCommand.value}`);
+    if (voiceEnabled) {
+      speakText(`Updated ${pendingCommand.column} to ${pendingCommand.value} for ${studentName}`);
+    }
+  };
+
+  const executeCommand = (command) => {
+    switch (command.type) {
+      case 'SMART_NAME_GRADE_ENTRY':
+        handleSmartNameGradeEntryVoice(command.data);
+        break;
+      case 'ADD_STUDENT':
+        saveStateForUndo();
+        handleAddStudentVoice(command.data);
+        break;
+      case 'ROW_GRADE_ENTRY':
+        saveStateForUndo();
+        handleRowGradeEntryVoice(command.data);
+        break;
+      case 'QUICK_GRADE_ENTRY':
+        saveStateForUndo();
+        handleQuickGradeEntryVoice(command.data);
+        break;
+      case 'SELECT_DUPLICATE':
+        handleDuplicateSelection(command.data.selectedOption);
+        break;
+      default:
+        toast.error(`🎙️ Command not recognized: "${command.data.originalText}"`);
+        if (voiceEnabled) {
+          speakText('Sorry, I didn\'t understand that command. Please try again.');
+        }
+    }
+  };
+
+  const executeConfirmedCommand = (confirmation) => {
+    const { command, suggestedStudent } = confirmation;
+    
+    if (command.type === 'SMART_NAME_GRADE_ENTRY') {
+      // Find the confirmed student
+      const studentIndex = tableData.findIndex(row => 
+        `${row['First Name']} ${row['Last Name']}` === suggestedStudent
+      );
+      
+      if (studentIndex !== -1) {
+        saveStateForUndo();
+        handleCellChange(studentIndex, command.data.column, command.data.value);
+        setSelectedRow(studentIndex);
+        
+        const student = tableData[studentIndex];
+        addRecentStudent(suggestedStudent);
+        
+        toast.success(`✅ ${suggestedStudent} - ${command.data.column}: ${command.data.value}`);
+        if (voiceEnabled) {
+          speakText(`Updated ${command.data.column} to ${command.data.value} for ${suggestedStudent}`);
+        }
+      }
+    }
+  };
+
+  const requestConfirmation = (command, originalTranscript) => {
+    if (command.type === 'SMART_NAME_GRADE_ENTRY') {
+      const { searchName, column, value } = command.data;
+      
+      // Try to find student with fuzzy matching
+      const result = findStudentRowSmart(tableData, searchName, recentStudents);
+      
+      if (result.possibleMatches.length > 0) {
+        const topMatch = result.possibleMatches[0];
+        setPendingConfirmation({
+          command,
+          originalTranscript,
+          suggestedStudent: topMatch.student,
+          alternatives: result.possibleMatches.slice(1, 3)
+        });
+        
+        toast(
+          `🤔 Did you mean "${topMatch.student}"? Say "yes" to confirm or "no" to cancel.`,
+          { 
+            duration: 8000,
+            icon: '🤔',
+            style: {
+              background: '#fef3c7',
+              color: '#92400e'
+            }
+          }
+        );
+        
+        if (voiceEnabled) {
+          speakText(`Did you mean ${topMatch.student}? Say yes to confirm or no to cancel.`);
+        }
+      } else {
+        toast.error(`Student "${searchName}" not found. Please try again.`);
+        if (voiceEnabled) {
+          speakText(`Student ${searchName} not found. Please try again.`);
+        }
+      }
+    }
+  };
 
   const handleVoiceCommand = (transcript) => {
-  if (!transcript.trim()) return;
+    if (!transcript.trim()) return;
 
-  console.log('Voice command received:', transcript);
-  
-  const command = parseVoiceCommand(transcript, headers, tableData);
-  
-  console.log('Parsed command:', command);
-  
-  switch (command.type) {
-    case 'ADD_STUDENT':
-      console.log('Executing ADD_STUDENT');
-      handleAddStudentVoice(command.data);
-      break;
-    case 'GRADE_ENTRY':
-      console.log('Executing GRADE_ENTRY');
-      handleGradeEntryVoice(command.data);
-      break;
-    case 'ROW_GRADE_ENTRY':
-      console.log('Executing ROW_GRADE_ENTRY');
-      handleRowGradeEntryVoice(command.data);
-      break;
-    case 'NAME_GRADE_ENTRY':
-      console.log('Executing NAME_GRADE_ENTRY');
-      handleNameGradeEntryVoice(command.data);
-      break;
-    case 'SMART_NAME_GRADE_ENTRY': // New case
-      console.log('Executing SMART_NAME_GRADE_ENTRY');
-      handleSmartNameGradeEntryVoice(command.data);
-      break;
-    case 'QUICK_GRADE_ENTRY':
-      console.log('Executing QUICK_GRADE_ENTRY');
-      handleQuickGradeEntryVoice(command.data);
-      break;
-    default:
-      console.log('Command not recognized:', command);
-      toast.error(`🎙️ Command not recognized: "${transcript}"`);
-      if (voiceEnabled) {
-        speakText(`Sorry, I didn't understand that command. Please try again.`);
+    console.log('Voice command received:', transcript);
+    
+    const command = parseVoiceCommand(transcript, headers, tableData, {
+      recentStudents,
+      commandHistory,
+      alternatives
+    });
+    
+    console.log('Parsed command:', command);
+    
+    // Handle confirmation commands
+    if (command.type === 'CONFIRM_COMMAND' && pendingConfirmation) {
+      executeConfirmedCommand(pendingConfirmation);
+      setPendingConfirmation(null);
+      return;
+    }
+    
+    if (command.type === 'REJECT_COMMAND') {
+      if (pendingConfirmation) {
+        setPendingConfirmation(null);
+        toast('Command cancelled', { icon: 'ℹ️' });
+        if (voiceEnabled) {
+          speakText('Command cancelled');
+        }
+        return;
       }
-  }
-};
+      if (duplicateOptions) {
+        setDuplicateOptions(null);
+        setPendingCommand(null);
+        toast('Duplicate selection cancelled', { icon: 'ℹ️' });
+        if (voiceEnabled) {
+          speakText('Selection cancelled');
+        }
+        return;
+      }
+    }
+    
+    // Handle undo/redo
+    if (command.type === 'UNDO_COMMAND') {
+      handleUndo();
+      return;
+    }
+    
+    if (command.type === 'REDO_COMMAND') {
+      handleRedo();
+      return;
+    }
+    
+    // Check if confirmation is needed for low confidence commands
+    if (command.data?.confidence === 'low' || command.data?.usedAlternative) {
+      requestConfirmation(command, transcript);
+      return;
+    }
+    
+    // Execute command directly for high confidence
+    executeCommand(command);
+    
+    // Add to history
+    addCommandHistory({
+      transcript,
+      command,
+      timestamp: new Date(),
+      executed: true
+    });
+  };
 
+  // Keep all your existing handlers...
   const handleAddStudentVoice = (data) => {
     const emptyRowIndex = findEmptyRow(tableData);
     if (emptyRowIndex !== -1) {
@@ -171,41 +445,41 @@ const ClassRecordExcel = () => {
     }
   };
 
- const handleNameGradeEntryVoice = (data) => {
-  console.log('Looking for student:', data);
-  
-  // Try to find by full name first
-  let targetRowIndex = findStudentRow(tableData, data.firstName, data.lastName);
-  
-  // If not found and we have only one name, try searching more flexibly
-  if (targetRowIndex === -1 && (data.firstName || data.lastName)) {
-    const searchName = data.firstName || data.lastName;
-    targetRowIndex = tableData.findIndex(row => {
-      const fullName = `${row['First Name']} ${row['Last Name']}`.toLowerCase().trim();
-      const firstName = (row['First Name'] || '').toLowerCase().trim();
-      const lastName = (row['Last Name'] || '').toLowerCase().trim();
-      
-      return firstName.includes(searchName.toLowerCase()) || 
-             lastName.includes(searchName.toLowerCase()) ||
-             fullName.includes(searchName.toLowerCase());
-    });
-  }
-  
-  if (targetRowIndex !== -1) {
-    handleCellChange(targetRowIndex, data.column, data.value);
-    setSelectedRow(targetRowIndex);
-    const student = tableData[targetRowIndex];
-    toast.success(`✅ ${student['First Name']} ${student['Last Name']} - ${data.column}: ${data.value}`);
-    if (voiceEnabled) {
-      speakText(`Updated ${data.column} to ${data.value} for ${student['First Name']} ${student['Last Name']}`);
+  const handleNameGradeEntryVoice = (data) => {
+    console.log('Looking for student:', data);
+    
+    // Try to find by full name first
+    let targetRowIndex = findStudentRow(tableData, data.firstName, data.lastName);
+    
+    // If not found and we have only one name, try searching more flexibly
+    if (targetRowIndex === -1 && (data.firstName || data.lastName)) {
+      const searchName = data.firstName || data.lastName;
+      targetRowIndex = tableData.findIndex(row => {
+        const fullName = `${row['First Name']} ${row['Last Name']}`.toLowerCase().trim();
+        const firstName = (row['First Name'] || '').toLowerCase().trim();
+        const lastName = (row['Last Name'] || '').toLowerCase().trim();
+        
+        return firstName.includes(searchName.toLowerCase()) || 
+               lastName.includes(searchName.toLowerCase()) ||
+               fullName.includes(searchName.toLowerCase());
+      });
     }
-  } else {
-    toast.error(`Student "${data.firstName || ''} ${data.lastName || ''}".trim() not found`);
-    if (voiceEnabled) {
-      speakText(`Student ${data.firstName || ''} ${data.lastName || ''} not found`);
+    
+    if (targetRowIndex !== -1) {
+      handleCellChange(targetRowIndex, data.column, data.value);
+      setSelectedRow(targetRowIndex);
+      const student = tableData[targetRowIndex];
+      toast.success(`✅ ${student['First Name']} ${student['Last Name']} - ${data.column}: ${data.value}`);
+      if (voiceEnabled) {
+        speakText(`Updated ${data.column} to ${data.value} for ${student['First Name']} ${student['Last Name']}`);
+      }
+    } else {
+      toast.error(`Student "${data.firstName || ''} ${data.lastName || ''}".trim() not found`);
+      if (voiceEnabled) {
+        speakText(`Student ${data.firstName || ''} ${data.lastName || ''} not found`);
+      }
     }
-  }
-};
+  };
 
   const handleGradeEntryVoice = (data) => {
     let targetRowIndex = -1;
@@ -284,7 +558,7 @@ const ClassRecordExcel = () => {
     }
   };
 
-    const handleQuickGradeEntryVoice = (data) => {
+  const handleQuickGradeEntryVoice = (data) => {
     if (selectedRow >= 0 && selectedRow < tableData.length) {
       handleCellChange(selectedRow, data.column, data.value);
       const student = tableData[selectedRow];
@@ -301,7 +575,7 @@ const ClassRecordExcel = () => {
     }
   };
 
-const handleVoiceRecord = () => {
+  const handleVoiceRecord = () => {
     if (!isSupported) {
       toast.error('Speech recognition is not supported in your browser. Please use Chrome, Edge, or Safari.');
       return;
@@ -315,7 +589,7 @@ const handleVoiceRecord = () => {
     }
   };
   
-   const toggleVoiceFeedback = () => {
+  const toggleVoiceFeedback = () => {
     setVoiceEnabled(!voiceEnabled);
     if (!voiceEnabled) {
       speakText('Voice feedback enabled');
@@ -325,8 +599,7 @@ const handleVoiceRecord = () => {
     }
   };
 
-
-
+  // Keep all your existing data loading and management functions...
   const loadSpreadsheetData = async () => {
     try {
       // Load both spreadsheet data and custom columns
@@ -617,6 +890,43 @@ const handleVoiceRecord = () => {
 
           {/* Action Buttons */}
           <div className="flex items-center space-x-3">
+            {/* Accuracy Level Selector */}
+            <div className="flex items-center space-x-2 bg-gray-100 rounded-lg p-1">
+              <span className="text-xs text-gray-600 px-2">Accuracy:</span>
+              {['high', 'medium', 'low'].map((level) => (
+                <button
+                  key={level}
+                  onClick={() => handleAccuracyChange(level)}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${
+                    accuracyLevel === level
+                      ? 'bg-blue-500 text-white'
+                      : 'text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  {level.charAt(0).toUpperCase() + level.slice(1)}
+                </button>
+              ))}
+            </div>
+
+            {/* Undo/Redo Buttons */}
+            <button
+              onClick={handleUndo}
+              disabled={undoStack.length === 0}
+              className="flex items-center space-x-2 bg-orange-500 text-white px-3 py-2 rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50"
+              title="Undo last action (or say 'undo')"
+            >
+              ↶ Undo
+            </button>
+
+            <button
+              onClick={handleRedo}
+              disabled={redoStack.length === 0}
+              className="flex items-center space-x-2 bg-green-500 text-white px-3 py-2 rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50"
+              title="Redo last action (or say 'redo')"
+            >
+              ↷ Redo
+            </button>
+
             <button
               onClick={addNewStudent}
               className="flex items-center space-x-2 bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors"
@@ -641,7 +951,7 @@ const handleVoiceRecord = () => {
               {voiceEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
             </button>
 
-             <button
+            <button
               onClick={handleVoiceRecord}
               disabled={!isSupported}
               className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 ${
@@ -674,7 +984,8 @@ const handleVoiceRecord = () => {
         </div>
       </div>
 
-       {isSupported && (
+      {/* Voice Status Bar */}
+      {isSupported && (
         <div className={`transition-all duration-300 ${
           isListening ? 'bg-gradient-to-r from-red-500 to-pink-600' : 'bg-gradient-to-r from-blue-500 to-indigo-600'
         } text-white px-6 py-3`}>
@@ -705,13 +1016,13 @@ const handleVoiceRecord = () => {
         </div>
       )}
 
-       {/* Voice Commands Help */}
+      {/* Voice Commands Help */}
       {isListening && (
         <div className="bg-blue-50 border-b border-blue-200 px-6 py-3">
           <div className="text-sm text-blue-800">
             <p className="font-medium mb-1">🎙️ Voice Commands Examples:</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-              <span>• "Last name Capuras first name Vaness Quiz 1 twenty"</span>
+              <span>• "Maria Quiz 3 twenty" (handles duplicates automatically)</span>
               <span>• "John Doe Quiz 2 eighty-five"</span>
               <span>• "Row 5 Midterm ninety-two"</span>
               <span>• "Add student Maria Santos ID 12345"</span>
@@ -720,7 +1031,7 @@ const handleVoiceRecord = () => {
         </div>
       )}
 
-    {/* Browser Support Warning */}
+      {/* Browser Support Warning */}
       {!isSupported && (
         <div className="bg-yellow-50 border-b border-yellow-200 px-6 py-3">
           <p className="text-sm text-yellow-800">
@@ -729,8 +1040,55 @@ const handleVoiceRecord = () => {
         </div>
       )}
 
+      {/* 🔥 NEW: Duplicate Selection UI */}
+      {duplicateOptions && (
+        <div className="bg-amber-50 border-b border-amber-200 px-6 py-4">
+          <div className="text-sm text-amber-800">
+            <p className="font-medium mb-2">🤔 Multiple students found named "{duplicateOptions.searchName}":</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {duplicateOptions.matches.map((match, index) => (
+                <div key={index} className="flex items-center justify-between bg-white rounded p-2 border border-amber-200">
+                  <div>
+                    <span className="font-medium">Option {index + 1}:</span> {match.student} (Row {match.index + 1})
+                    {match.hasExistingScore && (
+                      <span className="text-xs text-amber-600 ml-2">Current: {match.existingValue}</span>
+                    )}
+                    {!match.hasExistingScore && (
+                      <span className="text-xs text-green-600 ml-2">Empty ✓</span>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => handleDuplicateSelection(index + 1)}
+                    className="bg-amber-500 text-white px-3 py-1 rounded text-xs hover:bg-amber-600 transition-colors"
+                  >
+                    Select
+                  </button>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs mt-2 text-amber-600">
+              Say "option 1", "option 2", etc. or click Select buttons above. Say "cancel" to abort.
+            </p>
+          </div>
+        </div>
+      )}
 
+      {/* Pending Confirmation UI */}
+      {pendingConfirmation && (
+        <div className="bg-yellow-50 border-b border-yellow-200 px-6 py-3">
+          <div className="text-sm text-yellow-800">
+            <p className="font-medium mb-1">🤔 Confirmation Required:</p>
+            <p>Did you mean <strong>{pendingConfirmation.suggestedStudent}</strong>? Say "yes" to confirm or "no" to cancel.</p>
+            {pendingConfirmation.alternatives.length > 0 && (
+              <p className="text-xs mt-1">
+                Other possibilities: {pendingConfirmation.alternatives.map(alt => alt.student).join(', ')}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
+      {/* Keep all your existing components... */}
       {/* Category Management Bar */}
       <div className="bg-white border-b border-gray-200 px-6 py-3">
         <div className="flex items-center justify-between">
@@ -763,15 +1121,6 @@ const handleVoiceRecord = () => {
         </div>
       </div>
 
-      {/* Voice Recording Tip */}
-      {isRecording && (
-        <div className="bg-red-50 border-b border-red-200 px-6 py-2">
-          <p className="text-sm text-red-700 animate-pulse">
-            🎙️ <strong>Recording:</strong> Say "John Doe Quiz 1 85" to add grades, or "Add student Mary Smith ID 12345"
-          </p>
-        </div>
-      )}
-
       {/* Table Container */}
       <div className="flex-1 overflow-auto">
         <div className="p-4">
@@ -803,7 +1152,14 @@ const handleVoiceRecord = () => {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {tableData.map((row, rowIndex) => (
-                    <tr key={rowIndex} className="hover:bg-gray-50">
+                    <tr 
+                      key={rowIndex} 
+                      className={`hover:bg-gray-50 ${
+                        duplicateOptions?.matches.some(match => match.index === rowIndex) 
+                          ? 'bg-amber-50 border-2 border-amber-300' 
+                          : ''
+                      }`}
+                    >
                       {headers.map((header, colIndex) => (
                         <td
                           key={colIndex}
