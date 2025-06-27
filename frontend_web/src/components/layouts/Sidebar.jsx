@@ -1,18 +1,16 @@
 import PropTypes from 'prop-types';
 import { useEffect, useState } from 'react';
-import { FiCalendar, FiLogOut } from 'react-icons/fi';
-import { HiOutlineUserGroup } from 'react-icons/hi';
+import { FiLogOut } from 'react-icons/fi';
 import {
-  MdKeyboardArrowDown,
-  MdKeyboardArrowLeft,
-  MdKeyboardArrowRight,
-  MdKeyboardArrowUp,
-  MdOutlineDashboard,
-  MdOutlineSettings
+    MdKeyboardArrowDown,
+    MdKeyboardArrowLeft,
+    MdKeyboardArrowRight,
+    MdKeyboardArrowUp,
+    MdOutlineDashboard,
+    MdOutlineSettings
 } from 'react-icons/md';
 import {
-  RiBookOpenLine,
-  RiSoundModuleLine
+    RiSoundModuleLine
 } from 'react-icons/ri';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
@@ -163,36 +161,7 @@ const Sidebar = ({ onCollapse }) => {
 
   const navItems = [
     { name: 'Dashboard', icon: <MdOutlineDashboard size={22} />, path: '/dashboard' },
-    {
-      name: 'Courses',
-      icon: <RiBookOpenLine size={22} />,
-      path: '/dashboard/courses'
-    },
-    {
-      name: 'Class Records',
-      icon: <RiSoundModuleLine size={22} />,
-      path: '/dashboard/class-records',
-      hasSubmenu: true,
-      submenu: [
-        { name: 'Create Class Record', path: '/dashboard/class-records/create' },
-        { name: 'View Records', path: '/dashboard/class-records/view' }
-      ] 
-    },
-    {
-      name: 'Schedule',
-      icon: <FiCalendar size={22} />,
-      path: '/dashboard/schedule'
-    },
-    {
-      name: 'Team',
-      icon: <HiOutlineUserGroup size={22} />,
-      path: '/dashboard/team',
-      hasSubmenu: true,
-      submenu: [
-        { name: 'Your Teams', path: '/dashboard/team/your-teams' },
-        { name: 'Joined Teams', path: '/dashboard/team/joined-teams' }
-      ]
-    },
+    { name: 'Class Records', icon: <RiSoundModuleLine size={22} />, path: '/dashboard/class-records' },
     { name: 'Settings', icon: <MdOutlineSettings size={22} />, path: '/dashboard/settings' },
   ];
 

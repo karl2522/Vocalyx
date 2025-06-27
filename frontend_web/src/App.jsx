@@ -1,33 +1,21 @@
 import { GoogleOAuthProvider } from '@react-oauth/google'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { Toaster } from 'react-hot-toast'
 import { Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom'
 import { AuthProvider } from './auth/AuthContext'
-import ClassDetails from './components/ClassDetails'
-import Classes from './components/Classes'
-import CourseDetail from './components/CourseDetail'
-import Courses from './components/Courses'
+import ClassRecordExcel from './components/ClassRecordExcel.jsx'
+import ClassRecordImport from './components/ClassRecordImport.jsx'
+import ClassRecords from './components/ClassRecords.jsx'
 import Dashboard from './components/Dashboard'
 import LandingPage from './components/LandingPage'
 import Login from './components/Login'
 import Profile from './components/Profile'
 import ProtectedRoute from './components/ProtectedRoute'
 import PublicRoute from './components/PublicRoute'
-import Schedule from './components/Schedule'
 import Signup from './components/Signup'
-import Team from './components/Team'
-import ClassAccessGuard from './components/ClassAccessGuard'
-import JoinedTeams from './components/JoinedTeams.jsx'
-import CourseAccessGuard from './components/CourseAccessGuard'
-import TeamDetail from './components/TeamDetail.jsx'
-import YourTeams from './components/YourTeams.jsx'
-import CreateClassRecord from './components/CreateClassRecords.jsx'
-import ViewClassRecords from './components/ViewClassRecords .jsx'
-import ClassRecordExcel from './components/ClassRecordExcel.jsx'
-import ClassRecordImport from './components/ClassRecordImport.jsx'
 import './index.css'
 import { enableHardwareAcceleration, preloadHeaderAssets } from './utils/preload.js'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 // Create a client
 const queryClient = new QueryClient({
@@ -117,33 +105,16 @@ function App() {
                     <Dashboard />
                   </ProtectedRoute>
                 } />
-                <Route path="/dashboard/courses" element={
-                  <ProtectedRoute>
-                    <Courses />
-                  </ProtectedRoute>
-                } />
-               <Route path="/dashboard/course/:id" element={
-                  <ProtectedRoute>
-                    <CourseAccessGuard>
-                      <CourseDetail />
-                    </CourseAccessGuard>
-                  </ProtectedRoute>
-                } />
                 
-                {/* Add Class Records Routes */}
+                {/* Class Records Routes */}
                 <Route path="/dashboard/class-records" element={
                   <ProtectedRoute>
-                    <CreateClassRecord />
-                  </ProtectedRoute>
-                } />
-                <Route path="/dashboard/class-records/create" element={
-                  <ProtectedRoute>
-                    <CreateClassRecord />
+                    <ClassRecords />
                   </ProtectedRoute>
                 } />
                 <Route path="/dashboard/class-records/view" element={
                   <ProtectedRoute>
-                    <ViewClassRecords />
+                    <ClassRecords />
                   </ProtectedRoute>
                 } />
 
@@ -159,51 +130,9 @@ function App() {
                   </ProtectedRoute>
                 } />
                 
-                <Route path="/dashboard/classes" element={
-                  <ProtectedRoute>
-                    <Classes />
-                  </ProtectedRoute>
-                } />
-               <Route path="/dashboard/class/:id" element={
-                  <ProtectedRoute>
-                    <ClassAccessGuard>
-                      <ClassDetails />
-                    </ClassAccessGuard>
-                  </ProtectedRoute>
-                } />
                 <Route path="/dashboard/profile" element={
                   <ProtectedRoute>
                     <Profile />
-                  </ProtectedRoute>
-                } />
-                <Route path="/dashboard/team" element={
-                  <ProtectedRoute>
-                    <Team />
-                  </ProtectedRoute>
-                } />
-                <Route path="/dashboard/team/your-teams" element={
-                  <ProtectedRoute>
-                    <YourTeams />
-                  </ProtectedRoute>
-                } />
-                <Route path="/dashboard/team/joined-teams" element={
-                  <ProtectedRoute>
-                    <JoinedTeams />
-                  </ProtectedRoute>
-                } />
-                <Route path="/dashboard/team/your-teams/:id" element={
-                  <ProtectedRoute>
-                    <TeamDetail userIsOwner={true} />
-                  </ProtectedRoute>
-                } />
-                <Route path="/dashboard/team/joined-teams/:id" element={
-                  <ProtectedRoute>
-                    <TeamDetail userIsOwner={false} />
-                  </ProtectedRoute>
-                } />
-                <Route path="/dashboard/schedule" element={
-                  <ProtectedRoute>
-                    <Schedule />
                   </ProtectedRoute>
                 } />
                 <Route path="*" element={

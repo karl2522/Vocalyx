@@ -1,14 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { BsCheckCircle, BsExclamationTriangle, BsFileEarmarkSpreadsheet, BsArrowClockwise } from 'react-icons/bs';
-import { FiX, FiCheck, FiAlertCircle, FiArrowRight, FiColumns } from 'react-icons/fi';
+import React, { useEffect, useState } from 'react';
+import { BsArrowClockwise, BsCheckCircle, BsExclamationTriangle, BsFileEarmarkSpreadsheet } from 'react-icons/bs';
+import { FiAlertCircle, FiArrowRight, FiCheck, FiColumns, FiX } from 'react-icons/fi';
 
 const MergeExcelModal = ({ 
   isOpen, 
   onClose, 
   currentFile,
   newFile,
-  onMerge,
-  teamAccess
+  onMerge
 }) => {
   const [step, setStep] = useState('compare'); 
   const [matchedStudents, setMatchedStudents] = useState([]);

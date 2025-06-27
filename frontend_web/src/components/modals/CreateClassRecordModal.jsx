@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { BookOpen, Calendar, X } from 'lucide-react';
 import PropTypes from 'prop-types';
-import { X, BookOpen, Calendar } from 'lucide-react';
+import { useRef, useState } from 'react';
 
 const CreateClassRecordModal = ({ isOpen, onClose, onSubmit }) => {
   const [formData, setFormData] = useState({
@@ -9,6 +9,7 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit }) => {
   });
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const modalRef = useRef(null);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -70,109 +71,122 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit }) => {
     onClose();
   };
 
+  // Outside click to close
+  const handleBackdropClick = (e) => {
+    if (modalRef.current && !modalRef.current.contains(e.target)) {
+      handleClose();
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md transform transition-all duration-300 scale-100">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
-              <BookOpen className="w-5 h-5 text-white" />
+    <div className="fixed inset-0 z-[100] flex items-center justify-center" onMouseDown={handleBackdropClick}>
+      {/* Backdrop */}
+      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300" style={{zIndex: 100}} aria-hidden="true"></div>
+      <div ref={modalRef} className="relative z-[101] w-full max-w-md mx-auto">
+        {/* Modal Card */}
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-[#E5E7EB]">
+          {/* Header with brand gradient */}
+          <div className="flex items-center justify-between px-6 py-5 rounded-t-2xl" style={{background: 'linear-gradient(90deg, #333D79 0%, #4A5491 100%)'}}>
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center shadow">
+                <BookOpen className="w-5 h-5 text-white" />
+              </div>
+              <h2 className="text-xl font-semibold text-white tracking-wide">Create Class Record</h2>
             </div>
-            <h2 className="text-xl font-semibold text-gray-800">Create Class Record</h2>
-          </div>
-          <button
-            onClick={handleClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors duration-200"
-          >
-            <X className="w-5 h-5 text-gray-500" />
-          </button>
-        </div>
-
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          {/* Class Record Name */}
-          <div>
-            <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-              Class Record Name *
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                id="name"
-                name="name"
-                value={formData.name}
-                onChange={handleInputChange}
-                placeholder="e.g., Mathematics 101, Physics Lab"
-                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${
-                  errors.name ? 'border-red-500 bg-red-50' : 'border-gray-300'
-                }`}
-              />
-              <BookOpen className="absolute right-3 top-3 w-5 h-5 text-gray-400" />
-            </div>
-            {errors.name && (
-              <p className="mt-1 text-sm text-red-600">{errors.name}</p>
-            )}
+            <button
+              onClick={handleClose}
+              className="p-2 hover:bg-white/20 rounded-lg transition-colors duration-200"
+              title="Close"
+            >
+              <X className="w-5 h-5 text-white" />
+            </button>
           </div>
 
-          {/* Semester */}
-          <div>
-            <label htmlFor="semester" className="block text-sm font-medium text-gray-700 mb-2">
-              Semester *
-            </label>
-            <div className="relative">
-              <select
-                id="semester"
-                name="semester"
-                value={formData.semester}
-                onChange={handleInputChange}
-                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 appearance-none bg-white ${
-                  errors.semester ? 'border-red-500 bg-red-50' : 'border-gray-300'
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="p-6 space-y-5">
+            {/* Class Record Name */}
+            <div>
+              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
+                Class Record Name <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  id="name"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleInputChange}
+                  placeholder="e.g., Mathematics 101, Physics Lab"
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#333D79] focus:border-[#333D79] focus:outline-none transition-all duration-200 text-gray-900 bg-gray-50 ${
+                    errors.name ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                  }`}
+                />
+                <BookOpen className="absolute right-3 top-3 w-5 h-5 text-gray-400" />
+              </div>
+              {errors.name && (
+                <p className="mt-1 text-sm text-red-600">{errors.name}</p>
+              )}
+            </div>
+
+            {/* Semester */}
+            <div>
+              <label htmlFor="semester" className="block text-sm font-medium text-gray-700 mb-2">
+                Semester <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <select
+                  id="semester"
+                  name="semester"
+                  value={formData.semester}
+                  onChange={handleInputChange}
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#333D79] focus:border-[#333D79] focus:outline-none transition-all duration-200 appearance-none bg-gray-50 text-gray-900 ${
+                    errors.semester ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                  }`}
+                >
+                  <option value="">Select Semester</option>
+                  <option value="1st Semester">1st Semester</option>
+                  <option value="2nd Semester">2nd Semester</option>
+                  <option value="Summer">Summer</option>
+                </select>
+                <Calendar className="absolute right-3 top-3 w-5 h-5 text-gray-400 pointer-events-none" />
+              </div>
+              {errors.semester && (
+                <p className="mt-1 text-sm text-red-600">{errors.semester}</p>
+              )}
+            </div>
+
+            {/* Buttons */}
+            <div className="flex space-x-3 pt-4">
+              <button
+                type="button"
+                onClick={handleClose}
+                className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors duration-200 font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all duration-200 shadow-md ${
+                  loading
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-[#333D79] to-[#4A5491] hover:from-[#2A2F66] hover:to-[#3A4080] text-white'
                 }`}
               >
-                <option value="">Select Semester</option>
-                <option value="1st Semester">1st Semester</option>
-                <option value="2nd Semester">2nd Semester</option>
-                <option value="Summer">Summer</option>
-              </select>
-              <Calendar className="absolute right-3 top-3 w-5 h-5 text-gray-400 pointer-events-none" />
+                {loading ? (
+                  <div className="flex items-center justify-center space-x-2">
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <span>Creating...</span>
+                  </div>
+                ) : (
+                  'Create Record'
+                )}
+              </button>
             </div>
-            {errors.semester && (
-              <p className="mt-1 text-sm text-red-600">{errors.semester}</p>
-            )}
-          </div>
-
-          {/* Buttons */}
-          <div className="flex space-x-3 pt-4">
-            <button
-              type="button"
-              onClick={handleClose}
-              className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200 font-medium"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all duration-200 ${
-                loading
-                  ? 'bg-gray-400 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 shadow-md hover:shadow-lg'
-              } text-white`}
-            >
-              {loading ? (
-                <div className="flex items-center justify-center space-x-2">
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>Creating...</span>
-                </div>
-              ) : (
-                'Create Record'
-              )}
-            </button>
-          </div>
-        </form>
+          </form>
+        </div>
       </div>
     </div>
   );
