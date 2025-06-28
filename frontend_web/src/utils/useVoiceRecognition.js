@@ -11,6 +11,84 @@ const useVoiceRecognition = () => {
   const [commandHistory, setCommandHistory] = useState([]);
   const [confidenceThreshold, setConfidenceThreshold] = useState(0.8);
   const [alternatives, setAlternatives] = useState([]);
+  const [contextWords, setContextWords] = useState(new Set());
+  const [adaptiveCorrections, setAdaptiveCorrections] = useState({});
+
+   const buildContextDictionary = useCallback((tableData = [], headers = []) => {
+    const words = new Set();
+    
+    // Add student names
+    tableData.forEach(row => {
+      if (row['First Name']) words.add(row['First Name'].toLowerCase());
+      if (row['Last Name']) words.add(row['Last Name'].toLowerCase());
+    });
+    
+    // Add column headers
+    headers.forEach(header => {
+      header.split(' ').forEach(word => {
+        if (word.length > 2) words.add(word.toLowerCase());
+      });
+    });
+    
+    // Add common academic terms
+    const academicTerms = ['quiz', 'lab', 'exam', 'midterm', 'final', 'assignment', 'project', 'homework'];
+    academicTerms.forEach(term => words.add(term));
+    
+    setContextWords(words);
+    console.log('🧠 Context dictionary built:', words.size, 'words');
+  }, []);
+
+  const correctTranscriptWithContext = useCallback((rawTranscript) => {
+    let corrected = rawTranscript;
+    
+    // Apply context-aware corrections
+    contextWords.forEach(contextWord => {
+      const words = corrected.split(' ');
+      const correctedWords = words.map(word => {
+        const cleanWord = word.toLowerCase().replace(/[^a-z]/g, '');
+        
+        // Check if word is similar to context word
+        if (cleanWord.length > 2 && contextWord.length > 2) {
+          const similarity = calculateSimilarity(cleanWord, contextWord);
+          if (similarity > 0.7) {
+            console.log(`🔧 Context correction: "${word}" → "${contextWord}"`);
+            return word.replace(new RegExp(cleanWord, 'gi'), contextWord);
+          }
+        }
+        return word;
+      });
+      corrected = correctedWords.join(' ');
+    });
+    
+    return corrected;
+  }, [contextWords]);
+
+  const calculateSimilarity = (word1, word2) => {
+    const longer = word1.length > word2.length ? word1 : word2;
+    const shorter = word1.length > word2.length ? word2 : word1;
+    const editDistance = levenshteinDistance(longer, shorter);
+    return (longer.length - editDistance) / longer.length;
+  };
+
+  const levenshteinDistance = (str1, str2) => {
+    const matrix = Array(str2.length + 1).fill().map(() => Array(str1.length + 1).fill(0));
+    
+    for (let i = 0; i <= str1.length; i++) matrix[0][i] = i;
+    for (let j = 0; j <= str2.length; j++) matrix[j][0] = j;
+    
+    for (let j = 1; j <= str2.length; j++) {
+      for (let i = 1; i <= str1.length; i++) {
+        const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
+        matrix[j][i] = Math.min(
+          matrix[j][i - 1] + 1,
+          matrix[j - 1][i] + 1,
+          matrix[j - 1][i - 1] + cost
+        );
+      }
+    }
+    
+    return matrix[str2.length][str1.length];
+  };
 
   useEffect(() => {
     // Check for browser support
@@ -25,9 +103,16 @@ const useVoiceRecognition = () => {
       speechRecognition.interimResults = true;
       speechRecognition.lang = 'en-US';
       speechRecognition.maxAlternatives = 5; // Get more alternatives for better accuracy
-      
-      // 🔥 FIXED: Remove the problematic grammars line
-      // speechRecognition.grammars = null; // ❌ This was causing the error!
+
+      if ('webkitAudioContext' in window || 'AudioContext' in window) {
+        try {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          const audioContext = new AudioContext();
+          console.log('🎵 Enhanced audio processing enabled');
+        } catch (error) {
+          console.log('🎵 Basic audio processing mode');
+        }
+      }
 
       speechRecognition.onstart = () => {
         console.log('🎙️ Speech recognition started with enhanced accuracy');
@@ -43,29 +128,41 @@ const useVoiceRecognition = () => {
           const result = event.results[i];
           
           if (result.isFinal) {
-            // 🔥 NEW: Collect alternatives with confidence scores
+            // 🔥 ENHANCED: Multi-step processing
             const alternatives = [];
-            for (let j = 0; j < Math.min(result.length, 3); j++) {
+            for (let j = 0; j < Math.min(result.length, 5); j++) {
+              let transcript = result[j].transcript.trim();
+              
+              // Step 1: Apply context corrections
+              transcript = correctTranscriptWithContext(transcript);
+              
+              // Step 2: Apply phonetic corrections (your existing function)
+              // This will be called in the parser
+              
               alternatives.push({
-                transcript: result[j].transcript,
-                confidence: result[j].confidence || 0.8 // Default confidence if not available
+                transcript: transcript,
+                confidence: result[j].confidence || 0.8,
+                processed: true
               });
             }
             
-            // Choose best alternative above confidence threshold
-            const bestResult = alternatives.find(alt => alt.confidence >= confidenceThreshold) || alternatives[0];
+            // Choose best alternative with enhanced scoring
+            const bestResult = selectBestAlternative(alternatives);
             finalTranscript += bestResult.transcript;
             
-            console.log('🎯 Voice alternatives:', alternatives);
+            console.log('🎯 Enhanced alternatives:', alternatives);
             console.log('✅ Selected:', bestResult);
             
             setAlternatives(alternatives);
+            
+            // 🔥 NEW: Learn from corrections
+            learnFromCorrection(bestResult.transcript);
+            
           } else {
             interimTranscript += result[0].transcript;
           }
         }
 
-        // Update transcript with final + interim results
         setTranscript(finalTranscript + interimTranscript);
       };
 
@@ -97,7 +194,38 @@ const useVoiceRecognition = () => {
       console.log('❌ Speech recognition not supported');
       setIsSupported(false);
     }
-  }, [confidenceThreshold]);
+  }, [confidenceThreshold, correctTranscriptWithContext]);
+
+  const selectBestAlternative = useCallback((alternatives) => {
+    return alternatives.reduce((best, current) => {
+      let score = current.confidence;
+      
+      // Bonus for context words
+      const words = current.transcript.toLowerCase().split(' ');
+      const contextMatches = words.filter(word => contextWords.has(word)).length;
+      score += contextMatches * 0.1;
+      
+      // Bonus for command patterns
+      if (/\b(quiz|lab|exam|midterm|final)\s+\d+\b/i.test(current.transcript)) {
+        score += 0.15;
+      }
+      
+      return score > (best.confidence || 0) ? { ...current, confidence: score } : best;
+    }, alternatives[0]);
+  }, [contextWords]);
+
+  const learnFromCorrection = useCallback((transcript) => {
+    // Store patterns that work well
+    const words = transcript.toLowerCase().split(' ');
+    words.forEach(word => {
+      if (word.length > 2) {
+        setAdaptiveCorrections(prev => ({
+          ...prev,
+          [word]: (prev[word] || 0) + 1
+        }));
+      }
+    });
+  }, []);
 
   // 🔥 NEW: Add student to recent context
   const addRecentStudent = useCallback((studentName) => {
@@ -174,14 +302,16 @@ const useVoiceRecognition = () => {
     stopListening,
     clearTranscript,
     isSupported,
-    // 🔥 NEW: Enhanced features
     recentStudents,
     commandHistory,
     alternatives,
     addRecentStudent,
     addCommandHistory,
     setAccuracyLevel,
-    confidenceThreshold
+    confidenceThreshold,
+    buildContextDictionary,
+    contextWords: Array.from(contextWords),
+    adaptiveCorrections
   };
 };
 

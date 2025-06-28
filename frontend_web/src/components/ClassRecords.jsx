@@ -10,7 +10,9 @@ import {
     FiPlus,
     FiSearch,
     FiUpload,
-    FiUser
+    FiUser,
+    FiTrash2,  // 🔥 NEW: Delete icon
+    FiEdit3    // 🔥 NEW: Edit icon
 } from 'react-icons/fi';
 import { RiSoundModuleLine } from 'react-icons/ri';
 import { Link } from 'react-router-dom';
@@ -19,7 +21,59 @@ import { showToast } from '../utils/toast.jsx';
 import DashboardLayout from './layouts/DashboardLayout';
 import CreateClassRecordModal from './modals/CreateClassRecordModal';
 
-// Skeleton Loader Component
+// 🔥 NEW: Delete Confirmation Modal Component
+const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, recordName, isDeleting }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
+            <FiTrash2 className="h-6 w-6 text-red-600" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">Delete Class Record</h3>
+            <p className="text-sm text-gray-500">This action cannot be undone</p>
+          </div>
+        </div>
+        
+        <div className="mb-6">
+          <p className="text-gray-700">
+            Are you sure you want to delete <strong>"{recordName}"</strong>? 
+            All associated data including students, grades, and spreadsheet data will be permanently removed.
+          </p>
+        </div>
+        
+        <div className="flex gap-3">
+          <button
+            onClick={onClose}
+            disabled={isDeleting}
+            className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={isDeleting}
+            className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {isDeleting ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                Deleting...
+              </>
+            ) : (
+              'Delete Record'
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Skeleton Loader Component (keep existing)
 const Skeleton = ({ className }) => (
   <div className={`bg-gray-200 rounded-md ${className}`}></div>
 );
@@ -93,6 +147,11 @@ const ClassRecords = () => {
   const [selectedSemester, setSelectedSemester] = useState('');
   const [viewMode, setViewMode] = useState('grid');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  
+  // 🔥 NEW: Delete & Edit states
+  const [deleteModal, setDeleteModal] = useState({ isOpen: false, record: null });
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [editingRecord, setEditingRecord] = useState(null);
 
   useEffect(() => {
     fetchClassRecords();
@@ -134,6 +193,75 @@ const ClassRecords = () => {
         toast.error('Failed to create class record');
       }
       throw error; // Re-throw to handle in modal
+    }
+  };
+
+  // 🔥 NEW: Delete handler
+  const handleDeleteRecord = async (record) => {
+    setDeleteModal({ isOpen: true, record });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteModal.record) return;
+    
+    try {
+      setIsDeleting(true);
+      await classRecordService.deleteClassRecord(deleteModal.record.id);
+      
+      // Remove from local state
+      setClassRecords(prev => prev.filter(r => r.id !== deleteModal.record.id));
+      
+      toast.success(`"${deleteModal.record.name}" deleted successfully!`);
+      setDeleteModal({ isOpen: false, record: null });
+    } catch (error) {
+      console.error('Error deleting class record:', error);
+      if (error.response?.status === 404) {
+        toast.error('Class record not found');
+      } else if (error.response?.data?.detail) {
+        toast.error(error.response.data.detail);
+      } else {
+        toast.error('Failed to delete class record');
+      }
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // 🔥 NEW: Edit handler
+  const handleEditRecord = (record) => {
+    setEditingRecord(record);
+    setIsModalOpen(true);
+  };
+
+  // 🔥 NEW: Update handler
+  const handleUpdateRecord = async (formData) => {
+    try {
+      const response = await classRecordService.updateClassRecord(editingRecord.id, formData);
+      
+      // Update local state
+      setClassRecords(prev => prev.map(record => 
+        record.id === editingRecord.id ? response.data : record
+      ));
+      
+      toast.success('Class record updated successfully!');
+      setEditingRecord(null);
+    } catch (error) {
+      console.error('Error updating class record:', error);
+      if (error.response?.data) {
+        const errorData = error.response.data;
+        if (errorData.name) {
+          toast.error(`Name: ${errorData.name[0]}`);
+        } else if (errorData.semester) {
+          toast.error(`Semester: ${errorData.semester[0]}`);
+        } else if (errorData.non_field_errors) {
+          toast.error(errorData.non_field_errors[0]);
+        } else {
+          toast.error('Failed to update class record');
+        }
+      } else {
+        toast.error('Failed to update class record');
+      }
+      throw error;
     }
   };
 
@@ -254,7 +382,10 @@ const ClassRecords = () => {
             </div>
             
             <button
-              onClick={() => setIsModalOpen(true)}
+              onClick={() => {
+                setEditingRecord(null);
+                setIsModalOpen(true);
+              }}
               className="flex items-center gap-2 bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white px-4 py-2 rounded-lg hover:from-[#2A2F66] hover:to-[#3A4080] transition-all shadow-md hover:shadow-lg"
             >
               <FiPlus size={18} />
@@ -414,10 +545,31 @@ const ClassRecords = () => {
             {filteredRecords.map((record) => (
               <div
                 key={record.id}
-                className={`bg-white rounded-lg shadow-md border border-gray-200 p-6 hover:shadow-lg transition-all duration-200 ${
+                className={`group bg-white rounded-lg shadow-md border border-gray-200 p-6 hover:shadow-lg transition-all duration-200 relative ${
                   viewMode === 'list' ? 'flex items-center gap-6' : ''
                 }`}
               >
+                {/* 🔥 NEW: Top-right action icons */}
+                <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                  {/* Edit Icon */}
+                  <button
+                    onClick={() => handleEditRecord(record)}
+                    className="w-8 h-8 bg-blue-50 hover:bg-blue-100 text-blue-600 hover:text-blue-700 rounded-lg flex items-center justify-center transition-all duration-200 hover:scale-110"
+                    title="Edit class record"
+                  >
+                    <FiEdit3 className="h-4 w-4" />
+                  </button>
+                  
+                  {/* Delete Icon */}
+                  <button
+                    onClick={() => handleDeleteRecord(record)}
+                    className="w-8 h-8 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 rounded-lg flex items-center justify-center transition-all duration-200 hover:scale-110"
+                    title="Delete class record"
+                  >
+                    <FiTrash2 className="h-4 w-4" />
+                  </button>
+                </div>
+
                 {/* Icon & Badge */}
                 <div className={`${viewMode === 'list' ? 'flex-shrink-0' : 'mb-4'}`}>
                   <div className="flex items-center gap-3">
@@ -435,7 +587,7 @@ const ClassRecords = () => {
                 {/* Content */}
                 <div className={`${viewMode === 'list' ? 'flex-1' : ''}`}>
                   <div className={`${viewMode === 'list' ? 'flex items-center justify-between' : ''}`}>
-                    <div className={`${viewMode === 'list' ? 'flex-1' : 'mb-4'}`}>
+                    <div className={`${viewMode === 'list' ? 'flex-1' : 'mb-4'} ${viewMode === 'grid' ? 'pr-16' : ''}`}>
                       <h3 className={`font-semibold text-gray-900 mb-2 ${viewMode === 'list' ? 'text-lg' : ''}`}>
                         {record.name}
                       </h3>
@@ -478,8 +630,8 @@ const ClassRecords = () => {
                       )}
                     </div>
 
-                    {/* Actions */}
-                    <div className={`${viewMode === 'list' ? 'flex gap-2 flex-shrink-0' : 'space-y-2'}`}>
+                    {/* 🔥 UPDATED: Clean main action buttons */}
+                    <div className={`${viewMode === 'list' ? 'flex gap-2 flex-shrink-0' : 'grid grid-cols-1 gap-2'}`}>
                       <Link
                         to={`/dashboard/class-records/${record.id}/excel`}
                         className={`flex items-center justify-center gap-2 bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white px-4 py-2 rounded-lg hover:from-[#2A2F66] hover:to-[#3A4080] transition-all text-sm font-medium ${
@@ -507,11 +659,25 @@ const ClassRecords = () => {
           </div>
         )}
         
-        {/* Create Class Record Modal */}
+        {/* 🔥 ENHANCED: Create/Edit Class Record Modal */}
         <CreateClassRecordModal
           isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          onSubmit={handleCreateRecord}
+          onClose={() => {
+            setIsModalOpen(false);
+            setEditingRecord(null);
+          }}
+          onSubmit={editingRecord ? handleUpdateRecord : handleCreateRecord}
+          editData={editingRecord}
+          isEditing={!!editingRecord}
+        />
+
+        {/* 🔥 NEW: Delete Confirmation Modal */}
+        <DeleteConfirmationModal
+          isOpen={deleteModal.isOpen}
+          onClose={() => setDeleteModal({ isOpen: false, record: null })}
+          onConfirm={confirmDelete}
+          recordName={deleteModal.record?.name || ''}
+          isDeleting={isDeleting}
         />
       </div>
     </DashboardLayout>

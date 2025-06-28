@@ -30,7 +30,9 @@ const ClassRecordExcel = () => {
     addRecentStudent,
     addCommandHistory,
     setAccuracyLevel: setVoiceAccuracy,
-    alternatives
+    alternatives,
+    buildContextDictionary,
+    contextWords
   } = useVoiceRecognition();
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [lastVoiceCommand, setLastVoiceCommand] = useState('');
@@ -41,6 +43,19 @@ const ClassRecordExcel = () => {
   const [redoStack, setRedoStack] = useState([]);
   const [pendingConfirmation, setPendingConfirmation] = useState(null);
   const [accuracyLevel, setAccuracyLevel] = useState('medium');
+
+  const [batchMode, setBatchMode] = useState(false);
+  const [batchEntries, setBatchEntries] = useState([]);
+  const [currentBatchColumn, setCurrentBatchColumn] = useState('');
+  const [showBatchModal, setShowBatchModal] = useState(false);
+
+  const [trainingMode, setTrainingMode] = useState(false);
+  const [trainingPhrases] = useState([
+    "Maria Quiz 1 eighty-five",
+    "John Lab 2 ninety",
+    "Sarah Midterm seventy-five",
+    "Michael Final Exam ninety-two"
+  ]);
 
   // 🔥 NEW: Duplicate handling state
   const [duplicateOptions, setDuplicateOptions] = useState(null);
@@ -61,6 +76,13 @@ const ClassRecordExcel = () => {
       }, 3000);
     }
   }, [transcript, isListening, lastVoiceCommand, clearTranscript]);
+
+  useEffect(() => {
+    // Build context dictionary when data loads
+    if (tableData.length > 0 && headers.length > 0) {
+      buildContextDictionary(tableData, headers);
+    }
+  }, [tableData, headers, buildContextDictionary]);
 
   const defaultColumns = {
     student_info: ['No', 'Last Name', 'First Name', 'Student ID'],
@@ -102,6 +124,11 @@ const ClassRecordExcel = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const startVoiceTraining = () => {
+    setTrainingMode(true);
+    toast.success('🎯 Voice training started! Speak the phrases clearly.');
   };
 
   const handleAccuracyChange = (level) => {
@@ -258,10 +285,198 @@ const ClassRecordExcel = () => {
     }
   };
 
+  const handleBatchStudentList = (data) => {
+    console.log('🔥 Processing batch student list:', data);
+    
+    saveStateForUndo();
+    
+    const { column, students } = data;
+    let successCount = 0;
+    let failures = [];
+    
+    // Find the column
+    const matchedColumn = headers.find(header => 
+      header.toLowerCase().includes(column.toLowerCase()) ||
+      column.toLowerCase().includes(header.toLowerCase())
+    );
+    
+    if (!matchedColumn) {
+      toast.error(`Column "${column}" not found`);
+      return;
+    }
+    
+    const newData = [...tableData];
+    
+    students.forEach(({ name, score }) => {
+      const result = findStudentRowSmart(newData, name, recentStudents, matchedColumn);
+      
+      if (result.bestMatch !== -1) {
+        newData[result.bestMatch][matchedColumn] = score;
+        
+        // Auto-calculate totals
+        const gradeColumns = [
+          ...(customColumns.quizzes || []),
+          ...(customColumns.labs || []),
+          ...(customColumns.exams || [])
+        ];
+        
+        if (gradeColumns.includes(matchedColumn)) {
+          const total = calculateRowTotal(newData[result.bestMatch], gradeColumns);
+          newData[result.bestMatch]['Total'] = total;
+          newData[result.bestMatch]['Grade'] = calculateLetterGrade(total);
+        }
+        
+        successCount++;
+        addRecentStudent(result.possibleMatches[0]?.student || name);
+      } else {
+        failures.push(name);
+      }
+    });
+    
+    setTableData(newData);
+    
+    // Show results
+    toast.success(`✅ Updated ${successCount} students in ${matchedColumn}`);
+    
+    if (failures.length > 0) {
+      toast.error(`❌ Could not find: ${failures.join(', ')}`);
+    }
+    
+    if (voiceEnabled) {
+      speakText(`Updated ${successCount} students in ${matchedColumn}. ${failures.length > 0 ? `Could not find ${failures.length} students.` : ''}`);
+    }
+  };
+
+  const handleBatchRowRange = (data) => {
+    console.log('🔥 Processing batch row range:', data);
+    
+    saveStateForUndo();
+    
+    const { column, startRow, endRow, score } = data;
+    
+    // Find the column
+    const matchedColumn = headers.find(header => 
+      header.toLowerCase().includes(column.toLowerCase()) ||
+      column.toLowerCase().includes(header.toLowerCase())
+    );
+    
+    if (!matchedColumn) {
+      toast.error(`Column "${column}" not found`);
+      return;
+    }
+    
+    const newData = [...tableData];
+    let updatedCount = 0;
+    
+    for (let i = startRow; i <= endRow && i < newData.length; i++) {
+      // Skip empty rows
+      if (newData[i]['First Name'] || newData[i]['Last Name']) {
+        newData[i][matchedColumn] = score;
+        
+        // Auto-calculate totals
+        const gradeColumns = [
+          ...(customColumns.quizzes || []),
+          ...(customColumns.labs || []),
+          ...(customColumns.exams || [])
+        ];
+        
+        if (gradeColumns.includes(matchedColumn)) {
+          const total = calculateRowTotal(newData[i], gradeColumns);
+          newData[i]['Total'] = total;
+          newData[i]['Grade'] = calculateLetterGrade(total);
+        }
+        
+        updatedCount++;
+      }
+    }
+    
+    setTableData(newData);
+    
+    toast.success(`✅ Updated ${updatedCount} students (rows ${startRow + 1}-${endRow + 1}) in ${matchedColumn}: ${score}`);
+    
+    if (voiceEnabled) {
+      speakText(`Updated ${updatedCount} students in rows ${startRow + 1} through ${endRow + 1} for ${matchedColumn} with score ${score}`);
+    }
+  };
+
+  const handleBatchEveryone = (data) => {
+    console.log('🔥 Processing batch everyone:', data);
+    
+    saveStateForUndo();
+    
+    const { column, score, condition } = data;
+    
+    // Find the column
+    const matchedColumn = headers.find(header => 
+      header.toLowerCase().includes(column.toLowerCase()) ||
+      column.toLowerCase().includes(header.toLowerCase())
+    );
+    
+    if (!matchedColumn) {
+      toast.error(`Column "${column}" not found`);
+      return;
+    }
+    
+    const newData = [...tableData];
+    let updatedCount = 0;
+    
+    newData.forEach((row, index) => {
+      // Check if student exists (has name)
+      const hasStudent = row['First Name'] || row['Last Name'];
+      
+      if (hasStudent) {
+        // Apply condition
+        let shouldUpdate = true;
+        
+        if (condition === 'present') {
+          // Only update if current cell is empty (student is "present" for this assignment)
+          shouldUpdate = !row[matchedColumn] || row[matchedColumn].toString().trim() === '';
+        }
+        
+        if (shouldUpdate) {
+          row[matchedColumn] = score;
+          
+          // Auto-calculate totals
+          const gradeColumns = [
+            ...(customColumns.quizzes || []),
+            ...(customColumns.labs || []),
+            ...(customColumns.exams || [])
+          ];
+          
+          if (gradeColumns.includes(matchedColumn)) {
+            const total = calculateRowTotal(row, gradeColumns);
+            row['Total'] = total;
+            row['Grade'] = calculateLetterGrade(total);
+          }
+          
+          updatedCount++;
+        }
+      }
+    });
+    
+    setTableData(newData);
+    
+    const conditionText = condition === 'present' ? ' (present students only)' : '';
+    toast.success(`✅ Updated ${updatedCount} students${conditionText} in ${matchedColumn}: ${score}`);
+    
+    if (voiceEnabled) {
+      speakText(`Updated ${updatedCount} students in ${matchedColumn} with score ${score}`);
+    }
+  };
+
   const executeCommand = (command) => {
     switch (command.type) {
       case 'SMART_NAME_GRADE_ENTRY':
         handleSmartNameGradeEntryVoice(command.data);
+        break;
+      case 'BATCH_STUDENT_LIST':
+        handleBatchStudentList(command.data);
+        break;
+      case 'BATCH_ROW_RANGE':
+        handleBatchRowRange(command.data);
+        break;
+      case 'BATCH_EVERYONE':
+        handleBatchEveryone(command.data);
         break;
       case 'ADD_STUDENT':
         saveStateForUndo();
@@ -355,6 +570,18 @@ const ClassRecordExcel = () => {
     if (!transcript.trim()) return;
 
     console.log('Voice command received:', transcript);
+
+     const contextCorrectedTranscript = applyContextPhoneticCorrections(
+      transcript, 
+      contextWords
+    );
+
+    console.log('🧠 Context corrected:', contextCorrectedTranscript);
+
+    if (batchMode) {
+      handleBatchVoiceCommand(transcript);
+      return;
+    }
     
     const command = parseVoiceCommand(transcript, headers, tableData, {
       recentStudents,
@@ -707,6 +934,177 @@ const ClassRecordExcel = () => {
     return 'F';
   };
 
+  const startBatchMode = () => {
+    setBatchMode(true);
+    setShowBatchModal(true);
+    setBatchEntries([]);
+    setCurrentBatchColumn('');
+    
+    toast.success('🎯 Batch Mode activated! Say a column name first (e.g., "Quiz 1")');
+    if (voiceEnabled) {
+      speakText('Batch mode activated. Say a column name first, like Quiz 1');
+    }
+  };
+
+  const handleBatchVoiceCommand = (transcript) => {
+  if (!transcript.trim()) return;
+
+  console.log('🎯 Batch voice command:', transcript);
+  
+  // If no column is set, try to detect column name
+  if (!currentBatchColumn) {
+    const detectedColumn = headers.find(header => 
+      transcript.toLowerCase().includes(header.toLowerCase()) ||
+      header.toLowerCase().includes(transcript.toLowerCase())
+    );
+    
+    if (detectedColumn) {
+      setCurrentBatchColumn(detectedColumn);
+      toast.success(`✅ Column set to: ${detectedColumn}. Now say student names and scores!`);
+      if (voiceEnabled) {
+        speakText(`Column set to ${detectedColumn}. Now say student names and scores like Maria 85`);
+      }
+      return;
+    } else {
+      toast.error('Column not found. Please say a valid column name.');
+      return;
+    }
+  }
+  
+  // Parse student name and score: "Maria 85"
+  const studentScorePattern = /^(.+?)\s+(\d+)$/;
+    const match = transcript.trim().match(studentScorePattern);
+    
+    if (match) {
+      const studentName = match[1].trim();
+      const score = match[2];
+      
+      // Check if student exists
+      const result = findStudentRowSmart(tableData, studentName, recentStudents, currentBatchColumn);
+      
+      if (result.bestMatch !== -1) {
+        const student = tableData[result.bestMatch];
+        const fullName = `${student['First Name']} ${student['Last Name']}`;
+        
+        // Check if already in batch
+        const existingIndex = batchEntries.findIndex(entry => entry.rowIndex === result.bestMatch);
+        
+        if (existingIndex !== -1) {
+          // Update existing entry
+          const newEntries = [...batchEntries];
+          newEntries[existingIndex] = {
+            ...newEntries[existingIndex],
+            score,
+            status: 'updated'
+          };
+          setBatchEntries(newEntries);
+          
+          toast.success(`✅ Updated ${fullName}: ${score}`);
+          if (voiceEnabled) {
+            speakText(`Updated ${fullName} to ${score}`);
+          }
+        } else {
+          // Add new entry
+          const newEntry = {
+            rowIndex: result.bestMatch,
+            studentName: fullName,
+            originalName: studentName,
+            score,
+            status: 'ready',
+            hasExistingScore: result.possibleMatches[0]?.hasExistingScore || false,
+            existingValue: result.possibleMatches[0]?.existingValue || null
+          };
+          
+          setBatchEntries(prev => [...prev, newEntry]);
+          
+          toast.success(`✅ Added ${fullName}: ${score}`);
+          if (voiceEnabled) {
+            speakText(`Added ${fullName} with score ${score}`);
+          }
+        }
+      } else {
+        toast.error(`❌ Student "${studentName}" not found`);
+        if (voiceEnabled) {
+          speakText(`Student ${studentName} not found`);
+        }
+      }
+    } else {
+      // Check for control commands
+      if (transcript.toLowerCase().includes('done') || transcript.toLowerCase().includes('finish')) {
+        if (batchEntries.length > 0) {
+          executeBatchEntries();
+        } else {
+          toast.error('No entries to save');
+        }
+      } else if (transcript.toLowerCase().includes('clear') || transcript.toLowerCase().includes('reset')) {
+        setBatchEntries([]);
+        toast.success('Batch entries cleared');
+      } else {
+        toast.error('Say student name and score (e.g., "Maria 85") or "done" to finish');
+      }
+    }
+  };
+
+  const executeBatchEntries = () => {
+    if (batchEntries.length === 0) return;
+    
+    saveStateForUndo();
+    
+    const newData = [...tableData];
+    let successCount = 0;
+    
+    batchEntries.forEach(entry => {
+      if (entry.status === 'ready' || entry.status === 'updated') {
+        newData[entry.rowIndex][currentBatchColumn] = entry.score;
+        
+        // Auto-calculate totals
+        const gradeColumns = [
+          ...(customColumns.quizzes || []),
+          ...(customColumns.labs || []),
+          ...(customColumns.exams || [])
+        ];
+        
+        if (gradeColumns.includes(currentBatchColumn)) {
+          const total = calculateRowTotal(newData[entry.rowIndex], gradeColumns);
+          newData[entry.rowIndex]['Total'] = total;
+          newData[entry.rowIndex]['Grade'] = calculateLetterGrade(total);
+        }
+        
+        successCount++;
+        addRecentStudent(entry.studentName);
+      }
+    });
+    
+    setTableData(newData);
+    
+    // Close batch mode
+    setBatchMode(false);
+    setShowBatchModal(false);
+    setBatchEntries([]);
+    setCurrentBatchColumn('');
+    
+    toast.success(`🎉 Batch completed! Updated ${successCount} students in ${currentBatchColumn}`);
+    if (voiceEnabled) {
+      speakText(`Batch completed. Updated ${successCount} students in ${currentBatchColumn}`);
+    }
+  };
+
+  const cancelBatchMode = () => {
+    setBatchMode(false);
+    setShowBatchModal(false);
+    setBatchEntries([]);
+    setCurrentBatchColumn('');
+    
+    toast.info('Batch mode cancelled');
+    if (voiceEnabled) {
+      speakText('Batch mode cancelled');
+    }
+  };
+
+  const removeBatchEntry = (index) => {
+    setBatchEntries(prev => prev.filter((_, i) => i !== index));
+  };
+
   const getColumnColor = (column) => {
     if (customColumns.student_info?.includes(column)) return 'bg-blue-50';
     if (customColumns.quizzes?.includes(column)) return 'bg-green-50';
@@ -974,6 +1372,24 @@ const ClassRecordExcel = () => {
             </button>
 
             <button
+              onClick={startBatchMode}
+              className="flex items-center space-x-2 bg-purple-500 text-white px-4 py-2 rounded-lg hover:bg-purple-600 transition-colors"
+              title="Start batch grading mode"
+            >
+              <Users className="w-4 h-4" />
+              <span>Batch Mode</span>
+            </button>
+
+            <button
+              onClick={startVoiceTraining}
+              className="flex items-center space-x-2 bg-purple-500 text-white px-3 py-2 rounded-lg hover:bg-purple-600 transition-colors"
+              title="Train voice recognition"
+            >
+              <span>🎯</span>
+              <span>Train Voice</span>
+            </button>
+
+            <button
               onClick={handleExport}
               className="flex items-center space-x-2 bg-purple-500 text-white px-4 py-2 rounded-lg hover:bg-purple-600 transition-colors"
             >
@@ -1021,11 +1437,22 @@ const ClassRecordExcel = () => {
         <div className="bg-blue-50 border-b border-blue-200 px-6 py-3">
           <div className="text-sm text-blue-800">
             <p className="font-medium mb-1">🎙️ Voice Commands Examples:</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-              <span>• "Maria Quiz 3 twenty" (handles duplicates automatically)</span>
-              <span>• "John Doe Quiz 2 eighty-five"</span>
-              <span>• "Row 5 Midterm ninety-two"</span>
-              <span>• "Add student Maria Santos ID 12345"</span>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+              <div>
+                <strong>Single:</strong>
+                <br />• "Maria Quiz 3 twenty"
+                <br />• "John Lab 2 eighty-five"
+              </div>
+              <div>
+                <strong>Batch List:</strong>
+                <br />• "Quiz 1: John 85, Maria 92, Carlos 88"
+                <br />• "Lab 2: Alice 90, Bob 85"
+              </div>
+              <div>
+                <strong>Batch Range:</strong>
+                <br />• "Midterm: Row 1 through 5, all score 90"
+                <br />• "Quiz 2: Everyone present gets 85"
+              </div>
             </div>
           </div>
         </div>
@@ -1190,6 +1617,148 @@ const ClassRecordExcel = () => {
           </div>
         </div>
       </div>
+
+      {/* Batch Mode Modal */}
+      {showBatchModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-gray-800">
+                🎯 Batch Grading Mode
+                {currentBatchColumn && (
+                  <span className="ml-2 text-blue-600">({currentBatchColumn})</span>
+                )}
+              </h2>
+              <button
+                onClick={cancelBatchMode}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            {!currentBatchColumn ? (
+              <div className="text-center py-8">
+                <div className="mb-4">
+                  <Mic className={`w-16 h-16 mx-auto ${isListening ? 'text-red-500 animate-pulse' : 'text-blue-500'}`} />
+                </div>
+                <h3 className="text-lg font-medium mb-2">Step 1: Choose Column</h3>
+                <p className="text-gray-600 mb-4">
+                  Say a column name to start batch grading
+                </p>
+                <div className="grid grid-cols-3 gap-2 text-sm">
+                  {headers.filter(h => !['No', 'Last Name', 'First Name', 'Student ID', 'Total', 'Grade'].includes(h)).map(header => (
+                    <button
+                      key={header}
+                      onClick={() => {
+                        setCurrentBatchColumn(header);
+                        toast.success(`Column set to: ${header}`);
+                      }}
+                      className="bg-blue-100 text-blue-800 px-3 py-2 rounded hover:bg-blue-200 transition-colors"
+                    >
+                      {header}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-hidden flex flex-col">
+                <div className="bg-blue-50 rounded-lg p-4 mb-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-medium text-blue-800">
+                        {isListening ? '🎙️ Listening for entries...' : '✅ Ready for voice input'}
+                      </h3>
+                      <p className="text-blue-600 text-sm">
+                        Say: "Maria 85" or "John 92" • Say "done" when finished
+                      </p>
+                    </div>
+                    <div className="text-blue-600 font-medium">
+                      {batchEntries.length} students ready
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Batch Entries List */}
+                <div className="flex-1 overflow-auto">
+                  {batchEntries.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                      <p>No students added yet</p>
+                      <p className="text-sm">Start saying student names and scores</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {batchEntries.map((entry, index) => (
+                        <div
+                          key={index}
+                          className="flex items-center justify-between bg-gray-50 rounded-lg p-3 border"
+                        >
+                          <div className="flex items-center space-x-3">
+                            <div className="flex-shrink-0">
+                              {entry.status === 'ready' ? (
+                                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                              ) : entry.status === 'updated' ? (
+                                <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                              ) : (
+                                <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
+                              )}
+                            </div>
+                            <div>
+                              <div className="font-medium">{entry.studentName}</div>
+                              <div className="text-sm text-gray-500">
+                                {currentBatchColumn}: {entry.score}
+                                {entry.hasExistingScore && (
+                                  <span className="ml-2 text-amber-600">
+                                    (was: {entry.existingValue})
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => removeBatchEntry(index)}
+                            className="text-red-500 hover:text-red-700 p-1"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                
+                {/* Action Buttons */}
+                <div className="flex space-x-3 mt-4 pt-4 border-t">
+                  <button
+                    onClick={cancelBatchMode}
+                    className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      setBatchEntries([]);
+                      toast.success('Entries cleared');
+                    }}
+                    disabled={batchEntries.length === 0}
+                    className="bg-yellow-500 text-white px-4 py-2 rounded-lg hover:bg-yellow-600 transition-colors disabled:opacity-50"
+                  >
+                    Clear All
+                  </button>
+                  <button
+                    onClick={executeBatchEntries}
+                    disabled={batchEntries.length === 0}
+                    className="flex-1 bg-green-500 text-white py-2 rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50"
+                  >
+                    Save {batchEntries.length} Students
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Add Column Modal */}
       {showAddColumnModal && (

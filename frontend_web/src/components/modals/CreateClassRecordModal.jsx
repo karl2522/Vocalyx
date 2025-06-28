@@ -1,15 +1,39 @@
-import { BookOpen, Calendar, X } from 'lucide-react';
+import { BookOpen, Calendar, X, User, FileText } from 'lucide-react';
 import PropTypes from 'prop-types';
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 
-const CreateClassRecordModal = ({ isOpen, onClose, onSubmit }) => {
+const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing }) => {
   const [formData, setFormData] = useState({
     name: '',
-    semester: ''
+    semester: '',
+    teacher_name: '',
+    description: ''
   });
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const modalRef = useRef(null);
+
+  // 🔥 FIXED: useEffect to handle edit data
+  useEffect(() => {
+    if (editData && isEditing) {
+      setFormData({
+        name: editData.name || '',
+        semester: editData.semester || '',
+        teacher_name: editData.teacher_name || '',
+        description: editData.description || ''
+      });
+    } else {
+      // Reset for new records
+      setFormData({
+        name: '',
+        semester: '',
+        teacher_name: '',
+        description: ''
+      });
+    }
+    // Clear errors when modal opens/closes
+    setErrors({});
+  }, [editData, isEditing, isOpen]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -54,11 +78,11 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit }) => {
     try {
       await onSubmit(formData);
       // Reset form after successful submission
-      setFormData({ name: '', semester: '' });
+      setFormData({ name: '', semester: '', teacher_name: '', description: '' });
       setErrors({});
       onClose();
     } catch (error) {
-      console.error('Error creating class record:', error);
+      console.error('Error submitting class record:', error);
       // Handle error (you might want to show an error message)
     } finally {
       setLoading(false);
@@ -66,7 +90,7 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit }) => {
   };
 
   const handleClose = () => {
-    setFormData({ name: '', semester: '' });
+    setFormData({ name: '', semester: '', teacher_name: '', description: '' });
     setErrors({});
     onClose();
   };
@@ -87,13 +111,15 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit }) => {
       <div ref={modalRef} className="relative z-[101] w-full max-w-md mx-auto">
         {/* Modal Card */}
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-[#E5E7EB]">
-          {/* Header with brand gradient */}
+          {/* 🔥 UPDATED: Header with dynamic title */}
           <div className="flex items-center justify-between px-6 py-5 rounded-t-2xl" style={{background: 'linear-gradient(90deg, #333D79 0%, #4A5491 100%)'}}>
             <div className="flex items-center space-x-3">
               <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center shadow">
                 <BookOpen className="w-5 h-5 text-white" />
               </div>
-              <h2 className="text-xl font-semibold text-white tracking-wide">Create Class Record</h2>
+              <h2 className="text-xl font-semibold text-white tracking-wide">
+                {isEditing ? 'Edit Class Record' : 'Create Class Record'}
+              </h2>
             </div>
             <button
               onClick={handleClose}
@@ -157,7 +183,45 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit }) => {
               )}
             </div>
 
-            {/* Buttons */}
+            {/* 🔥 NEW: Teacher Name Field */}
+            <div>
+              <label htmlFor="teacher_name" className="block text-sm font-medium text-gray-700 mb-2">
+                Teacher Name
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  id="teacher_name"
+                  name="teacher_name"
+                  value={formData.teacher_name}
+                  onChange={handleInputChange}
+                  placeholder="e.g., Dr. Smith, Prof. Johnson"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#333D79] focus:border-[#333D79] focus:outline-none transition-all duration-200 text-gray-900 bg-gray-50"
+                />
+                <User className="absolute right-3 top-3 w-5 h-5 text-gray-400" />
+              </div>
+            </div>
+
+            {/* 🔥 NEW: Description Field */}
+            <div>
+              <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
+                Description
+              </label>
+              <div className="relative">
+                <textarea
+                  id="description"
+                  name="description"
+                  value={formData.description}
+                  onChange={handleInputChange}
+                  placeholder="Optional description for this class record..."
+                  rows="3"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#333D79] focus:border-[#333D79] focus:outline-none transition-all duration-200 text-gray-900 bg-gray-50 resize-none"
+                />
+                <FileText className="absolute right-3 top-3 w-5 h-5 text-gray-400" />
+              </div>
+            </div>
+
+            {/* 🔥 UPDATED: Buttons with dynamic text */}
             <div className="flex space-x-3 pt-4">
               <button
                 type="button"
@@ -178,10 +242,10 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit }) => {
                 {loading ? (
                   <div className="flex items-center justify-center space-x-2">
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    <span>Creating...</span>
+                    <span>{isEditing ? 'Updating...' : 'Creating...'}</span>
                   </div>
                 ) : (
-                  'Create Record'
+                  <span>{isEditing ? 'Update Record' : 'Create Record'}</span>
                 )}
               </button>
             </div>
@@ -192,10 +256,19 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit }) => {
   );
 };
 
+// 🔥 UPDATED: PropTypes to include new props
 CreateClassRecordModal.propTypes = {
   isOpen: PropTypes.bool.isRequired,
   onClose: PropTypes.func.isRequired,
   onSubmit: PropTypes.func.isRequired,
+  editData: PropTypes.object,
+  isEditing: PropTypes.bool
+};
+
+// 🔥 NEW: Default props
+CreateClassRecordModal.defaultProps = {
+  editData: null,
+  isEditing: false
 };
 
 export default CreateClassRecordModal;

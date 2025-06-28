@@ -11,6 +11,28 @@ const nameVariations = {
   'jessica': ['jessica', 'jess', 'jesica']
 };
 
+const batchPatterns = {
+  // Batch keywords
+  'everyone': 'EVERYONE',
+  'all students': 'ALL_STUDENTS', 
+  'entire class': 'ALL_STUDENTS',
+  'whole class': 'ALL_STUDENTS',
+  'everybody': 'EVERYONE',
+  
+  // Range keywords  
+  'through': 'THROUGH',
+  'to': 'TO',
+  'thru': 'THROUGH',
+  'from': 'FROM',
+  'rows': 'ROWS',
+  
+  // Conditional keywords
+  'present': 'PRESENT',
+  'absent': 'ABSENT',
+  'empty': 'EMPTY',
+  'filled': 'FILLED'
+};
+
 const phoneticCorrections = {
   // Lab variations
   'love': 'lab',
@@ -52,7 +74,46 @@ const phoneticCorrections = {
   'finale': 'final',
   'find': 'final',
   'file': 'final',
-  'fine': 'final'
+  'fine': 'final',
+
+  'laboratory': 'lab',
+  'laboratories': 'lab',
+  'examination': 'exam',
+  'examinations': 'exam',
+  'assessment': 'quiz',
+  'assessments': 'quiz',
+  'evaluation': 'exam',
+  'evaluations': 'exam',
+  'practicum': 'lab',
+  'practical': 'lab',
+  
+  'want': '1',
+  'once': '1',
+  'won': '1',
+  'to': '2',
+  'too': '2',
+  'tree': '3',
+  'free': '3',
+  'for': '4',
+  'fore': '4',
+  'ate': '8',
+  'night': '9',
+  'teen': '10',
+
+  'marry': 'mary',
+  'marie': 'mary',
+  'maria': 'maria',
+  'jon': 'john',
+  'johny': 'johnny',
+  'mike': 'michael',
+  'dave': 'david',
+  'chris': 'christopher',
+  'liz': 'elizabeth',
+  'beth': 'elizabeth',
+  'jen': 'jennifer',
+  'jenny': 'jennifer',
+  'jim': 'james',
+  'jimmy': 'james'
 };
 
 const wordsToNumbers = {
@@ -74,6 +135,90 @@ const undoRedoPatterns = {
   redo: ['redo', 'redo that', 'do again', 'repeat that', 'restore']
 };
 
+const parseBatchCommand = (transcript) => {
+  console.log('🎯 Parsing batch command:', transcript);
+  
+  // Pattern 1: "Quiz 1: John 85, Maria 92, Carlos 88"
+  const studentListPattern = /^(.+?):\s*(.+)$/;
+  const studentListMatch = transcript.match(studentListPattern);
+  
+  if (studentListMatch) {
+    const columnPart = studentListMatch[1].trim();
+    const studentsPart = studentListMatch[2].trim();
+    
+    // Parse individual student entries
+    const studentEntries = studentsPart.split(',').map(entry => {
+      const parts = entry.trim().split(/\s+/);
+      if (parts.length >= 2) {
+        const score = parts[parts.length - 1];
+        const name = parts.slice(0, -1).join(' ');
+        return { name: name.trim(), score: score.trim() };
+      }
+      return null;
+    }).filter(Boolean);
+    
+    if (studentEntries.length > 0) {
+      console.log('✅ Student list batch detected:', { columnPart, studentEntries });
+      return {
+        type: 'BATCH_STUDENT_LIST',
+        data: {
+          column: columnPart,
+          students: studentEntries,
+          confidence: 'high'
+        }
+      };
+    }
+  }
+  
+  // Pattern 2: "Lab 2: Row 1 through 5, all score 90"
+  const rowRangePattern = /^(.+?):\s*row\s*(\d+)\s*(?:through|to|thru)\s*(\d+).*?(?:all\s*(?:score|get|gets?))?\s*(\d+)$/i;
+  const rowRangeMatch = transcript.match(rowRangePattern);
+  
+  if (rowRangeMatch) {
+    const column = rowRangeMatch[1].trim();
+    const startRow = parseInt(rowRangeMatch[2]);
+    const endRow = parseInt(rowRangeMatch[3]);
+    const score = rowRangeMatch[4];
+    
+    console.log('✅ Row range batch detected:', { column, startRow, endRow, score });
+    return {
+      type: 'BATCH_ROW_RANGE',
+      data: {
+        column,
+        startRow: startRow - 1, // Convert to 0-based index
+        endRow: endRow - 1,
+        score,
+        confidence: 'high'
+      }
+    };
+  }
+  
+  // Pattern 3: "Midterm: Everyone present gets 85"
+  const everyonePattern = /^(.+?):\s*(?:everyone|all students|entire class|everybody)\s*(?:present|filled)?\s*(?:gets?|scores?)\s*(\d+)$/i;
+  const everyoneMatch = transcript.match(everyonePattern);
+  
+  if (everyoneMatch) {
+    const column = everyoneMatch[1].trim();
+    const score = everyoneMatch[2];
+    const condition = transcript.includes('present') ? 'present' : 'all';
+    
+    console.log('✅ Everyone batch detected:', { column, score, condition });
+    return {
+      type: 'BATCH_EVERYONE',
+      data: {
+        column,
+        score,
+        condition,
+        confidence: 'high'
+      }
+    };
+  }
+  
+  return null;
+};
+
+
+
 // Levenshtein Distance for fuzzy matching (enhanced)
 const levenshteinDistance = (str1, str2) => {
   const track = Array(str2.length + 1).fill(null).map(() => Array(str1.length + 1).fill(null));
@@ -90,6 +235,66 @@ const levenshteinDistance = (str1, str2) => {
     }
   }
   return track[str2.length][str1.length];
+};
+
+const applyContextPhoneticCorrections = (transcript, contextWords = []) => {
+  console.log('🔧 BEFORE context phonetic correction:', transcript);
+  
+  let corrected = transcript;
+  let changesFound = false;
+  
+  // Apply enhanced corrections
+  Object.keys(enhancedPhoneticCorrections).forEach(misheard => {
+    const correct = enhancedPhoneticCorrections[misheard];
+    const regex = new RegExp(`\\b${misheard}\\b`, 'gi');
+    
+    if (regex.test(corrected)) {
+      console.log(`🎯 ENHANCED CORRECTION: "${misheard}" → "${correct}"`);
+      corrected = corrected.replace(regex, correct);
+      changesFound = true;
+    }
+  });
+  
+  // 🔥 NEW: Context-specific corrections
+  const words = corrected.split(' ');
+  const correctedWords = words.map(word => {
+    const cleanWord = word.toLowerCase().replace(/[^a-z]/g, '');
+    
+    // Find best context match
+    let bestMatch = null;
+    let bestScore = 0;
+    
+    contextWords.forEach(contextWord => {
+      if (cleanWord.length > 2 && contextWord.length > 2) {
+        const similarity = calculateWordSimilarity(cleanWord, contextWord);
+        if (similarity > bestScore && similarity > 0.75) {
+          bestMatch = contextWord;
+          bestScore = similarity;
+        }
+      }
+    });
+    
+    if (bestMatch) {
+      console.log(`🧠 CONTEXT CORRECTION: "${word}" → "${bestMatch}" (${bestScore.toFixed(2)})`);
+      return word.replace(new RegExp(cleanWord, 'gi'), bestMatch);
+    }
+    
+    return word;
+  });
+  
+  corrected = correctedWords.join(' ');
+  
+  console.log('🔧 AFTER context phonetic correction:', corrected);
+  console.log('🔧 Changes made:', changesFound);
+  
+  return corrected;
+};
+
+const calculateWordSimilarity = (word1, word2) => {
+  const longer = word1.length > word2.length ? word1 : word2;
+  const shorter = word1.length > word2.length ? word2 : word1;
+  const editDistance = levenshteinDistance(longer, shorter);
+  return (longer.length - editDistance) / longer.length;
 };
 
 const applyPhoneticCorrections = (transcript) => {
@@ -286,6 +491,11 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
   normalizedTranscript = applyPhoneticCorrections(normalizedTranscript);
   console.log('🎙️ After phonetic corrections:', normalizedTranscript);
 
+  const batchCommand = parseBatchCommand(normalizedTranscript);
+  if (batchCommand) {
+    console.log('🔥 Batch command detected:', batchCommand);
+    return batchCommand;
+  }
 
   for (const undoWord of undoRedoPatterns.undo) {
     if (normalizedTranscript.includes(undoWord)) {
