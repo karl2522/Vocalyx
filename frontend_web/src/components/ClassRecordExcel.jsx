@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, Mic, MicOff, Download, Users, Plus, X, Edit2, Volume2, VolumeX} from 'lucide-react';
-import { classRecordService } from '../services/api';
+import { AlertCircle, ArrowLeft, ChevronDown, Download, Edit2, FileSpreadsheet, HelpCircle, Mic, MicOff, MoreVertical, Plus, RotateCcw, RotateCw, Save, Target, Upload, Users, Volume2, VolumeX, X } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import useVoiceRecognition from '../utils/useVoiceRecognition';
-import { parseVoiceCommand, findStudentRow, findEmptyRow, findStudentRowSmart} from '../utils/voicecommandParser';
+import { useNavigate, useParams } from 'react-router-dom';
+import { classRecordService } from '../services/api';
 import { speakText, stopSpeaking } from '../utils/speechSynthesis';
+import useVoiceRecognition from '../utils/useVoiceRecognition';
+import { findEmptyRow, findStudentRow, findStudentRowSmart, parseVoiceCommand } from '../utils/voicecommandParser';
 
 const ClassRecordExcel = () => {
   const { id } = useParams();
@@ -65,6 +65,19 @@ const ClassRecordExcel = () => {
   const [showAddColumnModal, setShowAddColumnModal] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('');
   const [newColumnName, setNewColumnName] = useState('');
+
+  // 🔥 NEW: Dropdown state management
+  const [dropdowns, setDropdowns] = useState({
+    tools: false,
+    voice: false,
+    edit: false
+  });
+
+  // 🔥 NEW: Voice guide modal state
+  const [showVoiceGuide, setShowVoiceGuide] = useState(false);
+
+  // 🔥 NEW: Import modal state
+  const [showImportModal, setShowImportModal] = useState(false);
 
   useEffect(() => {
     if (transcript && !isListening && transcript !== lastVoiceCommand) {
@@ -1106,12 +1119,12 @@ const ClassRecordExcel = () => {
   };
 
   const getColumnColor = (column) => {
-    if (customColumns.student_info?.includes(column)) return 'bg-blue-50';
-    if (customColumns.quizzes?.includes(column)) return 'bg-green-50';
-    if (customColumns.labs?.includes(column)) return 'bg-orange-50';
-    if (customColumns.exams?.includes(column)) return 'bg-red-50';
+    if (customColumns.student_info?.includes(column)) return 'bg-slate-50';
+    if (customColumns.quizzes?.includes(column)) return 'bg-blue-50';
+    if (customColumns.labs?.includes(column)) return 'bg-emerald-50';
+    if (customColumns.exams?.includes(column)) return 'bg-amber-50';
     if (customColumns.calculations?.includes(column)) return 'bg-purple-50';
-    return 'bg-white';
+    return 'bg-slate-50';
   };
 
   const getCategoryFromColumn = (column) => {
@@ -1251,6 +1264,39 @@ const ClassRecordExcel = () => {
     toast.success('New student row added!');
   };
 
+  // Dropdown helper functions
+  const toggleDropdown = (name) => {
+    setDropdowns(prev => {
+      const isCurrentlyOpen = prev[name];
+      if (isCurrentlyOpen) {
+        // If currently open, just close it
+        return {
+          ...prev,
+          [name]: false
+        };
+      } else {
+        // If currently closed, close all others and open this one
+        return {
+          tools: false,
+          voice: false,
+          edit: false,
+          [name]: true
+        };
+      }
+    });
+  };
+
+  const closeAllDropdowns = () => {
+    setDropdowns({ tools: false, voice: false, edit: false });
+  };
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => closeAllDropdowns();
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -1260,313 +1306,442 @@ const ClassRecordExcel = () => {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <button
-              onClick={() => navigate('/dashboard/class-records/view')}
-              className="flex items-center space-x-2 text-gray-600 hover:text-gray-800 transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5" />
-              <span>Back to Records</span>
-            </button>
-            <div className="h-6 w-px bg-gray-300"></div>
-            <div>
-              <h1 className="text-xl font-semibold text-gray-800">{classRecord?.name}</h1>
-              <p className="text-sm text-gray-600">
-                {classRecord?.semester} • {classRecord?.teacher_name}
-                {lastSaved && (
-                  <span className="ml-2 text-gray-400">
-                    • Last saved: {new Date(lastSaved).toLocaleTimeString()}
-                  </span>
-                )}
-              </p>
+    <div className="h-screen flex flex-col bg-slate-50">
+      {/* Professional Header */}
+      <div className="bg-white border-b border-slate-200 shadow-sm">
+        {/* Top Bar */}
+        <div className="px-6 py-4 border-b border-slate-100">
+          <div className="flex items-center justify-between">
+            {/* Left Section - Navigation & Title */}
+            <div className="flex items-center space-x-4">
+              <button
+                onClick={() => navigate('/dashboard/class-records/view')}
+                className="flex items-center space-x-2 text-slate-600 hover:text-slate-800 transition-colors group"
+              >
+                <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
+                <span className="text-sm font-medium">Back to Records</span>
+              </button>
+              <div className="h-5 w-px bg-slate-300"></div>
+              <div>
+                <h1 className="text-xl font-semibold text-slate-900">{classRecord?.name}</h1>
+                <div className="flex items-center space-x-3 text-sm text-slate-500">
+                  <span>{classRecord?.semester}</span>
+                  <span>•</span>
+                  <span>{classRecord?.teacher_name}</span>
+                  {lastSaved && (
+                    <>
+                      <span>•</span>
+                      <span className="text-emerald-600">
+                        Last saved {new Date(lastSaved).toLocaleTimeString()}
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
 
-          {/* Action Buttons */}
-          <div className="flex items-center space-x-3">
-            {/* Accuracy Level Selector */}
-            <div className="flex items-center space-x-2 bg-gray-100 rounded-lg p-1">
-              <span className="text-xs text-gray-600 px-2">Accuracy:</span>
-              {['high', 'medium', 'low'].map((level) => (
+            {/* Right Section - Action Menu */}
+            <div className="flex items-center space-x-2">
+              {/* Primary Save */}
+              <button
+                onClick={handleSave}
+                disabled={isSaving}
+                className="flex items-center space-x-2 bg-emerald-600 text-white px-4 py-2.5 rounded-lg font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50 shadow-lg shadow-emerald-600/25"
+              >
+                <Save className="w-4 h-4" />
+                <span>{isSaving ? 'Saving...' : 'Save'}</span>
+              </button>
+
+              {/* Edit Tools Dropdown */}
+              <div className="relative" onClick={(e) => e.stopPropagation()}>
                 <button
-                  key={level}
-                  onClick={() => handleAccuracyChange(level)}
-                  className={`px-2 py-1 text-xs rounded transition-colors ${
-                    accuracyLevel === level
-                      ? 'bg-blue-500 text-white'
-                      : 'text-gray-600 hover:bg-gray-200'
-                  }`}
+                  onClick={() => toggleDropdown('edit')}
+                  className="flex items-center space-x-2 bg-slate-100 text-slate-700 px-3 py-2.5 rounded-lg font-medium hover:bg-slate-200 transition-colors"
                 >
-                  {level.charAt(0).toUpperCase() + level.slice(1)}
+                  <Edit2 className="w-4 h-4" />
+                  <span>Edit</span>
+                  <ChevronDown className={`w-4 h-4 transition-transform ${dropdowns.edit ? 'rotate-180' : ''}`} />
                 </button>
-              ))}
+                
+                {dropdowns.edit && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-slate-200 py-2 z-50">
+                    <button
+                      onClick={() => {
+                        addNewStudent();
+                        closeAllDropdowns();
+                      }}
+                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Add Student</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowAddColumnModal(true);
+                        closeAllDropdowns();
+                      }}
+                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Add Column</span>
+                    </button>
+                    <hr className="my-2 border-slate-200" />
+                    <button
+                      onClick={() => {
+                        handleUndo();
+                        closeAllDropdowns();
+                      }}
+                      disabled={undoStack.length === 0}
+                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      <span>Undo</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        handleRedo();
+                        closeAllDropdowns();
+                      }}
+                      disabled={redoStack.length === 0}
+                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <RotateCw className="w-4 h-4" />
+                      <span>Redo</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Voice Tools Dropdown */}
+              <div className="relative" onClick={(e) => e.stopPropagation()}>
+                <button
+                  onClick={() => toggleDropdown('voice')}
+                  className="flex items-center space-x-2 bg-slate-100 text-slate-700 px-3 py-2.5 rounded-lg font-medium hover:bg-slate-200 transition-colors"
+                >
+                  {voiceEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+                  <span>Voice</span>
+                  <ChevronDown className={`w-4 h-4 transition-transform ${dropdowns.voice ? 'rotate-180' : ''}`} />
+                </button>
+                
+                {dropdowns.voice && (
+                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl border border-slate-200 py-2 z-50">
+                    <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                      Voice Settings
+                    </div>
+                    <button
+                      onClick={() => {
+                        toggleVoiceFeedback();
+                        closeAllDropdowns();
+                      }}
+                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                    >
+                      {voiceEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+                      <span>{voiceEnabled ? 'Disable' : 'Enable'} Voice Feedback</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        startVoiceTraining();
+                        closeAllDropdowns();
+                      }}
+                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                    >
+                      <Target className="w-4 h-4" />
+                      <span>Train Voice Recognition</span>
+                    </button>
+                    <hr className="my-2 border-slate-200" />
+                    <div className="px-4 py-2">
+                      <div className="text-xs font-medium text-slate-500 mb-2">Accuracy Level</div>
+                      <div className="grid grid-cols-3 gap-1">
+                        {['high', 'medium', 'low'].map((level) => (
+                          <button
+                            key={level}
+                            onClick={() => {
+                              handleAccuracyChange(level);
+                              closeAllDropdowns();
+                            }}
+                            className={`px-2 py-1 text-xs rounded font-medium transition-colors ${
+                              accuracyLevel === level
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}
+                          >
+                            {level.charAt(0).toUpperCase() + level.slice(1)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Tools Dropdown */}
+              <div className="relative" onClick={(e) => e.stopPropagation()}>
+                <button
+                  onClick={() => toggleDropdown('tools')}
+                  className="flex items-center space-x-2 bg-slate-100 text-slate-700 px-3 py-2.5 rounded-lg font-medium hover:bg-slate-200 transition-colors"
+                >
+                  <MoreVertical className="w-4 h-4" />
+                  <span>Tools</span>
+                  <ChevronDown className={`w-4 h-4 transition-transform ${dropdowns.tools ? 'rotate-180' : ''}`} />
+                </button>
+                
+                {dropdowns.tools && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-slate-200 py-2 z-50">
+                    <button
+                      onClick={() => {
+                        startBatchMode();
+                        closeAllDropdowns();
+                      }}
+                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                    >
+                      <Users className="w-4 h-4" />
+                      <span>Batch Grading</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        handleExport();
+                        closeAllDropdowns();
+                      }}
+                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Export CSV</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowImportModal(true);
+                        closeAllDropdowns();
+                      }}
+                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                    >
+                      <Upload className="w-4 h-4" />
+                      <span>Import CSV</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
-
-            {/* Undo/Redo Buttons */}
-            <button
-              onClick={handleUndo}
-              disabled={undoStack.length === 0}
-              className="flex items-center space-x-2 bg-orange-500 text-white px-3 py-2 rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50"
-              title="Undo last action (or say 'undo')"
-            >
-              ↶ Undo
-            </button>
-
-            <button
-              onClick={handleRedo}
-              disabled={redoStack.length === 0}
-              className="flex items-center space-x-2 bg-green-500 text-white px-3 py-2 rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50"
-              title="Redo last action (or say 'redo')"
-            >
-              ↷ Redo
-            </button>
-
-            <button
-              onClick={addNewStudent}
-              className="flex items-center space-x-2 bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Student</span>
-            </button>
-
-            <button
-              onClick={() => setShowAddColumnModal(true)}
-              className="flex items-center space-x-2 bg-indigo-500 text-white px-4 py-2 rounded-lg hover:bg-indigo-600 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Column</span>
-            </button>
-
-            <button
-              onClick={toggleVoiceFeedback}
-              className="flex items-center space-x-2 bg-yellow-500 text-white px-3 py-2 rounded-lg hover:bg-yellow-600 transition-colors"
-              title={voiceEnabled ? 'Disable voice feedback' : 'Enable voice feedback'}
-            >
-              {voiceEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-            </button>
-
-            <button
-              onClick={handleVoiceRecord}
-              disabled={!isSupported}
-              className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 ${
-                isListening
-                  ? 'bg-red-500 text-white hover:bg-red-600 animate-pulse'
-                  : 'bg-blue-500 text-white hover:bg-blue-600'
-              } disabled:opacity-50 disabled:cursor-not-allowed`}
-            >
-              {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-              <span>{isListening ? 'Stop Recording' : 'Voice Record'}</span>
-            </button>
-
-            <button
-              onClick={handleSave}
-              disabled={isSaving}
-              className="flex items-center space-x-2 bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50"
-            >
-              <Save className="w-4 h-4" />
-              <span>{isSaving ? 'Saving...' : 'Save'}</span>
-            </button>
-
-            <button
-              onClick={startBatchMode}
-              className="flex items-center space-x-2 bg-purple-500 text-white px-4 py-2 rounded-lg hover:bg-purple-600 transition-colors"
-              title="Start batch grading mode"
-            >
-              <Users className="w-4 h-4" />
-              <span>Batch Mode</span>
-            </button>
-
-            <button
-              onClick={startVoiceTraining}
-              className="flex items-center space-x-2 bg-purple-500 text-white px-3 py-2 rounded-lg hover:bg-purple-600 transition-colors"
-              title="Train voice recognition"
-            >
-              <span>🎯</span>
-              <span>Train Voice</span>
-            </button>
-
-            <button
-              onClick={handleExport}
-              className="flex items-center space-x-2 bg-purple-500 text-white px-4 py-2 rounded-lg hover:bg-purple-600 transition-colors"
-            >
-              <Download className="w-4 h-4" />
-              <span>Export CSV</span>
-            </button>
           </div>
         </div>
-      </div>
 
-      {/* Voice Status Bar */}
-      {isSupported && (
-        <div className={`transition-all duration-300 ${
-          isListening ? 'bg-gradient-to-r from-red-500 to-pink-600' : 'bg-gradient-to-r from-blue-500 to-indigo-600'
-        } text-white px-6 py-3`}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
+        {/* Stats Bar */}
+        <div className="px-6 py-3 bg-slate-50 border-b border-slate-200">
+          <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center space-x-6">
               <div className="flex items-center space-x-2">
-                {isListening ? (
-                  <div className="w-3 h-3 bg-white rounded-full animate-pulse"></div>
-                ) : (
-                  <div className="w-3 h-3 bg-white bg-opacity-50 rounded-full"></div>
-                )}
-                <span className="font-medium">
-                  {isListening ? '🎙️ Listening...' : '✅ Voice Commands Ready'}
-                </span>
+                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                <span className="text-slate-600">Students: <span className="font-semibold text-slate-900">{tableData.filter(row => row['Last Name'] || row['First Name']).length}</span></span>
               </div>
-              
-              {transcript && (
-                <div className="bg-white bg-opacity-20 rounded-lg px-3 py-1 max-w-md">
-                  <span className="text-sm truncate">"{transcript}"</span>
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
+                <span className="text-slate-600">Columns: <span className="font-semibold text-slate-900">{headers.length}</span></span>
+              </div>
+              {isListening && (
+                <div className="flex items-center space-x-2 text-red-600">
+                  <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                  <span className="font-medium">Listening...</span>
                 </div>
               )}
             </div>
-
-            <div className="text-sm bg-white bg-opacity-20 rounded-lg px-3 py-1">
-              Selected Row: {selectedRow + 1}
+            
+            <div className="text-slate-500">
+              Selected Row: <span className="font-semibold text-slate-900">{selectedRow + 1}</span>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Voice Commands Help */}
-      {isListening && (
-        <div className="bg-blue-50 border-b border-blue-200 px-6 py-3">
-          <div className="text-sm text-blue-800">
-            <p className="font-medium mb-1">🎙️ Voice Commands Examples:</p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
-              <div>
-                <strong>Single:</strong>
-                <br />• "Maria Quiz 3 twenty"
-                <br />• "John Lab 2 eighty-five"
-              </div>
-              <div>
-                <strong>Batch List:</strong>
-                <br />• "Quiz 1: John 85, Maria 92, Carlos 88"
-                <br />• "Lab 2: Alice 90, Bob 85"
-              </div>
-              <div>
-                <strong>Batch Range:</strong>
-                <br />• "Midterm: Row 1 through 5, all score 90"
-                <br />• "Quiz 2: Everyone present gets 85"
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Browser Support Warning */}
-      {!isSupported && (
-        <div className="bg-yellow-50 border-b border-yellow-200 px-6 py-3">
-          <p className="text-sm text-yellow-800">
-            ⚠️ Voice recognition is not supported in your browser. Please use Chrome, Edge, or Safari for voice commands.
-          </p>
-        </div>
-      )}
-
-      {/* 🔥 NEW: Duplicate Selection UI */}
-      {duplicateOptions && (
-        <div className="bg-amber-50 border-b border-amber-200 px-6 py-4">
-          <div className="text-sm text-amber-800">
-            <p className="font-medium mb-2">🤔 Multiple students found named "{duplicateOptions.searchName}":</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {duplicateOptions.matches.map((match, index) => (
-                <div key={index} className="flex items-center justify-between bg-white rounded p-2 border border-amber-200">
-                  <div>
-                    <span className="font-medium">Option {index + 1}:</span> {match.student} (Row {match.index + 1})
-                    {match.hasExistingScore && (
-                      <span className="text-xs text-amber-600 ml-2">Current: {match.existingValue}</span>
-                    )}
-                    {!match.hasExistingScore && (
-                      <span className="text-xs text-green-600 ml-2">Empty ✓</span>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => handleDuplicateSelection(index + 1)}
-                    className="bg-amber-500 text-white px-3 py-1 rounded text-xs hover:bg-amber-600 transition-colors"
-                  >
-                    Select
-                  </button>
-                </div>
-              ))}
-            </div>
-            <p className="text-xs mt-2 text-amber-600">
-              Say "option 1", "option 2", etc. or click Select buttons above. Say "cancel" to abort.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Pending Confirmation UI */}
-      {pendingConfirmation && (
-        <div className="bg-yellow-50 border-b border-yellow-200 px-6 py-3">
-          <div className="text-sm text-yellow-800">
-            <p className="font-medium mb-1">🤔 Confirmation Required:</p>
-            <p>Did you mean <strong>{pendingConfirmation.suggestedStudent}</strong>? Say "yes" to confirm or "no" to cancel.</p>
-            {pendingConfirmation.alternatives.length > 0 && (
-              <p className="text-xs mt-1">
-                Other possibilities: {pendingConfirmation.alternatives.map(alt => alt.student).join(', ')}
-              </p>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Keep all your existing components... */}
-      {/* Category Management Bar */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-6 text-sm">
-            <div className="flex items-center space-x-2">
-              <div className="w-4 h-4 bg-blue-500 rounded"></div>
-              <span className="text-gray-600">Student Info ({customColumns.student_info?.length || 0})</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <div className="w-4 h-4 bg-green-500 rounded"></div>
-              <span className="text-gray-600">Quizzes ({customColumns.quizzes?.length || 0})</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <div className="w-4 h-4 bg-orange-500 rounded"></div>
-              <span className="text-gray-600">Labs ({customColumns.labs?.length || 0})</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <div className="w-4 h-4 bg-red-500 rounded"></div>
-              <span className="text-gray-600">Exams ({customColumns.exams?.length || 0})</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <div className="w-4 h-4 bg-purple-500 rounded"></div>
-              <span className="text-gray-600">Calculations ({customColumns.calculations?.length || 0})</span>
-            </div>
-          </div>
-          
-          <div className="text-sm text-gray-500">
-            Total Columns: {headers.length} | Students: {tableData.filter(row => row['Last Name'] || row['First Name']).length}
           </div>
         </div>
       </div>
 
-      {/* Table Container */}
-      <div className="flex-1 overflow-auto">
-        <div className="p-4">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+      {/* Browser Support Warning - Minimal */}
+      {!isSupported && (
+        <div className="bg-amber-50 border-b border-amber-200 px-6 py-2">
+          <div className="flex items-center space-x-2 text-sm text-amber-800">
+            <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+            <span>Voice recognition requires Chrome, Edge, or Safari browser</span>
+          </div>
+        </div>
+      )}
+
+      {/* Voice Transcript Display - Only when active */}
+      {transcript && isListening && (
+        <div className="bg-blue-50 border-b border-blue-200 px-6 py-2">
+          <div className="flex items-center space-x-3 text-sm">
+            <div className="flex items-center space-x-2 text-blue-700">
+              <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+              <span className="font-medium">Voice Input:</span>
+            </div>
+            <div className="bg-white rounded px-3 py-1 text-slate-700 font-mono text-xs">
+              "{transcript}"
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Voice Commands Help - Collapsible */}
+      {isListening && (
+        <div className="bg-slate-100 border-b border-slate-200 px-6 py-3">
+          <details className="text-sm">
+            <summary className="cursor-pointer text-slate-700 font-medium hover:text-slate-900 flex items-center space-x-2">
+              <Mic className="w-4 h-4" />
+              <span>Voice Commands Guide</span>
+            </summary>
+            <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-slate-600">
+              <div className="bg-white rounded-lg p-3 border border-slate-200">
+                <div className="font-medium text-slate-700 mb-2">Single Entry</div>
+                <div className="space-y-1">
+                  <div>"Maria Quiz 3 twenty"</div>
+                  <div>"John Lab 2 eighty-five"</div>
+                </div>
+              </div>
+              <div className="bg-white rounded-lg p-3 border border-slate-200">
+                <div className="font-medium text-slate-700 mb-2">Batch List</div>
+                <div className="space-y-1">
+                  <div>"Quiz 1: John 85, Maria 92"</div>
+                  <div>"Lab 2: Alice 90, Bob 85"</div>
+                </div>
+              </div>
+              <div className="bg-white rounded-lg p-3 border border-slate-200">
+                <div className="font-medium text-slate-700 mb-2">Batch Range</div>
+                <div className="space-y-1">
+                  <div>"Midterm: Row 1 through 5, all score 90"</div>
+                  <div>"Quiz 2: Everyone present gets 85"</div>
+                </div>
+              </div>
+            </div>
+          </details>
+        </div>
+      )}
+
+      {/* Duplicate Selection UI - Clean */}
+      {duplicateOptions && (
+        <div className="bg-blue-50 border-b border-blue-200 px-6 py-4">
+          <div className="flex items-start space-x-4">
+            <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+              <Users className="w-4 h-4 text-blue-600" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-medium text-blue-900 mb-2">
+                Multiple students found for "{duplicateOptions.searchName}"
+              </h3>
+              <div className="space-y-2">
+                {duplicateOptions.matches.map((match, index) => (
+                  <div key={index} className="flex items-center justify-between bg-white rounded-lg p-3 border border-blue-200 shadow-sm">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-xs font-medium text-blue-700">
+                        {index + 1}
+                      </div>
+                      <div>
+                        <div className="font-medium text-slate-900">{match.student}</div>
+                        <div className="text-xs text-slate-500">Row {match.index + 1}</div>
+                      </div>
+                      {match.hasExistingScore ? (
+                        <div className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded">
+                          Current: {match.existingValue}
+                        </div>
+                      ) : (
+                        <div className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded">
+                          Empty
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => handleDuplicateSelection(index + 1)}
+                      className="bg-blue-600 text-white px-3 py-1 rounded text-xs font-medium hover:bg-blue-700 transition-colors"
+                    >
+                      Select
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 text-xs text-blue-700 bg-blue-100 rounded-lg px-3 py-2">
+                Say "option 1", "option 2", etc. or click Select buttons. Say "cancel" to abort.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pending Confirmation UI - Clean */}
+      {pendingConfirmation && (
+        <div className="bg-amber-50 border-b border-amber-200 px-6 py-4">
+          <div className="flex items-start space-x-4">
+            <div className="flex-shrink-0 w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center">
+              <Edit2 className="w-4 h-4 text-amber-600" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-medium text-amber-900 mb-2">Confirmation Required</h3>
+              <div className="bg-white rounded-lg p-3 border border-amber-200">
+                <p className="text-sm text-slate-700">
+                  Did you mean <span className="font-semibold text-slate-900">{pendingConfirmation.suggestedStudent}</span>?
+                </p>
+                {pendingConfirmation.alternatives.length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-amber-200">
+                    <p className="text-xs text-slate-500">
+                      Other matches: {pendingConfirmation.alternatives.map(alt => alt.student).join(', ')}
+                    </p>
+                  </div>
+                )}
+              </div>
+              <div className="mt-3 text-xs text-amber-700 bg-amber-100 rounded-lg px-3 py-2">
+                Say "yes" to confirm or "no" to cancel
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Category Overview Bar */}
+      <div className="bg-white border-b border-slate-200 px-6 py-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-6 text-sm">
+            <div className="flex items-center space-x-2">
+              <div className="w-3 h-3 bg-slate-400 rounded-sm"></div>
+              <span className="text-slate-600">Info <span className="text-slate-400">({customColumns.student_info?.length || 0})</span></span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <div className="w-3 h-3 bg-blue-500 rounded-sm"></div>
+              <span className="text-slate-600">Quizzes <span className="text-slate-400">({customColumns.quizzes?.length || 0})</span></span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <div className="w-3 h-3 bg-emerald-500 rounded-sm"></div>
+              <span className="text-slate-600">Labs <span className="text-slate-400">({customColumns.labs?.length || 0})</span></span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <div className="w-3 h-3 bg-amber-500 rounded-sm"></div>
+              <span className="text-slate-600">Exams <span className="text-slate-400">({customColumns.exams?.length || 0})</span></span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <div className="w-3 h-3 bg-purple-500 rounded-sm"></div>
+              <span className="text-slate-600">Totals <span className="text-slate-400">({customColumns.calculations?.length || 0})</span></span>
+            </div>
+          </div>
+          
+          <div className="flex items-center space-x-4 text-sm text-slate-500">
+            <span>{headers.length} columns</span>
+            <span>•</span>
+            <span>{tableData.filter(row => row['Last Name'] || row['First Name']).length} students</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Professional Table Container */}
+      <div className="flex-1 overflow-auto bg-slate-50">
+        <div className="p-6">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
+                <thead className="bg-slate-50 border-b border-slate-200 sticky top-0">
                   <tr>
                     {headers.map((header, index) => (
                       <th
                         key={index}
-                        className={`px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px] ${getColumnColor(header)} relative group`}
+                        className={`px-4 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider min-w-[120px] ${getColumnColor(header)} relative group border-r border-slate-200 last:border-r-0`}
                       >
                         <div className="flex items-center justify-between">
                           <span>{header}</span>
                           {!['No', 'Total', 'Grade'].includes(header) && (
                             <button
                               onClick={() => handleRemoveColumn(getCategoryFromColumn(header), header)}
-                              className="opacity-0 group-hover:opacity-100 ml-2 text-red-500 hover:text-red-700 transition-opacity"
+                              className="opacity-0 group-hover:opacity-100 ml-2 text-slate-400 hover:text-red-500 transition-all duration-200 hover:scale-110"
                               title={`Remove ${header}`}
                             >
                               <X className="w-3 h-3" />
@@ -1577,29 +1752,32 @@ const ClassRecordExcel = () => {
                     ))}
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white divide-y divide-slate-100">
                   {tableData.map((row, rowIndex) => (
                     <tr 
                       key={rowIndex} 
-                      className={`hover:bg-gray-50 ${
+                      className={`hover:bg-slate-50 transition-colors ${
                         duplicateOptions?.matches.some(match => match.index === rowIndex) 
-                          ? 'bg-amber-50 border-2 border-amber-300' 
-                          : ''
+                          ? 'bg-blue-50 border-l-4 border-blue-400' 
+                          : selectedRow === rowIndex 
+                            ? 'bg-blue-50/50 border-l-4 border-blue-300'
+                            : ''
                       }`}
                     >
                       {headers.map((header, colIndex) => (
                         <td
                           key={colIndex}
-                          className={`px-4 py-2 text-sm ${getColumnColor(header)} border-r border-gray-100 last:border-r-0`}
+                          className={`px-4 py-3 text-sm ${getColumnColor(header)} border-r border-slate-100 last:border-r-0`}
                         >
                           {header === 'No' || header === 'Total' || header === 'Grade' ? (
-                            <span className="text-gray-900 font-medium">{row[header]}</span>
+                            <span className="text-slate-900 font-medium">{row[header]}</span>
                           ) : (
                             <input
                               type="text"
                               value={row[header] || ''}
                               onChange={(e) => handleCellChange(rowIndex, header, e.target.value)}
-                              className="w-full border-none outline-none bg-transparent focus:bg-white focus:ring-2 focus:ring-blue-500 rounded px-2 py-1 transition-all"
+                              onFocus={() => setSelectedRow(rowIndex)}
+                              className="w-full border-none outline-none bg-transparent focus:bg-blue-50 focus:ring-2 focus:ring-blue-500 rounded-lg px-2 py-1.5 transition-all"
                               placeholder={
                                 customColumns.student_info?.includes(header) 
                                   ? 'Enter info...' 
@@ -1618,20 +1796,25 @@ const ClassRecordExcel = () => {
         </div>
       </div>
 
-      {/* Batch Mode Modal */}
+      {/* Professional Batch Mode Modal */}
       {showBatchModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-gray-800">
-                🎯 Batch Grading Mode
-                {currentBatchColumn && (
-                  <span className="ml-2 text-blue-600">({currentBatchColumn})</span>
-                )}
-              </h2>
+        <div className="fixed inset-0 bg-slate-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b border-slate-200 bg-slate-50">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <Users className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">Batch Grading Mode</h2>
+                  {currentBatchColumn && (
+                    <p className="text-sm text-slate-600">Column: <span className="font-medium text-blue-600">{currentBatchColumn}</span></p>
+                  )}
+                </div>
+              </div>
               <button
                 onClick={cancelBatchMode}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-slate-400 hover:text-slate-600 transition-colors"
               >
                 <X className="w-6 h-6" />
               </button>
@@ -1760,29 +1943,36 @@ const ClassRecordExcel = () => {
         </div>
       )}
 
-      {/* Add Column Modal */}
+      {/* Professional Add Column Modal */}
       {showAddColumnModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-96">
-            <h2 className="text-lg font-semibold mb-4">Add New Column</h2>
+        <div className="fixed inset-0 bg-slate-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between p-6 border-b border-slate-200 bg-slate-50">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <Plus className="w-5 h-5 text-blue-600" />
+                </div>
+                <h2 className="text-lg font-semibold text-slate-900">Add New Column</h2>
+              </div>
+            </div>
             
-            <div className="space-y-4">
+            <div className="p-6 space-y-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
+                <label className="block text-sm font-medium text-slate-700 mb-3">Category</label>
                 <select
                   value={selectedCategory}
                   onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white"
                 >
                   <option value="">Select Category</option>
-                  <option value="quizzes">Quizzes</option>
-                  <option value="labs">Lab Activities</option>
-                  <option value="exams">Exams</option>
+                  <option value="quizzes">📝 Quizzes</option>
+                  <option value="labs">🧪 Lab Activities</option>
+                  <option value="exams">📋 Exams</option>
                 </select>
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Column Name</label>
+                <label className="block text-sm font-medium text-slate-700 mb-3">Column Name</label>
                 <input
                   type="text"
                   value={newColumnName}
@@ -1793,28 +1983,349 @@ const ClassRecordExcel = () => {
                     selectedCategory === 'exams' ? 'Practical Exam' :
                     'Enter column name...'
                   }
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                 />
               </div>
             </div>
             
-            <div className="flex space-x-3 mt-6">
-              <button
-                onClick={handleAddColumn}
-                className="flex-1 bg-blue-500 text-white py-2 rounded-lg hover:bg-blue-600 transition-colors"
-              >
-                Add Column
-              </button>
+            <div className="flex space-x-3 p-6 border-t border-slate-200 bg-slate-50">
               <button
                 onClick={() => {
                   setShowAddColumnModal(false);
                   setSelectedCategory('');
                   setNewColumnName('');
                 }}
-                className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400 transition-colors"
+                className="flex-1 bg-slate-200 text-slate-700 py-3 rounded-lg hover:bg-slate-300 transition-colors font-medium"
               >
                 Cancel
               </button>
+              <button
+                onClick={handleAddColumn}
+                className="flex-1 bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-lg shadow-blue-600/25"
+              >
+                Add Column
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🎤 FLOATING VOICE RECORDING BUTTON */}
+      {isSupported && (
+        <div className="fixed bottom-6 right-6 z-50">
+          <div className="flex items-center space-x-3">
+            {/* Voice Guide Button */}
+            <button
+              onClick={() => setShowVoiceGuide(true)}
+              className="bg-white border border-slate-300 text-slate-600 hover:text-slate-900 hover:border-slate-400 p-3 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 group"
+              title="Voice Commands Guide"
+            >
+              <HelpCircle className="w-5 h-5 group-hover:scale-110 transition-transform" />
+            </button>
+
+            {/* Main Voice Recording Button */}
+            <button
+              onClick={handleVoiceRecord}
+              className={`relative p-4 rounded-full shadow-2xl transition-all duration-300 transform hover:scale-105 ${
+                isListening
+                  ? 'bg-red-500 text-white shadow-red-500/50 animate-pulse hover:bg-red-600'
+                  : 'bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white shadow-blue-600/50 hover:bg-blue-[#4A5491]'
+              }`}
+              title={isListening ? 'Stop voice recording' : 'Start voice recording'}
+            >
+              {isListening ? (
+                <MicOff className="w-6 h-6" />
+              ) : (
+                <Mic className="w-6 h-6" />
+              )}
+              
+              {/* Listening indicator ring */}
+              {isListening && (
+                <div className="absolute inset-0 rounded-full border-4 border-red-300 animate-ping"></div>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 📖 PROFESSIONAL VOICE GUIDE MODAL */}
+      {showVoiceGuide && (
+        <div 
+          className="fixed inset-0 bg-slate-900 bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={() => setShowVoiceGuide(false)}
+        >
+          <div 
+            className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-slate-200 bg-slate-50">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <Mic className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">Voice Commands Guide</h2>
+                  <p className="text-sm text-slate-600">Learn how to use voice commands efficiently</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowVoiceGuide(false)}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 overflow-y-auto max-h-[calc(85vh-180px)]">
+              {/* Quick Start */}
+              <div className="mb-8">
+                <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center space-x-2">
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  <span>Quick Start</span>
+                </h3>
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <div className="font-medium text-blue-900 mb-2">🎯 Basic Pattern</div>
+                      <div className="text-blue-700 space-y-1">
+                        <div>"[Student Name] [Column] [Score]"</div>
+                        <div className="text-xs text-blue-600">Example: "Maria Quiz 1 eighty-five"</div>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="font-medium text-blue-900 mb-2">🔧 Controls</div>
+                      <div className="text-blue-700 space-y-1">
+                        <div>"undo" - Undo last action</div>
+                        <div>"cancel" - Cancel current operation</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Command Types */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Single Entry */}
+                <div className="bg-white border border-slate-200 rounded-lg p-5 hover:shadow-md transition-shadow">
+                  <div className="flex items-center space-x-3 mb-4">
+                    <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">
+                      <span className="text-emerald-600 font-bold text-sm">1</span>
+                    </div>
+                    <h4 className="font-semibold text-slate-900">Single Entry</h4>
+                  </div>
+                  <div className="space-y-3 text-sm">
+                    <div>
+                      <div className="font-medium text-slate-700 mb-1">Examples:</div>
+                      <div className="bg-slate-50 rounded p-2 space-y-1 text-slate-600">
+                        <div>"Maria Quiz 3 twenty"</div>
+                        <div>"John Lab 2 eighty-five"</div>
+                        <div>"Sarah Midterm seventy-five"</div>
+                      </div>
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      Perfect for entering individual student grades quickly
+                    </div>
+                  </div>
+                </div>
+
+                {/* Batch List */}
+                <div className="bg-white border border-slate-200 rounded-lg p-5 hover:shadow-md transition-shadow">
+                  <div className="flex items-center space-x-3 mb-4">
+                    <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <span className="text-blue-600 font-bold text-sm">N</span>
+                    </div>
+                    <h4 className="font-semibold text-slate-900">Batch List</h4>
+                  </div>
+                  <div className="space-y-3 text-sm">
+                    <div>
+                      <div className="font-medium text-slate-700 mb-1">Examples:</div>
+                      <div className="bg-slate-50 rounded p-2 space-y-1 text-slate-600">
+                        <div>"Quiz 1: John 85, Maria 92"</div>
+                        <div>"Lab 2: Alice 90, Bob 85"</div>
+                      </div>
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      Enter multiple students for the same assignment at once
+                    </div>
+                  </div>
+                </div>
+
+                {/* Batch Range */}
+                <div className="bg-white border border-slate-200 rounded-lg p-5 hover:shadow-md transition-shadow">
+                  <div className="flex items-center space-x-3 mb-4">
+                    <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
+                      <span className="text-purple-600 font-bold text-sm">∞</span>
+                    </div>
+                    <h4 className="font-semibold text-slate-900">Batch Range</h4>
+                  </div>
+                  <div className="space-y-3 text-sm">
+                    <div>
+                      <div className="font-medium text-slate-700 mb-1">Examples:</div>
+                      <div className="bg-slate-50 rounded p-2 space-y-1 text-slate-600">
+                        <div>"Midterm: Row 1 through 5, all score 90"</div>
+                        <div>"Quiz 2: Everyone present gets 85"</div>
+                      </div>
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      Assign the same grade to multiple students in a range
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tips */}
+              <div className="mt-8">
+                <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center space-x-2">
+                  <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+                  <span>Pro Tips</span>
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
+                    <div className="font-medium text-amber-900 mb-2">💡 Accuracy Tips</div>
+                    <ul className="text-sm text-amber-800 space-y-1">
+                      <li>• Speak clearly and at normal pace</li>
+                      <li>• Use "twenty" instead of "20"</li>
+                      <li>• Say "Quiz one" instead of "Quiz 1"</li>
+                    </ul>
+                  </div>
+                  <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                    <div className="font-medium text-green-900 mb-2">⚡ Efficiency Tips</div>
+                    <ul className="text-sm text-green-800 space-y-1">
+                      <li>• Use batch commands for repeated grades</li>
+                      <li>• Train voice recognition for better results</li>
+                      <li>• Check transcript display for accuracy</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-between p-6 border-t border-slate-200 bg-slate-50">
+              <div className="text-sm text-slate-600">
+                Need help? The voice button is in the bottom-right corner
+              </div>
+              <button
+                onClick={() => setShowVoiceGuide(false)}
+                className="bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white px-6 py-2.5 rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-lg shadow-blue-600/25"
+              >
+                Got it!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 📁 PROFESSIONAL IMPORT MODAL */}
+      {showImportModal && (
+        <div 
+          className="fixed inset-0 bg-slate-900 bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={() => setShowImportModal(false)}
+        >
+          <div 
+            className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[75vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-slate-50">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">Import CSV File</h2>
+                  <p className="text-sm text-slate-600">Upload student data to update your class records</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowImportModal(false)}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-4 space-y-4">
+              {/* File Upload Area */}
+              <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:border-slate-400 transition-colors">
+                <div className="flex flex-col items-center space-y-3">
+                  <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center">
+                    <Upload className="w-6 h-6 text-slate-500" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-medium text-slate-900 mb-1">Choose a CSV file</h3>
+                    <p className="text-sm text-slate-600 mb-3">
+                      Drag and drop your CSV file here, or click to browse
+                    </p>
+                    <label className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white rounded-lg hover:opacity-90 transition-opacity cursor-pointer">
+                      <Upload className="w-4 h-4 mr-2" />
+                      Browse Files
+                      <input type="file" accept=".csv" className="hidden" />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Format Requirements */}
+              <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
+                <div className="flex items-start space-x-3">
+                  <AlertCircle className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <h4 className="font-medium text-blue-900 mb-1">CSV Format Requirements</h4>
+                    <ul className="text-sm text-blue-800 space-y-0.5">
+                      <li>• First row should contain column headers</li>
+                      <li>• Include columns: Last Name, First Name, Student ID</li>
+                      <li>• Additional columns will be imported as grade columns</li>
+                      <li>• Use comma (,) as separator</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* Import Options */}
+              <div className="space-y-3">
+                <h4 className="font-medium text-slate-900">Import Options</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <label className="flex items-center space-x-3 p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer">
+                    <input type="radio" name="importMode" value="merge" defaultChecked className="text-blue-600" />
+                    <div>
+                      <div className="font-medium text-slate-900">Merge with existing</div>
+                      <div className="text-sm text-slate-600">Update existing students, add new ones</div>
+                    </div>
+                  </label>
+                  <label className="flex items-center space-x-3 p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer">
+                    <input type="radio" name="importMode" value="replace" className="text-blue-600" />
+                    <div>
+                      <div className="font-medium text-slate-900">Replace all data</div>
+                      <div className="text-sm text-slate-600">Clear existing data and import new</div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-between p-4 border-t border-slate-200 bg-slate-50">
+              <div className="text-sm text-slate-600">
+                Supported format: CSV files only
+              </div>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setShowImportModal(false)}
+                  className="px-4 py-2 text-slate-700 bg-slate-200 rounded-lg hover:bg-slate-300 transition-colors font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  className="px-6 py-2 bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white rounded-lg hover:opacity-90 transition-opacity font-medium shadow-lg"
+                  disabled
+                >
+                  Import Data
+                </button>
+              </div>
             </div>
           </div>
         </div>
