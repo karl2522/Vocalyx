@@ -194,7 +194,7 @@ const parseBatchCommand = (transcript) => {
   }
   
   // Pattern 3: "Midterm: Everyone present gets 85"
-  const everyonePattern = /^(.+?):\s*(?:everyone|all students|entire class|everybody)\s*(?:present|filled)?\s*(?:gets?|scores?)\s*(\d+)$/i;
+  const everyonePattern = /^(.+?)\s+(?:everyone|all students|entire class|everybody)\s*(?:present|presents|filled)?\s*(?:gets?|get|scores?|score)\s*(\d+)$/i;
   const everyoneMatch = transcript.match(everyonePattern);
   
   if (everyoneMatch) {
@@ -531,7 +531,7 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
       }
     };
   }
-  
+
   // Convert spoken numbers to digits with enhanced coverage
   let processedTranscript = normalizedTranscript;
   processedTranscript = applyPhoneticCorrections(processedTranscript);
@@ -542,6 +542,35 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
 
   // Clean up colons and extra spaces
   processedTranscript = processedTranscript.replace(/[:]/g, ' ').replace(/\s+/g, ' ').trim();
+
+  const sortPattern = /(?:sort|arrange|order)\s+(?:students?\s+)?(?:by\s+)?(alphabetical|name|first\s+name|last\s+name|a\s+to\s+z|z\s+to\s+a)/i;
+  const sortMatch = processedTranscript.match(sortPattern);
+
+  if (sortMatch) {
+    const sortType = sortMatch[1].toLowerCase();
+    let command = 'alphabetical';
+    let direction = 'asc';
+    
+    if (sortType.includes('z to a') || sortType.includes('reverse')) {
+      direction = 'desc';
+    }
+    
+    if (sortType.includes('first')) {
+      command = 'firstName';
+    } else if (sortType.includes('last')) {
+      command = 'lastName';
+    }
+    
+    console.log('✅ SORT command detected:', { command, direction });
+    return {
+      type: 'SORT_STUDENTS',
+      data: {
+        sortType: command,
+        direction: direction,
+        confidence: 'high'
+      }
+    };
+  }
 
   console.log('🎙️ Processing voice command:', processedTranscript);
   console.log('📋 Available headers:', headers);

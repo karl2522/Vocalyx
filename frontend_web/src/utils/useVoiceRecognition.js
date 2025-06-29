@@ -5,11 +5,13 @@ const useVoiceRecognition = () => {
   const [transcript, setTranscript] = useState('');
   const [recognition, setRecognition] = useState(null);
   const [isSupported, setIsSupported] = useState(false);
+
+  const [interimBatchCommand, setInterimBatchCommand] = useState('');
   
   // 🔥 NEW: Context awareness and accuracy features
   const [recentStudents, setRecentStudents] = useState([]);
   const [commandHistory, setCommandHistory] = useState([]);
-  const [confidenceThreshold, setConfidenceThreshold] = useState(0.8);
+  const [confidenceThreshold, setConfidenceThreshold] = useState(0.9);
   const [alternatives, setAlternatives] = useState([]);
   const [contextWords, setContextWords] = useState(new Set());
   const [adaptiveCorrections, setAdaptiveCorrections] = useState({});
@@ -128,42 +130,57 @@ const useVoiceRecognition = () => {
           const result = event.results[i];
           
           if (result.isFinal) {
-            // 🔥 ENHANCED: Multi-step processing
+            // Handle final results (keep existing logic)
             const alternatives = [];
             for (let j = 0; j < Math.min(result.length, 5); j++) {
               let transcript = result[j].transcript.trim();
               
-              // Step 1: Apply context corrections
-              transcript = correctTranscriptWithContext(transcript);
-              
-              // Step 2: Apply phonetic corrections (your existing function)
-              // This will be called in the parser
-              
-              alternatives.push({
-                transcript: transcript,
-                confidence: result[j].confidence || 0.8,
-                processed: true
-              });
+              if (transcript && transcript.length >= 3) {
+                transcript = correctTranscriptWithContext(transcript);
+                alternatives.push({
+                  transcript: transcript,
+                  confidence: result[j].confidence || 0.8,
+                  processed: true
+                });
+              }
             }
             
-            // Choose best alternative with enhanced scoring
-            const bestResult = selectBestAlternative(alternatives);
-            finalTranscript += bestResult.transcript;
-            
-            console.log('🎯 Enhanced alternatives:', alternatives);
-            console.log('✅ Selected:', bestResult);
-            
-            setAlternatives(alternatives);
-            
-            // 🔥 NEW: Learn from corrections
-            learnFromCorrection(bestResult.transcript);
+            if (alternatives.length > 0) {
+              const bestResult = selectBestAlternative(alternatives);
+              if (bestResult.transcript && bestResult.transcript.trim().length >= 3) {
+                finalTranscript += bestResult.transcript;
+                console.log('🎯 Enhanced alternatives:', alternatives);
+                console.log('✅ Selected:', bestResult);
+                setAlternatives(alternatives);
+                learnFromCorrection(bestResult.transcript);
+              }
+            }
             
           } else {
-            interimTranscript += result[0].transcript;
+            // 🔥 NEW: Process interim results for real-time batch mode
+            const interimText = result[0].transcript.trim();
+            if (interimText && interimText.length >= 4) {
+              interimTranscript += interimText;
+              
+              // 🔥 REAL-TIME: Check if interim result looks like a complete command
+              const studentScorePattern = /^(.+?)\s+(\d+)$/;
+              if (studentScorePattern.test(interimText) && interimText.length >= 4) {
+                console.log('🔥 REAL-TIME: Potential batch command detected:', interimText);
+                // Trigger real-time processing
+                if (window.batchModeActive) {
+                  console.log('🔥 INSTANT: Processing batch command now!');
+                  setInterimBatchCommand(interimText);
+                }
+              }
+            }
           }
         }
 
-        setTranscript(finalTranscript + interimTranscript);
+        // Set transcript with both final and interim
+        const combinedTranscript = finalTranscript + interimTranscript;
+        if (combinedTranscript && combinedTranscript.trim().length >= 3) {
+          setTranscript(combinedTranscript);
+        }
       };
 
       speechRecognition.onerror = (event) => {
@@ -243,15 +260,16 @@ const useVoiceRecognition = () => {
     });
   }, []);
 
-  const startListening = useCallback(() => {
+  const startListening = useCallback((silent = false) => {
     if (recognition && !isListening) {
       setTranscript('');
       setAlternatives([]);
       try {
         recognition.start();
-        // Enhanced feedback
-        if ('speechSynthesis' in window) {
-          const utterance = new SpeechSynthesisUtterance('Voice recording started. Speak clearly for best accuracy.');
+        
+        // 🔥 FIX: Only play voice feedback if not in silent mode
+        if (!silent && 'speechSynthesis' in window) {
+          const utterance = new SpeechSynthesisUtterance('Started');
           utterance.rate = 1.1;
           utterance.pitch = 1;
           utterance.volume = 0.8;
@@ -287,13 +305,11 @@ const useVoiceRecognition = () => {
     setAlternatives([]);
   }, []);
 
-  // 🔥 NEW: Adjust confidence threshold
-  const setAccuracyLevel = useCallback((level) => {
-    // high = 0.9, medium = 0.8, low = 0.6
-    const thresholds = { high: 0.9, medium: 0.8, low: 0.6 };
-    setConfidenceThreshold(thresholds[level] || 0.8);
-    console.log(`🎯 Accuracy level set to ${level} (threshold: ${thresholds[level]})`);
-  }, []);
+ const setAccuracyLevel = useCallback((level = 'high') => {
+  const thresholds = { high: 0.9, medium: 0.8, low: 0.6 };
+  setConfidenceThreshold(thresholds[level] || 0.9);
+  console.log(`🎯 Accuracy level set to ${level} (threshold: ${thresholds[level]})`);
+}, []);
 
   return {
     isListening,
@@ -311,7 +327,9 @@ const useVoiceRecognition = () => {
     confidenceThreshold,
     buildContextDictionary,
     contextWords: Array.from(contextWords),
-    adaptiveCorrections
+    adaptiveCorrections,
+    interimBatchCommand,
+  setInterimBatchCommand
   };
 };
 

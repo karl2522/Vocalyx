@@ -5,7 +5,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { classRecordService } from '../services/api';
 import { speakText, stopSpeaking } from '../utils/speechSynthesis';
 import useVoiceRecognition from '../utils/useVoiceRecognition';
-import { findEmptyRow, findStudentRow, findStudentRowSmart, parseVoiceCommand } from '../utils/voicecommandParser';
+import { findEmptyRow, findStudentRow, findStudentRowSmart, parseVoiceCommand} from '../utils/voicecommandParser';
 
 const ClassRecordExcel = () => {
   const { id } = useParams();
@@ -18,6 +18,7 @@ const ClassRecordExcel = () => {
   const [headers, setHeaders] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
+  const [interimBatchCommand, setInterimBatchCommand] = useState('');
 
   const { 
     isListening, 
@@ -29,7 +30,6 @@ const ClassRecordExcel = () => {
     recentStudents,
     addRecentStudent,
     addCommandHistory,
-    setAccuracyLevel: setVoiceAccuracy,
     alternatives,
     buildContextDictionary,
     contextWords
@@ -42,12 +42,14 @@ const ClassRecordExcel = () => {
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
   const [pendingConfirmation, setPendingConfirmation] = useState(null);
-  const [accuracyLevel, setAccuracyLevel] = useState('medium');
 
   const [batchMode, setBatchMode] = useState(false);
   const [batchEntries, setBatchEntries] = useState([]);
   const [currentBatchColumn, setCurrentBatchColumn] = useState('');
   const [showBatchModal, setShowBatchModal] = useState(false);
+
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+  const [showSortModal, setShowSortModal] = useState(false);
 
   const [trainingMode, setTrainingMode] = useState(false);
   const [trainingPhrases] = useState([
@@ -80,15 +82,124 @@ const ClassRecordExcel = () => {
   const [showImportModal, setShowImportModal] = useState(false);
 
   useEffect(() => {
-    if (transcript && !isListening && transcript !== lastVoiceCommand) {
-      handleVoiceCommand(transcript);
-      setLastVoiceCommand(transcript);
-      // Clear transcript after processing
-      setTimeout(() => {
-        clearTranscript();
-      }, 3000);
+    if (transcript && 
+        transcript.trim() && 
+        transcript.trim().length >= 3 && 
+        !isListening && 
+        transcript !== lastVoiceCommand) {
+      
+      console.log('🔥 DEBUG: useEffect triggered - batchMode:', batchMode);
+      console.log('🔥 DEBUG: transcript:', transcript);
+      
+      if (batchMode) {
+        console.log('🔥 DEBUG: Calling handleBatchVoiceCommand...');
+        handleBatchVoiceCommand(transcript);
+        setLastVoiceCommand(transcript);
+        
+        if (!transcript.toLowerCase().includes('done') && 
+            !transcript.toLowerCase().includes('finish') &&
+            !transcript.toLowerCase().includes('exit')) {
+          
+          setTimeout(() => {
+            clearTranscript();
+            setTimeout(() => {
+              if (batchMode && !isListening) {
+                console.log('🔄 Restarting voice for batch mode...');
+                startListening(true);
+              }
+            }, 500);
+          }, 1000);
+        } else {
+          setTimeout(() => clearTranscript(), 2000);
+        }
+        
+      } else {
+        console.log('🔥 DEBUG: Calling handleVoiceCommand (normal mode)...');
+        handleVoiceCommand(transcript);
+        setLastVoiceCommand(transcript);
+        setTimeout(() => clearTranscript(), 2000);
+      }
     }
-  }, [transcript, isListening, lastVoiceCommand, clearTranscript]);
+  }, [transcript, isListening, lastVoiceCommand, clearTranscript, batchMode, startListening]);
+
+  useEffect(() => {
+    console.log('🔥 DEBUG: interimBatchCommand changed:', interimBatchCommand);
+    console.log('🔥 DEBUG: batchMode:', batchMode);
+    console.log('🔥 DEBUG: currentBatchColumn:', currentBatchColumn);
+    
+    if (interimBatchCommand && batchMode && currentBatchColumn) {
+      const studentScorePattern = /^(.+?)\s+(\d+)$/;
+      const match = interimBatchCommand.trim().match(studentScorePattern);
+      
+      if (match) {
+        const studentName = match[1].trim();
+        const score = match[2];
+        
+        console.log('🔥 REAL-TIME BATCH: Processing', studentName, score);
+        
+        // 🔥 IMMEDIATELY find and add student without waiting for voice to stop
+        const result = findStudentRowSmart(tableData, studentName, recentStudents, currentBatchColumn);
+        
+        if (result.bestMatch !== -1) {
+          const student = tableData[result.bestMatch];
+          const fullName = `${student['First Name']} ${student['Last Name']}`;
+          
+          // Check if already in batch
+          const existingIndex = batchEntries.findIndex(entry => entry.rowIndex === result.bestMatch);
+          
+          if (existingIndex !== -1) {
+            // Update existing entry
+            const newEntries = [...batchEntries];
+            newEntries[existingIndex] = {
+              ...newEntries[existingIndex],
+              score,
+              status: 'updated'
+            };
+            setBatchEntries(newEntries);
+            console.log('🔥 REAL-TIME: Updated existing entry for', fullName);
+          } else {
+            // Add new entry IMMEDIATELY
+            const newEntry = {
+              rowIndex: result.bestMatch,
+              studentName: fullName,
+              originalName: studentName,
+              score,
+              status: 'ready',
+              hasExistingScore: result.possibleMatches[0]?.hasExistingScore || false,
+              existingValue: result.possibleMatches[0]?.existingValue || null
+            };
+            
+            setBatchEntries(prev => [...prev, newEntry]);
+            console.log('🔥 REAL-TIME: Added new entry for', fullName);
+          }
+          
+          // ✅ INSTANT feedback without stopping voice
+          toast.success(`✅ ${fullName}: ${score}`, { 
+            duration: 2000,
+            position: 'top-right'
+          });
+          
+          // Optional: Brief audio feedback (very short so it doesn't interfere)
+          if (voiceEnabled) {
+            const utterance = new SpeechSynthesisUtterance('Added');
+            utterance.rate = 2.0; // Very fast
+            utterance.volume = 0.3; // Quiet
+            window.speechSynthesis.speak(utterance);
+          }
+          
+        } else {
+          console.log('🔥 REAL-TIME: Student not found for', studentName);
+          toast.error(`❌ Student "${studentName}" not found`, {
+            duration: 2000,
+            position: 'top-right'
+          });
+        }
+        
+        // Clear the interim command to prevent reprocessing
+        setInterimBatchCommand('');
+      }
+    }
+  }, [interimBatchCommand, batchMode, currentBatchColumn, tableData, batchEntries, recentStudents, voiceEnabled]);
 
   useEffect(() => {
     // Build context dictionary when data loads
@@ -144,12 +255,6 @@ const ClassRecordExcel = () => {
     toast.success('🎯 Voice training started! Speak the phrases clearly.');
   };
 
-  const handleAccuracyChange = (level) => {
-    setAccuracyLevel(level);
-    setVoiceAccuracy(level);
-    toast.success(`Voice accuracy set to ${level}`);
-  };
-
   const handleRedo = () => {
     if (redoStack.length > 0) {
       const nextState = redoStack[redoStack.length - 1];
@@ -169,10 +274,96 @@ const ClassRecordExcel = () => {
     }
   };
 
+  const handleQuickSort = (type) => {
+    switch (type) {
+      case 'az':
+        sortStudents('alphabetical', 'asc');
+        break;
+      case 'za':
+        sortStudents('alphabetical', 'desc');
+        break;
+      default:
+        break;
+    }
+    setShowSortModal(false);
+  };
+
   const saveStateForUndo = () => {
     setUndoStack(prev => [...prev, JSON.parse(JSON.stringify(tableData))].slice(-10));
     setRedoStack([]); // Clear redo stack when new action is performed
   };
+
+  const sortStudents = useCallback((key, direction = 'asc') => {
+    const sortedData = [...tableData].sort((a, b) => {
+      let aValue, bValue;
+      
+      if (key === 'alphabetical') {
+        // Sort by Last Name, then First Name
+        const aName = `${a['Last Name'] || ''} ${a['First Name'] || ''}`.trim().toLowerCase();
+        const bName = `${b['Last Name'] || ''} ${b['First Name'] || ''}`.trim().toLowerCase();
+        aValue = aName;
+        bValue = bName;
+      } else if (key === 'firstName') {
+        aValue = (a['First Name'] || '').toLowerCase();
+        bValue = (b['First Name'] || '').toLowerCase();
+      } else if (key === 'lastName') {
+        aValue = (a['Last Name'] || '').toLowerCase();
+        bValue = (b['Last Name'] || '').toLowerCase();
+      } else if (key === 'total') {
+        aValue = parseFloat(a['Total'] || 0);
+        bValue = parseFloat(b['Total'] || 0);
+      } else if (key === 'studentId') {
+        aValue = (a['Student ID'] || '').toLowerCase();
+        bValue = (b['Student ID'] || '').toLowerCase();
+      }
+      
+      // Handle empty rows (keep them at bottom)
+      const aIsEmpty = !a['First Name'] && !a['Last Name'];
+      const bIsEmpty = !b['First Name'] && !b['Last Name'];
+      
+      if (aIsEmpty && !bIsEmpty) return 1;
+      if (!aIsEmpty && bIsEmpty) return -1;
+      if (aIsEmpty && bIsEmpty) return 0;
+      
+      // Sort actual data
+      if (aValue < bValue) return direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+    
+    // 🔥 NEW: Re-number the "No" column to stay sequential (1,2,3,4,5...)
+    const reNumberedData = sortedData.map((row, index) => ({
+      ...row,
+      'No': index + 1  // 🔥 This keeps numbers sequential!
+    }));
+    
+    // Save state for undo
+    saveStateForUndo();
+    
+    // Update table data
+    setTableData(reNumberedData);
+    setSortConfig({ key, direction });
+    
+    // Update selected row to follow the sorted data
+    if (selectedRow >= 0 && selectedRow < tableData.length) {
+      const selectedStudent = tableData[selectedRow];
+      if (selectedStudent['First Name'] || selectedStudent['Last Name']) {
+        const newIndex = reNumberedData.findIndex(row => 
+          row['First Name'] === selectedStudent['First Name'] && 
+          row['Last Name'] === selectedStudent['Last Name'] &&
+          row['Student ID'] === selectedStudent['Student ID']
+        );
+        if (newIndex !== -1) {
+          setSelectedRow(newIndex);
+        }
+      }
+    }
+    
+    toast.success(`✅ Students sorted by ${key} (${direction === 'asc' ? 'A-Z' : 'Z-A'})`);
+    if (voiceEnabled) {
+      speakText(`Students sorted by ${key}`);
+    }
+  }, [tableData, selectedRow, saveStateForUndo, voiceEnabled]);
 
   const handleUndo = () => {
     if (undoStack.length > 0) {
@@ -506,6 +697,9 @@ const ClassRecordExcel = () => {
       case 'SELECT_DUPLICATE':
         handleDuplicateSelection(command.data.selectedOption);
         break;
+      case 'SORT_STUDENTS':
+        sortStudents(command.data.sortType, command.data.direction);
+        break;
       default:
         toast.error(`🎙️ Command not recognized: "${command.data.originalText}"`);
         if (voiceEnabled) {
@@ -584,13 +778,6 @@ const ClassRecordExcel = () => {
 
     console.log('Voice command received:', transcript);
 
-     const contextCorrectedTranscript = applyContextPhoneticCorrections(
-      transcript, 
-      contextWords
-    );
-
-    console.log('🧠 Context corrected:', contextCorrectedTranscript);
-
     if (batchMode) {
       handleBatchVoiceCommand(transcript);
       return;
@@ -603,6 +790,8 @@ const ClassRecordExcel = () => {
     });
     
     console.log('Parsed command:', command);
+    console.log('🔥 PARSED COMMAND TYPE:', command.type); 
+    console.log('🔥 PARSED COMMAND DATA:', command.data);
     
     // Handle confirmation commands
     if (command.type === 'CONFIRM_COMMAND' && pendingConfirmation) {
@@ -952,55 +1141,82 @@ const ClassRecordExcel = () => {
     setShowBatchModal(true);
     setBatchEntries([]);
     setCurrentBatchColumn('');
+
+    window.batchModeActive = true;
+    console.log('🔥 DEBUG: window.batchModeActive set to:', window.batchModeActive);
     
     toast.success('🎯 Batch Mode activated! Say a column name first (e.g., "Quiz 1")');
     if (voiceEnabled) {
-      speakText('Batch mode activated. Say a column name first, like Quiz 1');
+      speakText('Batch mode activated');
     }
+    
+    setTimeout(() => {
+      if (!isListening) {
+        startListening(true); 
+      }
+    }, 2000); 
   };
 
   const handleBatchVoiceCommand = (transcript) => {
-  if (!transcript.trim()) return;
+    if (!transcript.trim()) return;
 
-  console.log('🎯 Batch voice command:', transcript);
-  
-  // If no column is set, try to detect column name
-  if (!currentBatchColumn) {
-    const detectedColumn = headers.find(header => 
-      transcript.toLowerCase().includes(header.toLowerCase()) ||
-      header.toLowerCase().includes(transcript.toLowerCase())
-    );
+    console.log('🔥 DEBUG: === BATCH COMMAND START ===');
+    console.log('🔥 DEBUG: batchMode =', batchMode);
+    console.log('🔥 DEBUG: currentBatchColumn =', currentBatchColumn);
+    console.log('🔥 DEBUG: transcript =', transcript);
+    console.log('🔥 DEBUG: current batchEntries count =', batchEntries.length);
     
-    if (detectedColumn) {
-      setCurrentBatchColumn(detectedColumn);
-      toast.success(`✅ Column set to: ${detectedColumn}. Now say student names and scores!`);
-      if (voiceEnabled) {
-        speakText(`Column set to ${detectedColumn}. Now say student names and scores like Maria 85`);
+    // If no column is set, try to detect column name
+    if (!currentBatchColumn) {
+      console.log('🔥 DEBUG: No column set, trying to detect...');
+      const detectedColumn = headers.find(header => 
+        transcript.toLowerCase().includes(header.toLowerCase()) ||
+        header.toLowerCase().includes(transcript.toLowerCase()) 
+      );
+      
+      if (detectedColumn) {
+        console.log('🔥 DEBUG: Column detected:', detectedColumn);
+        setCurrentBatchColumn(detectedColumn);
+        toast.success(`✅ Column set to: ${detectedColumn}. Now say student names and scores!`);
+        if (voiceEnabled) {
+          speakText(`Column set to ${detectedColumn}. Now say student names and scores like Maria 85`);
+        }
+        return;
+      } else {
+        console.log('🔥 DEBUG: No column detected in headers:', headers);
+        toast.error('Column not found. Please say a valid column name.');
+        return;
       }
-      return;
-    } else {
-      toast.error('Column not found. Please say a valid column name.');
-      return;
     }
-  }
-  
-  // Parse student name and score: "Maria 85"
-  const studentScorePattern = /^(.+?)\s+(\d+)$/;
+
+    // Parse student name and score: "Maria 85"
+    const studentScorePattern = /^(.+?)\s+(\d+)$/;
     const match = transcript.trim().match(studentScorePattern);
+    
+    console.log('🔥 DEBUG: Pattern match result:', match);
     
     if (match) {
       const studentName = match[1].trim();
       const score = match[2];
       
+      console.log('🔥 DEBUG: Parsed - studentName:', studentName, 'score:', score);
+      
       // Check if student exists
       const result = findStudentRowSmart(tableData, studentName, recentStudents, currentBatchColumn);
+      
+      console.log('🔥 DEBUG: Student search result:', result);
       
       if (result.bestMatch !== -1) {
         const student = tableData[result.bestMatch];
         const fullName = `${student['First Name']} ${student['Last Name']}`;
         
+        console.log('🔥 DEBUG: Found student:', fullName, 'at index:', result.bestMatch);
+        
         // Check if already in batch
         const existingIndex = batchEntries.findIndex(entry => entry.rowIndex === result.bestMatch);
+        
+        console.log('🔥 DEBUG: Existing entry index:', existingIndex);
+        console.log('🔥 DEBUG: Current batchEntries before update:', batchEntries);
         
         if (existingIndex !== -1) {
           // Update existing entry
@@ -1010,6 +1226,7 @@ const ClassRecordExcel = () => {
             score,
             status: 'updated'
           };
+          console.log('🔥 DEBUG: Updating existing entry. New entries:', newEntries);
           setBatchEntries(newEntries);
           
           toast.success(`✅ Updated ${fullName}: ${score}`);
@@ -1028,46 +1245,75 @@ const ClassRecordExcel = () => {
             existingValue: result.possibleMatches[0]?.existingValue || null
           };
           
-          setBatchEntries(prev => [...prev, newEntry]);
+          console.log('🔥 DEBUG: Adding new entry:', newEntry);
+          console.log('🔥 DEBUG: Previous batchEntries:', batchEntries);
+          
+          setBatchEntries(prev => {
+            const updated = [...prev, newEntry];
+            console.log('🔥 DEBUG: Updated batchEntries:', updated);
+            return updated;
+          });
           
           toast.success(`✅ Added ${fullName}: ${score}`);
           if (voiceEnabled) {
             speakText(`Added ${fullName} with score ${score}`);
           }
         }
+        
+        console.log('🔥 DEBUG: ⚠️ IMPORTANT: Did we modify tableData directly? NO - only batchEntries should be modified!');
+        
       } else {
+        console.log('🔥 DEBUG: Student not found for:', studentName);
         toast.error(`❌ Student "${studentName}" not found`);
         if (voiceEnabled) {
           speakText(`Student ${studentName} not found`);
         }
       }
     } else {
+      console.log('🔥 DEBUG: No pattern match, checking control commands...');
       // Check for control commands
       if (transcript.toLowerCase().includes('done') || transcript.toLowerCase().includes('finish')) {
+        console.log('🔥 DEBUG: DONE command detected');
         if (batchEntries.length > 0) {
+          console.log('🔥 DEBUG: Executing batch entries...');
           executeBatchEntries();
+          setBatchMode(false);
+          setShowBatchModal(false);
         } else {
           toast.error('No entries to save');
         }
       } else if (transcript.toLowerCase().includes('clear') || transcript.toLowerCase().includes('reset')) {
+        console.log('🔥 DEBUG: CLEAR command detected');
         setBatchEntries([]);
         toast.success('Batch entries cleared');
       } else {
+        console.log('🔥 DEBUG: Unknown command');
         toast.error('Say student name and score (e.g., "Maria 85") or "done" to finish');
       }
     }
+    
+    console.log('🔥 DEBUG: === BATCH COMMAND END ===');
   };
 
   const executeBatchEntries = () => {
-    if (batchEntries.length === 0) return;
+    console.log('🔥 DEBUG: === EXECUTING BATCH ENTRIES ===');
+    console.log('🔥 DEBUG: batchEntries.length =', batchEntries.length);
+    console.log('🔥 DEBUG: batchEntries =', batchEntries);
+    
+    if (batchEntries.length === 0) {
+      console.log('🔥 DEBUG: No entries to execute, returning...');
+      return;
+    }
     
     saveStateForUndo();
     
     const newData = [...tableData];
     let successCount = 0;
     
-    batchEntries.forEach(entry => {
+    batchEntries.forEach((entry, index) => {
+      console.log(`🔥 DEBUG: Processing entry ${index}:`, entry);
       if (entry.status === 'ready' || entry.status === 'updated') {
+        console.log(`🔥 DEBUG: Updating tableData[${entry.rowIndex}][${currentBatchColumn}] = ${entry.score}`);
         newData[entry.rowIndex][currentBatchColumn] = entry.score;
         
         // Auto-calculate totals
@@ -1081,6 +1327,7 @@ const ClassRecordExcel = () => {
           const total = calculateRowTotal(newData[entry.rowIndex], gradeColumns);
           newData[entry.rowIndex]['Total'] = total;
           newData[entry.rowIndex]['Grade'] = calculateLetterGrade(total);
+          console.log(`🔥 DEBUG: Updated totals - Total: ${total}, Grade: ${newData[entry.rowIndex]['Grade']}`);
         }
         
         successCount++;
@@ -1088,6 +1335,7 @@ const ClassRecordExcel = () => {
       }
     });
     
+    console.log('🔥 DEBUG: Setting new tableData...');
     setTableData(newData);
     
     // Close batch mode
@@ -1095,11 +1343,17 @@ const ClassRecordExcel = () => {
     setShowBatchModal(false);
     setBatchEntries([]);
     setCurrentBatchColumn('');
+
+    window.batchModeActive = false;
+    console.log('🔥 DEBUG: Cleared window.batchModeActive');
     
+    console.log(`🔥 DEBUG: Batch completed! Updated ${successCount} students`);
     toast.success(`🎉 Batch completed! Updated ${successCount} students in ${currentBatchColumn}`);
     if (voiceEnabled) {
       speakText(`Batch completed. Updated ${successCount} students in ${currentBatchColumn}`);
     }
+    
+    console.log('🔥 DEBUG: === BATCH EXECUTION END ===');
   };
 
   const cancelBatchMode = () => {
@@ -1108,7 +1362,7 @@ const ClassRecordExcel = () => {
     setBatchEntries([]);
     setCurrentBatchColumn('');
     
-    toast.info('Batch mode cancelled');
+    toast('Batch mode cancelled');
     if (voiceEnabled) {
       speakText('Batch mode cancelled');
     }
@@ -1352,6 +1606,17 @@ const ClassRecordExcel = () => {
                 <span>{isSaving ? 'Saving...' : 'Save'}</span>
               </button>
 
+              <button
+                onClick={() => setShowSortModal(true)}
+                className="flex items-center space-x-2 bg-indigo-500 text-white px-4 py-2 rounded-lg hover:bg-indigo-600 transition-colors"
+                title="Sort students"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+                </svg>
+                <span>Sort Students</span>
+              </button>
+
               {/* Edit Tools Dropdown */}
               <div className="relative" onClick={(e) => e.stopPropagation()}>
                 <button
@@ -1448,28 +1713,6 @@ const ClassRecordExcel = () => {
                       <Target className="w-4 h-4" />
                       <span>Train Voice Recognition</span>
                     </button>
-                    <hr className="my-2 border-slate-200" />
-                    <div className="px-4 py-2">
-                      <div className="text-xs font-medium text-slate-500 mb-2">Accuracy Level</div>
-                      <div className="grid grid-cols-3 gap-1">
-                        {['high', 'medium', 'low'].map((level) => (
-                          <button
-                            key={level}
-                            onClick={() => {
-                              handleAccuracyChange(level);
-                              closeAllDropdowns();
-                            }}
-                            className={`px-2 py-1 text-xs rounded font-medium transition-colors ${
-                              accuracyLevel === level
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                            }`}
-                          >
-                            {level.charAt(0).toUpperCase() + level.slice(1)}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
                   </div>
                 )}
               </div>
@@ -2212,6 +2455,127 @@ const ClassRecordExcel = () => {
                 className="bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white px-6 py-2.5 rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-lg shadow-blue-600/25"
               >
                 Got it!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🔥 NEW: Sort Students Modal */}
+      {showSortModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-800">
+                📋 Sort Students
+              </h3>
+              <button
+                onClick={() => setShowSortModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="space-y-3">
+              <p className="text-sm text-gray-600 mb-4">
+                Choose how to sort your students. All grades and data will stay with each student.
+              </p>
+              
+              {/* 🔥 Alphabetical Sorting */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <h4 className="font-medium text-gray-800 mb-3 flex items-center gap-2">
+                  🔤 Alphabetical Sorting
+                </h4>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => handleQuickSort('az')}
+                    className="flex items-center justify-center gap-2 bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-2 rounded-lg transition-colors text-sm font-medium"
+                  >
+                    🔽 A → Z
+                  </button>
+                  <button
+                    onClick={() => handleQuickSort('za')}
+                    className="flex items-center justify-center gap-2 bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-2 rounded-lg transition-colors text-sm font-medium"
+                  >
+                    🔼 Z → A
+                  </button>
+                </div>
+              </div>
+              
+              {/* 🔥 Custom Sorting Options */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <h4 className="font-medium text-gray-800 mb-3 flex items-center gap-2">
+                  🎯 Custom Sorting
+                </h4>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => {
+                      sortStudents('firstName', 'asc');
+                      setShowSortModal(false);
+                    }}
+                    className="w-full flex items-center justify-between bg-gray-50 hover:bg-gray-100 text-gray-700 px-3 py-2 rounded-lg transition-colors text-sm"
+                  >
+                    <span>👤 First Name (A-Z)</span>
+                    <span className="text-gray-400">→</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      sortStudents('lastName', 'asc');
+                      setShowSortModal(false);
+                    }}
+                    className="w-full flex items-center justify-between bg-gray-50 hover:bg-gray-100 text-gray-700 px-3 py-2 rounded-lg transition-colors text-sm"
+                  >
+                    <span>📛 Last Name (A-Z)</span>
+                    <span className="text-gray-400">→</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      sortStudents('total', 'desc');
+                      setShowSortModal(false);
+                    }}
+                    className="w-full flex items-center justify-between bg-gray-50 hover:bg-gray-100 text-gray-700 px-3 py-2 rounded-lg transition-colors text-sm"
+                  >
+                    <span>📊 Total Score (High-Low)</span>
+                    <span className="text-gray-400">→</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      sortStudents('studentId', 'asc');
+                      setShowSortModal(false);
+                    }}
+                    className="w-full flex items-center justify-between bg-gray-50 hover:bg-gray-100 text-gray-700 px-3 py-2 rounded-lg transition-colors text-sm"
+                  >
+                    <span>🆔 Student ID (A-Z)</span>
+                    <span className="text-gray-400">→</span>
+                  </button>
+                </div>
+              </div>
+              
+              {/* Current Sort Status */}
+              {sortConfig.key && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 text-green-700 text-sm">
+                    <span>✅ Currently sorted by:</span>
+                    <strong>
+                      {sortConfig.key === 'alphabetical' ? 'Full Name' : 
+                      sortConfig.key === 'firstName' ? 'First Name' :
+                      sortConfig.key === 'lastName' ? 'Last Name' :
+                      sortConfig.key === 'total' ? 'Total Score' :
+                      sortConfig.key === 'studentId' ? 'Student ID' : sortConfig.key}
+                    </strong>
+                    <span>({sortConfig.direction === 'asc' ? 'A-Z' : 'Z-A'})</span>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowSortModal(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
               </button>
             </div>
           </div>

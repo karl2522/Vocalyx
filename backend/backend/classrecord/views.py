@@ -208,7 +208,6 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
-    # Keep all your existing methods (save_columns, columns, add_column, remove_column)
     @action(detail=True, methods=['post'])
     def save_columns(self, request, pk=None):
         """Save custom column structure"""
@@ -289,7 +288,6 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def remove_column(self, request, pk=None):
-        """Remove a column from a specific category"""
         try:
             class_record = self.get_object()
             category = request.data.get('category')
@@ -322,7 +320,6 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_400_BAD_REQUEST)
 
 
-# Keep your other ViewSets the same
 class StudentViewSet(viewsets.ModelViewSet):
     serializer_class = StudentSerializer
     permission_classes = [permissions.IsAuthenticated]
