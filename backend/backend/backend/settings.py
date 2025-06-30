@@ -20,17 +20,17 @@ from celery.schedules import crontab
 from dotenv import load_dotenv
 from firebase_admin import credentials
 
-load_dotenv()
-
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+load_dotenv(os.path.join(BASE_DIR, '.env'))
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY')
+SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-fallback-secret-key-for-development-only')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
@@ -70,16 +70,16 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',  # CORS must be at the top
+    'backend.cors_middleware.CustomCorsMiddleware',  # Custom CORS middleware for error responses
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-
 ]
 
 AUTHENTICATION_BACKENDS = [
@@ -144,18 +144,22 @@ SIMPLE_JWT = {
 }
 
 
-#CORs settings
+# CORS settings - DEVELOPMENT MODE
+CORS_ALLOW_ALL_ORIGINS = True  # Allow all origins for development
+CORS_ALLOW_CREDENTIALS = True
+
+# Explicitly allow common development origins
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
     "http://10.0.165.206:8080",
     "http://10.0.165.206",
     "https://vocalyx-frontend.vercel.app",
     "http://192.168.254.101:8000",
     "http://192.168.254.101"
 ]
-
-CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOW_METHODS = [
     'DELETE',
@@ -176,6 +180,39 @@ CORS_ALLOW_HEADERS = [
     'user-agent',
     'x-csrftoken',
     'x-requested-with',
+    'x-google-access-token',
+]
+
+# Additional CORS settings
+CORS_ALLOW_PRIVATE_NETWORK = True
+CORS_PREFLIGHT_MAX_AGE = 86400
+CORS_EXPOSE_HEADERS = []
+CORS_REPLACE_HTTPS_REFERER = False
+
+# Force CORS headers on all responses, including error responses
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+    'x-google-access-token',
+]
+
+# Additional settings to ensure CORS on error responses
+CORS_URLS_REGEX = r'^/api/.*$'
+
+# Ensure CORS headers are sent on error responses too
+CORS_ORIGIN_ALLOW_ALL = True  # Deprecated setting but sometimes needed
+CORS_ALLOW_ALL_ORIGINS = True  # Ensure this is enabled
+
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://.*\.firebaseapp\.com$",
+    r"^https://.*\.googleapis\.com$",
 ]
 
 GOOGLE_OAUTH2_CLIENT_ID = '841187713627-6u60gs5iq5h6qalooub6q27nrulifoug.apps.googleusercontent.com'
@@ -233,6 +270,17 @@ SECURE_SSL_REDIRECT = False if DEBUG else True
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SESSION_COOKIE_SECURE = False if DEBUG else True
 CSRF_COOKIE_SECURE = False if DEBUG else True
+
+# CSRF settings for development
+if DEBUG:
+    CSRF_TRUSTED_ORIGINS = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
+    CSRF_COOKIE_SAMESITE = 'Lax'
+    CSRF_COOKIE_HTTPONLY = False
 
 CELERY_BEAT_SCHEDULE = {
     'cleanup-expired-tokens': {
@@ -308,3 +356,30 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'users.CustomUser'
+
+# Google Sheets Template Configuration
+import json
+
+# Google Sheets Template Configuration
+GOOGLE_SHEETS_TEMPLATE_ID = os.getenv('GOOGLE_SHEETS_TEMPLATE_ID', '1iMKqLouXzb2XDvYwcysPVxXx0R-Cb6Yo')
+
+# Load Google Service Account Credentials from JSON file
+GOOGLE_SERVICE_ACCOUNT_CREDENTIALS = {}
+SERVICE_ACCOUNT_FILE = os.path.join(BASE_DIR.parent, 'vocalyx-service-account.json')
+if os.path.exists(SERVICE_ACCOUNT_FILE):
+    with open(SERVICE_ACCOUNT_FILE, 'r') as f:
+        GOOGLE_SERVICE_ACCOUNT_CREDENTIALS = json.load(f)
+    print(f"✅ Google Service Account credentials loaded from {SERVICE_ACCOUNT_FILE}")
+else:
+    print(f"❌ Warning: Service account file not found at {SERVICE_ACCOUNT_FILE}")
+    print(f"📁 Checking current directory: {BASE_DIR}")
+    print(f"📁 Checking parent directory: {BASE_DIR.parent}")
+    # Also check in current directory
+    current_service_file = os.path.join(BASE_DIR, 'vocalyx-service-account.json')
+    if os.path.exists(current_service_file):
+        with open(current_service_file, 'r') as f:
+            GOOGLE_SERVICE_ACCOUNT_CREDENTIALS = json.load(f)
+        print(f"✅ Google Service Account credentials loaded from {current_service_file}")
+    else:
+        print(f"❌ Service account file also not found at {current_service_file}")
+        print("🔧 Google Sheets integration will be disabled")

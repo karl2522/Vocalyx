@@ -12,16 +12,23 @@ class ClassRecordSerializer(serializers.ModelSerializer):
             'name',
             'semester',
             'teacher_name',
+            'description',
             'student_count',
             'created_at',
             'updated_at',
             'spreadsheet_data',
             'custom_columns',
-            'last_modified'
+            'last_modified',
+            'google_sheet_id',
+            'google_sheet_url'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'last_modified', 'student_count']
 
     def create(self, validated_data):
+        # Ensure Google Sheets fields have default values if not provided
+        validated_data.setdefault('google_sheet_id', None)
+        validated_data.setdefault('google_sheet_url', None)
+        
         validated_data['user'] = self.context['request'].user
         return super().create(validated_data)
 
@@ -68,6 +75,7 @@ class ClassRecordDetailSerializer(serializers.ModelSerializer):
             'name',
             'semester',
             'teacher_name',
+            'description',
             'students',
             'grade_categories',
             'student_count',
@@ -75,6 +83,8 @@ class ClassRecordDetailSerializer(serializers.ModelSerializer):
             'custom_columns',
             'created_at',
             'updated_at',
-            'last_modified'
+            'last_modified',
+            'google_sheet_id',
+            'google_sheet_url'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'last_modified', 'student_count']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'last_modified', 'student_count', 'google_sheet_url']

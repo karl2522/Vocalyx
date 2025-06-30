@@ -14,9 +14,14 @@ class ClassRecord(models.Model):
     name = models.CharField(max_length=200)
     semester = models.CharField(max_length=20, choices=SEMESTER_CHOICES)
     teacher_name = models.CharField(max_length=100, blank=True)
+    description = models.TextField(blank=True)  # Added description field
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    
+    # Google Sheets Integration
+    google_sheet_id = models.CharField(max_length=255, blank=True, null=True)
+    google_sheet_url = models.URLField(blank=True, null=True)
 
     # EXISTING FIELDS for spreadsheet functionality
     spreadsheet_data = models.JSONField(default=list, blank=True)

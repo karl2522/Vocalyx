@@ -5,14 +5,13 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { classRecordService } from '../services/api';
 import { speakText, stopSpeaking } from '../utils/speechSynthesis';
 import useVoiceRecognition from '../utils/useVoiceRecognition';
-import { findEmptyRow, findStudentRow, findStudentRowSmart, parseVoiceCommand} from '../utils/voicecommandParser';
+import { findEmptyRow, findStudentRow, findStudentRowSmart, parseVoiceCommand } from '../utils/voicecommandParser';
 
 const ClassRecordExcel = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [classRecord, setClassRecord] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [isRecording, setIsRecording] = useState(false);
   const [tableData, setTableData] = useState([]);
   const [customColumns, setCustomColumns] = useState({});
   const [headers, setHeaders] = useState([]);
@@ -32,13 +31,12 @@ const ClassRecordExcel = () => {
     addCommandHistory,
     alternatives,
     buildContextDictionary,
-    contextWords
   } = useVoiceRecognition();
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [lastVoiceCommand, setLastVoiceCommand] = useState('');
   const [selectedRow, setSelectedRow] = useState(0);
 
-  const [commandHistory, setCommandHistory] = useState([]);
+  const [commandHistory] = useState([]);
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
   const [pendingConfirmation, setPendingConfirmation] = useState(null);
@@ -51,13 +49,7 @@ const ClassRecordExcel = () => {
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [showSortModal, setShowSortModal] = useState(false);
 
-  const [trainingMode, setTrainingMode] = useState(false);
-  const [trainingPhrases] = useState([
-    "Maria Quiz 1 eighty-five",
-    "John Lab 2 ninety",
-    "Sarah Midterm seventy-five",
-    "Michael Final Exam ninety-two"
-  ]);
+
 
   // 🔥 NEW: Duplicate handling state
   const [duplicateOptions, setDuplicateOptions] = useState(null);
@@ -240,6 +232,7 @@ const ClassRecordExcel = () => {
   const fetchClassRecord = async () => {
     try {
       const response = await classRecordService.getClassRecord(id);
+      console.log("DEBUG: Fetched class record data:", response.data);
       setClassRecord(response.data);
     } catch (error) {
       console.error('Error fetching class record:', error);
@@ -251,7 +244,6 @@ const ClassRecordExcel = () => {
   };
 
   const startVoiceTraining = () => {
-    setTrainingMode(true);
     toast.success('🎯 Voice training started! Speak the phrases clearly.');
   };
 
@@ -1555,6 +1547,359 @@ const ClassRecordExcel = () => {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
+  // 🔥 Google Sheets Integration - Show embedded sheet if available
+  if (classRecord?.google_sheet_id) {
+    console.log('🔍 Google Sheets data:', {
+      google_sheet_id: classRecord.google_sheet_id,
+      google_sheet_url: classRecord.google_sheet_url,
+      embed_url: `https://docs.google.com/spreadsheets/d/${classRecord.google_sheet_id}/edit?usp=sharing&rm=embedded`
+    });
+
+    return (
+      <div className="h-screen flex flex-col bg-slate-50">
+        {/* Header */}
+        <div className="bg-white border-b border-slate-200 shadow-sm">
+          {/* Top Bar */}
+          <div className="px-6 py-3">
+            <div className="flex items-center justify-between">
+              {/* Left Section - Navigation & Title */}
+              <div className="flex items-center space-x-4">
+                <button
+                  onClick={() => navigate('/dashboard/class-records/view')}
+                  className="flex items-center space-x-2 text-slate-600 hover:text-slate-800 transition-colors group"
+                >
+                  <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
+                  <span className="text-sm font-medium">Back to Records</span>
+                </button>
+                <div className="h-5 w-px bg-slate-300"></div>
+                <div>
+                  <h1 className="text-xl font-semibold text-slate-900">{classRecord?.name}</h1>
+                  <div className="flex items-center space-x-3 text-sm text-slate-500">
+                    <span>{classRecord?.semester}</span>
+                    <span>•</span>
+                    <span>{classRecord?.teacher_name}</span>
+
+                    {lastSaved && (
+                      <>
+                        <span>•</span>
+                        <span className="text-emerald-600">
+                          Last saved {new Date(lastSaved).toLocaleTimeString()}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Section */}
+              <div className="flex items-center space-x-3">
+                {/* Save Button */}
+                <button
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className="flex items-center space-x-2 bg-emerald-600 text-white px-3 py-2 rounded-lg font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50 shadow-sm"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>{isSaving ? 'Saving...' : 'Save'}</span>
+                </button>
+
+                {/* Voice Controls */}
+                <div className="relative" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    onClick={() => toggleDropdown('voice')}
+                    className="flex items-center space-x-2 bg-blue-50 text-blue-700 px-3 py-2 rounded-lg font-medium hover:bg-blue-100 transition-colors shadow-sm"
+                  >
+                    {voiceEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+                    <span>Voice</span>
+                    <ChevronDown className={`w-4 h-4 transition-transform ${dropdowns.voice ? 'rotate-180' : ''}`} />
+                  </button>
+                  
+                  {dropdowns.voice && (
+                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-slate-200 py-2 z-50">
+                      <button
+                        onClick={() => {
+                          handleVoiceRecord();
+                          closeAllDropdowns();
+                        }}
+                        className={`flex items-center space-x-3 px-4 py-2 text-sm w-full text-left ${
+                          isListening 
+                            ? 'text-red-700 bg-red-50 hover:bg-red-100' 
+                            : 'text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                        <span>{isListening ? 'Stop Recording' : 'Start Recording'}</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          toggleVoiceFeedback();
+                          closeAllDropdowns();
+                        }}
+                        className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                      >
+                        {voiceEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+                        <span>{voiceEnabled ? 'Disable Voice' : 'Enable Voice'}</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowVoiceGuide(true);
+                          closeAllDropdowns();
+                        }}
+                        className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                      >
+                        <HelpCircle className="w-4 h-4" />
+                        <span>Voice Guide</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Open in Google Sheets Button */}
+                <a
+                  href={classRecord.google_sheet_url || `https://docs.google.com/spreadsheets/d/${classRecord.google_sheet_id}/edit`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center space-x-2 bg-green-50 text-green-700 px-3 py-2 rounded-lg font-medium hover:bg-green-100 transition-colors shadow-sm border border-green-200"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  <span>Open in Sheets</span>
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Embedded Google Sheet */}
+        <div className="flex-1 p-0">
+          <div className="h-full bg-white overflow-hidden">
+            {/* Keep the iframe - it's working! */}
+            <iframe
+              src={`https://docs.google.com/spreadsheets/d/${classRecord.google_sheet_id}/edit?usp=sharing&widget=true&headers=false&rm=embedded`}
+              width="100%"
+              height="100%"
+              frameBorder="0"
+              className="w-full h-full border-0"
+              title={`${classRecord.name} - Class Record Sheet`}
+              allowFullScreen
+              style={{
+                border: 'none',
+                outline: 'none'
+              }}
+            />
+          </div>
+        </div>
+
+        {/* 🎤 FLOATING VOICE RECORDING BUTTON - Embedded View */}
+        {isSupported && (
+          <div className="fixed bottom-6 right-6 z-50">
+            <div className="flex items-center space-x-3">
+              {/* Voice Guide Button */}
+              <button
+                onClick={() => setShowVoiceGuide(true)}
+                className="bg-white border border-slate-300 text-slate-600 hover:text-slate-900 hover:border-slate-400 p-3 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 group"
+                title="Voice Commands Guide"
+              >
+                <HelpCircle className="w-5 h-5 group-hover:scale-110 transition-transform" />
+              </button>
+
+              {/* Main Voice Recording Button */}
+              <button
+                onClick={handleVoiceRecord}
+                className={`relative p-4 rounded-full shadow-2xl transition-all duration-300 transform hover:scale-105 ${
+                  isListening
+                    ? 'bg-red-500 text-white shadow-red-500/50 animate-pulse hover:bg-red-600'
+                    : 'bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white shadow-blue-600/50 hover:bg-blue-[#4A5491]'
+                }`}
+                title={isListening ? 'Stop voice recording' : 'Start voice recording'}
+              >
+                {isListening ? (
+                  <MicOff className="w-6 h-6" />
+                ) : (
+                  <Mic className="w-6 h-6" />
+                )}
+                
+                {/* Listening indicator ring */}
+                {isListening && (
+                  <div className="absolute inset-0 rounded-full border-4 border-red-300 animate-ping"></div>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 📖 VOICE GUIDE MODAL - Embedded View */}
+        {showVoiceGuide && (
+          <div 
+            className="fixed inset-0 bg-slate-900 bg-opacity-50 flex items-center justify-center z-50 p-4"
+            onClick={() => setShowVoiceGuide(false)}
+          >
+            <div 
+              className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-6 border-b border-slate-200 bg-slate-50">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <Mic className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-slate-900">Voice Commands Guide</h2>
+                    <p className="text-sm text-slate-600">Learn how to use voice commands efficiently</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowVoiceGuide(false)}
+                  className="text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              {/* Modal Content */}
+              <div className="p-6 overflow-y-auto max-h-[calc(85vh-180px)]">
+                {/* Quick Start */}
+                <div className="mb-8">
+                  <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center space-x-2">
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    <span>Quick Start</span>
+                  </h3>
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <div className="font-medium text-blue-900 mb-2">🎯 Basic Pattern</div>
+                        <div className="text-blue-700 space-y-1">
+                          <div>"[Student Name] [Column] [Score]"</div>
+                          <div className="text-xs text-blue-600">Example: "Maria Quiz 1 eighty-five"</div>
+                        </div>
+                      </div>
+                      <div>
+                        <div className="font-medium text-blue-900 mb-2">🔧 Controls</div>
+                        <div className="text-blue-700 space-y-1">
+                          <div>"undo" - Undo last action</div>
+                          <div>"cancel" - Cancel current operation</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Command Types */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* Single Entry */}
+                  <div className="bg-white border border-slate-200 rounded-lg p-5 hover:shadow-md transition-shadow">
+                    <div className="flex items-center space-x-3 mb-4">
+                      <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">
+                        <span className="text-emerald-600 font-bold text-sm">1</span>
+                      </div>
+                      <h4 className="font-semibold text-slate-900">Single Entry</h4>
+                    </div>
+                    <div className="space-y-3 text-sm">
+                      <div>
+                        <div className="font-medium text-slate-700 mb-1">Examples:</div>
+                        <div className="bg-slate-50 rounded p-2 space-y-1 text-slate-600">
+                          <div>"Maria Quiz 3 twenty"</div>
+                          <div>"John Lab 2 eighty-five"</div>
+                          <div>"Sarah Midterm seventy-five"</div>
+                        </div>
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        Perfect for entering individual student grades quickly
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Batch List */}
+                  <div className="bg-white border border-slate-200 rounded-lg p-5 hover:shadow-md transition-shadow">
+                    <div className="flex items-center space-x-3 mb-4">
+                      <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <span className="text-blue-600 font-bold text-sm">N</span>
+                      </div>
+                      <h4 className="font-semibold text-slate-900">Batch List</h4>
+                    </div>
+                    <div className="space-y-3 text-sm">
+                      <div>
+                        <div className="font-medium text-slate-700 mb-1">Examples:</div>
+                        <div className="bg-slate-50 rounded p-2 space-y-1 text-slate-600">
+                          <div>"Quiz 1: John 85, Maria 92"</div>
+                          <div>"Lab 2: Alice 90, Bob 85"</div>
+                        </div>
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        Enter multiple students for the same assignment at once
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Batch Range */}
+                  <div className="bg-white border border-slate-200 rounded-lg p-5 hover:shadow-md transition-shadow">
+                    <div className="flex items-center space-x-3 mb-4">
+                      <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
+                        <span className="text-purple-600 font-bold text-sm">∞</span>
+                      </div>
+                      <h4 className="font-semibold text-slate-900">Batch Range</h4>
+                    </div>
+                    <div className="space-y-3 text-sm">
+                      <div>
+                        <div className="font-medium text-slate-700 mb-1">Examples:</div>
+                        <div className="bg-slate-50 rounded p-2 space-y-1 text-slate-600">
+                          <div>"Midterm: Row 1 through 5, all score 90"</div>
+                          <div>"Quiz 2: Everyone present gets 85"</div>
+                        </div>
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        Assign the same grade to multiple students in a range
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tips */}
+                <div className="mt-8">
+                  <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center space-x-2">
+                    <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+                    <span>Pro Tips</span>
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
+                      <div className="font-medium text-amber-900 mb-2">💡 Accuracy Tips</div>
+                      <ul className="text-sm text-amber-800 space-y-1">
+                        <li>• Speak clearly and at normal pace</li>
+                        <li>• Use "twenty" instead of "20"</li>
+                        <li>• Say "Quiz one" instead of "Quiz 1"</li>
+                      </ul>
+                    </div>
+                    <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                      <div className="font-medium text-green-900 mb-2">⚡ Efficiency Tips</div>
+                      <ul className="text-sm text-green-800 space-y-1">
+                        <li>• Use batch commands for repeated grades</li>
+                        <li>• Train voice recognition for better results</li>
+                        <li>• Check transcript display for accuracy</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="flex items-center justify-between p-6 border-t border-slate-200 bg-slate-50">
+                <div className="text-sm text-slate-600">
+                  Press the floating microphone button to start voice commands
+                </div>
+                <button
+                  onClick={() => setShowVoiceGuide(false)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Got it!
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }

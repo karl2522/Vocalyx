@@ -1,7 +1,6 @@
 import { useMsal } from "@azure/msal-react";
 import * as Checkbox from "@radix-ui/react-checkbox";
-import { GoogleLogin } from '@react-oauth/google';
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { FaCheck, FaEnvelope, FaLock } from "react-icons/fa";
 import { FcGoogle } from "react-icons/fc";
 import { useNavigate } from "react-router-dom";
@@ -22,6 +21,7 @@ function Login() {
       remember: false
     });
     const [loading, setLoading] = useState(false);
+    const [googleLoading, setGoogleLoading] = useState(false);
 
     const handleChange = (e) => {
       const { id, value} = e.target;
@@ -43,26 +43,23 @@ function Login() {
     }
   }, []);
 
-    const handleGoogleLogin = async (credentialResponse) => {
+    const handleGoogleLogin = async () => {
+      setGoogleLoading(true);
       try {
-        console.log('Current URL:', window.location.href);
-        console.log('Current Origin:', window.location.origin);
-        console.log('Google Response:', credentialResponse);
+        console.log('Starting Firebase Google login...');
         
-        if (credentialResponse.credential) {
-          const authResult = await googleLogin(credentialResponse);
-          if (authResult && authResult.token) {
-            showToast.success("Login successful!", "Google Authentication");
-            navigate("/dashboard");
-          } else {
-            throw new Error('Login failed');
-          }
+        const authResult = await googleLogin();
+        if (authResult && authResult.token) {
+          showToast.success("Login successful!", "Google Authentication");
+          navigate("/dashboard");
         } else {
-          throw new Error('No credential received from Google');
+          throw new Error('Login failed');
         }
       } catch (error) {
         console.error('Google login error:', error);
         showToast.error(error.message || "Google login failed");
+      } finally {
+        setGoogleLoading(false);
       }
     };
 
@@ -135,12 +132,12 @@ function Login() {
               throw new Error('Invalid response from server');
           }
       } catch (error) {
-          console.error('Login error in component:', error);
-          showToast.error(error.message || "An error occurred during login");
+          console.error('Login error:', error);
+          showToast.error(error.message || "Login failed");
       } finally {
           setLoading(false);
       }
-  };
+    };
 
     const toSignup = () => {
         navigate("/signup");
@@ -161,30 +158,26 @@ function Login() {
           {/* Social Login Buttons */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 mb-5 sm:mb-6">
             <div className="relative flex w-full h-10 sm:h-11">
-              {/* Hidden original Google button that receives the click */}
-              <div className="absolute inset-0 opacity-0 z-10 overflow-hidden">
-                <GoogleLogin
-                  onSuccess={handleGoogleLogin}
-                  onError={() => {
-                    showToast.error("Google login failed");
-                  }}
-                  useOneTap={false}
-                  type="standard"
-                  width="100%"
-                />
-              </div>
               {/* Custom styled button that visually appears to users */}
-              <button 
+              <button
                 type="button"
-                className="w-full h-full flex items-center justify-center gap-2 py-2 px-3 sm:px-4 bg-white border border-gray-300 rounded-lg shadow-md text-sm sm:text-base"
+                onClick={handleGoogleLogin}
+                disabled={googleLoading}
+                className="w-full h-full flex items-center justify-center gap-2 py-2 px-3 sm:px-4 bg-white border border-gray-300 rounded-lg shadow-md text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
               >
-                <FcGoogle className="w-4 h-4 sm:w-5 sm:h-5" />
-                <span>Google</span>
+                {googleLoading ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-700"></div>
+                ) : (
+                  <>
+                    <FcGoogle className="w-4 h-4 sm:w-5 sm:h-5" />
+                    <span>Google</span>
+                  </>
+                )}
               </button>
             </div>
             <button 
               onClick={handleMicrosoftLogin}
-              className="h-10 sm:h-11 flex items-center justify-center gap-2 py-2 px-3 sm:px-4 bg-white border border-gray-300 rounded-lg shadow-md text-sm sm:text-base"
+              className="h-10 sm:h-11 flex items-center justify-center gap-2 py-2 px-3 sm:px-4 bg-white border border-gray-300 rounded-lg shadow-md text-sm sm:text-base hover:bg-gray-50 transition-colors"
             >
               <img 
                 src={microsoft} 

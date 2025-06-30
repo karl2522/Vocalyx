@@ -67,6 +67,16 @@ const TopNavbar = ({ sidebarCollapsed }) => {
   const fetchNotifications = async () => {
     setNotificationsLoading(true);
     try {
+      // Check if user is authenticated before making request
+      const authToken = localStorage.getItem('authToken');
+      const userData = localStorage.getItem('user');
+      
+      if (!authToken || !userData) {
+        console.log('User not authenticated, skipping notifications fetch');
+        setNotificationsLoading(false);
+        return;
+      }
+
       const response = await notificationService.getNotifications();
       setNotifications(response.data);
       
@@ -75,6 +85,10 @@ const TopNavbar = ({ sidebarCollapsed }) => {
       setUnreadNotificationsCount(countResponse.data.unread_count);
     } catch (error) {
       console.error('Error fetching notifications:', error);
+      // If it's a 401 error, user might need to re-authenticate
+      if (error.response?.status === 401) {
+        console.log('Authentication failed, user may need to re-login');
+      }
     } finally {
       setNotificationsLoading(false);
     }
@@ -160,17 +174,35 @@ const TopNavbar = ({ sidebarCollapsed }) => {
   useEffect(() => {
     const checkNotifications = async () => {
       try {
+        // Check if user is authenticated before making request
+        const authToken = localStorage.getItem('authToken');
+        const userData = localStorage.getItem('user');
+        
+        if (!authToken || !userData) {
+          console.log('User not authenticated, skipping notification check');
+          return;
+        }
+
         const response = await notificationService.getNotificationCount();
         setUnreadNotificationsCount(response.data.unread_count);
       } catch (error) {
         console.error('Error checking notification count:', error);
+        // If it's a 401 error, user might need to re-authenticate
+        if (error.response?.status === 401) {
+          console.log('Authentication failed, user may need to re-login');
+        }
       }
     };
 
-    checkNotifications();
+    // Delay initial check to allow auth context to initialize
+    const timeoutId = setTimeout(checkNotifications, 1000);
     
     const intervalId = setInterval(checkNotifications, 60000); 
-    return () => clearInterval(intervalId);
+    
+    return () => {
+      clearTimeout(timeoutId);
+      clearInterval(intervalId);
+    };
   }, []);
 
   const getTimeString = (timestamp) => {

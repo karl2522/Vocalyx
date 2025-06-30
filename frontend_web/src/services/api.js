@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = 'http://127.0.0.1:8000/api';
+const API_URL = 'http://localhost:8000/api';
 
 const api = axios.create({
     baseURL: API_URL,
@@ -13,6 +13,8 @@ api.interceptors.request.use(
     (config) => {
         // Try to get token from both possible storage keys for backward compatibility
         const token = localStorage.getItem('authToken') || localStorage.getItem('access_token');
+        
+
         
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
@@ -206,7 +208,16 @@ export const classRecordService = {
     getClassRecords: () => api.get('/class-records/'),
     
     // Create a new class record
-    createClassRecord: (recordData) => api.post('/class-records/', recordData),
+    createClassRecord: (recordData) => {
+        const googleAccessToken = localStorage.getItem('googleAccessToken');
+        const config = {};
+        if (googleAccessToken) {
+            config.headers = {
+                'X-Google-Access-Token': googleAccessToken
+            };
+        }
+        return api.post('/class-records/', recordData, config);
+    },
     
     // Get a specific class record by ID
     getClassRecord: (id) => api.get(`/class-records/${id}/`),

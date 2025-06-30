@@ -17,7 +17,9 @@ import requests as http_requests
 from .serializers import UserRegistrationSerializer, UserLoginSerializer
 from .models import CustomUser
 from .utils import send_verification_email, get_current_utc_time, get_user_login
+from .google_drive_service import GoogleDriveService
 from firebase_admin import auth
+from .google_sheets_service import GoogleSheetsService
 
 
 logger = logging.getLogger(__name__)
@@ -414,12 +416,15 @@ def microsoft_auth(request):
 @permission_classes([AllowAny])
 def firebase_auth_view(request):
     try:
-        firebase_token = request.data.get('firebase_token')
-        if not firebase_token:
-            return Response({'error': 'No token provided'}, status=400)
+        # Accept both parameter names for backward compatibility
+        id_token = request.data.get('id_token') or request.data.get('firebase_token')
+        access_token = request.data.get('access_token')
+        
+        if not id_token:
+            return Response({'error': 'No ID token provided'}, status=400)
 
         try:
-            decoded_token = auth.verify_id_token(firebase_token)
+            decoded_token = auth.verify_id_token(id_token)
         except Exception as e:
             logger.error(f"Firebase token verification failed: {str(e)}")
             return Response({'error': f'Invalid Firebase token: {str(e)}'}, status=400)
@@ -434,33 +439,48 @@ def firebase_auth_view(request):
                 logger.error(f"Failed to get Firebase user: {str(e)}")
                 return Response({'error': 'No email found in token or user record'}, status=400)
 
+        # Get provider information from Firebase token
         provider_data = decoded_token.get('firebase', {}).get('sign_in_provider', '')
         is_google = 'google.com' in provider_data
         is_microsoft = 'microsoft.com' in provider_data
 
+        # Extract additional user info from token
+        name = decoded_token.get('name', '')
+        picture = decoded_token.get('picture', '')
+        names = name.split(' ', 1) if name else ['', '']
+        first_name = names[0] if names[0] else decoded_token.get('given_name', '')
+        last_name = names[1] if len(names) > 1 else decoded_token.get('family_name', '')
+
         try:
             user = CustomUser.objects.get(email=email)
+            
+            # Update user information
             if is_google:
                 user.google_id = uid
             elif is_microsoft:
                 user.microsoft_id = uid
-
+            
+            # Update user profile information if available
+            if first_name:
+                user.first_name = first_name
+            if last_name:
+                user.last_name = last_name
+            if picture:
+                user.profile_picture = picture
+                
             user.email_verified = True
             user.save()
             logger.info(f"Updated existing user via Firebase: {user.email}")
+            
         except CustomUser.DoesNotExist:
             username = f"firebase_{uid}"
-
-            name = decoded_token.get('name', '')
-            names = name.split(' ', 1) if name else ['', '']
-            first_name = names[0]
-            last_name = names[1] if len(names) > 1 else ''
 
             user = CustomUser.objects.create_user(
                 username=username,
                 email=email,
                 first_name=first_name,
                 last_name=last_name,
+                profile_picture=picture,
                 email_verified=True
             )
 
@@ -471,6 +491,11 @@ def firebase_auth_view(request):
 
             user.save()
             logger.info(f"Created new user via Firebase: {user.email}")
+
+        # Store Google access token in session/cache for Drive API access
+        if access_token and is_google:
+            # Store the access token in the response so frontend can store it
+            logger.info(f"Google access token received for user: {user.email}")
 
         refresh = RefreshToken.for_user(user)
 
@@ -483,8 +508,18 @@ def firebase_auth_view(request):
                 'first_name': user.first_name,
                 'last_name': user.last_name,
                 'name': f"{user.first_name} {user.last_name}".strip(),
+                'profile_picture': user.profile_picture,
+                'institution': user.institution,
+                'position': user.position,
+                'bio': user.bio,
+                'has_google': user.has_google,
+                'has_microsoft': user.has_microsoft
             }
         }
+        
+        # Include access token information if available
+        if access_token and is_google:
+            response_data['google_access_token'] = access_token
 
         return Response(response_data)
 
@@ -570,3 +605,231 @@ def validate_token(request):
             'valid': False,
             'error': 'Invalid token'
         }, status=status.HTTP_401_UNAUTHORIZED)
+
+
+# Google Drive API endpoints
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def drive_test_connection(request):
+    """Test Google Drive API connection with user's access token"""
+    try:
+        access_token = request.data.get('access_token')
+        if not access_token:
+            return Response({'error': 'Google access token required'}, status=400)
+        
+        drive_service = GoogleDriveService(access_token)
+        result = drive_service.test_connection()
+        
+        return Response(result)
+        
+    except Exception as e:
+        logger.error(f"Drive connection test error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def drive_list_files(request):
+    """List files in user's Google Drive"""
+    try:
+        access_token = request.headers.get('X-Google-Access-Token')
+        if not access_token:
+            return Response({'error': 'Google access token required in X-Google-Access-Token header'}, status=400)
+        
+        # Get query parameters
+        query = request.GET.get('query')
+        page_size = int(request.GET.get('page_size', 10))
+        folder_id = request.GET.get('folder_id')
+        
+        drive_service = GoogleDriveService(access_token)
+        result = drive_service.list_files(
+            query=query,
+            page_size=page_size,
+            folder_id=folder_id
+        )
+        
+        return Response(result)
+        
+    except Exception as e:
+        logger.error(f"Drive list files error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def drive_upload_file(request):
+    """Upload a file to user's Google Drive"""
+    try:
+        access_token = request.headers.get('X-Google-Access-Token')
+        if not access_token:
+            return Response({'error': 'Google access token required in X-Google-Access-Token header'}, status=400)
+        
+        # Check if file is provided
+        if 'file' not in request.FILES:
+            return Response({'error': 'File required'}, status=400)
+        
+        uploaded_file = request.FILES['file']
+        folder_id = request.data.get('folder_id')
+        
+        # Read file content
+        file_content = uploaded_file.read()
+        
+        drive_service = GoogleDriveService(access_token)
+        result = drive_service.upload_file(
+            file_content=file_content,
+            filename=uploaded_file.name,
+            mime_type=uploaded_file.content_type or 'application/octet-stream',
+            folder_id=folder_id
+        )
+        
+        return Response(result)
+        
+    except Exception as e:
+        logger.error(f"Drive upload file error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def drive_create_folder(request):
+    """Create a folder in user's Google Drive"""
+    try:
+        access_token = request.headers.get('X-Google-Access-Token')
+        if not access_token:
+            return Response({'error': 'Google access token required in X-Google-Access-Token header'}, status=400)
+        
+        folder_name = request.data.get('folder_name')
+        if not folder_name:
+            return Response({'error': 'Folder name required'}, status=400)
+        
+        parent_folder_id = request.data.get('parent_folder_id')
+        
+        drive_service = GoogleDriveService(access_token)
+        result = drive_service.create_folder(
+            folder_name=folder_name,
+            parent_folder_id=parent_folder_id
+        )
+        
+        return Response(result)
+        
+    except Exception as e:
+        logger.error(f"Drive create folder error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def drive_download_file(request, file_id):
+    """Download a file from user's Google Drive"""
+    try:
+        access_token = request.headers.get('X-Google-Access-Token')
+        if not access_token:
+            return Response({'error': 'Google access token required in X-Google-Access-Token header'}, status=400)
+        
+        drive_service = GoogleDriveService(access_token)
+        result = drive_service.get_file_content(file_id)
+        
+        if result.get('success'):
+            from django.http import HttpResponse
+            response = HttpResponse(
+                result['content'],
+                content_type=result.get('content_type', 'application/octet-stream')
+            )
+            response['Content-Disposition'] = f'attachment; filename="drive_file_{file_id}"'
+            return response
+        else:
+            return Response(result, status=400)
+        
+    except Exception as e:
+        logger.error(f"Drive download file error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+# Google Sheets API endpoints
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def sheets_copy_template(request):
+    """Copy a template Google Sheet to user's Drive"""
+    try:
+        access_token = request.headers.get('X-Google-Access-Token')
+        if not access_token:
+            return Response({'error': 'Google access token required in X-Google-Access-Token header'}, status=400)
+        
+        template_id = request.data.get('template_id')
+        sheet_name = request.data.get('name')
+        
+        if not template_id or not sheet_name:
+            return Response({'error': 'template_id and name are required'}, status=400)
+        
+        sheets_service = GoogleSheetsService(access_token)
+        result = sheets_service.copy_template_sheet(
+            template_file_id=template_id, 
+            new_name=sheet_name
+        )
+        
+        return Response(result)
+        
+    except Exception as e:
+        logger.error(f"Sheets copy template error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def sheets_get_info(request, sheet_id):
+    """Get information about a specific sheet"""
+    try:
+        access_token = request.headers.get('X-Google-Access-Token')
+        if not access_token:
+            return Response({'error': 'Google access token required in X-Google-Access-Token header'}, status=400)
+        
+        sheets_service = GoogleSheetsService(access_token)
+        result = sheets_service.get_sheet_info(sheet_id)
+        
+        return Response(result)
+        
+    except Exception as e:
+        logger.error(f"Get sheet info error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def sheets_list_user_sheets(request):
+    """List user's Google Sheets"""
+    try:
+        access_token = request.headers.get('X-Google-Access-Token')
+        if not access_token:
+            return Response({'error': 'Google access token required in X-Google-Access-Token header'}, status=400)
+        
+        sheets_service = GoogleSheetsService(access_token)
+        result = sheets_service.get_user_sheets()
+        
+        return Response(result)
+        
+    except Exception as e:
+        logger.error(f"List user sheets error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def sheets_update_permissions(request, sheet_id):
+    """Update sheet permissions"""
+    try:
+        access_token = request.headers.get('X-Google-Access-Token')
+        if not access_token:
+            return Response({'error': 'Google access token required in X-Google-Access-Token header'}, status=400)
+        
+        make_public = request.data.get('make_public_readable', False)
+        
+        sheets_service = GoogleSheetsService(access_token)
+        result = sheets_service.update_sheet_permissions(sheet_id, make_public)
+        
+        return Response(result)
+        
+    except Exception as e:
+        logger.error(f"Update sheet permissions error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
