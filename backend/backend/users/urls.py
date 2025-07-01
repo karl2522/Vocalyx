@@ -7,7 +7,8 @@ from .views import (
     drive_create_folder, drive_download_file,
     sheets_copy_template, sheets_get_info, sheets_list_user_sheets,
     sheets_update_permissions, sheets_get_data, sheets_get_data_service_account, sheets_update_cell_service_account,
-    sheets_add_student_service_account
+    sheets_add_student_service_account, sheets_add_student_with_auto_number_service_account,
+    sheets_auto_number_students_service_account, get_class_records_with_live_counts_cached
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -42,4 +43,9 @@ urlpatterns = [
 
     path('sheets/service-account/<str:sheet_id>/update-cell/', sheets_update_cell_service_account, name='sheets_update_cell_service_account'),
     path('sheets/service-account/<str:sheet_id>/add-student/', sheets_add_student_service_account, name='sheets_add_student_service_account'),
+
+    path('sheets/<str:sheet_id>/add-student-auto-number/', sheets_add_student_with_auto_number_service_account, name='sheets_add_student_auto_number'),
+    path('sheets/<str:sheet_id>/auto-number-students/', sheets_auto_number_students_service_account, name='sheets_auto_number_students'),
+
+    path('class-records/live-counts/', get_class_records_with_live_counts_cached, name='class_records_live_counts'),
 ]

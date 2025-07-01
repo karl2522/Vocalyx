@@ -162,7 +162,7 @@ const Sidebar = ({ onCollapse }) => {
   const navItems = [
     { name: 'Dashboard', icon: <MdOutlineDashboard size={22} />, path: '/dashboard' },
     { name: 'Class Records', icon: <RiSoundModuleLine size={22} />, path: '/dashboard/class-records' },
-    { name: 'Settings', icon: <MdOutlineSettings size={22} />, path: '/dashboard/settings' },
+    { name: 'Settings', icon: <MdOutlineSettings size={22} />, path: '/dashboard/profile' },
   ];
 
   return (

@@ -17,7 +17,6 @@ const ClassRecordExcel = () => {
   const [loading, setLoading] = useState(true);
   const [headers, setHeaders] = useState([]);
   const [lastSaved, setLastSaved] = useState(null);
-  const [interimBatchCommand, setInterimBatchCommand] = useState('');
 
   const { 
     isListening, 
@@ -36,13 +35,9 @@ const ClassRecordExcel = () => {
   const [lastVoiceCommand, setLastVoiceCommand] = useState('');
 
   const [batchMode, setBatchMode] = useState(false);
-  const [batchEntries, setBatchEntries] = useState([]);
-  const [currentBatchColumn, setCurrentBatchColumn] = useState('');
-  const [showBatchModal, setShowBatchModal] = useState(false);
 
   // 🔥 NEW: Duplicate handling state
   const [duplicateOptions, setDuplicateOptions] = useState(null);
-  const [pendingCommand, setPendingCommand] = useState(null);
 
   // 🔥 NEW: Dropdown state management
   const [dropdowns, setDropdowns] = useState({
@@ -53,9 +48,6 @@ const ClassRecordExcel = () => {
 
   // 🔥 NEW: Voice guide modal state
   const [showVoiceGuide, setShowVoiceGuide] = useState(false);
-
-  // 🔥 NEW: Import modal state
-  const [showImportModal, setShowImportModal] = useState(false);
 
   useEffect(() => {
     if (transcript && 
@@ -197,12 +189,12 @@ const handleAddStudentVoice = async (data) => {
         // Prepare student data for Google Sheets
         const studentData = {};
         
-        // 🔥 FIX: Map the parsed data keys correctly to sheet column names
+        // 🔥 ADD AUTO-NUMBERING - we'll let the backend handle this
         if (data['Last Name'] || data.lastName) {
-            studentData['LASTNAME'] = data['Last Name'] || data.lastName; // No space!
+            studentData['LASTNAME'] = data['Last Name'] || data.lastName;
         }
         if (data['First Name'] || data.firstName) {
-            studentData['FIRST NAME'] = data['First Name'] || data.firstName; // Keep space!
+            studentData['FIRST NAME'] = data['First Name'] || data.firstName;
         }
         if (data['Student ID'] || data.studentId) {
             studentData['STUDENT ID'] = data['Student ID'] || data.studentId;
@@ -210,8 +202,8 @@ const handleAddStudentVoice = async (data) => {
 
         console.log('🔧 Mapped student data for sheets:', studentData);
         
-        // Call the API to add student to Google Sheets
-        const response = await classRecordService.addStudentToGoogleSheets(
+        // 🔥 NEW: Call the API with auto-numbering flag
+        const response = await classRecordService.addStudentToGoogleSheetsWithAutoNumber(
             classRecord.google_sheet_id,
             studentData
         );
@@ -219,9 +211,9 @@ const handleAddStudentVoice = async (data) => {
         if (response.data?.success) {
             const studentName = `${studentData['FIRST NAME'] || ''} ${studentData['LASTNAME'] || ''}`.trim();
             
-            toast.success(`✅ Student added: ${studentName}`);
+            toast.success(`✅ Student added: ${studentName} (Row ${response.data.rowNumber})`);
             if (voiceEnabled) {
-                speakText(`Successfully added student ${studentName}`);
+                speakText(`Successfully added student ${studentName} as number ${response.data.rowNumber}`);
             }
             
         } else {
@@ -233,6 +225,33 @@ const handleAddStudentVoice = async (data) => {
         if (voiceEnabled) {
             speakText('Failed to add the student. Please try again.');
         }
+    }
+};
+
+const handleAutoNumberStudents = async () => {
+    if (!classRecord?.google_sheet_id) {
+        toast.error('No Google Sheet connected');
+        return;
+    }
+
+    try {
+        toast('🔢 Auto-numbering students...');
+        
+        const response = await classRecordService.autoNumberGoogleSheetsStudents(
+            classRecord.google_sheet_id
+        );
+
+        if (response.data?.success) {
+            toast.success(`✅ Auto-numbered ${response.data.count} students`);
+            if (voiceEnabled) {
+                speakText(`Successfully numbered ${response.data.count} students`);
+            }
+        } else {
+            throw new Error(response.data?.error || 'Failed to auto-number students');
+        }
+    } catch (error) {
+        console.error('Auto-number error:', error);
+        toast.error('Failed to auto-number students');
     }
 };
 
@@ -770,33 +789,50 @@ const handleExportToPDF = async () => {
                 </button>
                 
                 {dropdowns.tools && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-slate-200 py-2 z-50">
-                    {/* Export options */}
-                    <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
-                      Export Options
-                    </div>
-                    <button
-                      onClick={() => {
-                        handleExportToExcel();
-                        closeAllDropdowns();
-                      }}
-                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
-                    >
-                      <FileSpreadsheet className="w-4 h-4 text-green-600" />
-                      <span>Export to Excel (clean)</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        handleExportToPDF();
-                        closeAllDropdowns();
-                      }}
-                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
-                    >
-                      <Download className="w-4 h-4 text-red-600" />
-                      <span>Export to PDF (clean)</span>
-                    </button>
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-slate-200 py-2 z-50">
+                  {/* Export options */}
+                  <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                    Export Options
                   </div>
-                )}
+                  <button
+                    onClick={() => {
+                      handleExportToExcel();
+                      closeAllDropdowns();
+                    }}
+                    className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-green-600" />
+                    <span>Export to Excel (clean)</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleExportToPDF();
+                      closeAllDropdowns();
+                    }}
+                    className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                  >
+                    <Download className="w-4 h-4 text-red-600" />
+                    <span>Export to PDF (clean)</span>
+                  </button>
+                  
+                  <hr className="my-2 border-slate-200" />
+                  
+                  {/* 🔥 NEW: Auto-number option */}
+                  <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                    Sheet Tools
+                  </div>
+                  <button
+                    onClick={() => {
+                      handleAutoNumberStudents();
+                      closeAllDropdowns();
+                    }}
+                    className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                  >
+                    <span className="w-4 h-4 text-blue-600 text-center font-bold">#</span>
+                    <span>Auto-Number Students</span>
+                  </button>
+                </div>
+              )}
               </div>
 
                 {/* Open in Google Sheets Button */}
@@ -1046,721 +1082,17 @@ const handleExportToPDF = async () => {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-slate-50">
-      {/* Professional Header */}
-      <div className="bg-white border-b border-slate-200 shadow-sm">
-        {/* Top Bar */}
-        <div className="px-6 py-4 border-b border-slate-100">
-          <div className="flex items-center justify-between">
-            {/* Left Section - Navigation & Title */}
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={() => navigate('/dashboard/class-records/view')}
-                className="flex items-center space-x-2 text-slate-600 hover:text-slate-800 transition-colors group"
-              >
-                <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
-                <span className="text-sm font-medium">Back to Records</span>
-              </button>
-              <div className="h-5 w-px bg-slate-300"></div>
-              <div>
-                <h1 className="text-xl font-semibold text-slate-900">{classRecord?.name}</h1>
-                <div className="flex items-center space-x-3 text-sm text-slate-500">
-                  <span>{classRecord?.semester}</span>
-                  <span>•</span>
-                  <span>{classRecord?.teacher_name}</span>
-                  {lastSaved && (
-                    <>
-                      <span>•</span>
-                      <span className="text-emerald-600">
-                        Last saved {new Date(lastSaved).toLocaleTimeString()}
-                      </span>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Right Section - Action Menu */}
-            <div className="flex items-center space-x-2">
-              {/* Primary Save */}
-              <div className="flex items-center space-x-2 bg-emerald-50 text-emerald-700 px-4 py-2.5 rounded-lg font-medium shadow-sm border border-emerald-200">
-                <Save className="w-4 h-4" />
-                <span>Auto-saved in Sheets</span>
-              </div>
-
-              <button
-                onClick={() => setShowSortModal(true)}
-                className="flex items-center space-x-2 bg-indigo-500 text-white px-4 py-2 rounded-lg hover:bg-indigo-600 transition-colors"
-                title="Sort students"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
-                </svg>
-                <span>Sort Students</span>
-              </button>
-
-              {/* Edit Tools Dropdown */}
-              <div className="relative" onClick={(e) => e.stopPropagation()}>
-                <button
-                  onClick={() => toggleDropdown('edit')}
-                  className="flex items-center space-x-2 bg-slate-100 text-slate-700 px-3 py-2.5 rounded-lg font-medium hover:bg-slate-200 transition-colors"
-                >
-                  <Edit2 className="w-4 h-4" />
-                  <span>Edit</span>
-                  <ChevronDown className={`w-4 h-4 transition-transform ${dropdowns.edit ? 'rotate-180' : ''}`} />
-                </button>
-                
-                {dropdowns.edit && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-slate-200 py-2 z-50">
-                    <button
-                      onClick={() => {
-                        addNewStudent();
-                        closeAllDropdowns();
-                      }}
-                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
-                    >
-                      <Plus className="w-4 h-4" />
-                      <span>Add Student</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowAddColumnModal(true);
-                        closeAllDropdowns();
-                      }}
-                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
-                    >
-                      <Plus className="w-4 h-4" />
-                      <span>Add Column</span>
-                    </button>
-                    <hr className="my-2 border-slate-200" />
-                    <button
-                      onClick={() => {
-                        handleUndo();
-                        closeAllDropdowns();
-                      }}
-                      disabled={undoStack.length === 0}
-                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <RotateCcw className="w-4 h-4" />
-                      <span>Undo</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        handleRedo();
-                        closeAllDropdowns();
-                      }}
-                      disabled={redoStack.length === 0}
-                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <RotateCw className="w-4 h-4" />
-                      <span>Redo</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Voice Tools Dropdown */}
-              <div className="relative" onClick={(e) => e.stopPropagation()}>
-                <button
-                  onClick={() => toggleDropdown('voice')}
-                  className="flex items-center space-x-2 bg-slate-100 text-slate-700 px-3 py-2.5 rounded-lg font-medium hover:bg-slate-200 transition-colors"
-                >
-                  {voiceEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-                  <span>Voice</span>
-                  <ChevronDown className={`w-4 h-4 transition-transform ${dropdowns.voice ? 'rotate-180' : ''}`} />
-                </button>
-                
-                {dropdowns.voice && (
-                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl border border-slate-200 py-2 z-50">
-                    <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
-                      Voice Settings
-                    </div>
-                    <button
-                      onClick={() => {
-                        toggleVoiceFeedback();
-                        closeAllDropdowns();
-                      }}
-                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
-                    >
-                      {voiceEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-                      <span>{voiceEnabled ? 'Disable' : 'Enable'} Voice Feedback</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        startVoiceTraining();
-                        closeAllDropdowns();
-                      }}
-                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
-                    >
-                      <Target className="w-4 h-4" />
-                      <span>Train Voice Recognition</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Tools Dropdown */}
-              <div className="relative" onClick={(e) => e.stopPropagation()}>
-                <button
-                  onClick={() => toggleDropdown('tools')}
-                  className="flex items-center space-x-2 bg-slate-100 text-slate-700 px-3 py-2.5 rounded-lg font-medium hover:bg-slate-200 transition-colors"
-                >
-                  <MoreVertical className="w-4 h-4" />
-                  <span>Tools</span>
-                  <ChevronDown className={`w-4 h-4 transition-transform ${dropdowns.tools ? 'rotate-180' : ''}`} />
-                </button>
-                
-                {dropdowns.tools && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-slate-200 py-2 z-50">       
-                    <hr className="my-2 border-slate-200" />
-                    
-                    {/* Existing tools */}
-                    <button
-                      onClick={() => {
-                        startBatchMode();
-                        closeAllDropdowns();
-                      }}
-                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
-                    >
-                      <Users className="w-4 h-4" />
-                      <span>Batch Grading</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowImportModal(true);
-                        closeAllDropdowns();
-                      }}
-                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
-                    >
-                      <Upload className="w-4 h-4" />
-                      <span>Import CSV</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Stats Bar */}
-        <div className="px-6 py-3 bg-slate-50 border-b border-slate-200">
-          <div className="flex items-center justify-between text-sm">
-            <div className="flex items-center space-x-6">
-              <div className="flex items-center space-x-2">
-                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                <span className="text-slate-600">Google Sheets Integration: <span className="font-semibold text-emerald-900">Active</span></span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
-                <span className="text-slate-600">Columns: <span className="font-semibold text-slate-900">{headers.length}</span></span>
-              </div>
-              {isListening && (
-                <div className="flex items-center space-x-2 text-red-600">
-                  <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                  <span className="font-medium">Listening...</span>
-                </div>
-              )}
-            </div>
-            
-            <div className="text-slate-500">
-              Data synced with Google Sheets
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Browser Support Warning - Minimal */}
-      {!isSupported && (
-        <div className="bg-amber-50 border-b border-amber-200 px-6 py-2">
-          <div className="flex items-center space-x-2 text-sm text-amber-800">
-            <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
-            <span>Voice recognition requires Chrome, Edge, or Safari browser</span>
-          </div>
-        </div>
-      )}
-
-      {/* Voice Transcript Display - Only when active */}
-      {transcript && isListening && (
-        <div className="bg-blue-50 border-b border-blue-200 px-6 py-2">
-          <div className="flex items-center space-x-3 text-sm">
-            <div className="flex items-center space-x-2 text-blue-700">
-              <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-              <span className="font-medium">Voice Input:</span>
-            </div>
-            <div className="bg-white rounded px-3 py-1 text-slate-700 font-mono text-xs">
-              "{transcript}"
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Voice Commands Help - Collapsible */}
-      {isListening && (
-        <div className="bg-slate-100 border-b border-slate-200 px-6 py-3">
-          <details className="text-sm">
-            <summary className="cursor-pointer text-slate-700 font-medium hover:text-slate-900 flex items-center space-x-2">
-              <Mic className="w-4 h-4" />
-              <span>Voice Commands Guide</span>
-            </summary>
-            <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-slate-600">
-              <div className="bg-white rounded-lg p-3 border border-slate-200">
-                <div className="font-medium text-slate-700 mb-2">Single Entry</div>
-                <div className="space-y-1">
-                  <div>"Maria Quiz 3 twenty"</div>
-                  <div>"John Lab 2 eighty-five"</div>
-                </div>
-              </div>
-              <div className="bg-white rounded-lg p-3 border border-slate-200">
-                <div className="font-medium text-slate-700 mb-2">Batch List</div>
-                <div className="space-y-1">
-                  <div>"Quiz 1: John 85, Maria 92"</div>
-                  <div>"Lab 2: Alice 90, Bob 85"</div>
-                </div>
-              </div>
-              <div className="bg-white rounded-lg p-3 border border-slate-200">
-                <div className="font-medium text-slate-700 mb-2">Batch Range</div>
-                <div className="space-y-1">
-                  <div>"Midterm: Row 1 through 5, all score 90"</div>
-                  <div>"Quiz 2: Everyone present gets 85"</div>
-                </div>
-              </div>
-            </div>
-          </details>
-        </div>
-      )}
-
-      {/* Duplicate Selection UI - Clean */}
-      {duplicateOptions && (
-        <div className="bg-blue-50 border-b border-blue-200 px-6 py-4">
-          <div className="flex items-start space-x-4">
-            <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Users className="w-4 h-4 text-blue-600" />
-            </div>
-            <div className="flex-1">
-              <h3 className="text-sm font-medium text-blue-900 mb-2">
-                Multiple students found for "{duplicateOptions.searchName}"
-              </h3>
-              <div className="space-y-2">
-                {duplicateOptions.matches.map((match, index) => (
-                  <div key={index} className="flex items-center justify-between bg-white rounded-lg p-3 border border-blue-200 shadow-sm">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-xs font-medium text-blue-700">
-                        {index + 1}
-                      </div>
-                      <div>
-                        <div className="font-medium text-slate-900">{match.student}</div>
-                        <div className="text-xs text-slate-500">Row {match.index + 1}</div>
-                      </div>
-                      {match.hasExistingScore ? (
-                        <div className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded">
-                          Current: {match.existingValue}
-                        </div>
-                      ) : (
-                        <div className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded">
-                          Empty
-                        </div>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => handleDuplicateSelection(index + 1)}
-                      className="bg-blue-600 text-white px-3 py-1 rounded text-xs font-medium hover:bg-blue-700 transition-colors"
-                    >
-                      Select
-                    </button>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-3 text-xs text-blue-700 bg-blue-100 rounded-lg px-3 py-2">
-                Say "option 1", "option 2", etc. or click Select buttons. Say "cancel" to abort.
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Pending Confirmation UI - Clean */}
-      {pendingConfirmation && (
-        <div className="bg-amber-50 border-b border-amber-200 px-6 py-4">
-          <div className="flex items-start space-x-4">
-            <div className="flex-shrink-0 w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center">
-              <Edit2 className="w-4 h-4 text-amber-600" />
-            </div>
-            <div className="flex-1">
-              <h3 className="text-sm font-medium text-amber-900 mb-2">Confirmation Required</h3>
-              <div className="bg-white rounded-lg p-3 border border-amber-200">
-                <p className="text-sm text-slate-700">
-                  Did you mean <span className="font-semibold text-slate-900">{pendingConfirmation.suggestedStudent}</span>?
-                </p>
-                {pendingConfirmation.alternatives.length > 0 && (
-                  <div className="mt-2 pt-2 border-t border-amber-200">
-                    <p className="text-xs text-slate-500">
-                      Other matches: {pendingConfirmation.alternatives.map(alt => alt.student).join(', ')}
-                    </p>
-                  </div>
-                )}
-              </div>
-              <div className="mt-3 text-xs text-amber-700 bg-amber-100 rounded-lg px-3 py-2">
-                Say "yes" to confirm or "no" to cancel
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Professional Batch Mode Modal */}
-      {showBatchModal && (
-        <div className="fixed inset-0 bg-slate-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between p-6 border-b border-slate-200 bg-slate-50">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Users className="w-5 h-5 text-blue-600" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-slate-900">Batch Grading Mode</h2>
-                  {currentBatchColumn && (
-                    <p className="text-sm text-slate-600">Column: <span className="font-medium text-blue-600">{currentBatchColumn}</span></p>
-                  )}
-                </div>
-              </div>
-              <button
-                onClick={cancelBatchMode}
-                className="text-slate-400 hover:text-slate-600 transition-colors"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-            
-            {!currentBatchColumn ? (
-              <div className="text-center py-8">
-                <div className="mb-4">
-                  <Mic className={`w-16 h-16 mx-auto ${isListening ? 'text-red-500 animate-pulse' : 'text-blue-500'}`} />
-                </div>
-                <h3 className="text-lg font-medium mb-2">Step 1: Choose Column</h3>
-                <p className="text-gray-600 mb-4">
-                  Say a column name to start batch grading
-                </p>
-                <div className="grid grid-cols-3 gap-2 text-sm">
-                  {headers.filter(h => !['No', 'Last Name', 'First Name', 'Student ID', 'Total', 'Grade'].includes(h)).map(header => (
-                    <button
-                      key={header}
-                      onClick={() => {
-                        setCurrentBatchColumn(header);
-                        toast.success(`Column set to: ${header}`);
-                      }}
-                      className="bg-blue-100 text-blue-800 px-3 py-2 rounded hover:bg-blue-200 transition-colors"
-                    >
-                      {header}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="flex-1 overflow-hidden flex flex-col">
-                <div className="bg-blue-50 rounded-lg p-4 mb-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-medium text-blue-800">
-                        {isListening ? '🎙️ Listening for entries...' : '✅ Ready for voice input'}
-                      </h3>
-                      <p className="text-blue-600 text-sm">
-                        Say: "Maria 85" or "John 92" • Say "done" when finished
-                      </p>
-                    </div>
-                    <div className="text-blue-600 font-medium">
-                      {batchEntries.length} students ready
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Batch Entries List */}
-                <div className="flex-1 overflow-auto">
-                  {batchEntries.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">
-                      <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                      <p>No students added yet</p>
-                      <p className="text-sm">Start saying student names and scores</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {batchEntries.map((entry, index) => (
-                        <div
-                          key={index}
-                          className="flex items-center justify-between bg-gray-50 rounded-lg p-3 border"
-                        >
-                          <div className="flex items-center space-x-3">
-                            <div className="flex-shrink-0">
-                              {entry.status === 'ready' ? (
-                                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                              ) : entry.status === 'updated' ? (
-                                <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                              ) : (
-                                <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
-                              )}
-                            </div>
-                            <div>
-                              <div className="font-medium">{entry.studentName}</div>
-                              <div className="text-sm text-gray-500">
-                                {currentBatchColumn}: {entry.score}
-                                {entry.hasExistingScore && (
-                                  <span className="ml-2 text-amber-600">
-                                    (was: {entry.existingValue})
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => removeBatchEntry(index)}
-                            className="text-red-500 hover:text-red-700 p-1"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                
-                {/* Action Buttons */}
-                <div className="flex space-x-3 mt-4 pt-4 border-t">
-                  <button
-                    onClick={cancelBatchMode}
-                    className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => {
-                      setBatchEntries([]);
-                      toast.success('Entries cleared');
-                    }}
-                    disabled={batchEntries.length === 0}
-                    className="bg-yellow-500 text-white px-4 py-2 rounded-lg hover:bg-yellow-600 transition-colors disabled:opacity-50"
-                  >
-                    Clear All
-                  </button>
-                  <button
-                    onClick={executeBatchEntries}
-                    disabled={batchEntries.length === 0}
-                    className="flex-1 bg-green-500 text-white py-2 rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50"
-                  >
-                    Save {batchEntries.length} Students
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* 🎤 FLOATING VOICE RECORDING BUTTON */}
-      {isSupported && (
-        <div className="fixed bottom-6 right-6 z-50">
-          <div className="flex items-center space-x-3">
-            {/* Voice Guide Button */}
-            <button
-              onClick={() => setShowVoiceGuide(true)}
-              className="bg-white border border-slate-300 text-slate-600 hover:text-slate-900 hover:border-slate-400 p-3 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 group"
-              title="Voice Commands Guide"
-            >
-              <HelpCircle className="w-5 h-5 group-hover:scale-110 transition-transform" />
-            </button>
-
-            {/* Main Voice Recording Button */}
-            <button
-              onClick={handleVoiceRecord}
-              className={`relative p-4 rounded-full shadow-2xl transition-all duration-300 transform hover:scale-105 ${
-                isListening
-                  ? 'bg-red-500 text-white shadow-red-500/50 animate-pulse hover:bg-red-600'
-                  : 'bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white shadow-blue-600/50 hover:bg-blue-[#4A5491]'
-              }`}
-              title={isListening ? 'Stop voice recording' : 'Start voice recording'}
-            >
-              {isListening ? (
-                <MicOff className="w-6 h-6" />
-              ) : (
-                <Mic className="w-6 h-6" />
-              )}
-              
-              {/* Listening indicator ring */}
-              {isListening && (
-                <div className="absolute inset-0 rounded-full border-4 border-red-300 animate-ping"></div>
-              )}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* 📖 PROFESSIONAL VOICE GUIDE MODAL */}
-      {showVoiceGuide && (
-        <div 
-          className="fixed inset-0 bg-slate-900 bg-opacity-50 flex items-center justify-center z-50 p-4"
-          onClick={() => setShowVoiceGuide(false)}
+    <div className="h-screen flex items-center justify-center bg-slate-50">
+      <div className="text-center">
+        <h2 className="text-xl font-semibold text-slate-900 mb-2">No Google Sheet Connected</h2>
+        <p className="text-slate-600 mb-4">This class record needs a Google Sheet to function.</p>
+        <button
+          onClick={() => navigate('/dashboard/class-records/view')}
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
         >
-          <div 
-            className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-6 border-b border-slate-200 bg-slate-50">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Mic className="w-5 h-5 text-blue-600" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-slate-900">Voice Commands Guide</h2>
-                  <p className="text-sm text-slate-600">Learn how to use voice commands efficiently</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowVoiceGuide(false)}
-                className="text-slate-400 hover:text-slate-600 transition-colors"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-
-            {/* Modal Content */}
-            <div className="p-6 overflow-y-auto max-h-[calc(85vh-180px)]">
-              {/* Quick Start */}
-              <div className="mb-8">
-                <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center space-x-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  <span>Quick Start</span>
-                </h3>
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <div className="font-medium text-blue-900 mb-2">🎯 Basic Pattern</div>
-                      <div className="text-blue-700 space-y-1">
-                        <div>"[Student Name] [Column] [Score]"</div>
-                        <div className="text-xs text-blue-600">Example: "Maria Quiz 1 eighty-five"</div>
-                      </div>
-                    </div>
-                    <div>
-                      <div className="font-medium text-blue-900 mb-2">🔧 Controls</div>
-                      <div className="text-blue-700 space-y-1">
-                        <div>"undo" - Undo last action</div>
-                        <div>"cancel" - Cancel current operation</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Command Types */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Single Entry */}
-                <div className="bg-white border border-slate-200 rounded-lg p-5 hover:shadow-md transition-shadow">
-                  <div className="flex items-center space-x-3 mb-4">
-                    <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">
-                      <span className="text-emerald-600 font-bold text-sm">1</span>
-                    </div>
-                    <h4 className="font-semibold text-slate-900">Single Entry</h4>
-                  </div>
-                  <div className="space-y-3 text-sm">
-                    <div>
-                      <div className="font-medium text-slate-700 mb-1">Examples:</div>
-                      <div className="bg-slate-50 rounded p-2 space-y-1 text-slate-600">
-                        <div>"Maria Quiz 3 twenty"</div>
-                        <div>"John Lab 2 eighty-five"</div>
-                        <div>"Sarah Midterm seventy-five"</div>
-                      </div>
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      Perfect for entering individual student grades quickly
-                    </div>
-                  </div>
-                </div>
-
-                {/* Batch List */}
-                <div className="bg-white border border-slate-200 rounded-lg p-5 hover:shadow-md transition-shadow">
-                  <div className="flex items-center space-x-3 mb-4">
-                    <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <span className="text-blue-600 font-bold text-sm">N</span>
-                    </div>
-                    <h4 className="font-semibold text-slate-900">Batch List</h4>
-                  </div>
-                  <div className="space-y-3 text-sm">
-                    <div>
-                      <div className="font-medium text-slate-700 mb-1">Examples:</div>
-                      <div className="bg-slate-50 rounded p-2 space-y-1 text-slate-600">
-                        <div>"Quiz 1: John 85, Maria 92"</div>
-                        <div>"Lab 2: Alice 90, Bob 85"</div>
-                      </div>
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      Enter multiple students for the same assignment at once
-                    </div>
-                  </div>
-                </div>
-
-                {/* Batch Range */}
-                <div className="bg-white border border-slate-200 rounded-lg p-5 hover:shadow-md transition-shadow">
-                  <div className="flex items-center space-x-3 mb-4">
-                    <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-                      <span className="text-purple-600 font-bold text-sm">∞</span>
-                    </div>
-                    <h4 className="font-semibold text-slate-900">Batch Range</h4>
-                  </div>
-                  <div className="space-y-3 text-sm">
-                    <div>
-                      <div className="font-medium text-slate-700 mb-1">Examples:</div>
-                      <div className="bg-slate-50 rounded p-2 space-y-1 text-slate-600">
-                        <div>"Midterm: Row 1 through 5, all score 90"</div>
-                        <div>"Quiz 2: Everyone present gets 85"</div>
-                      </div>
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      Assign the same grade to multiple students in a range
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Tips */}
-              <div className="mt-8">
-                <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center space-x-2">
-                  <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
-                  <span>Pro Tips</span>
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
-                    <div className="font-medium text-amber-900 mb-2">💡 Accuracy Tips</div>
-                    <ul className="text-sm text-amber-800 space-y-1">
-                      <li>• Speak clearly and at normal pace</li>
-                      <li>• Use "twenty" instead of "20"</li>
-                      <li>• Say "Quiz one" instead of "Quiz 1"</li>
-                    </ul>
-                  </div>
-                  <div className="bg-green-50 rounded-lg p-4 border border-green-200">
-                    <div className="font-medium text-green-900 mb-2">⚡ Efficiency Tips</div>
-                    <ul className="text-sm text-green-800 space-y-1">
-                      <li>• Use batch commands for repeated grades</li>
-                      <li>• Train voice recognition for better results</li>
-                      <li>• Check transcript display for accuracy</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="flex items-center justify-between p-6 border-t border-slate-200 bg-slate-50">
-              <div className="text-sm text-slate-600">
-                Need help? The voice button is in the bottom-right corner
-              </div>
-              <button
-                onClick={() => setShowVoiceGuide(false)}
-                className="bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white px-6 py-2.5 rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-lg shadow-blue-600/25"
-              >
-                Got it!
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          Back to Records
+        </button>
+      </div>
     </div>
   );
 };

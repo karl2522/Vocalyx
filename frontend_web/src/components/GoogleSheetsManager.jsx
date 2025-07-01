@@ -4,7 +4,7 @@ import googleSheetsService from '../services/googleSheetsService';
 import { showToast } from '../utils/toast';
 
 // Your Class Record Template Sheet ID
-const DEFAULT_TEMPLATE_ID = '1iMKqLouXzb2XDvYwcysPVxXx0R-Cb6Yo';
+const DEFAULT_TEMPLATE_ID = '1h-dR0ergnvgqxXsS6nLFb7lAthuoJ5MVKya4NbYHT2c';
 
 function GoogleSheetsManager() {
   const [sheets, setSheets] = useState([]);

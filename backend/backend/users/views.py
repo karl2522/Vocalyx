@@ -20,6 +20,8 @@ from .utils import send_verification_email, get_current_utc_time, get_user_login
 from .google_drive_service import GoogleDriveService
 from firebase_admin import auth
 from .google_sheets_service import GoogleSheetsService
+from django.core.cache import cache
+import hashlib
 
 
 logger = logging.getLogger(__name__)
@@ -915,3 +917,82 @@ def sheets_add_student_service_account(request, sheet_id):
         logger.error(f"Add student error: {str(e)}")
         return Response({'error': str(e)}, status=500)
 
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def sheets_add_student_with_auto_number_service_account(request, sheet_id):
+    """Add a new student to Google Sheet with auto-numbering using service account"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+
+        student_data = request.data.get('student_data')
+        if not student_data:
+            return Response({'error': 'student_data is required'}, status=400)
+
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+        result = service.add_student_with_auto_number(sheet_id, student_data)
+
+        return Response(result)
+
+    except Exception as e:
+        logger.error(f"Add student with auto-number error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def sheets_auto_number_students_service_account(request, sheet_id):
+    """Auto-number all existing students in Google Sheet using service account"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+        result = service.auto_number_all_students(sheet_id)
+
+        return Response(result)
+
+    except Exception as e:
+        logger.error(f"Auto-number students error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_class_records_with_live_counts_cached(request):
+    """Get class records with cached live student counts"""
+    try:
+        from classrecord.models import ClassRecord
+        from classrecord.serializers import ClassRecordSerializer
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+
+        # Get all class records for the user
+        class_records = ClassRecord.objects.filter(user=request.user).order_by('-created_at')
+        serializer = ClassRecordSerializer(class_records, many=True)
+        records_data = serializer.data
+
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+
+        for record in records_data:
+            if record.get('google_sheet_id'):
+                # 🔥 Use cache with 2-minute expiry
+                cache_key = f"student_count_{record['google_sheet_id']}"
+                cached_count = cache.get(cache_key)
+
+                if cached_count is not None:
+                    # Use cached value
+                    record['student_count'] = cached_count
+                else:
+                    try:
+                        # Get fresh count and cache it
+                        live_count = service.get_student_count(record['google_sheet_id'])
+                        record['student_count'] = live_count
+
+                        # Cache for 2 minutes
+                        cache.set(cache_key, live_count, 120)
+                    except Exception as e:
+                        logger.warning(f"Could not get live count for record {record['id']}: {str(e)}")
+
+        return Response(records_data)
+
+    except Exception as e:
+        logger.error(f"Get class records with cached counts error: {str(e)}")
+        return Response({'error': str(e)}, status=500)

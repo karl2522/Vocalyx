@@ -371,3 +371,214 @@ class GoogleServiceAccountSheets:
                 'success': False,
                 'error': f'Failed to add student: {str(e)}'
             }
+
+    def add_student_with_auto_number(self, sheet_id: str, student_data: dict) -> dict:
+        """
+        Add a new student row to the Google Sheet with auto-numbering.
+
+        Args:
+            sheet_id: ID of the spreadsheet
+            student_data: Dictionary with student information (e.g., {'LASTNAME': 'Smith', 'FIRST NAME': 'John'})
+
+        Returns:
+            Dict containing success status and row info
+        """
+        try:
+            # Get sheet data
+            sheet_data = self.get_sheet_data(sheet_id)
+            if not sheet_data['success']:
+                return sheet_data
+
+            headers = sheet_data['headers']
+            sheet_name = sheet_data['sheet_name']
+            current_data = sheet_data['tableData']
+
+            # Find next empty row (skip 2 header rows)
+            next_row = len(current_data) + 3  # +2 for headers, +1 for 1-based indexing
+
+            # 🔥 Calculate the student number (how many students currently exist + 1)
+            student_number = len(current_data) + 1
+
+            # Create new row with student data
+            new_row = [''] * len(headers)
+
+            # 🔥 Auto-assign the number to the first column (NO.)
+            if len(headers) > 0:
+                new_row[0] = str(student_number)
+
+            # Fill in the student data
+            for key, value in student_data.items():
+                if key in headers:
+                    index = headers.index(key)
+                    new_row[index] = str(value)
+
+            # Append the new row
+            range_name = f"{sheet_name}!A{next_row}:{chr(65 + len(headers) - 1)}{next_row}"
+
+            body = {
+                'values': [new_row]
+            }
+
+            result = self.sheets_service.spreadsheets().values().update(
+                spreadsheetId=sheet_id,
+                range=range_name,
+                valueInputOption='RAW',
+                body=body
+            ).execute()
+
+            logger.info(f"Successfully added student #{student_number} to row {next_row}")
+
+            return {
+                'success': True,
+                'updated_cells': result.get('updatedCells', 0),
+                'row_added': next_row,
+                'rowNumber': student_number,  # 🔥 Return the assigned number
+                'student_data': student_data,
+                'range': range_name
+            }
+
+        except HttpError as e:
+            error_details = e.content.decode('utf-8') if e.content else str(e)
+            logger.error(f"Google Sheets API error adding student with auto-number: {error_details}")
+            return {
+                'success': False,
+                'error': f'Google Sheets API error: {e.status_code}',
+                'details': error_details
+            }
+        except Exception as e:
+            logger.error(f"Unexpected error adding student with auto-number: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Failed to add student with auto-number: {str(e)}'
+            }
+
+    def auto_number_all_students(self, sheet_id: str) -> dict:
+        """
+        Auto-number all existing students in the Google Sheet.
+
+        Args:
+            sheet_id: ID of the spreadsheet
+
+        Returns:
+            Dict containing success status and count of numbered students
+        """
+        try:
+            # Get sheet data
+            sheet_data = self.get_sheet_data(sheet_id)
+            if not sheet_data['success']:
+                return sheet_data
+
+            headers = sheet_data['headers']
+            sheet_name = sheet_data['sheet_name']
+            current_data = sheet_data['tableData']
+
+            if not current_data:
+                return {
+                    'success': True,
+                    'count': 0,
+                    'message': 'No students to number'
+                }
+
+            # Check if first column is NO. column
+            if not headers or 'NO' not in headers[0].upper():
+                return {
+                    'success': False,
+                    'error': 'First column should be NO. column for auto-numbering'
+                }
+
+            # 🔥 Prepare batch update for all student numbers
+            updates = []
+            for i, row in enumerate(current_data):
+                student_number = i + 1  # Start from 1
+
+                # Skip if student has no name data (empty row)
+                has_data = False
+                for j in range(1, min(len(row), len(headers))):  # Skip first column (NO.)
+                    if row[j] if j < len(row) else '':
+                        has_data = True
+                        break
+
+                if has_data:
+                    # Calculate cell position (skip 2 header rows)
+                    cell_row = i + 3  # +2 for headers, +1 for 1-based indexing
+                    cell_range = f"{sheet_name}!A{cell_row}"
+
+                    updates.append({
+                        'range': cell_range,
+                        'values': [[str(student_number)]]
+                    })
+
+            if not updates:
+                return {
+                    'success': True,
+                    'count': 0,
+                    'message': 'No students found to number'
+                }
+
+            # 🔥 Batch update all numbers at once
+            body = {
+                'valueInputOption': 'RAW',
+                'data': updates
+            }
+
+            result = self.sheets_service.spreadsheets().values().batchUpdate(
+                spreadsheetId=sheet_id,
+                body=body
+            ).execute()
+
+            updated_count = len(updates)
+            logger.info(f"Successfully auto-numbered {updated_count} students")
+
+            return {
+                'success': True,
+                'count': updated_count,
+                'updated_cells': result.get('totalUpdatedCells', 0),
+                'message': f'Auto-numbered {updated_count} students'
+            }
+
+        except HttpError as e:
+            error_details = e.content.decode('utf-8') if e.content else str(e)
+            logger.error(f"Google Sheets API error auto-numbering students: {error_details}")
+            return {
+                'success': False,
+                'error': f'Google Sheets API error: {e.status_code}',
+                'details': error_details
+            }
+        except Exception as e:
+            logger.error(f"Unexpected error auto-numbering students: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Failed to auto-number students: {str(e)}'
+            }
+
+    def get_student_count(self, sheet_id: str) -> int:
+        """
+        Get the actual number of students in the Google Sheet.
+
+        Args:
+            sheet_id: ID of the spreadsheet
+
+        Returns:
+            Number of students (rows with data excluding headers)
+        """
+        try:
+            sheet_data = self.get_sheet_data(sheet_id)
+            if not sheet_data['success']:
+                return 0
+
+            # Count rows that have actual student data
+            student_count = 0
+            for row in sheet_data['tableData']:
+                # Check if the row has name data (not empty)
+                if len(row) >= 2:  # At least LASTNAME and FIRST NAME columns
+                    lastname = row[1].strip() if len(row) > 1 and row[1] else ''
+                    firstname = row[2].strip() if len(row) > 2 and row[2] else ''
+
+                    if lastname or firstname:  # Row has student data
+                        student_count += 1
+
+            return student_count
+
+        except Exception as e:
+            logger.error(f"Error counting students: {str(e)}")
+            return 0

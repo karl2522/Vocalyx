@@ -160,7 +160,7 @@ const ClassRecords = () => {
   const fetchClassRecords = async () => {
     try {
       setLoading(true);
-      const response = await classRecordService.getClassRecords();
+      const response = await classRecordService.getClassRecordsWithLiveCounts();
       setClassRecords(response.data);
     } catch (error) {
       console.error('Error fetching class records:', error);

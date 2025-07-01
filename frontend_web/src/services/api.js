@@ -316,6 +316,14 @@ export const classRecordService = {
             student_data: studentData
         });
     },
+
+    addStudentToGoogleSheetsWithAutoNumber: (sheetId, studentData) => 
+        api.post(`/sheets/${sheetId}/add-student-auto-number/`, { student_data: studentData }),
+
+    autoNumberGoogleSheetsStudents: (sheetId) => 
+        api.post(`/sheets/${sheetId}/auto-number-students/`),
+
+    getClassRecordsWithLiveCounts: () => api.get('/class-records/live-counts/'),
 };
 
 export const studentService = {
