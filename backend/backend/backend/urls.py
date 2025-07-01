@@ -21,18 +21,14 @@ from drf_spectacular.views import (
 )
 from rest_framework.routers import DefaultRouter
 
-from excel.views import ExcelViewSet
 
 # Create a router instance
 router = DefaultRouter()
-router.register(r'excel', ExcelViewSet, basename='excel')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('users.urls')),
     path('api/', include(router.urls)),
-    path('api/', include('classes.urls')),
-    path('api/', include('teams.urls')),
     path('api/', include('classrecord.urls')),
     path('api/', include('notifications.urls')),
     path('api/speech/', include('speech_services.urls')),
