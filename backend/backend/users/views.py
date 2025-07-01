@@ -833,3 +833,85 @@ def sheets_update_permissions(request, sheet_id):
     except Exception as e:
         logger.error(f"Update sheet permissions error: {str(e)}")
         return Response({'error': str(e)}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def sheets_get_data(request, sheet_id):
+    """Get data from a Google Sheet"""
+    try:
+        access_token = request.headers.get('X-Google-Access-Token')
+        if not access_token:
+            return Response({'error': 'Google access token required in X-Google-Access-Token header'}, status=400)
+
+        sheets_service = GoogleSheetsService(access_token)
+        result = sheets_service.get_sheet_data(sheet_id)
+
+        return Response(result)
+
+    except Exception as e:
+        logger.error(f"Get sheet data error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def sheets_get_data_service_account(request, sheet_id):
+    """Get data from a Google Sheet using service account (for app-created sheets)"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+        result = service.get_sheet_data(sheet_id)
+
+        return Response(result)
+
+    except Exception as e:
+        logger.error(f"Service account sheet data error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def sheets_update_cell_service_account(request, sheet_id):
+    """Update a single cell in Google Sheet using service account"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+
+        row = request.data.get('row')  # 0-based index
+        column = request.data.get('column')  # Column name like 'QUIZ 1'
+        value = request.data.get('value')
+
+        if row is None or not column or value is None:
+            return Response({'error': 'row, column, and value are required'}, status=400)
+
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+        result = service.update_cell(sheet_id, row, column, value)
+
+        return Response(result)
+
+    except Exception as e:
+        logger.error(f"Update cell error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def sheets_add_student_service_account(request, sheet_id):
+    """Add a new student to Google Sheet using service account"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+
+        student_data = request.data.get('student_data')
+        if not student_data:
+            return Response({'error': 'student_data is required'}, status=400)
+
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+        result = service.add_student(sheet_id, student_data)
+
+        return Response(result)
+
+    except Exception as e:
+        logger.error(f"Add student error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+

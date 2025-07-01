@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:8000/api';
+const API_URL = ' http://127.0.0.1:8000/api';
 
 const api = axios.create({
     baseURL: API_URL,
@@ -286,6 +286,35 @@ export const classRecordService = {
 
     clearImportedExcel: (id) => {
         return api.post(`/class-records/${id}/clear_imported_excel/`);
+    },
+
+    getGoogleSheetsData: (sheetId) => {
+        const googleAccessToken = localStorage.getItem('googleAccessToken');
+        const config = {};
+        if (googleAccessToken) {
+            config.headers = {
+                'X-Google-Access-Token': googleAccessToken
+            };
+        }
+        return api.get(`/sheets/data/${sheetId}/`, config);
+    },
+
+    getGoogleSheetsDataServiceAccount: (sheetId) => {
+        return api.get(`/sheets/service-account/data/${sheetId}/`);
+    },
+
+    updateGoogleSheetsCell: (sheetId, row, column, value) => {
+        return api.post(`/sheets/service-account/${sheetId}/update-cell/`, {
+            row,
+            column, 
+            value
+        });
+    },
+
+    addStudentToGoogleSheets: (sheetId, studentData) => {
+        return api.post(`/sheets/service-account/${sheetId}/add-student/`, {
+            student_data: studentData
+        });
     },
 };
 

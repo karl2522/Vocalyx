@@ -6,7 +6,8 @@ from .views import (
     drive_test_connection, drive_list_files, drive_upload_file,
     drive_create_folder, drive_download_file,
     sheets_copy_template, sheets_get_info, sheets_list_user_sheets,
-    sheets_update_permissions
+    sheets_update_permissions, sheets_get_data, sheets_get_data_service_account, sheets_update_cell_service_account,
+    sheets_add_student_service_account
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -22,17 +23,23 @@ urlpatterns = [
     path('firebase-auth/', firebase_auth_view, name='firebase_auth'),
     path('update-profile/', update_profile, name='update_profile'),
     path('profile/', get_profile, name='get_profile'),
-    
+
     # Google Drive API endpoints
     path('drive/test/', drive_test_connection, name='drive_test_connection'),
     path('drive/files/', drive_list_files, name='drive_list_files'),
     path('drive/upload/', drive_upload_file, name='drive_upload_file'),
     path('drive/folder/', drive_create_folder, name='drive_create_folder'),
     path('drive/download/<str:file_id>/', drive_download_file, name='drive_download_file'),
-    
+
     # Google Sheets API endpoints
     path('sheets/copy-template/', sheets_copy_template, name='sheets_copy_template'),
     path('sheets/info/<str:sheet_id>/', sheets_get_info, name='sheets_get_info'),
     path('sheets/list/', sheets_list_user_sheets, name='sheets_list_user_sheets'),
     path('sheets/permissions/<str:sheet_id>/', sheets_update_permissions, name='sheets_update_permissions'),
+    path('sheets/data/<str:sheet_id>/', sheets_get_data, name='sheets_get_data'),
+    path('sheets/service-account/data/<str:sheet_id>/', sheets_get_data_service_account,
+         name='sheets_get_data_service_account'),
+
+    path('sheets/service-account/<str:sheet_id>/update-cell/', sheets_update_cell_service_account, name='sheets_update_cell_service_account'),
+    path('sheets/service-account/<str:sheet_id>/add-student/', sheets_add_student_service_account, name='sheets_add_student_service_account'),
 ]

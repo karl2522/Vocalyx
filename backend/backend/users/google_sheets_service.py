@@ -5,18 +5,19 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
+
 class GoogleSheetsService:
     """
     Service for Google Sheets operations using user access tokens.
     """
-    
+
     SHEETS_API_BASE_URL = "https://sheets.googleapis.com/v4/spreadsheets"
     DRIVE_API_BASE_URL = "https://www.googleapis.com/drive/v3"
-    
+
     def __init__(self, access_token: str):
         """
         Initialize with user's access token.
-        
+
         Args:
             access_token: Google OAuth2 access token with drive.file scope
         """
@@ -25,32 +26,32 @@ class GoogleSheetsService:
             'Authorization': f'Bearer {access_token}',
             'Content-Type': 'application/json'
         }
-    
+
     def copy_template_sheet(self, template_file_id: str, new_name: str) -> Dict:
         """
         Copy a template Google Sheet to user's Drive.
-        
+
         Args:
             template_file_id: ID of the template sheet to copy
             new_name: Name for the copied sheet
-            
+
         Returns:
             Dict containing copied file info or error
         """
         try:
             copy_url = f"{self.DRIVE_API_BASE_URL}/files/{template_file_id}/copy"
-            
+
             copy_data = {
                 "name": new_name
             }
-            
+
             response = requests.post(
                 copy_url,
                 headers=self.headers,
                 json=copy_data,
                 timeout=15
             )
-            
+
             if response.status_code == 200:
                 file_info = response.json()
                 return {
@@ -68,21 +69,21 @@ class GoogleSheetsService:
                     'error': f'Failed to copy template: {response.status_code}',
                     'details': response.text
                 }
-                
+
         except requests.exceptions.RequestException as e:
             logger.error(f"Sheets copy template failed: {str(e)}")
             return {
                 'success': False,
                 'error': f'Request failed: {str(e)}'
             }
-    
+
     def get_sheet_info(self, spreadsheet_id: str) -> Dict:
         """
         Get basic information about a spreadsheet.
-        
+
         Args:
             spreadsheet_id: ID of the spreadsheet
-            
+
         Returns:
             Dict containing sheet info or error
         """
@@ -91,14 +92,14 @@ class GoogleSheetsService:
             params = {
                 'fields': 'spreadsheetId,properties.title,sheets.properties'
             }
-            
+
             response = requests.get(
                 url,
                 headers=self.headers,
                 params=params,
                 timeout=10
             )
-            
+
             if response.status_code == 200:
                 sheet_data = response.json()
                 return {
@@ -121,41 +122,41 @@ class GoogleSheetsService:
                     'error': f'Failed to get sheet info: {response.status_code}',
                     'details': response.text
                 }
-                
+
         except requests.exceptions.RequestException as e:
             logger.error(f"Get sheet info failed: {str(e)}")
             return {
                 'success': False,
                 'error': f'Request failed: {str(e)}'
             }
-    
+
     def update_sheet_permissions(self, file_id: str, make_public_readable: bool = False) -> Dict:
         """
         Update sheet permissions.
-        
+
         Args:
             file_id: ID of the sheet file
             make_public_readable: Whether to make sheet publicly readable
-            
+
         Returns:
             Dict containing success status
         """
         try:
             permissions_url = f"{self.DRIVE_API_BASE_URL}/files/{file_id}/permissions"
-            
+
             if make_public_readable:
                 permission_data = {
                     "role": "reader",
                     "type": "anyone"
                 }
-                
+
                 response = requests.post(
                     permissions_url,
                     headers=self.headers,
                     json=permission_data,
                     timeout=10
                 )
-                
+
                 if response.status_code == 200:
                     return {
                         'success': True,
@@ -172,8 +173,7 @@ class GoogleSheetsService:
                     'success': True,
                     'message': 'No permission changes needed'
                 }
-                
-        
+
         except requests.exceptions.RequestException as e:
             logger.error(f"Update permissions failed: {str(e)}")
             return {
@@ -184,7 +184,7 @@ class GoogleSheetsService:
     def get_user_sheets(self) -> Dict:
         """
         Get list of user's Google Sheets.
-        
+
         Returns:
             Dict containing sheets list or error
         """
@@ -195,14 +195,14 @@ class GoogleSheetsService:
                 'fields': 'files(id,name,createdTime,modifiedTime,webViewLink)',
                 'pageSize': 50
             }
-            
+
             response = requests.get(
                 url,
                 headers=self.headers,
                 params=params,
                 timeout=15
             )
-            
+
             if response.status_code == 200:
                 files_data = response.json()
                 return {
@@ -225,10 +225,87 @@ class GoogleSheetsService:
                     'error': f'Failed to get sheets: {response.status_code}',
                     'details': response.text
                 }
-                
+
         except requests.exceptions.RequestException as e:
             logger.error(f"Get user sheets failed: {str(e)}")
             return {
                 'success': False,
                 'error': f'Request failed: {str(e)}'
-            } 
+            }
+
+    def get_sheet_data(self, sheet_id: str) -> Dict:
+        """
+        Get data from a Google Sheet for voice commands.
+
+        Args:
+            sheet_id: ID of the spreadsheet
+
+        Returns:
+            Dict containing sheet data or error
+        """
+        try:
+            # Get sheet metadata first
+            url = f"{self.SHEETS_API_BASE_URL}/{sheet_id}"
+
+            response = requests.get(
+                url,
+                headers=self.headers,
+                timeout=10
+            )
+
+            if response.status_code != 200:
+                return {
+                    'success': False,
+                    'error': f'Failed to get sheet metadata: {response.status_code}',
+                    'details': response.text
+                }
+
+            spreadsheet = response.json()
+
+            # Get the first sheet name
+            first_sheet = spreadsheet['sheets'][0]['properties']['title']
+
+            # Get the data from the first sheet
+            range_name = f"{first_sheet}!A:Z"
+            values_url = f"{self.SHEETS_API_BASE_URL}/{sheet_id}/values/{range_name}"
+
+            values_response = requests.get(
+                values_url,
+                headers=self.headers,
+                timeout=10
+            )
+
+            if values_response.status_code != 200:
+                return {
+                    'success': False,
+                    'error': f'Failed to get sheet data: {values_response.status_code}',
+                    'details': values_response.text
+                }
+
+            values_data = values_response.json()
+            values = values_data.get('values', [])
+
+            if not values:
+                return {
+                    'success': False,
+                    'error': 'No data found in sheet'
+                }
+
+            # First row as headers
+            headers = values[0] if values else []
+            # Rest as table data
+            tableData = values[1:] if len(values) > 1 else []
+
+            return {
+                'success': True,
+                'headers': headers,
+                'tableData': tableData,
+                'sheet_name': first_sheet
+            }
+
+        except Exception as e:
+            logger.error(f"Get sheet data error: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Failed to get sheet data: {str(e)}'
+            }

@@ -358,7 +358,7 @@ AUTH_USER_MODEL = 'users.CustomUser'
 import json
 
 # Google Sheets Template Configuration
-GOOGLE_SHEETS_TEMPLATE_ID = os.getenv('GOOGLE_SHEETS_TEMPLATE_ID', '1iMKqLouXzb2XDvYwcysPVxXx0R-Cb6Yo')
+GOOGLE_SHEETS_TEMPLATE_ID = os.getenv('GOOGLE_SHEETS_TEMPLATE_ID', '1h-dR0ergnvgqxXsS6nLFb7lAthuoJ5MVKya4NbYHT2c')
 
 # Load Google Service Account Credentials from JSON file
 GOOGLE_SERVICE_ACCOUNT_CREDENTIALS = {}

@@ -647,20 +647,51 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
   }
 
   // Pattern 1: Add new student (enhanced)
-  const addStudentPattern = /(?:add|new)\s+student\s+(.+?)(?:\s+(?:student\s+)?id\s+(\w+))?$/i;
+  const addStudentPattern = /(?:add|new)\s+student\s+(.+)$/i;
   const addStudentMatch = processedTranscript.match(addStudentPattern);
-  
+
   if (addStudentMatch) {
-    const fullName = addStudentMatch[1].trim();
-    const studentId = addStudentMatch[2] || '';
-    const nameParts = fullName.split(' ');
+    const fullCommand = addStudentMatch[1].trim();
+    console.log('🔥 Full command to parse:', fullCommand);
     
-    console.log('✅ ADD_STUDENT pattern matched:', { fullName, studentId, nameParts });
+    // 🔥 NEW: Smart field extraction
+    let lastName = '';
+    let firstName = '';
+    let studentId = '';
+    
+    // Pattern: "last name kaporas first name vaness"
+    const fieldPattern = /(?:last\s+name|lastname)\s+([^\s]+)(?:\s+(?:first\s+name|firstname)\s+([^\s]+))?|(?:first\s+name|firstname)\s+([^\s]+)(?:\s+(?:last\s+name|lastname)\s+([^\s]+))?/gi;
+    
+    let match;
+    while ((match = fieldPattern.exec(fullCommand)) !== null) {
+      if (match[1]) { // last name first
+        lastName = match[1];
+        if (match[2]) firstName = match[2];
+      } else if (match[3]) { // first name first
+        firstName = match[3];
+        if (match[4]) lastName = match[4];
+      }
+    }
+    
+    // Extract student ID if present
+    const idPattern = /(?:student\s+)?id\s+(\w+)/i;
+    const idMatch = fullCommand.match(idPattern);
+    if (idMatch) {
+      studentId = idMatch[1];
+    }
+    
+    console.log('✅ ADD_STUDENT pattern matched:', { 
+      fullCommand, 
+      lastName, 
+      firstName, 
+      studentId 
+    });
+    
     return {
       type: 'ADD_STUDENT',
       data: {
-        'Last Name': nameParts[0] || '',
-        'First Name': nameParts.slice(1).join(' ') || '',
+        'Last Name': lastName,
+        'First Name': firstName,
         'Student ID': studentId,
         confidence: 'high'
       }
@@ -697,7 +728,7 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
   };
 };
 
-// 🔥 COMPLETELY REWRITTEN: Smart duplicate-aware student finder
+// 🔥 FIXED: Better logic for when to show duplicates
 export const findStudentRowSmart = (tableData, searchName, recentStudents = [], targetColumn = null) => {
   const cleanedSearchName = cleanName(searchName);
   console.log('🔍 Searching for student:', cleanedSearchName);
@@ -713,8 +744,8 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
     );
     if (!hasData) return;
     
-    const firstName = cleanName(row['First Name'] || '');
-    const lastName = cleanName(row['Last Name'] || '');
+    const firstName = cleanName(row['FIRST NAME'] || '');
+    const lastName = cleanName(row['LASTNAME'] || '');
     const fullName = `${firstName} ${lastName}`.trim();
     
     // Check various combinations
@@ -761,7 +792,7 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
         
         allMatches.push({
           index,
-          student: `${row['First Name']} ${row['Last Name']}`,
+          student: `${row['FIRST NAME']} ${row['LASTNAME']}`,
           score,
           matchType,
           candidate,
@@ -776,14 +807,15 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
   // Sort matches by score (best first)
   allMatches.sort((a, b) => a.score - b.score);
   
-  // 🔥 NEW: Smart duplicate resolution logic
+  // 🔥 FIXED: Better duplicate detection
   if (allMatches.length === 0) {
     console.log('❌ No student match found for:', cleanedSearchName);
     return {
       bestMatch: -1,
       possibleMatches: [],
       confidence: 'none',
-      hasDuplicates: false
+      hasDuplicates: false,
+      needsConfirmation: false
     };
   }
   
@@ -795,14 +827,40 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
       bestMatch: match.index,
       possibleMatches: [match],
       confidence: match.score === 0 ? 'high' : match.score < 3 ? 'medium' : 'low',
-      hasDuplicates: false
+      hasDuplicates: false,
+      needsConfirmation: false
     };
   }
   
-  // 🔥 NEW: Multiple matches found - apply smart resolution
+  // 🔥 FIXED: Multiple matches found - apply smart resolution
   console.log('🔍 Multiple matches found:', allMatches);
   
-  // Strategy 1: Prefer empty score cells over filled ones
+  // Strategy 1: If we have a clear exact match (score 0), use it unless there are multiple exact matches
+  const exactMatches = allMatches.filter(match => match.score === 0);
+  if (exactMatches.length === 1) {
+    console.log('✅ Single exact match found:', exactMatches[0]);
+    return {
+      bestMatch: exactMatches[0].index,
+      possibleMatches: allMatches.slice(0, 3),
+      confidence: 'high',
+      hasDuplicates: false,
+      needsConfirmation: false
+    };
+  }
+  
+  // Strategy 2: Multiple exact matches - need user confirmation
+  if (exactMatches.length > 1) {
+    console.log('🤔 Multiple exact matches need confirmation:', exactMatches);
+    return {
+      bestMatch: -1,
+      possibleMatches: exactMatches,
+      confidence: 'ambiguous',
+      hasDuplicates: true,
+      needsConfirmation: true
+    };
+  }
+  
+  // Strategy 3: Prefer empty score cells over filled ones
   if (targetColumn) {
     const emptyMatches = allMatches.filter(match => !match.hasExistingScore);
     if (emptyMatches.length === 1) {
@@ -812,12 +870,13 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
         possibleMatches: allMatches.slice(0, 3),
         confidence: 'high',
         hasDuplicates: false,
+        needsConfirmation: false,
         resolvedBy: 'empty_score'
       };
     }
   }
   
-  // Strategy 2: Check recent context
+  // Strategy 4: Check recent context
   if (recentStudents.length > 0) {
     for (const recent of recentStudents) {
       const recentMatch = allMatches.find(match => 
@@ -830,33 +889,37 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
           possibleMatches: allMatches.slice(0, 3),
           confidence: 'high',
           hasDuplicates: false,
+          needsConfirmation: false,
           resolvedBy: 'recent_context'
         };
       }
     }
   }
   
-  // Strategy 3: Multiple exact matches - need user confirmation
-  const exactMatches = allMatches.filter(match => match.score === 0);
-  if (exactMatches.length > 1) {
-    console.log('🤔 Multiple exact matches need confirmation:', exactMatches);
+  // Strategy 5: If we have significantly different scores, show options
+  const bestScore = allMatches[0].score;
+  const similarMatches = allMatches.filter(match => match.score <= bestScore + 2);
+  
+  if (similarMatches.length > 1) {
+    console.log('🤔 Multiple similar matches need confirmation:', similarMatches);
     return {
       bestMatch: -1,
-      possibleMatches: exactMatches,
+      possibleMatches: similarMatches,
       confidence: 'ambiguous',
       hasDuplicates: true,
       needsConfirmation: true
     };
   }
   
-  // Strategy 4: Best score wins
+  // Strategy 6: Best score wins
   const bestMatch = allMatches[0];
   console.log('✅ Using best score match:', bestMatch);
   return {
     bestMatch: bestMatch.index,
     possibleMatches: allMatches.slice(0, 3),
     confidence: bestMatch.score === 0 ? 'high' : bestMatch.score < 3 ? 'medium' : 'low',
-    hasDuplicates: allMatches.length > 1
+    hasDuplicates: false,
+    needsConfirmation: false
   };
 };
 
@@ -868,6 +931,6 @@ export const findStudentRow = (tableData, firstName, lastName) => {
 
 export const findEmptyRow = (tableData) => {
   return tableData.findIndex(row => {
-    return !row['First Name'] && !row['Last Name'];
+    return !row['FIRST NAME'] && !row['LASTNAME']; // 🔥 Updated keys
   });
 };

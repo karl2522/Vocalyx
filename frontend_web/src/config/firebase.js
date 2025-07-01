@@ -21,10 +21,10 @@ export const auth = getAuth(app);
 // Initialize Google Auth Provider
 export const googleProvider = new GoogleAuthProvider();
 
-// Add Google Drive scope for accessing user's Drive files
+// 🔥 FIXED - Add ALL necessary scopes
 googleProvider.addScope('https://www.googleapis.com/auth/drive.file');
-
-// Optional: You can also add these scopes for additional functionality
+googleProvider.addScope('https://www.googleapis.com/auth/spreadsheets');
+googleProvider.addScope('https://www.googleapis.com/auth/spreadsheets.readonly');
 googleProvider.addScope('profile');
 googleProvider.addScope('email');
 
@@ -33,4 +33,4 @@ googleProvider.setCustomParameters({
   prompt: 'select_account'
 });
 
-export default app; 
+export default app;
