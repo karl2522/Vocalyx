@@ -1,5 +1,5 @@
 import { AlertCircle, ArrowLeft, ChevronDown, Download, Edit2, FileSpreadsheet, HelpCircle, Mic, MicOff, MoreVertical, Plus, RotateCcw, RotateCw, Save, Target, Upload, Users, Volume2, VolumeX, X } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { useNavigate, useParams } from 'react-router-dom';
 import { classRecordService } from '../services/api';
@@ -18,6 +18,12 @@ const ClassRecordExcel = () => {
   const [headers, setHeaders] = useState([]);
   const [lastSaved, setLastSaved] = useState(null);
 
+   const [batchMode, setBatchMode] = useState(false);
+    const [showBatchModal, setShowBatchModal] = useState(false);
+    const [currentBatchColumn, setCurrentBatchColumn] = useState('');
+    const [batchEntries, setBatchEntries] = useState([]);
+    const [isProcessingBatch, setIsProcessingBatch] = useState(false);
+
   const { 
     isListening, 
     transcript, 
@@ -30,69 +36,144 @@ const ClassRecordExcel = () => {
     addCommandHistory,
     alternatives,
     buildContextDictionary,
+    interimBatchCommand,
+    setInterimBatchCommand
   } = useVoiceRecognition();
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [lastVoiceCommand, setLastVoiceCommand] = useState('');
-
-  const [batchMode, setBatchMode] = useState(false);
-
-  // 🔥 NEW: Duplicate handling state
   const [duplicateOptions, setDuplicateOptions] = useState(null);
-
-  // 🔥 NEW: Dropdown state management
   const [dropdowns, setDropdowns] = useState({
     tools: false,
     voice: false,
     edit: false
   });
-
-  // 🔥 NEW: Voice guide modal state
   const [showVoiceGuide, setShowVoiceGuide] = useState(false);
 
-  useEffect(() => {
-    if (transcript && 
-        transcript.trim() && 
-        transcript.trim().length >= 3 && 
-        !isListening && 
-        transcript !== lastVoiceCommand) {
-      
-      console.log('🔥 DEBUG: useEffect triggered - batchMode:', batchMode);
-      console.log('🔥 DEBUG: transcript:', transcript);
-      
-      if (batchMode) {
-        console.log('🔥 DEBUG: Calling handleBatchVoiceCommand...');
-        handleBatchVoiceCommand(transcript);
-        setLastVoiceCommand(transcript);
-        
-        if (!transcript.toLowerCase().includes('done') && 
-            !transcript.toLowerCase().includes('finish') &&
-            !transcript.toLowerCase().includes('exit')) {
-          
-          setTimeout(() => {
-            clearTranscript();
-            setTimeout(() => {
-              if (batchMode && !isListening) {
-                console.log('🔄 Restarting voice for batch mode...');
-                startListening(true);
-              }
-            }, 500);
-          }, 1000);
-        } else {
-          setTimeout(() => clearTranscript(), 2000);
-        }
-        
-      } else {
-        console.log('🔥 DEBUG: Calling handleVoiceCommand (normal mode)...');
-        handleVoiceCommand(transcript);
-        setLastVoiceCommand(transcript);
-        setTimeout(() => clearTranscript(), 2000);
-      }
-    }
-  }, [transcript, isListening, lastVoiceCommand, clearTranscript, batchMode, startListening]);
+  const isFirstRender = useRef(true);
 
   useEffect(() => {
-    fetchClassRecord();
-  }, [id]);
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      console.log('🔥 FIRST RENDER: Component mounted');
+    }
+  }, []);
+
+    useEffect(() => {
+      console.log('🔥 MAIN EFFECT: Checking conditions...');
+      console.log('🔥 MAIN EFFECT: transcript:', transcript);
+      console.log('🔥 MAIN EFFECT: transcript.trim().length:', transcript?.trim().length);
+      console.log('🔥 MAIN EFFECT: isListening:', isListening);
+      console.log('🔥 MAIN EFFECT: lastVoiceCommand:', lastVoiceCommand);
+      console.log('🔥 MAIN EFFECT: batchMode:', batchMode);
+
+      if (transcript && 
+          transcript.trim() && 
+          transcript.trim().length >= 3 && 
+          !isListening && 
+          transcript !== lastVoiceCommand) {
+        
+        console.log('🔥 MAIN EFFECT: ✅ All conditions met, processing...');
+        console.log('🔥 MAIN EFFECT: batchMode:', batchMode);
+        console.log('🔥 MAIN EFFECT: transcript:', transcript);
+        
+        if (batchMode) {
+          console.log('🔥 MAIN EFFECT: 📦 BATCH MODE - Calling handleBatchVoiceCommand...');
+          
+          // 🔥 FIX: Only process if it's a command, not already processed interim
+          if (!transcript.toLowerCase().includes('done') && 
+              !transcript.toLowerCase().includes('finish') &&
+              !transcript.toLowerCase().includes('exit')) {
+            console.log('🔥 MAIN EFFECT: 🔄 Skipping main processing - using interim processing only');
+            setLastVoiceCommand(transcript);
+            setTimeout(() => {
+              console.log('🔥 MAIN EFFECT: 🧹 Clearing transcript (batch mode)');
+              clearTranscript();
+            }, 1000);
+            return; // 🔥 EARLY RETURN - Don't process again
+          }
+          
+          handleBatchVoiceCommand(transcript);
+          setLastVoiceCommand(transcript);
+          
+          if (transcript.toLowerCase().includes('done') || 
+              transcript.toLowerCase().includes('finish') ||
+              transcript.toLowerCase().includes('exit')) {
+            console.log('🔥 MAIN EFFECT: 🏁 FINISHING batch mode detected');
+            window.batchModeFinishing = true;
+            setTimeout(() => {
+              console.log('🔥 MAIN EFFECT: 🧹 Clearing transcript after done command');
+              clearTranscript();
+            }, 2000);
+          }
+          
+        } else {
+          console.log('🔥 MAIN EFFECT: 🎯 NORMAL MODE - Calling handleVoiceCommand...');
+          handleVoiceCommand(transcript);
+          setLastVoiceCommand(transcript);
+          setTimeout(() => clearTranscript(), 2000);
+        }
+      } else {
+        console.log('🔥 MAIN EFFECT: ❌ Conditions not met, skipping...');
+      }
+    }, [transcript, isListening, lastVoiceCommand, clearTranscript, batchMode]);
+
+    useEffect(() => {
+      fetchClassRecord();
+    }, [id]);
+
+   useEffect(() => {
+    console.log('🔥 BATCH MODE CHANGED:', batchMode);
+    console.log('🔥 SHOWBATCHMODAL:', showBatchModal);
+    console.log('🔥 CURRENT COLUMN:', currentBatchColumn);
+    console.log('🔥 WINDOW FLAGS:', {
+      batchModeActive: window.batchModeActive,
+      batchModeFinishing: window.batchModeFinishing
+    });
+    
+    // Get more detailed stack trace
+    const stack = new Error().stack;
+    const lines = stack.split('\n').slice(0, 8); // Get top 8 lines
+    console.log('🔥 DETAILED STACK:', lines);
+    
+    // Check if it's being called from an unexpected place
+    if (!batchMode && showBatchModal) {
+      console.log('🚨 WARNING: batchMode is false but modal is still open!');
+    }
+  }, [batchMode, showBatchModal, currentBatchColumn]);
+
+    useEffect(() => {
+      if (interimBatchCommand && batchMode && currentBatchColumn) {
+        console.log('🔥 REAL-TIME: Processing interim command:', interimBatchCommand);
+        
+        const studentScorePattern = /^(.+?)\s+(\d+(?:\.\d+)?)$/;
+        const match = interimBatchCommand.trim().match(studentScorePattern);
+        
+        if (match) {
+          const [, studentName, score] = match;
+          console.log('🔥 REAL-TIME: Calling processBatchEntry for:', studentName, score);
+          
+          // 🔥 SIMPLIFIED: Just process it once
+          processBatchEntry(studentName.trim(), score.trim());
+          
+          // 🔥 Clear immediately
+          setInterimBatchCommand('');
+        }
+      }
+    }, [interimBatchCommand, batchMode, currentBatchColumn]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && batchMode) {
+        console.log('🔥 ESCAPE: Preventing escape key in batch mode');
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown, true); // Use capture phase
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
+  }, [batchMode]);
 
  const fetchClassRecord = async () => {
     try {
@@ -408,14 +489,7 @@ const handleAutoNumberStudents = async () => {
         handleBatchVoiceCommand(transcript);
         return;
     }
-    
-    // 🔥 REMOVE THIS DISABLED MESSAGE:
-    // toast.error(`🎙️ Voice commands are temporarily disabled. Please use the Google Sheets interface directly.`);
-    // if (voiceEnabled) {
-    //   speakText('Voice commands are temporarily disabled. Please use the Google Sheets interface directly.');
-    // }
 
-    // 🔥 ADD THIS INSTEAD:
     const command = parseVoiceCommand(transcript, headers, [], {
         recentStudents,
         commandHistory: [],
@@ -442,6 +516,230 @@ const handleAutoNumberStudents = async () => {
         timestamp: new Date(),
         executed: true
     });
+};
+
+const handleBatchVoiceCommand = async (transcript) => {
+  console.log('🔥 BATCH VOICE: Processing:', transcript);
+  
+  // Handle "done" or "finish" commands
+  if (/\b(done|finish|exit|complete)\b/i.test(transcript)) {
+    console.log('🔥 BATCH VOICE: Finishing batch mode - calling executeBatchEntries');
+    await executeBatchEntries();
+    return;
+  }
+
+  // Handle "clear" command
+  if (/\b(clear|reset|empty)\b/i.test(transcript)) {
+    console.log('🔥 BATCH VOICE: Clearing entries');
+    setBatchEntries([]);
+    toast.success('Batch entries cleared');
+    return;
+  }
+
+  // Parse student name + score pattern: "Capuras 50" or "John 85"
+  const studentScorePattern = /^(.+?)\s+(\d+(?:\.\d+)?)$/;
+  const match = transcript.trim().match(studentScorePattern);
+  
+  if (match) {
+    const [, studentName, score] = match;
+    console.log('🔥 BATCH VOICE: Processing batch entry:', studentName, score);
+    await processBatchEntry(studentName.trim(), score.trim());
+  } else {
+    console.log('🔥 BATCH VOICE: Pattern not matched:', transcript);
+  }
+};
+
+const processBatchEntry = async (studentName, score) => {
+  console.log('🔥 PROCESS BATCH: 🚀 Starting processBatchEntry');
+  console.log('🔥 PROCESS BATCH: studentName:', studentName);
+  console.log('🔥 PROCESS BATCH: score:', score);
+  console.log('🔥 PROCESS BATCH: currentBatchColumn:', currentBatchColumn);
+  
+  if (!currentBatchColumn) {
+    console.log('🔥 PROCESS BATCH: ❌ No column selected');
+    toast.error('Please select a column first');
+    return;
+  }
+
+  // 🔥 REMOVE ALL DUPLICATE PREVENTION - LET IT PROCESS EVERYTHING
+  try {
+    console.log('🔥 PROCESS BATCH: 🔄 Setting isProcessingBatch to true');
+    setIsProcessingBatch(true);
+    
+    console.log('🔥 PROCESS BATCH: 📊 Fetching sheet data...');
+    const sheetsResponse = await classRecordService.getGoogleSheetsDataServiceAccount(classRecord.google_sheet_id);
+    
+    if (!sheetsResponse.data?.success) {
+      throw new Error('Could not load student data');
+    }
+
+    console.log('🔥 PROCESS BATCH: ✅ Sheet data loaded');
+    const convertedTableData = sheetsResponse.data.tableData.map(row => {
+      const rowObject = {};
+      sheetsResponse.data.headers.forEach((header, index) => {
+        rowObject[header] = row[index] || '';
+      });
+      return rowObject;
+    });
+
+    console.log('🔥 PROCESS BATCH: 🔍 Searching for student...');
+    const result = findStudentRowSmart(convertedTableData, studentName, recentStudents, currentBatchColumn);
+    console.log('🔥 PROCESS BATCH: 🔍 Search result:', result);
+    
+    const entryId = `${studentName}_${Date.now()}`;
+    let newEntry;
+
+    if (result.bestMatch !== -1) {
+      console.log('🔥 PROCESS BATCH: ✅ Student found!');
+      const student = convertedTableData[result.bestMatch];
+      const fullStudentName = `${student['FIRST NAME']} ${student['LASTNAME']}`.trim();
+      
+      const hasExistingScore = student[currentBatchColumn] && 
+                              String(student[currentBatchColumn]).trim() !== '' && 
+                              String(student[currentBatchColumn]).trim() !== '0';
+
+      newEntry = {
+        id: entryId,
+        originalInput: studentName,
+        studentName: fullStudentName,
+        score: score,
+        status: 'found',
+        rowIndex: result.bestMatch,
+        hasExistingScore,
+        existingValue: hasExistingScore ? student[currentBatchColumn] : null,
+        confidence: result.confidence
+      };
+
+      addRecentStudent(fullStudentName);
+      console.log('🔥 PROCESS BATCH: ✅ Student found, adding to UI');
+      
+    } else {
+      console.log('🔥 PROCESS BATCH: ❌ Student not found');
+      newEntry = {
+        id: entryId,
+        originalInput: studentName,
+        studentName: studentName,
+        score: score,
+        status: 'not_found',
+        rowIndex: -1,
+        hasExistingScore: false,
+        existingValue: null,
+        confidence: 'none'
+      };
+      console.log('🔥 PROCESS BATCH: ❌ Student not found, adding to UI');
+    }
+
+    console.log('🔥 PROCESS BATCH: 📝 Adding entry to batch list:', newEntry);
+    
+    // 🔥 SIMPLIFIED: Just add to the list - React will handle duplicates
+    setBatchEntries(prev => {
+      console.log('🔥 SET BATCH ENTRIES: Current entries:', prev.length);
+      console.log('🔥 SET BATCH ENTRIES: Adding entry:', newEntry.studentName);
+      
+      // 🔥 SIMPLE: Filter out any existing entry with same name, then add new one
+      const filtered = prev.filter(entry => 
+        entry.originalInput.toLowerCase() !== studentName.toLowerCase()
+      );
+      
+      const newEntries = [...filtered, newEntry];
+      console.log('🔥 SET BATCH ENTRIES: New total entries:', newEntries.length);
+      
+      return newEntries;
+    });
+
+  } catch (error) {
+    console.error('🔥 PROCESS BATCH: ❌ Error:', error);
+    toast.error(`Error processing ${studentName}: ${error.message}`);
+  } finally {
+    console.log('🔥 PROCESS BATCH: 🏁 Setting isProcessingBatch to false');
+    setIsProcessingBatch(false);
+  }
+};
+
+const executeBatchEntries = async () => {
+  const validEntries = batchEntries.filter(entry => entry.status === 'found');
+  
+  if (validEntries.length === 0) {
+    toast.error('No valid entries to save');
+    return;
+  }
+
+  try {
+    // 🔥 Stop continuous listening
+    window.batchModeFinishing = true;
+    
+    setIsProcessingBatch(true);
+    
+    // Process each valid entry
+    for (const entry of validEntries) {
+      await classRecordService.updateGoogleSheetsCell(
+        classRecord.google_sheet_id,
+        entry.rowIndex,
+        currentBatchColumn,
+        entry.score
+      );
+    }
+
+    toast.success(`✅ Batch saved: ${validEntries.length} students updated`);
+    if (voiceEnabled) {
+      speakText(`Batch complete. ${validEntries.length} students updated.`);
+    }
+
+    // Reset batch mode
+    console.log('🔥 EXECUTE BATCH: Setting batchMode to false after completion');
+    window.batchModeActive = false;
+    setBatchModeProtected(false, 'executeBatchEntries');
+    setShowBatchModal(false);
+    setBatchEntries([]);
+    setCurrentBatchColumn('');
+    
+  } catch (error) {
+    console.error('Batch execution error:', error);
+    toast.error('Failed to save batch entries');
+  } finally {
+    setIsProcessingBatch(false);
+  }
+};
+
+const setBatchModeProtected = useCallback((value, reason = 'unknown') => {
+  console.log(`🔥 SET BATCH MODE: ${value} - Reason: ${reason}`);
+  console.log('🔥 CALL STACK:', new Error().stack.split('\n').slice(0, 5));
+  setBatchMode(value);
+}, []);
+
+const startBatchMode = () => {
+  console.log('🔥 START BATCH: Setting batchMode to true');
+  setBatchModeProtected(true, 'startBatchMode');
+  setShowBatchModal(true);
+  setBatchEntries([]);
+  setCurrentBatchColumn('');
+  
+  window.batchModeActive = false; 
+  window.batchModeFinishing = false;
+  
+  if (voiceEnabled) {
+    speakText('Batch mode started. Please select a column.');
+  }
+};
+
+const cancelBatchMode = () => {
+  console.log('🔥 CANCEL BATCH: Setting batchMode to false');
+  // 🔥 Stop auto-restart before closing
+  window.batchModeActive = false;
+  window.batchModeFinishing = true;
+  
+  setBatchModeProtected(false, 'cancelBatchMode');
+  setShowBatchModal(false);
+  setBatchEntries([]);
+  setCurrentBatchColumn('');
+  
+  if (isListening) {
+    stopListening();
+  }
+  
+  if (voiceEnabled) {
+    speakText('Batch mode cancelled');
+  }
 };
 
 const handleExportToExcel = async () => {
@@ -817,10 +1115,23 @@ const handleExportToPDF = async () => {
                   
                   <hr className="my-2 border-slate-200" />
                   
-                  {/* 🔥 NEW: Auto-number option */}
+                  {/* Batch Mode & Auto-number options */}
                   <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
-                    Sheet Tools
+                    Grading Tools
                   </div>
+                  
+                  {/* 🔥 NEW: Batch Mode Button */}
+                  <button
+                    onClick={() => {
+                      startBatchMode();
+                      closeAllDropdowns();
+                    }}
+                    className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                  >
+                    <Users className="w-4 h-4 text-purple-600" />
+                    <span>Batch Grading</span>
+                  </button>
+                  
                   <button
                     onClick={() => {
                       handleAutoNumberStudents();
@@ -1073,6 +1384,273 @@ const handleExportToPDF = async () => {
                 >
                   Got it!
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 🔥 NEW: Batch Mode Modal */}
+        {showBatchModal && (
+          <div 
+            className="fixed inset-0 bg-slate-900 bg-opacity-50 flex items-center justify-center z-50 p-4"
+            onMouseDown={(e) => {
+              // 🔥 PREVENT closing when clicking background
+              console.log('🔥 MODAL BACKGROUND: Click prevented');
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          >
+            <div 
+              className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col"
+              onMouseDown={(e) => {
+                // 🔥 PREVENT event bubbling
+                console.log('🔥 MODAL CONTENT: Click prevented from bubbling');
+                e.stopPropagation();
+              }}
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-6 border-b border-slate-200 bg-slate-50">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                    <Users className="w-5 h-5 text-purple-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-slate-900">Batch Grading Mode</h2>
+                    {currentBatchColumn ? (
+                      <p className="text-sm text-slate-600">Column: <span className="font-medium text-purple-600">{currentBatchColumn}</span></p>
+                    ) : (
+                      <p className="text-sm text-slate-600">Select a column to start batch grading</p>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={(e) => {
+                    console.log('🔥 CLOSE BUTTON: Clicked - calling cancelBatchMode');
+                    e.preventDefault();
+                    e.stopPropagation();
+                    cancelBatchMode();
+                  }}
+                  className="text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              
+              {/* Modal Content */}
+              <div className="flex-1 overflow-hidden flex flex-col p-6">
+                {!currentBatchColumn ? (
+                  /* Column Selection */
+                  <div className="text-center py-8">
+                    <div className="mb-6">
+                      <div className="w-16 h-16 bg-purple-100 rounded-lg flex items-center justify-center mx-auto mb-4">
+                        <Users className="w-8 h-8 text-purple-600" />
+                      </div>
+                      <h3 className="text-lg font-medium mb-2">Choose a Column</h3>
+                      <p className="text-gray-600 mb-6">
+                        Select which column you want to grade in batch mode
+                      </p>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                      {headers.filter(h => !['NO.', 'LASTNAME', 'FIRST NAME', 'STUDENT ID'].includes(h)).map(header => (
+                        <button
+                          key={header}
+                            onClick={() => {
+                            console.log('🔥 COLUMN SELECT: 🎯 Column selected:', header);
+                            setCurrentBatchColumn(header);
+                            window.batchModeActive = true;
+                            window.batchModeFinishing = false;
+                            console.log('🔥 COLUMN SELECT: 🚀 Set window.batchModeActive = true');
+                            console.log('🔥 COLUMN SELECT: 🚀 Set window.batchModeFinishing = false');
+                            toast.success(`Column set to: ${header}. Start speaking!`);
+                            
+                            // Start listening with a slight delay
+                            setTimeout(() => {
+                              console.log('🔥 COLUMN SELECT: 🎤 Checking if should start listening...');
+                              console.log('🔥 COLUMN SELECT: isListening:', isListening);
+                              if (!isListening) {
+                                console.log('🔥 COLUMN SELECT: 🎤 Starting voice recognition...');
+                                startListening(true);
+                              } else {
+                                console.log('🔥 COLUMN SELECT: 🎤 Already listening');
+                              }
+                            }, 800);
+                          }}
+                          className="bg-purple-50 hover:bg-purple-100 text-purple-800 px-4 py-3 rounded-lg transition-colors border border-purple-200 font-medium"
+                        >
+                          {header}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  /* Batch Entries Display */
+                  <>
+                    {/* Status Bar */}
+                    <div className="bg-purple-50 rounded-lg p-4 mb-6 border border-purple-200">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <div className={`w-3 h-3 rounded-full ${isListening ? 'bg-red-500 animate-pulse' : 'bg-green-500'}`}></div>
+                          <div>
+                            <h3 className="font-medium text-purple-800">
+                              {isListening ? '🎙️ Listening...' : '✅ Ready for voice input'}
+                            </h3>
+                            <p className="text-purple-600 text-sm">
+                              Say: "Capuras 85" or "Maria 92" • Say "done" when finished
+                            </p>
+                          </div>
+                          {/* 🔥 DEBUG: Manual restart button */}
+                          <button
+                            onClick={() => {
+                              console.log('🔥 DEBUG: Manual restart clicked');
+                              console.log('🔥 DEBUG: Current isListening:', isListening);
+                              if (!isListening && window.batchModeActive) {
+                                console.log('🔥 DEBUG: Starting voice recognition manually');
+                                startListening(true);
+                              }
+                            }}
+                            className="px-3 py-1 bg-purple-200 text-purple-800 rounded text-xs"
+                          >
+                            🔄 Restart Voice
+                          </button>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-purple-800 font-medium">
+                            {batchEntries.filter(e => e.status === 'found').length} valid entries
+                          </div>
+                          <div className="text-purple-600 text-sm">
+                            {batchEntries.filter(e => e.status === 'not_found').length} not found
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-yellow-50 rounded-lg p-2 mb-4 border border-yellow-200">
+                      <div className="text-yellow-800 text-sm">
+                        🐛 DEBUG: batchEntries.length = {batchEntries.length}
+                        {batchEntries.length > 0 && (
+                          <div className="mt-1">
+                            Entries: {batchEntries.map(e => `${e.studentName}(${e.status})`).join(', ')}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Entries List */}
+                    <div className="flex-1 overflow-auto">
+
+                      <div className="text-xs text-gray-500 mb-2">
+                        Debug: {batchEntries.length} entries total
+                      </div>
+                      {batchEntries.length === 0 ? (
+                        <div className="text-center py-12 text-gray-500">
+                          <Mic className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                          <p className="text-lg mb-2">Start speaking to add entries</p>
+                          <p className="text-sm">Example: "Capuras 85", "Maria 92"</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {batchEntries.map((entry) => (
+                            <div
+                              key={entry.id}
+                              className={`flex items-center justify-between rounded-lg p-4 border-2 transition-all ${
+                                entry.status === 'found' 
+                                  ? 'bg-green-50 border-green-200' 
+                                  : 'bg-red-50 border-red-200'
+                              }`}
+                            >
+                              <div className="flex items-center space-x-3">
+                                {/* Status Icon */}
+                                {entry.status === 'found' ? (
+                                  <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+                                    <span className="text-white text-sm">✓</span>
+                                  </div>
+                                ) : (
+                                  <div className="w-6 h-6 bg-red-500 rounded-full flex items-center justify-center">
+                                    <span className="text-white text-sm">✗</span>
+                                  </div>
+                                )}
+                                
+                                {/* Student Info */}
+                                <div>
+                                  <div className="font-medium">
+                                    {entry.studentName} - {entry.score}
+                                  </div>
+                                  <div className="text-sm text-gray-500">
+                                    {entry.status === 'found' ? (
+                                      <>
+                                        Found student
+                                        {entry.hasExistingScore && (
+                                          <span className="ml-2 text-amber-600">
+                                            (was: {entry.existingValue})
+                                          </span>
+                                        )}
+                                      </>
+                                    ) : (
+                                      `"${entry.originalInput}" not found in sheet`
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              {/* Remove Button */}
+                              <button
+                                onClick={() => setBatchEntries(prev => prev.filter(e => e.id !== entry.id))}
+                                className="text-gray-400 hover:text-red-500 p-1"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-200">
+                      <div className="flex space-x-3">
+                        <button
+                          onClick={() => setCurrentBatchColumn('')}
+                          className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium"
+                        >
+                          ← Change Column
+                        </button>
+                        <button
+                          onClick={() => setBatchEntries([])}
+                          disabled={batchEntries.length === 0}
+                          className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 disabled:opacity-50"
+                        >
+                          Clear All
+                        </button>
+                      </div>
+                      
+                      <div className="flex space-x-3">
+                        <button
+                          onClick={cancelBatchMode}
+                          className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={executeBatchEntries}
+                          disabled={batchEntries.filter(e => e.status === 'found').length === 0 || isProcessingBatch}
+                          className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center space-x-2"
+                        >
+                          {isProcessingBatch ? (
+                            <>
+                              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                              <span>Saving...</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>Save {batchEntries.filter(e => e.status === 'found').length} Students</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>
