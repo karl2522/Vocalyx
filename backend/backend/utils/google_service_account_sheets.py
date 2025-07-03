@@ -582,3 +582,267 @@ class GoogleServiceAccountSheets:
         except Exception as e:
             logger.error(f"Error counting students: {str(e)}")
             return 0
+
+    def get_all_sheets_data(self, sheet_id: str) -> dict:
+        """
+        Get data from ALL sheets in a Google Spreadsheet.
+
+        Args:
+            sheet_id: ID of the spreadsheet
+
+        Returns:
+            Dict containing all sheets data or error
+        """
+        try:
+            # Get sheet metadata first
+            spreadsheet = self.sheets_service.spreadsheets().get(spreadsheetId=sheet_id).execute()
+            all_sheets = []
+
+            # 🔥 Loop through ALL sheets instead of just the first one
+            for sheet_info in spreadsheet['sheets']:
+                sheet_name = sheet_info['properties']['title']
+                sheet_id_internal = sheet_info['properties']['sheetId']
+
+                try:
+                    # Get data for this specific sheet
+                    range_name = f"'{sheet_name}'!A1:Z100"  # Use sheet name in quotes for safety
+                    result = self.sheets_service.spreadsheets().values().get(
+                        spreadsheetId=sheet_id,
+                        range=range_name
+                    ).execute()
+
+                    values = result.get('values', [])
+
+                    if values and len(values) >= 2:  # Only add sheets that have header data
+                        main_headers = values[0] if len(values) > 0 else []
+                        sub_headers = values[1] if len(values) > 1 else []
+
+                        # Combine headers for better voice recognition
+                        combined_headers = []
+                        for i, (main, sub) in enumerate(zip(main_headers, sub_headers)):
+                            if sub and sub.strip():
+                                combined_headers.append(sub.strip())
+                            elif main and main.strip():
+                                combined_headers.append(main.strip())
+                            else:
+                                combined_headers.append(f"Column_{i + 1}")
+
+                        tableData = values[2:] if len(values) > 2 else []
+
+                        all_sheets.append({
+                            'sheet_name': sheet_name,
+                            'sheet_id': sheet_id_internal,
+                            'headers': combined_headers,
+                            'main_headers': main_headers,
+                            'sub_headers': sub_headers,
+                            'tableData': tableData,
+                            'row_count': len(tableData)
+                        })
+
+                except Exception as sheet_error:
+                    logger.warning(f"Could not get data for sheet '{sheet_name}': {str(sheet_error)}")
+                    # Add sheet info even if we can't get data
+                    all_sheets.append({
+                        'sheet_name': sheet_name,
+                        'sheet_id': sheet_id_internal,
+                        'headers': [],
+                        'main_headers': [],
+                        'sub_headers': [],
+                        'tableData': [],
+                        'row_count': 0,
+                        'error': str(sheet_error)
+                    })
+
+            return {
+                'success': True,
+                'sheets': all_sheets,
+                'total_sheets': len(all_sheets)
+            }
+
+        except Exception as e:
+            logger.error(f"Get all sheets data error: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Failed to get sheets data: {str(e)}'
+            }
+
+    def get_specific_sheet_data(self, sheet_id: str, sheet_name: str) -> dict:
+        """
+        Get data from a specific sheet by name.
+
+        Args:
+            sheet_id: ID of the spreadsheet
+            sheet_name: Name of the specific sheet to get data from
+
+        Returns:
+            Dict containing sheet data or error
+        """
+        try:
+            # Get data from the specific sheet
+            range_name = f"'{sheet_name}'!A1:Z100"  # Use specific sheet name in quotes
+            result = self.sheets_service.spreadsheets().values().get(
+                spreadsheetId=sheet_id,
+                range=range_name
+            ).execute()
+
+            values = result.get('values', [])
+
+            if not values:
+                return {
+                    'success': False,
+                    'error': f'No data found in sheet "{sheet_name}"'
+                }
+
+            # Get BOTH header rows for voice commands
+            main_headers = values[0] if len(values) > 0 else []
+            sub_headers = values[1] if len(values) > 1 else []
+
+            # Combine headers for better voice recognition
+            combined_headers = []
+            for i, (main, sub) in enumerate(zip(main_headers, sub_headers)):
+                if sub and sub.strip():
+                    combined_headers.append(sub.strip())
+                elif main and main.strip():
+                    combined_headers.append(main.strip())
+                else:
+                    combined_headers.append(f"Column_{i + 1}")
+
+            # Rest of the data (skip first 2 rows which are headers)
+            tableData = values[2:] if len(values) > 2 else []
+
+            return {
+                'success': True,
+                'headers': combined_headers,
+                'main_headers': main_headers,
+                'sub_headers': sub_headers,
+                'tableData': tableData,
+                'sheet_name': sheet_name
+            }
+
+        except Exception as e:
+            logger.error(f"Get specific sheet data error: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Failed to get sheet data: {str(e)}'
+            }
+
+    def get_sheets_list(self, sheet_id: str) -> dict:
+        """
+        Get list of all sheets in a Google Spreadsheet.
+
+        Args:
+            sheet_id: ID of the spreadsheet
+
+        Returns:
+            Dict containing sheets list or error
+        """
+        try:
+            # Get sheet metadata
+            spreadsheet = self.sheets_service.spreadsheets().get(spreadsheetId=sheet_id).execute()
+
+            sheets_list = []
+            for sheet_info in spreadsheet['sheets']:
+                sheet_name = sheet_info['properties']['title']
+                sheet_id_internal = sheet_info['properties']['sheetId']
+                sheet_properties = sheet_info['properties']
+
+                sheets_list.append({
+                    'sheet_name': sheet_name,
+                    'sheet_id': sheet_id_internal,
+                    'index': sheet_properties.get('index', 0),
+                    'sheet_type': sheet_properties.get('sheetType', 'GRID'),
+                    'grid_properties': sheet_properties.get('gridProperties', {})
+                })
+
+            return {
+                'success': True,
+                'sheets': sheets_list,
+                'total_sheets': len(sheets_list),
+                'spreadsheet_title': spreadsheet.get('properties', {}).get('title', 'Unknown')
+            }
+
+        except Exception as e:
+            logger.error(f"Get sheets list error: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Failed to get sheets list: {str(e)}'
+            }
+
+    def update_cell_in_sheet(self, sheet_id: str, row_index: int, column_name: str, value: str,
+                             sheet_name: str = None) -> dict:
+        """
+        Update a single cell in a specific sheet of the Google Spreadsheet.
+
+        Args:
+            sheet_id: ID of the spreadsheet
+            row_index: 0-based row index (0 = first data row, skipping headers)
+            column_name: Name of the column (e.g., 'QUIZ 1')
+            value: Value to set in the cell
+            sheet_name: Name of the specific sheet (if None, uses first sheet)
+
+        Returns:
+            Dict containing success status and update info
+        """
+        try:
+            # Get sheet data to find column index and sheet name
+            if sheet_name:
+                sheet_data = self.get_specific_sheet_data(sheet_id, sheet_name)
+            else:
+                sheet_data = self.get_sheet_data(sheet_id)
+
+            if not sheet_data['success']:
+                return sheet_data
+
+            headers = sheet_data['headers']
+            target_sheet_name = sheet_data['sheet_name']
+
+            # Find column index
+            try:
+                column_index = headers.index(column_name)
+            except ValueError:
+                logger.error(f"Column '{column_name}' not found in headers: {headers}")
+                return {
+                    'success': False,
+                    'error': f'Column "{column_name}" not found. Available columns: {headers}'
+                }
+
+            # Convert column index to letter (A, B, C, etc.)
+            column_letter = chr(65 + column_index)
+
+            # Calculate actual sheet row (skip 2 header rows, convert to 1-based)
+            sheet_row = row_index + 3  # +2 for headers, +1 for 1-based indexing
+
+            cell_range = f"'{target_sheet_name}'!{column_letter}{sheet_row}"
+
+            logger.info(f"Updating cell {cell_range} with value '{value}'")
+
+            # Update the cell
+            body = {
+                'values': [[str(value)]]
+            }
+
+            result = self.sheets_service.spreadsheets().values().update(
+                spreadsheetId=sheet_id,
+                range=cell_range,
+                valueInputOption='RAW',
+                body=body
+            ).execute()
+
+            logger.info(f"Successfully updated cell {cell_range} with value '{value}'")
+
+            return {
+                'success': True,
+                'updated_cells': result.get('updatedCells', 0),
+                'cell_range': cell_range,
+                'value': value,
+                'row_index': row_index,
+                'column_name': column_name,
+                'sheet_name': target_sheet_name
+            }
+
+        except Exception as e:
+            logger.error(f"Unexpected error updating cell in sheet: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Failed to update cell: {str(e)}'
+            }

@@ -16,7 +16,7 @@ import {
 } from 'react-icons/fi';
 import { RiSoundModuleLine } from 'react-icons/ri';
 import { Link } from 'react-router-dom';
-import { classRecordService } from '../services/api';
+import { enhancedClassRecordService as classRecordService } from '../services/api';
 import { showToast } from '../utils/toast.jsx';
 import DashboardLayout from './layouts/DashboardLayout';
 import CreateClassRecordModal from './modals/CreateClassRecordModal';
@@ -649,7 +649,7 @@ const ClassRecords = () => {
           </div>
         )}
         
-        {/* 🔥 ENHANCED: Create/Edit Class Record Modal */}
+        {/* 🔥 ENHANCED: Create/Edit Class Record Modal with duplicate detection */}
         <CreateClassRecordModal
           isOpen={isModalOpen}
           onClose={() => {
@@ -659,6 +659,7 @@ const ClassRecords = () => {
           onSubmit={editingRecord ? handleUpdateRecord : handleCreateRecord}
           editData={editingRecord}
           isEditing={!!editingRecord}
+          existingRecords={classRecords}
         />
 
         {/* 🔥 NEW: Delete Confirmation Modal */}

@@ -1,8 +1,8 @@
-import { BookOpen, Calendar, X, User, FileText } from 'lucide-react';
+import { BookOpen, Calendar, X, User, FileText, AlertTriangle, CheckCircle } from 'lucide-react';
 import PropTypes from 'prop-types';
 import { useRef, useState, useEffect } from 'react';
 
-const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing }) => {
+const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing, existingRecords = [] }) => {
   const [formData, setFormData] = useState({
     name: '',
     semester: '',
@@ -11,7 +11,61 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
   });
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const [duplicateInfo, setDuplicateInfo] = useState(null);
   const modalRef = useRef(null);
+
+  // 🔥 NEW: Real-time duplicate detection
+  useEffect(() => {
+    if (!formData.name || !formData.semester) {
+      setDuplicateInfo(null);
+      return;
+    }
+
+    // Skip duplicate check for current record when editing
+    const recordsToCheck = isEditing 
+      ? existingRecords.filter(record => record.id !== editData?.id)
+      : existingRecords;
+
+    const duplicate = recordsToCheck.find(record => {
+      const nameMatch = record.name.toLowerCase().trim() === formData.name.toLowerCase().trim();
+      const semesterMatch = record.semester === formData.semester;
+      
+      // If teacher name is provided, include it in duplicate check
+      if (formData.teacher_name.trim()) {
+        const teacherMatch = record.teacher_name?.toLowerCase().trim() === formData.teacher_name.toLowerCase().trim();
+        return nameMatch && semesterMatch && teacherMatch;
+      }
+      
+      // If no teacher name, just check name + semester
+      return nameMatch && semesterMatch;
+    });
+
+    if (duplicate) {
+      setDuplicateInfo({
+        type: 'exact',
+        record: duplicate,
+        message: formData.teacher_name.trim() 
+          ? `A record with this name already exists for ${formData.semester} with ${duplicate.teacher_name || 'the same teacher'}`
+          : `A record with this name already exists for ${formData.semester}`
+      });
+    } else {
+      // Check for similar names (different semester/teacher - just a warning)
+      const similar = recordsToCheck.find(record => 
+        record.name.toLowerCase().trim() === formData.name.toLowerCase().trim() &&
+        record.semester !== formData.semester
+      );
+      
+      if (similar) {
+        setDuplicateInfo({
+          type: 'similar',
+          record: similar,
+          message: `Similar record "${similar.name}" exists in ${similar.semester}${similar.teacher_name ? ` with ${similar.teacher_name}` : ''}`
+        });
+      } else {
+        setDuplicateInfo(null);
+      }
+    }
+  }, [formData.name, formData.semester, formData.teacher_name, existingRecords, isEditing, editData?.id]);
 
   // 🔥 FIXED: useEffect to handle edit data
   useEffect(() => {
@@ -33,6 +87,7 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
     }
     // Clear errors when modal opens/closes
     setErrors({});
+    setDuplicateInfo(null);
   }, [editData, isEditing, isOpen]);
 
   const handleInputChange = (e) => {
@@ -70,7 +125,7 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!validateForm()) {
+    if (!validateForm() || duplicateInfo?.type === 'exact') {
       return;
     }
 
@@ -80,6 +135,7 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
       // Reset form after successful submission
       setFormData({ name: '', semester: '', teacher_name: '', description: '' });
       setErrors({});
+      setDuplicateInfo(null);
       onClose();
     } catch (error) {
       console.error('Error submitting class record:', error);
@@ -92,6 +148,7 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
   const handleClose = () => {
     setFormData({ name: '', semester: '', teacher_name: '', description: '' });
     setErrors({});
+    setDuplicateInfo(null);
     onClose();
   };
 
@@ -101,6 +158,14 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
       handleClose();
     }
   };
+
+  // 🔥 NEW: Check if form can be submitted
+  const canSubmit = !loading && 
+                   !errors.name && 
+                   !errors.semester && 
+                   formData.name.trim() && 
+                   formData.semester.trim() && 
+                   duplicateInfo?.type !== 'exact';
 
   if (!isOpen) return null;
 
@@ -146,7 +211,10 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
                   onChange={handleInputChange}
                   placeholder="e.g., Mathematics 101, Physics Lab"
                   className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#333D79] focus:border-[#333D79] focus:outline-none transition-all duration-200 text-gray-900 bg-gray-50 ${
-                    errors.name ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                    errors.name ? 'border-red-500 bg-red-50' : 
+                    duplicateInfo?.type === 'exact' ? 'border-red-500 bg-red-50' :
+                    duplicateInfo?.type === 'similar' ? 'border-yellow-500 bg-yellow-50' :
+                    'border-gray-300'
                   }`}
                 />
                 <BookOpen className="absolute right-3 top-3 w-5 h-5 text-gray-400" />
@@ -168,7 +236,10 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
                   value={formData.semester}
                   onChange={handleInputChange}
                   className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#333D79] focus:border-[#333D79] focus:outline-none transition-all duration-200 appearance-none bg-gray-50 text-gray-900 ${
-                    errors.semester ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                    errors.semester ? 'border-red-500 bg-red-50' : 
+                    duplicateInfo?.type === 'exact' ? 'border-red-500 bg-red-50' :
+                    duplicateInfo?.type === 'similar' ? 'border-yellow-500 bg-yellow-50' :
+                    'border-gray-300'
                   }`}
                 >
                   <option value="">Select Semester</option>
@@ -196,11 +267,49 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
                   value={formData.teacher_name}
                   onChange={handleInputChange}
                   placeholder="e.g., Dr. Smith, Prof. Johnson"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#333D79] focus:border-[#333D79] focus:outline-none transition-all duration-200 text-gray-900 bg-gray-50"
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#333D79] focus:border-[#333D79] focus:outline-none transition-all duration-200 text-gray-900 bg-gray-50 ${
+                    duplicateInfo?.type === 'exact' ? 'border-red-500 bg-red-50' :
+                    duplicateInfo?.type === 'similar' ? 'border-yellow-500 bg-yellow-50' :
+                    'border-gray-300'
+                  }`}
                 />
                 <User className="absolute right-3 top-3 w-5 h-5 text-gray-400" />
               </div>
             </div>
+
+            {/* 🔥 NEW: Duplicate Detection Alert */}
+            {duplicateInfo && (
+              <div className={`p-4 rounded-lg border ${
+                duplicateInfo.type === 'exact' 
+                  ? 'bg-red-50 border-red-200' 
+                  : 'bg-yellow-50 border-yellow-200'
+              }`}>
+                <div className="flex items-start gap-3">
+                  {duplicateInfo.type === 'exact' ? (
+                    <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                  )}
+                  <div className="flex-1">
+                    <p className={`text-sm font-medium ${
+                      duplicateInfo.type === 'exact' ? 'text-red-800' : 'text-yellow-800'
+                    }`}>
+                      {duplicateInfo.type === 'exact' ? 'Duplicate Found!' : 'Similar Record Found'}
+                    </p>
+                    <p className={`text-sm mt-1 ${
+                      duplicateInfo.type === 'exact' ? 'text-red-700' : 'text-yellow-700'
+                    }`}>
+                      {duplicateInfo.message}
+                    </p>
+                    {duplicateInfo.type === 'similar' && (
+                      <p className="text-xs text-yellow-600 mt-2">
+                        ✅ You can still create this record since it's in a different semester.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* 🔥 NEW: Description Field */}
             <div>
@@ -221,7 +330,7 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
               </div>
             </div>
 
-            {/* 🔥 UPDATED: Buttons with dynamic text */}
+            {/* 🔥 ENHANCED: Buttons with smart state management */}
             <div className="flex space-x-3 pt-4">
               <button
                 type="button"
@@ -232,12 +341,18 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
               </button>
               <button
                 type="submit"
-                disabled={loading}
+                disabled={!canSubmit}
                 className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all duration-200 shadow-md ${
-                  loading
-                    ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-[#333D79] to-[#4A5491] hover:from-[#2A2F66] hover:to-[#3A4080] text-white'
+                  !canSubmit
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-[#333D79] to-[#4A5491] hover:from-[#2A2F66] hover:to-[#3A4080] text-white hover:shadow-lg'
                 }`}
+                title={
+                  duplicateInfo?.type === 'exact' ? 'Cannot create duplicate record' :
+                  !formData.name.trim() ? 'Please enter a class name' :
+                  !formData.semester.trim() ? 'Please select a semester' :
+                  'Create this class record'
+                }
               >
                 {loading ? (
                   <div className="flex items-center justify-center space-x-2">
@@ -245,10 +360,27 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
                     <span>{isEditing ? 'Updating...' : 'Creating...'}</span>
                   </div>
                 ) : (
-                  <span>{isEditing ? 'Update Record' : 'Create Record'}</span>
+                  <div className="flex items-center justify-center space-x-2">
+                    {duplicateInfo?.type !== 'exact' && canSubmit && (
+                      <CheckCircle className="w-4 h-4" />
+                    )}
+                    <span>{isEditing ? 'Update Record' : 'Create Record'}</span>
+                  </div>
                 )}
               </button>
             </div>
+
+            {/* 🔥 NEW: Form hints */}
+            {!duplicateInfo && formData.name && formData.semester && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-green-600" />
+                  <p className="text-sm text-green-700 font-medium">
+                    Great! This record is unique and ready to create.
+                  </p>
+                </div>
+              </div>
+            )}
           </form>
         </div>
       </div>
@@ -256,19 +388,21 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
   );
 };
 
-// 🔥 UPDATED: PropTypes to include new props
+// 🔥 UPDATED: PropTypes to include existingRecords
 CreateClassRecordModal.propTypes = {
   isOpen: PropTypes.bool.isRequired,
   onClose: PropTypes.func.isRequired,
   onSubmit: PropTypes.func.isRequired,
   editData: PropTypes.object,
-  isEditing: PropTypes.bool
+  isEditing: PropTypes.bool,
+  existingRecords: PropTypes.array
 };
 
 // 🔥 NEW: Default props
 CreateClassRecordModal.defaultProps = {
   editData: null,
-  isEditing: false
+  isEditing: false,
+  existingRecords: []
 };
 
 export default CreateClassRecordModal;

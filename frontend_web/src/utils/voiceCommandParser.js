@@ -597,8 +597,19 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
         nameText = nameText.replace(regex, '').trim();
       });
       
+      const gradeWords = ['math', 'science', 'english', 'quiz', 'test', 'exam', 'lab', 'laboratory', 'midterm', 'final', 'assignment', 'homework', 'activity'];
+      gradeWords.forEach(gradeWord => {
+        const regex = new RegExp(`\\b${gradeWord}\\b`, 'gi');
+        nameText = nameText.replace(regex, '').trim();
+      });
+      
       // Clean up extra spaces
       nameText = nameText.replace(/\s+/g, ' ').trim();
+
+      const nameWords = nameText.split(' ').filter(word => word.length > 0);
+      if (nameWords.length > 2) {
+        nameText = nameWords.slice(0, 2).join(' '); // Take first 2 words max
+      }
       
       // 🔥 ENHANCED: Use context-aware name extraction
       const extractedName = extractNameFromText(nameText, recentStudents);

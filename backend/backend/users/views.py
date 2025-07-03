@@ -996,3 +996,80 @@ def get_class_records_with_live_counts_cached(request):
     except Exception as e:
         logger.error(f"Get class records with cached counts error: {str(e)}")
         return Response({'error': str(e)}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def sheets_get_all_sheets_data_service_account(request, sheet_id):
+    """Get data from ALL sheets in a Google Spreadsheet using service account"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+        result = service.get_all_sheets_data(sheet_id)
+
+        return Response(result)
+
+    except Exception as e:
+        logger.error(f"Get all sheets data error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def sheets_get_specific_sheet_data_service_account(request, sheet_id, sheet_name):
+    """Get data from a specific sheet by name using service account"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+        result = service.get_specific_sheet_data(sheet_id, sheet_name)
+
+        return Response(result)
+
+    except Exception as e:
+        logger.error(f"Get specific sheet data error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def sheets_list_all_sheets_service_account(request, sheet_id):
+    """List all sheets in a Google Spreadsheet using service account"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+        result = service.get_sheets_list(sheet_id)
+
+        return Response(result)
+
+    except Exception as e:
+        logger.error(f"List all sheets error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])  # 🔥 FIXED: was permission_calls
+def sheets_update_cell_specific_sheet_service_account(request, sheet_id):
+    """Update a cell in a specific sheet using service account"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+
+        row = request.data.get('row')  # 0-based index
+        column = request.data.get('column')  # Column name like 'QUIZ 1'
+        value = request.data.get('value')
+        sheet_name = request.data.get('sheet_name')  # 🔥 NEW: Specific sheet name
+
+        if row is None or not column or value is None:
+            return Response({'error': 'row, column, and value are required'}, status=400)
+
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+        result = service.update_cell_in_sheet(sheet_id, row, column, value, sheet_name)
+
+        return Response(result)
+
+    except Exception as e:
+        logger.error(f"Update cell in specific sheet error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+

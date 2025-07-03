@@ -324,57 +324,132 @@ export const classRecordService = {
         api.post(`/sheets/${sheetId}/auto-number-students/`),
 
     getClassRecordsWithLiveCounts: () => api.get('/class-records/live-counts/'),
+
+    getAllSheetsData: (sheetId) => {
+        return api.get(`/sheets/service-account/${sheetId}/all-sheets-data/`);
+    },
+
+    getSpecificSheetData: (sheetId, sheetName) => {
+        return api.get(`/sheets/service-account/${sheetId}/sheet/${encodeURIComponent(sheetName)}/data/`);
+    },
+
+    getSheetsList: (sheetId) => {
+        return api.get(`/sheets/service-account/${sheetId}/sheets-list/`);
+    },
+
+    updateGoogleSheetsCellSpecific: (sheetId, row, column, value, sheetName) => {
+        return api.post(`/sheets/service-account/${sheetId}/update-cell-specific/`, {
+            row,
+            column, 
+            value,
+            sheet_name: sheetName
+        });
+    },
 };
 
-export const studentService = {
-    // Get all students
-    getStudents: () => api.get('/students/'),
+export const enhancedClassRecordService = {
+    ...classRecordService,
     
-    // Create a new student
-    createStudent: (studentData) => api.post('/students/', studentData),
+    // Override createClassRecord to log activity
+    createClassRecord: async (recordData) => {
+        try {
+            const response = await classRecordService.createClassRecord(recordData);
+            
+            // Log activity
+            await activityService.logActivity(
+                'record_created',
+                `Created class record "${recordData.name}"`,
+                {
+                    description: `Created new class record for ${recordData.semester}`,
+                    metadata: { 
+                        semester: recordData.semester,
+                        teacher: recordData.teacher_name 
+                    },
+                    classRecordId: response.data.id
+                }
+            );
+            
+            return response;
+        } catch (error) {
+            throw error;
+        }
+    },
     
-    // Get a specific student
-    getStudent: (id) => api.get(`/students/${id}/`),
+    // Override updateClassRecord to log activity
+    updateClassRecord: async (id, recordData) => {
+        try {
+            const response = await classRecordService.updateClassRecord(id, recordData);
+            
+            // Log activity
+            await activityService.logActivity(
+                'record_updated',
+                `Updated class record "${recordData.name || 'record'}"`,
+                {
+                    description: `Modified class record details`,
+                    metadata: recordData,
+                    classRecordId: id
+                }
+            );
+            
+            return response;
+        } catch (error) {
+            throw error;
+        }
+    },
     
-    // Update a student
-    updateStudent: (id, studentData) => api.patch(`/students/${id}/`, studentData),
-    
-    // Delete a student
-    deleteStudent: (id) => api.delete(`/students/${id}/`),
+    // Override deleteClassRecord to log activity
+    deleteClassRecord: async (id, recordName = 'record') => {
+        try {
+            const response = await classRecordService.deleteClassRecord(id);
+            
+            // Log activity
+            await activityService.logActivity(
+                'record_deleted',
+                `Deleted class record "${recordName}"`,
+                {
+                    description: `Permanently removed class record`,
+                    metadata: { deleted_record_id: id },
+                    classRecordId: id
+                }
+            );
+            
+            return response;
+        } catch (error) {
+            throw error;
+        }
+    }
 };
 
-export const gradeCategoryService = {
-    // Get all grade categories
-    getGradeCategories: () => api.get('/grade-categories/'),
+export const activityService = {
+    // Get user activities
+    getActivities: (params = {}) => {
+        const queryParams = new URLSearchParams(params).toString();
+        return api.get(`/activities/${queryParams ? `?${queryParams}` : ''}`);
+    },
     
-    // Create a new grade category
-    createGradeCategory: (categoryData) => api.post('/grade-categories/', categoryData),
+    // Create new activity
+    createActivity: (activityData) => api.post('/activities/create/', activityData),
     
-    // Get a specific grade category
-    getGradeCategory: (id) => api.get(`/grade-categories/${id}/`),
+    // Get activity statistics
+    getActivityStats: (days = 7) => api.get(`/activities/stats/?days=${days}`),
     
-    // Update a grade category
-    updateGradeCategory: (id, categoryData) => api.patch(`/grade-categories/${id}/`, categoryData),
-    
-    // Delete a grade category
-    deleteGradeCategory: (id) => api.delete(`/grade-categories/${id}/`),
-};
-
-export const gradeService = {
-    // Get all grades
-    getGrades: () => api.get('/grades/'),
-    
-    // Create a new grade
-    createGrade: (gradeData) => api.post('/grades/', gradeData),
-    
-    // Get a specific grade
-    getGrade: (id) => api.get(`/grades/${id}/`),
-    
-    // Update a grade
-    updateGrade: (id, gradeData) => api.patch(`/grades/${id}/`, gradeData),
-    
-    // Delete a grade
-    deleteGrade: (id) => api.delete(`/grades/${id}/`),
+    // Helper method to log common activities
+    logActivity: async (type, title, options = {}) => {
+        try {
+            const activityData = {
+                activity_type: type,
+                title,
+                description: options.description || '',
+                metadata: options.metadata || {},
+                class_record_id: options.classRecordId || null,
+            };
+            
+            return await api.post('/activities/create/', activityData);
+        } catch (error) {
+            console.error('Failed to log activity:', error);
+            // Don't throw error to avoid breaking main functionality
+        }
+    }
 };
 
 // Add default export
@@ -384,10 +459,8 @@ const apiService = {
     login,
     logout,
     refreshToken,
-    classRecordService, // Add this
-    studentService,     // Add this
-    gradeCategoryService, // Add this
-    gradeService        // Add this
+    classRecordService: enhancedClassRecordService, // Use enhanced version
+    activityService, // 🔥 NEW
 };
 
 export default apiService;

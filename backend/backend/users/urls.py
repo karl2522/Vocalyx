@@ -1,4 +1,6 @@
 from django.urls import path
+
+from .activity_views import UserActivityListView, create_activity, get_activity_stats
 from .views import (
     RegisterView, LoginView, VerifyEmailView,
     google_auth, LogoutView, microsoft_auth, firebase_auth_view,
@@ -8,7 +10,9 @@ from .views import (
     sheets_copy_template, sheets_get_info, sheets_list_user_sheets,
     sheets_update_permissions, sheets_get_data, sheets_get_data_service_account, sheets_update_cell_service_account,
     sheets_add_student_service_account, sheets_add_student_with_auto_number_service_account,
-    sheets_auto_number_students_service_account, get_class_records_with_live_counts_cached
+    sheets_auto_number_students_service_account, get_class_records_with_live_counts_cached,
+    sheets_get_all_sheets_data_service_account, sheets_list_all_sheets_service_account,
+    sheets_get_specific_sheet_data_service_account, sheets_update_cell_specific_sheet_service_account
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -48,4 +52,24 @@ urlpatterns = [
     path('sheets/<str:sheet_id>/auto-number-students/', sheets_auto_number_students_service_account, name='sheets_auto_number_students'),
 
     path('class-records/live-counts/', get_class_records_with_live_counts_cached, name='class_records_live_counts'),
+
+    path('sheets/service-account/<str:sheet_id>/all-sheets-data/',
+         sheets_get_all_sheets_data_service_account,
+         name='sheets_get_all_sheets_data_service_account'),
+
+    path('sheets/service-account/<str:sheet_id>/sheets-list/',
+         sheets_list_all_sheets_service_account,
+         name='sheets_list_all_sheets_service_account'),
+
+    path('sheets/service-account/<str:sheet_id>/sheet/<str:sheet_name>/data/',
+         sheets_get_specific_sheet_data_service_account,
+         name='sheets_get_specific_sheet_data_service_account'),
+
+    path('sheets/service-account/<str:sheet_id>/update-cell-specific/',
+         sheets_update_cell_specific_sheet_service_account,
+         name='sheets_update_cell_specific_sheet_service_account'),
+
+    path('activities/', UserActivityListView.as_view(), name='user-activities'),
+    path('activities/create/', create_activity, name='create-activity'),
+    path('activities/stats/', get_activity_stats, name='activity-stats'),
 ]

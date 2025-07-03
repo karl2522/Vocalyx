@@ -233,18 +233,23 @@ class GoogleSheetsService:
                 'error': f'Request failed: {str(e)}'
             }
 
-    def get_sheet_data(self, sheet_id: str) -> Dict:
+    def get_sheet_data(self, sheet_id: str, sheet_name: Optional[str] = None) -> Dict:
         """
         Get data from a Google Sheet for voice commands.
 
         Args:
             sheet_id: ID of the spreadsheet
+            sheet_name: Optional name of specific sheet (if None, uses first sheet)
 
         Returns:
             Dict containing sheet data or error
         """
         try:
-            # Get sheet metadata first
+            if sheet_name:
+                # Get specific sheet data
+                return self.get_specific_sheet_data(sheet_id, sheet_name)
+
+            # Original behavior - get first sheet
             url = f"{self.SHEETS_API_BASE_URL}/{sheet_id}"
 
             response = requests.get(
@@ -265,8 +270,104 @@ class GoogleSheetsService:
             # Get the first sheet name
             first_sheet = spreadsheet['sheets'][0]['properties']['title']
 
-            # Get the data from the first sheet
-            range_name = f"{first_sheet}!A:Z"
+            # Use the specific sheet method
+            return self.get_specific_sheet_data(sheet_id, first_sheet)
+
+        except Exception as e:
+            logger.error(f"Get sheet data error: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Failed to get sheet data: {str(e)}'
+            }
+
+    def get_all_sheets_data(self, sheet_id: str) -> Dict:
+        """
+        Get data from ALL sheets in a Google Spreadsheet.
+
+        Args:
+            sheet_id: ID of the spreadsheet
+
+        Returns:
+            Dict containing all sheets data or error
+        """
+        try:
+            # Get sheet metadata first
+            url = f"{self.SHEETS_API_BASE_URL}/{sheet_id}"
+
+            response = requests.get(
+                url,
+                headers=self.headers,
+                timeout=10
+            )
+
+            if response.status_code != 200:
+                return {
+                    'success': False,
+                    'error': f'Failed to get sheet metadata: {response.status_code}',
+                    'details': response.text
+                }
+
+            spreadsheet = response.json()
+            all_sheets = []
+
+            # 🔥 Loop through ALL sheets instead of just the first one
+            for sheet_info in spreadsheet['sheets']:
+                sheet_name = sheet_info['properties']['title']
+                sheet_id_internal = sheet_info['properties']['sheetId']
+
+                # Get data for this specific sheet
+                range_name = f"'{sheet_name}'!A:Z"  # 🔥 Use sheet name in quotes for safety
+                values_url = f"{self.SHEETS_API_BASE_URL}/{sheet_id}/values/{range_name}"
+
+                values_response = requests.get(
+                    values_url,
+                    headers=self.headers,
+                    timeout=10
+                )
+
+                if values_response.status_code == 200:
+                    values_data = values_response.json()
+                    values = values_data.get('values', [])
+
+                    if values:  # Only add sheets that have data
+                        headers = values[0] if values else []
+                        tableData = values[1:] if len(values) > 1 else []
+
+                        all_sheets.append({
+                            'sheet_name': sheet_name,
+                            'sheet_id': sheet_id_internal,
+                            'headers': headers,
+                            'tableData': tableData,
+                            'row_count': len(tableData)
+                        })
+
+            return {
+                'success': True,
+                'sheets': all_sheets,
+                'total_sheets': len(all_sheets)
+            }
+
+        except Exception as e:
+            logger.error(f"Get all sheets data error: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Failed to get sheets data: {str(e)}'
+            }
+
+    def get_specific_sheet_data(self, sheet_id: str, sheet_name: str) -> Dict:
+        """
+        Get data from a specific sheet by name.
+
+        Args:
+            sheet_id: ID of the spreadsheet
+            sheet_name: Name of the specific sheet to get data from
+
+        Returns:
+            Dict containing sheet data or error
+        """
+        try:
+            # Get data from the specific sheet
+            range_name = f"'{sheet_name}'!A:Z"  # 🔥 Use specific sheet name
             values_url = f"{self.SHEETS_API_BASE_URL}/{sheet_id}/values/{range_name}"
 
             values_response = requests.get(
@@ -288,7 +389,7 @@ class GoogleSheetsService:
             if not values:
                 return {
                     'success': False,
-                    'error': 'No data found in sheet'
+                    'error': f'No data found in sheet "{sheet_name}"'
                 }
 
             # First row as headers
@@ -300,11 +401,11 @@ class GoogleSheetsService:
                 'success': True,
                 'headers': headers,
                 'tableData': tableData,
-                'sheet_name': first_sheet
+                'sheet_name': sheet_name
             }
 
         except Exception as e:
-            logger.error(f"Get sheet data error: {str(e)}")
+            logger.error(f"Get specific sheet data error: {str(e)}")
             return {
                 'success': False,
                 'error': f'Failed to get sheet data: {str(e)}'

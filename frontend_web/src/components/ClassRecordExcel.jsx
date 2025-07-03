@@ -22,11 +22,16 @@ const ClassRecordExcel = () => {
   const [headers, setHeaders] = useState([]);
   const [lastSaved, setLastSaved] = useState(null);
 
-   const [batchMode, setBatchMode] = useState(false);
-    const [showBatchModal, setShowBatchModal] = useState(false);
-    const [currentBatchColumn, setCurrentBatchColumn] = useState('');
-    const [batchEntries, setBatchEntries] = useState([]);
-    const [isProcessingBatch, setIsProcessingBatch] = useState(false);
+  const [batchMode, setBatchMode] = useState(false);
+  const [showBatchModal, setShowBatchModal] = useState(false);
+  const [currentBatchColumn, setCurrentBatchColumn] = useState('');
+  const [batchEntries, setBatchEntries] = useState([]);
+  const [isProcessingBatch, setIsProcessingBatch] = useState(false);
+
+  const [availableSheets, setAvailableSheets] = useState([]);
+  const [currentSheet, setCurrentSheet] = useState(null);
+  const [loadingSheets, setLoadingSheets] = useState(false);
+  const [showSheetSelector, setShowSheetSelector] = useState(false);
 
   const { 
     isListening, 
@@ -188,36 +193,36 @@ const ClassRecordExcel = () => {
       console.log("📊 Fetched class record data:", response.data);
       setClassRecord(response.data);
       
-      // 🔥 Load Google Sheets data for voice commands only
+      // 🔥 Load ALL sheets data for multi-sheet support
       if (response.data?.google_sheet_id) {
-        console.log("📊 Fetching Google Sheets data for voice commands...");
+        console.log("📊 Fetching ALL Google Sheets data for multi-sheet support...");
         
         try {
-          const sheetsResponse = await classRecordService.getGoogleSheetsDataServiceAccount(response.data.google_sheet_id);
-          console.log("📊 Google Sheets API response:", sheetsResponse.data);
+          // 🔥 NEW: Get list of all sheets first
+          const sheetsListResponse = await classRecordService.getSheetsList(response.data.google_sheet_id);
+          console.log("🔥 DEBUG: sheetsListResponse:", sheetsListResponse);
+          console.log("📋 Sheets list response:", sheetsListResponse.data);
           
-          if (sheetsResponse.data?.success && sheetsResponse.data.headers?.length > 0) {
-            setHeaders(sheetsResponse.data.headers);
+          if (sheetsListResponse.data?.success && sheetsListResponse.data.sheets?.length > 0) {
+            setAvailableSheets(sheetsListResponse.data.sheets);
             
-            // Convert table data for voice commands context
-            if (sheetsResponse.data.tableData?.length > 0) {
-              const convertedTableData = sheetsResponse.data.tableData.map(row => {
-                const rowObject = {};
-                sheetsResponse.data.headers.forEach((header, index) => {
-                  rowObject[header] = row[index] || '';
-                });
-                return rowObject;
-              });
-              
-              buildContextDictionary(convertedTableData, sheetsResponse.data.headers);
-            }
+            // Set the first sheet as current by default
+            const firstSheet = sheetsListResponse.data.sheets[0];
+            setCurrentSheet(firstSheet);
             
-            console.log("✅ Voice command data loaded successfully!");
+            // Load data from the first sheet
+            await loadSheetData(response.data.google_sheet_id, firstSheet.sheet_name);
+            
+            console.log("✅ Multi-sheet data loaded successfully!");
           } else {
-            console.log("⚠️ No Google Sheets data available for voice commands");
+            console.log("⚠️ Falling back to single sheet mode");
+            // Fall back to original single sheet loading
+            await loadSingleSheetData(response.data.google_sheet_id);
           }
         } catch (sheetsError) {
-          console.error("❌ Failed to load Google Sheets data:", sheetsError);
+          console.error("❌ Failed to load multi-sheet data, falling back to single sheet:", sheetsError);
+          // Fall back to original single sheet loading
+          await loadSingleSheetData(response.data.google_sheet_id);
         }
       }
       
@@ -230,8 +235,122 @@ const ClassRecordExcel = () => {
     }
   };
 
-  const startVoiceTraining = () => {
-    toast.success('🎯 Voice training started! Speak the phrases clearly.');
+  const loadSheetData = async (sheetId, sheetName) => {
+    try {
+      console.log(`📊 Loading data from sheet: ${sheetName}`);
+      
+      const sheetsResponse = await classRecordService.getSpecificSheetData(sheetId, sheetName);
+      console.log("📊 Specific sheet data response:", sheetsResponse.data);
+      
+      if (sheetsResponse.data?.success && sheetsResponse.data.headers?.length > 0) {
+        setHeaders(sheetsResponse.data.headers);
+        
+        // Convert table data for voice commands context
+        if (sheetsResponse.data.tableData?.length > 0) {
+          const convertedTableData = sheetsResponse.data.tableData.map(row => {
+            const rowObject = {};
+            sheetsResponse.data.headers.forEach((header, index) => {
+              rowObject[header] = row[index] || '';
+            });
+            return rowObject;
+          });
+          
+          buildContextDictionary(convertedTableData, sheetsResponse.data.headers);
+        }
+        
+        console.log(`✅ Sheet "${sheetName}" data loaded successfully!`);
+        toast.success(`Switched to sheet: ${sheetName}`);
+      } else {
+        console.log(`⚠️ No data available for sheet: ${sheetName}`);
+        toast(`No data found in sheet: ${sheetName}`);
+      }
+    } catch (error) {
+      console.error(`❌ Failed to load sheet data for: ${sheetName}`, error);
+      toast.error(`Failed to load sheet: ${sheetName}`);
+    }
+  };
+
+  const loadSingleSheetData = async (sheetId) => {
+    try {
+      const sheetsResponse = await classRecordService.getGoogleSheetsDataServiceAccount(sheetId);
+      console.log("📊 Google Sheets API response (single sheet):", sheetsResponse.data);
+      
+      if (sheetsResponse.data?.success && sheetsResponse.data.headers?.length > 0) {
+        setHeaders(sheetsResponse.data.headers);
+        
+        // Convert table data for voice commands context
+        if (sheetsResponse.data.tableData?.length > 0) {
+          const convertedTableData = sheetsResponse.data.tableData.map(row => {
+            const rowObject = {};
+            sheetsResponse.data.headers.forEach((header, index) => {
+              rowObject[header] = row[index] || '';
+            });
+            return rowObject;
+          });
+          
+          buildContextDictionary(convertedTableData, sheetsResponse.data.headers);
+        }
+        
+        console.log("✅ Voice command data loaded successfully (single sheet)!");
+      } else {
+        console.log("⚠️ No Google Sheets data available for voice commands");
+      }
+    } catch (error) {
+      console.error("❌ Failed to load Google Sheets data:", error);
+    }
+  };
+
+  const switchToSheet = async (sheet) => {
+    if (!classRecord?.google_sheet_id || !sheet) return;
+    
+    setLoadingSheets(true);
+    setCurrentSheet(sheet);
+    
+    try {
+      await loadSheetData(classRecord.google_sheet_id, sheet.sheet_name);
+      
+      // 🔥 If batch mode is active, we need to refresh the column options
+      if (batchMode) {
+        setCurrentBatchColumn(''); // Reset column selection
+        toast.info('Column selection reset for new sheet');
+      }
+      
+    } catch (error) {
+      console.error('Error switching sheet:', error);
+      toast.error('Failed to switch sheet');
+    } finally {
+      setLoadingSheets(false);
+      setShowSheetSelector(false);
+    }
+  };
+
+  const handleSheetSwitchVoiceCommand = (transcript) => {
+    // Listen for commands like "switch to sheet 1", "go to testing sheet", etc.
+    const sheetSwitchPattern = /(?:switch to|go to|use)\s+(?:sheet\s+)?(.+)/i;
+    const match = transcript.trim().match(sheetSwitchPattern);
+    
+    if (match) {
+      const targetSheetName = match[1].trim().toLowerCase();
+      
+      // Find matching sheet
+      const matchingSheet = availableSheets.find(sheet => 
+        sheet.sheet_name.toLowerCase().includes(targetSheetName) ||
+        targetSheetName.includes(sheet.sheet_name.toLowerCase())
+      );
+      
+      if (matchingSheet) {
+        switchToSheet(matchingSheet);
+        return true; // Command handled
+      } else {
+        toast.error(`Sheet "${targetSheetName}" not found`);
+        if (voiceEnabled) {
+          speakText(`Sheet ${targetSheetName} not found`);
+        }
+        return true; // Command handled (even if failed)
+      }
+    }
+    
+    return false; // Command not handled
   };
 
  const executeCommand = (command) => {
@@ -254,12 +373,186 @@ const ClassRecordExcel = () => {
       case 'REDO_COMMAND':
         toast('🔄 Redo functionality not available in Google Sheets mode');
         break;
+      case 'BATCH_EVERYONE':
+        handleBatchEveryoneCommand(command.data);
+        break;
+      case 'BATCH_STUDENT_LIST':
+        handleBatchStudentListCommand(command.data);
+        break;
+      case 'BATCH_ROW_RANGE':
+        handleBatchRowRangeCommand(command.data);
+        break;
       default:
-        toast.error(`🎙️ Command not recognized: "${command.data.originalText}"`);
+        toast.error(`🎙️ Command not recognized: "${command.data?.originalText || 'Unknown command'}"`);
         if (voiceEnabled) {
           speakText('Sorry, I didn\'t understand that command. Please try again.');
         }
     }
+};
+
+const handleBatchEveryoneCommand = async (data) => {
+  console.log('🎯 Handling batch everyone command:', data);
+  
+  if (!classRecord?.google_sheet_id) {
+    toast.error('No Google Sheet connected');
+    return;
+  }
+
+  try {
+    // Get fresh data for student search
+    let sheetsResponse;
+    if (currentSheet) {
+      console.log('🔥 DEBUG: Using current sheet:', currentSheet.sheet_name);
+      sheetsResponse = await classRecordService.getSpecificSheetData(
+        classRecord.google_sheet_id, 
+        currentSheet.sheet_name
+      );
+    } else {
+      console.log('🔥 DEBUG: Using default sheet data');
+      sheetsResponse = await classRecordService.getGoogleSheetsDataServiceAccount(classRecord.google_sheet_id);
+    }
+    
+    console.log('🔥 DEBUG: Sheets response:', sheetsResponse.data);
+    
+    if (!sheetsResponse.data?.success || !sheetsResponse.data.tableData?.length) {
+      toast.error('Could not load student data');
+      return;
+    }
+
+    console.log('🔥 DEBUG: Available headers:', sheetsResponse.data.headers);
+    console.log('🔥 DEBUG: Looking for column:', data.column);
+    
+    // 🔥 ENHANCED: Find the column with fuzzy matching
+    const targetColumn = sheetsResponse.data.headers.find(header => 
+      header.toLowerCase().includes(data.column.toLowerCase()) ||
+      data.column.toLowerCase().includes(header.toLowerCase())
+    );
+    
+    console.log('🔥 DEBUG: Found target column:', targetColumn);
+    
+    if (!targetColumn) {
+      toast.error(`Column "${data.column}" not found. Available columns: ${sheetsResponse.data.headers.join(', ')}`);
+      return;
+    }
+
+    // Convert array data to objects for processing
+    const convertedTableData = sheetsResponse.data.tableData.map(row => {
+      const rowObject = {};
+      sheetsResponse.data.headers.forEach((header, index) => {
+        rowObject[header] = row[index] || '';
+      });
+      return rowObject;
+    });
+
+    console.log('🔥 DEBUG: Converted table data sample:', convertedTableData.slice(0, 3));
+
+    // Filter students based on condition
+    let studentsToUpdate = [];
+    
+    if (data.condition === 'present') {
+      // Only students who are "present" (have some data in the row)
+      studentsToUpdate = convertedTableData.filter((row, index) => {
+        const hasData = row['FIRST NAME'] && row['LASTNAME'];
+        console.log(`🔥 DEBUG: Student ${index}: ${row['FIRST NAME']} ${row['LASTNAME']} - hasData: ${hasData}`);
+        return hasData;
+      });
+    } else {
+      // All students
+      studentsToUpdate = convertedTableData.filter((row, index) => {
+        return row['FIRST NAME'] && row['LASTNAME'];
+      });
+    }
+
+    console.log('🔥 DEBUG: Students to update:', studentsToUpdate.length);
+    console.log('🔥 DEBUG: Students list:', studentsToUpdate.map(s => `${s['FIRST NAME']} ${s['LASTNAME']}`));
+
+    if (studentsToUpdate.length === 0) {
+      toast.error('No students found to update');
+      return;
+    }
+
+    // Confirm with user
+    const confirmMessage = `Update ${targetColumn} to ${data.score} for ${studentsToUpdate.length} students?`;
+    console.log('🔥 DEBUG: Confirmation message:', confirmMessage);
+    
+    if (!window.confirm(confirmMessage)) {
+      console.log('🔥 DEBUG: User cancelled update');
+      return;
+    }
+
+    console.log('🔥 DEBUG: Starting updates...');
+
+    // Update all students
+    let successCount = 0;
+    for (let i = 0; i < studentsToUpdate.length; i++) {
+      const studentIndex = convertedTableData.indexOf(studentsToUpdate[i]);
+      const studentName = `${studentsToUpdate[i]['FIRST NAME']} ${studentsToUpdate[i]['LASTNAME']}`;
+      
+      console.log(`🔥 DEBUG: Updating student ${i + 1}/${studentsToUpdate.length}: ${studentName} at index ${studentIndex}`);
+      
+      try {
+        let updateResponse;
+        if (currentSheet) {
+          console.log('🔥 DEBUG: Using sheet-specific update');
+          updateResponse = await classRecordService.updateGoogleSheetsCellSpecific(
+            classRecord.google_sheet_id,
+            studentIndex,
+            targetColumn, // Use the found column name
+            data.score,
+            currentSheet.sheet_name
+          );
+        } else {
+          console.log('🔥 DEBUG: Using default update');
+          updateResponse = await classRecordService.updateGoogleSheetsCell(
+            classRecord.google_sheet_id,
+            studentIndex,
+            targetColumn, // Use the found column name
+            data.score
+          );
+        }
+        
+        console.log(`🔥 DEBUG: Update response for ${studentName}:`, updateResponse.data);
+        
+        if (updateResponse.data?.success) {
+          successCount++;
+          console.log(`✅ Successfully updated ${studentName}`);
+        } else {
+          console.error(`❌ Failed to update ${studentName}:`, updateResponse.data);
+        }
+      } catch (error) {
+        console.error(`❌ Exception updating ${studentName}:`, error);
+      }
+    }
+
+    console.log('🔥 DEBUG: Final results:', { successCount, totalAttempted: studentsToUpdate.length });
+
+    const sheetInfo = currentSheet ? ` in ${currentSheet.sheet_name}` : '';
+    toast.success(`✅ Updated ${targetColumn} to ${data.score} for ${successCount} students${sheetInfo}`);
+    
+    if (voiceEnabled) {
+      speakText(`Successfully updated ${targetColumn} to ${data.score} for ${successCount} students`);
+    }
+
+  } catch (error) {
+    console.error('🔥 DEBUG: Batch everyone command error:', error);
+    toast.error('Failed to process batch command');
+    if (voiceEnabled) {
+      speakText('Failed to process the batch command. Please try again.');
+    }
+  }
+};
+
+
+const handleBatchStudentListCommand = async (data) => {
+  console.log('🎯 Handling batch student list command:', data);
+  toast.info(`Batch student list command detected: ${data.students.length} students`);
+  // TODO: Implement student list batch processing
+};
+
+const handleBatchRowRangeCommand = async (data) => {
+  console.log('🎯 Handling batch row range command:', data);
+  toast.info(`Batch row range command detected: rows ${data.startRow + 1} to ${data.endRow + 1}`);
+  // TODO: Implement row range batch processing
 };
 
 const handleAddStudentVoice = async (data) => {
@@ -350,7 +643,15 @@ const handleAutoNumberStudents = async () => {
 
     try {
         // Get fresh data for student search
-        const sheetsResponse = await classRecordService.getGoogleSheetsDataServiceAccount(classRecord.google_sheet_id);
+        let sheetsResponse;
+        if (currentSheet) {
+          sheetsResponse = await classRecordService.getSpecificSheetData(
+            classRecord.google_sheet_id, 
+            currentSheet.sheet_name
+          );
+        } else {
+          sheetsResponse = await classRecordService.getGoogleSheetsDataServiceAccount(classRecord.google_sheet_id);
+        }
         
         if (!sheetsResponse.data?.success || !sheetsResponse.data.tableData?.length) {
             toast.error('Could not load student data');
@@ -403,12 +704,23 @@ const handleAutoNumberStudents = async () => {
         } else if (result.bestMatch !== -1) {
             // 🔥 FIX: Use bestMatch regardless of hasDuplicates flag
             try {
-                const response = await classRecordService.updateGoogleSheetsCell(
-                    classRecord.google_sheet_id,
-                    result.bestMatch,
-                    data.column,
-                    data.value
-                );
+                let response;
+                  if (currentSheet) {
+                    response = await classRecordService.updateGoogleSheetsCellSpecific(
+                      classRecord.google_sheet_id,
+                      result.bestMatch,
+                      data.column,
+                      data.value,
+                      currentSheet.sheet_name
+                    );
+                  } else {
+                    response = await classRecordService.updateGoogleSheetsCell(
+                      classRecord.google_sheet_id,
+                      result.bestMatch,
+                      data.column,
+                      data.value
+                    );
+                  }
 
                 if (response.data?.success) {
                     const student = convertedTableData[result.bestMatch];
@@ -484,7 +796,7 @@ const handleAutoNumberStudents = async () => {
 
 
 
-  const handleVoiceCommand = (transcript) => {
+   const handleVoiceCommand = (transcript) => {
     if (!transcript.trim()) return;
 
     console.log('Voice command received:', transcript);
@@ -492,6 +804,11 @@ const handleAutoNumberStudents = async () => {
     if (batchMode) {
         handleBatchVoiceCommand(transcript);
         return;
+    }
+
+    // 🔥 NEW: Check for sheet switching commands first
+    if (handleSheetSwitchVoiceCommand(transcript)) {
+        return; // Sheet switch command handled
     }
 
     const command = parseVoiceCommand(transcript, headers, [], {
@@ -520,7 +837,7 @@ const handleAutoNumberStudents = async () => {
         timestamp: new Date(),
         executed: true
     });
-};
+  };
 
 const handleBatchVoiceCommand = async (transcript) => {
   console.log('🔥 BATCH VOICE: Processing:', transcript);
@@ -554,156 +871,179 @@ const handleBatchVoiceCommand = async (transcript) => {
 };
 
 const processBatchEntry = async (studentName, score) => {
-  console.log('🔥 PROCESS BATCH: 🚀 Starting processBatchEntry');
-  console.log('🔥 PROCESS BATCH: studentName:', studentName);
-  console.log('🔥 PROCESS BATCH: score:', score);
-  console.log('🔥 PROCESS BATCH: currentBatchColumn:', currentBatchColumn);
-  
-  if (!currentBatchColumn) {
-    console.log('🔥 PROCESS BATCH: ❌ No column selected');
-    toast.error('Please select a column first');
-    return;
-  }
-
-  // 🔥 REMOVE ALL DUPLICATE PREVENTION - LET IT PROCESS EVERYTHING
-  try {
-    console.log('🔥 PROCESS BATCH: 🔄 Setting isProcessingBatch to true');
-    setIsProcessingBatch(true);
+    console.log('🔥 PROCESS BATCH: 🚀 Starting processBatchEntry');
+    console.log('🔥 PROCESS BATCH: studentName:', studentName);
+    console.log('🔥 PROCESS BATCH: score:', score);
+    console.log('🔥 PROCESS BATCH: currentBatchColumn:', currentBatchColumn);
+    console.log('🔥 PROCESS BATCH: currentSheet:', currentSheet?.sheet_name);
     
-    console.log('🔥 PROCESS BATCH: 📊 Fetching sheet data...');
-    const sheetsResponse = await classRecordService.getGoogleSheetsDataServiceAccount(classRecord.google_sheet_id);
-    
-    if (!sheetsResponse.data?.success) {
-      throw new Error('Could not load student data');
+    if (!currentBatchColumn) {
+      console.log('🔥 PROCESS BATCH: ❌ No column selected');
+      toast.error('Please select a column first');
+      return;
     }
 
-    console.log('🔥 PROCESS BATCH: ✅ Sheet data loaded');
-    const convertedTableData = sheetsResponse.data.tableData.map(row => {
-      const rowObject = {};
-      sheetsResponse.data.headers.forEach((header, index) => {
-        rowObject[header] = row[index] || '';
+    try {
+      console.log('🔥 PROCESS BATCH: 🔄 Setting isProcessingBatch to true');
+      setIsProcessingBatch(true);
+      
+      console.log('🔥 PROCESS BATCH: 📊 Fetching sheet data...');
+      
+      // 🔥 NEW: Use specific sheet data if available
+      let sheetsResponse;
+      if (currentSheet) {
+        sheetsResponse = await classRecordService.getSpecificSheetData(
+          classRecord.google_sheet_id, 
+          currentSheet.sheet_name
+        );
+      } else {
+        sheetsResponse = await classRecordService.getGoogleSheetsDataServiceAccount(
+          classRecord.google_sheet_id
+        );
+      }
+      
+      if (!sheetsResponse.data?.success) {
+        throw new Error('Could not load student data');
+      }
+
+      console.log('🔥 PROCESS BATCH: ✅ Sheet data loaded');
+      const convertedTableData = sheetsResponse.data.tableData.map(row => {
+        const rowObject = {};
+        sheetsResponse.data.headers.forEach((header, index) => {
+          rowObject[header] = row[index] || '';
+        });
+        return rowObject;
       });
-      return rowObject;
-    });
 
-    console.log('🔥 PROCESS BATCH: 🔍 Searching for student...');
-    const result = findStudentRowSmart(convertedTableData, studentName, recentStudents, currentBatchColumn);
-    console.log('🔥 PROCESS BATCH: 🔍 Search result:', result);
-    
-    const entryId = `${studentName}_${Date.now()}`;
-    let newEntry;
-
-    if (result.bestMatch !== -1) {
-      console.log('🔥 PROCESS BATCH: ✅ Student found!');
-      const student = convertedTableData[result.bestMatch];
-      const fullStudentName = `${student['FIRST NAME']} ${student['LASTNAME']}`.trim();
+      console.log('🔥 PROCESS BATCH: 🔍 Searching for student...');
+      const result = findStudentRowSmart(convertedTableData, studentName, recentStudents, currentBatchColumn);
+      console.log('🔥 PROCESS BATCH: 🔍 Search result:', result);
       
-      const hasExistingScore = student[currentBatchColumn] && 
-                              String(student[currentBatchColumn]).trim() !== '' && 
-                              String(student[currentBatchColumn]).trim() !== '0';
+      const entryId = `${studentName}_${Date.now()}`;
+      let newEntry;
 
-      newEntry = {
-        id: entryId,
-        originalInput: studentName,
-        studentName: fullStudentName,
-        score: score,
-        status: 'found',
-        rowIndex: result.bestMatch,
-        hasExistingScore,
-        existingValue: hasExistingScore ? student[currentBatchColumn] : null,
-        confidence: result.confidence
-      };
+      if (result.bestMatch !== -1) {
+        console.log('🔥 PROCESS BATCH: ✅ Student found!');
+        const student = convertedTableData[result.bestMatch];
+        const fullStudentName = `${student['FIRST NAME']} ${student['LASTNAME']}`.trim();
+        
+        const hasExistingScore = student[currentBatchColumn] && 
+                                String(student[currentBatchColumn]).trim() !== '' && 
+                                String(student[currentBatchColumn]).trim() !== '0';
 
-      addRecentStudent(fullStudentName);
-      console.log('🔥 PROCESS BATCH: ✅ Student found, adding to UI');
+        newEntry = {
+          id: entryId,
+          originalInput: studentName,
+          studentName: fullStudentName,
+          score: score,
+          status: 'found',
+          rowIndex: result.bestMatch,
+          hasExistingScore,
+          existingValue: hasExistingScore ? student[currentBatchColumn] : null,
+          confidence: result.confidence,
+          sheetName: currentSheet?.sheet_name // 🔥 NEW: Store sheet name
+        };
+
+        addRecentStudent(fullStudentName);
+        console.log('🔥 PROCESS BATCH: ✅ Student found, adding to UI');
+        
+      } else {
+        console.log('🔥 PROCESS BATCH: ❌ Student not found');
+        newEntry = {
+          id: entryId,
+          originalInput: studentName,
+          studentName: studentName,
+          score: score,
+          status: 'not_found',
+          rowIndex: -1,
+          hasExistingScore: false,
+          existingValue: null,
+          confidence: 'none',
+          sheetName: currentSheet?.sheet_name // 🔥 NEW: Store sheet name
+        };
+        console.log('🔥 PROCESS BATCH: ❌ Student not found, adding to UI');
+      }
+
+      console.log('🔥 PROCESS BATCH: 📝 Adding entry to batch list:', newEntry);
       
-    } else {
-      console.log('🔥 PROCESS BATCH: ❌ Student not found');
-      newEntry = {
-        id: entryId,
-        originalInput: studentName,
-        studentName: studentName,
-        score: score,
-        status: 'not_found',
-        rowIndex: -1,
-        hasExistingScore: false,
-        existingValue: null,
-        confidence: 'none'
-      };
-      console.log('🔥 PROCESS BATCH: ❌ Student not found, adding to UI');
+      setBatchEntries(prev => {
+        console.log('🔥 SET BATCH ENTRIES: Current entries:', prev.length);
+        console.log('🔥 SET BATCH ENTRIES: Adding entry:', newEntry.studentName);
+        
+        const filtered = prev.filter(entry => 
+          entry.originalInput.toLowerCase() !== studentName.toLowerCase()
+        );
+        
+        const newEntries = [...filtered, newEntry];
+        console.log('🔥 SET BATCH ENTRIES: New total entries:', newEntries.length);
+        
+        return newEntries;
+      });
+
+    } catch (error) {
+      console.error('🔥 PROCESS BATCH: ❌ Error:', error);
+      toast.error(`Error processing ${studentName}: ${error.message}`);
+    } finally {
+      console.log('🔥 PROCESS BATCH: 🏁 Setting isProcessingBatch to false');
+      setIsProcessingBatch(false);
     }
-
-    console.log('🔥 PROCESS BATCH: 📝 Adding entry to batch list:', newEntry);
-    
-    // 🔥 SIMPLIFIED: Just add to the list - React will handle duplicates
-    setBatchEntries(prev => {
-      console.log('🔥 SET BATCH ENTRIES: Current entries:', prev.length);
-      console.log('🔥 SET BATCH ENTRIES: Adding entry:', newEntry.studentName);
-      
-      // 🔥 SIMPLE: Filter out any existing entry with same name, then add new one
-      const filtered = prev.filter(entry => 
-        entry.originalInput.toLowerCase() !== studentName.toLowerCase()
-      );
-      
-      const newEntries = [...filtered, newEntry];
-      console.log('🔥 SET BATCH ENTRIES: New total entries:', newEntries.length);
-      
-      return newEntries;
-    });
-
-  } catch (error) {
-    console.error('🔥 PROCESS BATCH: ❌ Error:', error);
-    toast.error(`Error processing ${studentName}: ${error.message}`);
-  } finally {
-    console.log('🔥 PROCESS BATCH: 🏁 Setting isProcessingBatch to false');
-    setIsProcessingBatch(false);
-  }
-};
+  };
 
 const executeBatchEntries = async () => {
-  const validEntries = batchEntries.filter(entry => entry.status === 'found');
-  
-  if (validEntries.length === 0) {
-    toast.error('No valid entries to save');
-    return;
-  }
-
-  try {
-    // 🔥 Stop continuous listening
-    window.batchModeFinishing = true;
+    const validEntries = batchEntries.filter(entry => entry.status === 'found');
     
-    setIsProcessingBatch(true);
-    
-    // Process each valid entry
-    for (const entry of validEntries) {
-      await classRecordService.updateGoogleSheetsCell(
-        classRecord.google_sheet_id,
-        entry.rowIndex,
-        currentBatchColumn,
-        entry.score
-      );
+    if (validEntries.length === 0) {
+      toast.error('No valid entries to save');
+      return;
     }
 
-    toast.success(`✅ Batch saved: ${validEntries.length} students updated`);
-    if (voiceEnabled) {
-      speakText(`Batch complete. ${validEntries.length} students updated.`);
-    }
+    try {
+      window.batchModeFinishing = true;
+      setIsProcessingBatch(true);
+      
+      // Process each valid entry
+      for (const entry of validEntries) {
+        // 🔥 NEW: Use sheet-specific update if we have a current sheet
+        if (currentSheet) {
+          await classRecordService.updateGoogleSheetsCellSpecific(
+            classRecord.google_sheet_id,
+            entry.rowIndex,
+            currentBatchColumn,
+            entry.score,
+            currentSheet.sheet_name
+          );
+        } else {
+          // Fall back to original method
+          await classRecordService.updateGoogleSheetsCell(
+            classRecord.google_sheet_id,
+            entry.rowIndex,
+            currentBatchColumn,
+            entry.score
+          );
+        }
+      }
 
-    // Reset batch mode
-    console.log('🔥 EXECUTE BATCH: Setting batchMode to false after completion');
-    window.batchModeActive = false;
-    setBatchModeProtected(false, 'executeBatchEntries');
-    setShowBatchModal(false);
-    setBatchEntries([]);
-    setCurrentBatchColumn('');
-    
-  } catch (error) {
-    console.error('Batch execution error:', error);
-    toast.error('Failed to save batch entries');
-  } finally {
-    setIsProcessingBatch(false);
-  }
-};
+      const sheetInfo = currentSheet ? ` in ${currentSheet.sheet_name}` : '';
+      toast.success(`✅ Batch saved: ${validEntries.length} students updated${sheetInfo}`);
+      if (voiceEnabled) {
+        speakText(`Batch complete. ${validEntries.length} students updated${sheetInfo}.`);
+      }
+
+      // Reset batch mode
+      console.log('🔥 EXECUTE BATCH: Setting batchMode to false after completion');
+      window.batchModeActive = false;
+      setBatchModeProtected(false, 'executeBatchEntries');
+      setShowBatchModal(false);
+      setBatchEntries([]);
+      setCurrentBatchColumn('');
+      
+    } catch (error) {
+      console.error('Batch execution error:', error);
+      toast.error('Failed to save batch entries');
+    } finally {
+      setIsProcessingBatch(false);
+    }
+  };
 
 const setBatchModeProtected = useCallback((value, reason = 'unknown') => {
   console.log(`🔥 SET BATCH MODE: ${value} - Reason: ${reason}`);
@@ -967,6 +1307,7 @@ const handleExportToPDF = async () => {
 
   const closeAllDropdowns = () => {
     setDropdowns({ tools: false, voice: false, edit: false });
+    setShowSheetSelector(false); // 🔥 ADD THIS LINE
   };
 
   // Close dropdowns when clicking outside
@@ -1090,7 +1431,7 @@ const handleExportToPDF = async () => {
                   <ChevronDown className={`w-4 h-4 transition-transform ${dropdowns.tools ? 'rotate-180' : ''}`} />
                 </button>
                 
-                {dropdowns.tools && (
+              {dropdowns.tools && (
                 <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-slate-200 py-2 z-50">
                   {/* Export options */}
                   <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
@@ -1150,6 +1491,63 @@ const handleExportToPDF = async () => {
               )}
               </div>
 
+              {/* 🔥 NEW: Sheet Selector Dropdown */}
+              {availableSheets.length > 1 && (
+                <div className="relative" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    onClick={() => setShowSheetSelector(!showSheetSelector)}
+                    disabled={loadingSheets}
+                    className="flex items-center space-x-2 bg-indigo-50 text-indigo-700 px-3 py-2 rounded-lg font-medium hover:bg-indigo-100 transition-colors shadow-sm border border-indigo-200 disabled:opacity-50"
+                  >
+                    <FileSpreadsheet className="w-4 h-4" />
+                    <span className="max-w-24 truncate">
+                      {loadingSheets ? 'Loading...' : (currentSheet?.sheet_name || 'Select Sheet')}
+                    </span>
+                    <ChevronDown className={`w-4 h-4 transition-transform ${showSheetSelector ? 'rotate-180' : ''}`} />
+                  </button>
+                  
+                  {showSheetSelector && (
+                    <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-xl border border-slate-200 py-2 z-50 max-h-60 overflow-y-auto">
+                      <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                        Available Sheets ({availableSheets.length})
+                      </div>
+                      {availableSheets.map((sheet, index) => (
+                        <button
+                          key={sheet.sheet_id}
+                          onClick={() => switchToSheet(sheet)}
+                          disabled={loadingSheets}
+                          className={`flex items-center space-x-3 px-4 py-2 text-sm w-full text-left transition-colors disabled:opacity-50 ${
+                            currentSheet?.sheet_name === sheet.sheet_name
+                              ? 'bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500'
+                              : 'text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span className="w-6 h-6 bg-slate-100 rounded text-xs flex items-center justify-center font-medium">
+                            {index + 1}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium truncate">{sheet.sheet_name}</div>
+                            <div className="text-xs text-slate-500">
+                              Sheet {index + 1}
+                              {currentSheet?.sheet_name === sheet.sheet_name && (
+                                <span className="ml-1 text-indigo-600">• Active</span>
+                              )}
+                            </div>
+                          </div>
+                          {currentSheet?.sheet_name === sheet.sheet_name && (
+                            <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
+                          )}
+                        </button>
+                      ))}
+                      
+                      {/* Voice command hint */}
+                      <div className="mt-2 px-4 py-2 text-xs text-slate-500 border-t border-slate-200">
+                        💡 Say "switch to [sheet name]" to change sheets with voice
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
                 {/* Open in Google Sheets Button */}
                 <a
                   href={classRecord.google_sheet_url || `https://docs.google.com/spreadsheets/d/${classRecord.google_sheet_id}/edit`}
@@ -1168,20 +1566,36 @@ const handleExportToPDF = async () => {
         {/* Embedded Google Sheet */}
         <div className="flex-1 p-0">
           <div className="h-full bg-white overflow-hidden">
-            {/* Keep the iframe - it's working! */}
+            {/* 🔥 ENHANCED: Dynamic iframe that switches sheets */}
             <iframe
-              src={`https://docs.google.com/spreadsheets/d/${classRecord.google_sheet_id}/edit?usp=sharing&widget=true&headers=false&rm=embedded`}
+              key={currentSheet?.sheet_id || 'default'} // 🔥 Force re-render when sheet changes
+              src={currentSheet 
+                ? `https://docs.google.com/spreadsheets/d/${classRecord.google_sheet_id}/edit#gid=${currentSheet.sheet_id}&widget=true&headers=false&rm=embedded`
+                : `https://docs.google.com/spreadsheets/d/${classRecord.google_sheet_id}/edit?usp=sharing&widget=true&headers=false&rm=embedded`
+              }
               width="100%"
               height="100%"
               frameBorder="0"
               className="w-full h-full border-0"
-              title={`${classRecord.name} - Class Record Sheet`}
+              title={`${classRecord.name} - ${currentSheet?.sheet_name || 'Class Record'} Sheet`}
               allowFullScreen
               style={{
                 border: 'none',
                 outline: 'none'
               }}
             />
+            
+            {/* 🔥 Loading overlay when switching sheets */}
+            {loadingSheets && (
+              <div className="absolute inset-0 bg-white/80 flex items-center justify-center z-10">
+                <div className="flex items-center space-x-3">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600"></div>
+                  <span className="text-slate-700 font-medium">
+                    Switching to {currentSheet?.sheet_name}...
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1219,6 +1633,141 @@ const handleExportToPDF = async () => {
                   <div className="absolute inset-0 rounded-full border-4 border-red-300 animate-ping"></div>
                 )}
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* 🔥 NEW: Real-time Transcript Display */}
+        {(isListening || transcript.trim()) && (
+          <div className="fixed bottom-6 left-6 z-50 max-w-md">
+            <div className="bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden backdrop-blur-sm">
+              {/* Header */}
+              <div className={`px-4 py-3 flex items-center justify-between ${
+                isListening 
+                  ? 'bg-gradient-to-r from-red-50 to-red-100 border-b border-red-200' 
+                  : 'bg-gradient-to-r from-green-50 to-green-100 border-b border-green-200'
+              }`}>
+                <div className="flex items-center space-x-2">
+                  <div className={`w-2 h-2 rounded-full ${
+                    isListening ? 'bg-red-500 animate-pulse' : 'bg-green-500'
+                  }`}></div>
+                  <span className={`text-sm font-medium ${
+                    isListening ? 'text-red-700' : 'text-green-700'
+                  }`}>
+                    {isListening ? '🎙️ Listening...' : '✅ Voice Input'}
+                  </span>
+                  {batchMode && (
+                    <span className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded-full font-medium">
+                      Batch Mode
+                    </span>
+                  )}
+                </div>
+                
+                {/* Close button */}
+                <button
+                  onClick={() => {
+                    if (isListening) {
+                      stopListening();
+                    }
+                    clearTranscript();
+                  }}
+                  className={`p-1 rounded-full transition-colors ${
+                    isListening 
+                      ? 'hover:bg-red-200 text-red-600' 
+                      : 'hover:bg-green-200 text-green-600'
+                  }`}
+                  title="Clear transcript"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              
+              {/* Transcript Content */}
+              <div className="p-4">
+                {transcript.trim() ? (
+                  <div className="space-y-2">
+                    {/* Current transcript */}
+                    <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                      <div className="text-xs text-slate-500 mb-1">You said:</div>
+                      <div className="text-slate-800 font-medium leading-relaxed">
+                        "{transcript}"
+                      </div>
+                    </div>
+                    
+                    {/* Processing status */}
+                    {!isListening && transcript.trim() && (
+                      <div className="flex items-center space-x-2 text-xs text-slate-600">
+                        <div className="w-3 h-3 border border-slate-400 border-t-transparent rounded-full animate-spin"></div>
+                        <span>Processing command...</span>
+                      </div>
+                    )}
+                    
+                    {/* Batch mode hints */}
+                    {batchMode && currentBatchColumn && (
+                      <div className="bg-purple-50 rounded-lg p-2 border border-purple-200">
+                        <div className="text-xs text-purple-600 mb-1">
+                          💡 Column: <span className="font-medium">{currentBatchColumn}</span>
+                          {currentSheet && (
+                            <span className="ml-2">• Sheet: <span className="font-medium">{currentSheet.sheet_name}</span></span>
+                          )}
+                        </div>
+                        <div className="text-xs text-purple-600">
+                          Say: "Student Name + Score" or "done" to finish
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Regular mode hints */}
+                    {!batchMode && (
+                      <div className="bg-blue-50 rounded-lg p-2 border border-blue-200">
+                        <div className="text-xs text-blue-600">
+                          💡 Try: "Maria Quiz 1 eighty-five" or "John Lab 2 ninety"
+                          {currentSheet && (
+                            <div className="mt-1">Sheet: <span className="font-medium">{currentSheet.sheet_name}</span></div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  /* Empty state */
+                  <div className="text-center py-6">
+                    <Mic className="w-8 h-8 mx-auto text-slate-400 mb-2" />
+                    <div className="text-sm text-slate-600 mb-1">
+                      {isListening ? 'Speak now...' : 'Start speaking to see transcript'}
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      {batchMode 
+                        ? 'Batch mode active - Say student names and scores'
+                        : 'Voice commands will appear here'
+                      }
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              {/* Footer with alternatives (if available) */}
+              {alternatives.length > 1 && (
+                <div className="px-4 pb-3">
+                  <div className="text-xs text-slate-500 mb-2">Alternative interpretations:</div>
+                  <div className="space-y-1">
+                    {alternatives.slice(1, 3).map((alt, index) => (
+                      <div 
+                        key={index}
+                        className="text-xs text-slate-600 bg-slate-100 rounded px-2 py-1 cursor-pointer hover:bg-slate-200 transition-colors"
+                        onClick={() => {
+                          // Use alternative transcript
+                          setTranscript(alt.transcript);
+                          toast.info(`Switched to: "${alt.transcript}"`);
+                        }}
+                        title={`Confidence: ${(alt.confidence * 100).toFixed(1)}%`}
+                      >
+                        "{alt.transcript}" ({(alt.confidence * 100).toFixed(0)}%)
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
