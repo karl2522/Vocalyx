@@ -12,6 +12,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import BatchGradingModal from './modals/BatchGradingModal';
 import VoiceGuideModal from './modals/VoiceGuideModal';
+import OverrideConfirmationModal from './modals/OverrideConfirmationModal';
 
 
 const ClassRecordExcel = () => {
@@ -32,6 +33,8 @@ const ClassRecordExcel = () => {
   const [currentSheet, setCurrentSheet] = useState(null);
   const [loadingSheets, setLoadingSheets] = useState(false);
   const [showSheetSelector, setShowSheetSelector] = useState(false);
+
+  const [overrideConfirmation, setOverrideConfirmation] = useState(null);
 
   const { 
     isListening, 
@@ -312,7 +315,7 @@ const ClassRecordExcel = () => {
       // 🔥 If batch mode is active, we need to refresh the column options
       if (batchMode) {
         setCurrentBatchColumn(''); // Reset column selection
-        toast.info('Column selection reset for new sheet');
+        toast('Column selection reset for new sheet');
       }
       
     } catch (error) {
@@ -545,13 +548,13 @@ const handleBatchEveryoneCommand = async (data) => {
 
 const handleBatchStudentListCommand = async (data) => {
   console.log('🎯 Handling batch student list command:', data);
-  toast.info(`Batch student list command detected: ${data.students.length} students`);
+  toast(`Batch student list command detected: ${data.students.length} students`);
   // TODO: Implement student list batch processing
 };
 
 const handleBatchRowRangeCommand = async (data) => {
   console.log('🎯 Handling batch row range command:', data);
-  toast.info(`Batch row range command detected: rows ${data.startRow + 1} to ${data.endRow + 1}`);
+  toast(`Batch row range command detected: rows ${data.startRow + 1} to ${data.endRow + 1}`);
   // TODO: Implement row range batch processing
 };
 
@@ -564,27 +567,42 @@ const handleAddStudentVoice = async (data) => {
     }
 
     try {
-        // Prepare student data for Google Sheets
+        // 🔧 ENHANCED: Handle multiple field name formats
         const studentData = {};
         
-        // 🔥 ADD AUTO-NUMBERING - we'll let the backend handle this
-        if (data['Last Name'] || data.lastName) {
-            studentData['LASTNAME'] = data['Last Name'] || data.lastName;
+        // Last Name mapping (handle all possible variations)
+        const lastName = data['Last Name'] || data['LASTNAME'] || data.lastName || data['lastname'];
+        if (lastName) {
+            studentData['LASTNAME'] = lastName;
         }
-        if (data['First Name'] || data.firstName) {
-            studentData['FIRST NAME'] = data['First Name'] || data.firstName;
+        
+        // First Name mapping (handle all possible variations)
+        const firstName = data['First Name'] || data['FIRST NAME'] || data.firstName || data['firstname'];
+        if (firstName) {
+            studentData['FIRST NAME'] = firstName;
         }
-        if (data['Student ID'] || data.studentId) {
-            studentData['STUDENT ID'] = data['Student ID'] || data.studentId;
+        
+        // Student ID mapping (handle all possible variations)
+        const studentId = data['Student ID'] || data['STUDENT ID'] || data.studentId || data['studentid'];
+        if (studentId) {
+            studentData['STUDENT ID'] = studentId;
         }
 
-        console.log('🔧 Mapped student data for sheets:', studentData);
+        console.log('🔧 Raw data received:', JSON.stringify(data, null, 2));
+        console.log('🔧 Mapped student data for sheets:', JSON.stringify(studentData, null, 2));
         
-        // 🔥 NEW: Call the API with auto-numbering flag
+        // 🔧 VALIDATION: Check if we have minimum required data
+        if (!studentData['LASTNAME'] && !studentData['FIRST NAME']) {
+            throw new Error('Missing required student name data');
+        }
+        
+        // 🔥 Call the API with auto-numbering
         const response = await classRecordService.addStudentToGoogleSheetsWithAutoNumber(
             classRecord.google_sheet_id,
             studentData
         );
+
+        console.log('🔧 API Response:', response);
 
         if (response.data?.success) {
             const studentName = `${studentData['FIRST NAME'] || ''} ${studentData['LASTNAME'] || ''}`.trim();
@@ -598,8 +616,14 @@ const handleAddStudentVoice = async (data) => {
             throw new Error(response.data?.error || 'Failed to add student');
         }
     } catch (error) {
-        console.error('Add student error:', error);
-        toast.error(`Failed to add student: ${error.message}`);
+        console.error('❌ Add student error details:', {
+            message: error.message,
+            status: error.response?.status,
+            data: error.response?.data,
+            originalData: data
+        });
+        
+        toast.error(`Failed to add student: ${error.response?.data?.error || error.message}`);
         if (voiceEnabled) {
             speakText('Failed to add the student. Please try again.');
         }
@@ -634,129 +658,182 @@ const handleAutoNumberStudents = async () => {
 };
 
   const handleSmartNameGradeEntryVoice = async (data) => {
-    console.log('🎯 Smart name search for:', data);
-    
-    if (!classRecord?.google_sheet_id) {
-        toast.error('No Google Sheet connected');
-        return;
-    }
+  console.log('🎯 Smart name search for:', data);
+  
+  if (!classRecord?.google_sheet_id) {
+      toast.error('No Google Sheet connected');
+      return;
+  }
 
-    try {
-        // Get fresh data for student search
-        let sheetsResponse;
-        if (currentSheet) {
-          sheetsResponse = await classRecordService.getSpecificSheetData(
-            classRecord.google_sheet_id, 
-            currentSheet.sheet_name
-          );
-        } else {
-          sheetsResponse = await classRecordService.getGoogleSheetsDataServiceAccount(classRecord.google_sheet_id);
-        }
-        
-        if (!sheetsResponse.data?.success || !sheetsResponse.data.tableData?.length) {
-            toast.error('Could not load student data');
-            return;
-        }
+  try {
+      // Get fresh data for student search
+      let sheetsResponse;
+      if (currentSheet) {
+        sheetsResponse = await classRecordService.getSpecificSheetData(
+          classRecord.google_sheet_id, 
+          currentSheet.sheet_name
+        );
+      } else {
+        sheetsResponse = await classRecordService.getGoogleSheetsDataServiceAccount(classRecord.google_sheet_id);
+      }
+      
+      if (!sheetsResponse.data?.success || !sheetsResponse.data.tableData?.length) {
+          toast.error('Could not load student data');
+          return;
+      }
 
-        // Convert array data to objects for search
-        const convertedTableData = sheetsResponse.data.tableData.map(row => {
-            const rowObject = {};
-            sheetsResponse.data.headers.forEach((header, index) => {
-                rowObject[header] = row[index] || '';
-            });
-            return rowObject;
-        });
+      // Convert array data to objects for search
+      const convertedTableData = sheetsResponse.data.tableData.map(row => {
+          const rowObject = {};
+          sheetsResponse.data.headers.forEach((header, index) => {
+              rowObject[header] = row[index] || '';
+          });
+          return rowObject;
+      });
 
-        const result = findStudentRowSmart(convertedTableData, data.searchName, recentStudents, data.column);
-        
-        console.log('🔍 Search result:', result);
+      const result = findStudentRowSmart(convertedTableData, data.searchName, recentStudents, data.column);
+      
+      console.log('🔍 Search result:', result);
 
-        // 🔥 FIX: Check for needsConfirmation FIRST, then bestMatch
-        if (result.needsConfirmation && result.possibleMatches.length > 1) {
-            // Handle duplicates that need user confirmation
-            setDuplicateOptions({
-                matches: result.possibleMatches,
-                command: data,
-                searchName: data.searchName,
-                convertedTableData // Store for later use
-            });
-            
-            toast(
-                `🤔 Multiple students found named "${data.searchName}". Say "option 1", "option 2", etc. to choose.`,
-                { 
-                    duration: 10000,
-                    icon: '🤔',
-                    style: {
-                        background: '#fef3c7',
-                        color: '#92400e',
-                        border: '1px solid #f59e0b'
-                    }
-                }
-            );
-            
-            if (voiceEnabled) {
-                const optionsText = result.possibleMatches
-                    .map((match, index) => `Option ${index + 1}: ${match.student}`)
-                    .slice(0, 3)
-                    .join('. ');
-                speakText(`Found multiple students named ${data.searchName}. ${optionsText}. Say option 1, option 2, etc. to choose.`);
-            }
-        } else if (result.bestMatch !== -1) {
-            // 🔥 FIX: Use bestMatch regardless of hasDuplicates flag
-            try {
-                let response;
-                  if (currentSheet) {
-                    response = await classRecordService.updateGoogleSheetsCellSpecific(
-                      classRecord.google_sheet_id,
-                      result.bestMatch,
-                      data.column,
-                      data.value,
-                      currentSheet.sheet_name
-                    );
-                  } else {
-                    response = await classRecordService.updateGoogleSheetsCell(
-                      classRecord.google_sheet_id,
-                      result.bestMatch,
-                      data.column,
-                      data.value
-                    );
+      // 🔥 Handle duplicates first
+      if (result.needsConfirmation && result.possibleMatches.length > 1) {
+          setDuplicateOptions({
+              matches: result.possibleMatches,
+              command: data,
+              searchName: data.searchName,
+              convertedTableData
+          });
+          
+          toast(
+              `🤔 Multiple students found named "${data.searchName}". Say "option 1", "option 2", etc. to choose.`,
+              { 
+                  duration: 10000,
+                  icon: '🤔',
+                  style: {
+                      background: '#fef3c7',
+                      color: '#92400e',
+                      border: '1px solid #f59e0b'
                   }
+              }
+          );
+          
+          if (voiceEnabled) {
+              const optionsText = result.possibleMatches
+                  .map((match, index) => `Option ${index + 1}: ${match.student}`)
+                  .slice(0, 3)
+                  .join('. ');
+              speakText(`Found multiple students named ${data.searchName}. ${optionsText}. Say option 1, option 2, etc. to choose.`);
+          }
+          return;
+      }
 
-                if (response.data?.success) {
-                    const student = convertedTableData[result.bestMatch];
-                    const studentName = `${student['FIRST NAME']} ${student['LASTNAME']}`;
-                    
-                    // Add to recent students
-                    addRecentStudent(studentName);
-                    
-                    toast.success(`✅ ${studentName} - ${data.column}: ${data.value}`);
-                    if (voiceEnabled) {
-                        speakText(`Updated ${data.column} to ${data.value} for ${studentName}`);
-                    }
-                } else {
-                    throw new Error(response.data?.error || 'Failed to update cell');
-                }
-            } catch (updateError) {
-                console.error('Update error:', updateError);
-                toast.error(`Failed to update Google Sheets: ${updateError.message}`);
-                if (voiceEnabled) {
-                    speakText('Failed to update the grade. Please try again.');
-                }
-            }
-        } else {
-            // Only show "not found" if no bestMatch AND no confirmation needed
-            toast.error(`Student "${data.searchName}" not found`);
-            if (voiceEnabled) {
-                speakText(`Student ${data.searchName} not found`);
-            }
-        }
-    } catch (error) {
-        console.error('Voice command error:', error);
-        toast.error('Failed to process voice command');
-        if (voiceEnabled) {
-            speakText('Failed to process the command. Please try again.');
-        }
-    }
+      if (result.bestMatch !== -1) {
+          const student = convertedTableData[result.bestMatch];
+          const studentName = `${student['FIRST NAME']} ${student['LASTNAME']}`;
+          
+          // 🔥 NEW: Check for existing score and show override confirmation
+          const existingScore = student[data.column];
+          const hasExistingScore = existingScore && 
+                                  String(existingScore).trim() !== '' && 
+                                  String(existingScore).trim() !== '0';
+
+          if (hasExistingScore) {
+              console.log('🔥 EXISTING SCORE DETECTED:', existingScore);
+              
+              // Show override confirmation
+              setOverrideConfirmation({
+                  studentName,
+                  columnName: data.column,
+                  currentScore: existingScore,
+                  newScore: data.value,
+                  rowIndex: result.bestMatch,
+                  command: data,
+                  convertedTableData
+              });
+              
+              toast(
+                  `${studentName} already has a score of ${existingScore} for ${data.column}. Confirm to override.`,
+                  { duration: 8000 }
+              );
+              
+              if (voiceEnabled) {
+                  speakText(`${studentName} already has a score of ${existingScore} for ${data.column}. Say yes to override or no to cancel.`);
+              }
+              return;
+          }
+
+          // 🔥 No existing score - proceed normally
+          await performScoreUpdate(result.bestMatch, data, studentName, convertedTableData);
+          
+      } else {
+          toast.error(`Student "${data.searchName}" not found`);
+          if (voiceEnabled) {
+              speakText(`Student ${data.searchName} not found`);
+          }
+      }
+  } catch (error) {
+      console.error('Voice command error:', error);
+      toast.error('Failed to process voice command');
+      if (voiceEnabled) {
+          speakText('Failed to process the command. Please try again.');
+      }
+  }
+};
+
+  const performScoreUpdate = async (rowIndex, data, studentName, convertedTableData) => {
+  try {
+      let response;
+      if (currentSheet) {
+        response = await classRecordService.updateGoogleSheetsCellSpecific(
+          classRecord.google_sheet_id,
+          rowIndex,
+          data.column,
+          data.value,
+          currentSheet.sheet_name
+        );
+      } else {
+        response = await classRecordService.updateGoogleSheetsCell(
+          classRecord.google_sheet_id,
+          rowIndex,
+          data.column,
+          data.value
+        );
+      }
+
+      if (response.data?.success) {
+          addRecentStudent(studentName);
+          
+          toast.success(`✅ ${studentName} - ${data.column}: ${data.value}`);
+          if (voiceEnabled) {
+              speakText(`Updated ${data.column} to ${data.value} for ${studentName}`);
+          }
+      } else {
+          throw new Error(response.data?.error || 'Failed to update cell');
+      }
+  } catch (updateError) {
+      console.error('Update error:', updateError);
+      toast.error(`Failed to update Google Sheets: ${updateError.message}`);
+      if (voiceEnabled) {
+          speakText('Failed to update the grade. Please try again.');
+      }
+  }
+};
+
+  const handleOverrideConfirm = async () => {
+    if (!overrideConfirmation) return;
+    
+    const { rowIndex, command, studentName } = overrideConfirmation;
+    
+    await performScoreUpdate(rowIndex, command, studentName, overrideConfirmation.convertedTableData);
+    setOverrideConfirmation(null);
+  };
+
+const handleOverrideCancel = () => {
+  if (overrideConfirmation && voiceEnabled) {
+      speakText('Score update cancelled. Keeping existing score.');
+  }
+  setOverrideConfirmation(null);
+  toast('Score update cancelled');
 };
 
   const handleDuplicateSelection = async (selectedOption) => {
@@ -797,47 +874,59 @@ const handleAutoNumberStudents = async () => {
 
 
    const handleVoiceCommand = (transcript) => {
-    if (!transcript.trim()) return;
+  if (!transcript.trim()) return;
 
-    console.log('Voice command received:', transcript);
+  console.log('Voice command received:', transcript);
 
-    if (batchMode) {
-        handleBatchVoiceCommand(transcript);
-        return;
-    }
+  if (batchMode) {
+      handleBatchVoiceCommand(transcript);
+      return;
+  }
 
-    // 🔥 NEW: Check for sheet switching commands first
-    if (handleSheetSwitchVoiceCommand(transcript)) {
-        return; // Sheet switch command handled
-    }
+  // 🔥 NEW: Handle override confirmation responses
+  if (overrideConfirmation) {
+      const lowerTranscript = transcript.toLowerCase().trim();
+      if (/^(yes|yeah|yep|confirm|override|y)$/i.test(lowerTranscript)) {
+          handleOverrideConfirm();
+          return;
+      } else if (/^(no|nope|cancel|n)$/i.test(lowerTranscript)) {
+          handleOverrideCancel();
+          return;
+      } else {
+          toast.warning('Please say "yes" to override or "no" to cancel');
+          if (voiceEnabled) {
+              speakText('Please say yes to override or no to cancel');
+          }
+          return;
+      }
+  }
 
-    const command = parseVoiceCommand(transcript, headers, [], {
-        recentStudents,
-        commandHistory: [],
-        alternatives: []
-    });
-    
-    console.log('Parsed command:', command);
-    console.log('🔥 PARSED COMMAND TYPE:', command.type); 
-    console.log('🔥 PARSED COMMAND DATA:', command.data);
-    
-    // Handle duplicate selection
-    if (command.type === 'SELECT_DUPLICATE' && duplicateOptions) {
-        handleDuplicateSelection(command.data.selectedOption);
-        return;
-    }
-    
-    // Execute command directly
-    executeCommand(command);
-    
-    // Add to history
-    addCommandHistory({
-        transcript,
-        command,
-        timestamp: new Date(),
-        executed: true
-    });
-  };
+  // Rest of your existing voice command logic...
+  if (handleSheetSwitchVoiceCommand(transcript)) {
+      return;
+  }
+
+  const command = parseVoiceCommand(transcript, headers, [], {
+      recentStudents,
+      commandHistory: [],
+      alternatives: []
+  });
+  
+  // Handle duplicate selection
+  if (command.type === 'SELECT_DUPLICATE' && duplicateOptions) {
+      handleDuplicateSelection(command.data.selectedOption);
+      return;
+  }
+  
+  executeCommand(command);
+  
+  addCommandHistory({
+      transcript,
+      command,
+      timestamp: new Date(),
+      executed: true
+  });
+};
 
 const handleBatchVoiceCommand = async (transcript) => {
   console.log('🔥 BATCH VOICE: Processing:', transcript);
@@ -1758,7 +1847,7 @@ const handleExportToPDF = async () => {
                         onClick={() => {
                           // Use alternative transcript
                           setTranscript(alt.transcript);
-                          toast.info(`Switched to: "${alt.transcript}"`);
+                          toast(`Switched to: "${alt.transcript}"`);
                         }}
                         title={`Confidence: ${(alt.confidence * 100).toFixed(1)}%`}
                       >
@@ -1776,6 +1865,17 @@ const handleExportToPDF = async () => {
         <VoiceGuideModal
           showVoiceGuide={showVoiceGuide}
           setShowVoiceGuide={setShowVoiceGuide}
+        />
+
+        <OverrideConfirmationModal
+          isOpen={!!overrideConfirmation}
+          onClose={handleOverrideCancel}
+          onConfirm={handleOverrideConfirm}
+          studentName={overrideConfirmation?.studentName}
+          columnName={overrideConfirmation?.columnName}
+          currentScore={overrideConfirmation?.currentScore}
+          newScore={overrideConfirmation?.newScore}
+          isProcessing={false}
         />
 
 

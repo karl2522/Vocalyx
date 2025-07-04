@@ -11,8 +11,8 @@ import {
     FiSearch,
     FiUpload,
     FiUser,
-    FiTrash2,  // 🔥 NEW: Delete icon
-    FiEdit3    // 🔥 NEW: Edit icon
+    FiTrash2,  
+    FiEdit3    
 } from 'react-icons/fi';
 import { RiSoundModuleLine } from 'react-icons/ri';
 import { Link } from 'react-router-dom';
@@ -21,7 +21,6 @@ import { showToast } from '../utils/toast.jsx';
 import DashboardLayout from './layouts/DashboardLayout';
 import CreateClassRecordModal from './modals/CreateClassRecordModal';
 
-// 🔥 NEW: Delete Confirmation Modal Component
 const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, recordName, isDeleting }) => {
   if (!isOpen) return null;
 

@@ -18,14 +18,18 @@ def preprocess_audio(audio_bytes):
     Especially useful for classroom environments with background noise
     """
     try:
-        # Convert bytes to numpy array
+        # 🔧 Check if this is WEBM OPUS format (skip preprocessing)
+        if audio_bytes[:4] == b'RIFF' or audio_bytes[:4] == b'OggS' or len(audio_bytes) < 44:
+            print("🎯 Detected compressed audio format, skipping preprocessing...")
+            return audio_bytes
+
+        # Convert bytes to numpy array (only for LINEAR16/WAV)
         audio_data = np.frombuffer(audio_bytes, dtype=np.int16)
 
         # Convert to float for processing
         audio_data = audio_data.astype(np.float32) / 32768.0
 
         # Apply noise reduction (high-pass filter to remove low-frequency noise)
-        # Removes things like air conditioning, fans, low rumbles
         sos = signal.butter(5, 300, btype='high', fs=16000, output='sos')
         audio_filtered = signal.sosfilt(sos, audio_data)
 
@@ -36,7 +40,6 @@ def preprocess_audio(audio_bytes):
         # Normalize volume (but avoid clipping)
         max_val = np.max(np.abs(audio_filtered))
         if max_val > 0:
-            # Normalize to 90% to leave some headroom
             audio_normalized = audio_filtered * (0.9 / max_val)
         else:
             audio_normalized = audio_filtered
@@ -303,10 +306,11 @@ def transcribe_audio(audio_bytes, language=None, student_names=None, enable_prep
         audio_size = len(audio_bytes)
         print(f"Received audio: {audio_size} bytes")
 
-        # 🎯 NEW: Apply audio preprocessing for noisy environments
+        # 🔧 DISABLE audio preprocessing for WEBM OPUS (causes buffer issues)
+        # WEBM OPUS doesn't need the same preprocessing as raw LINEAR16
         if enable_preprocessing:
-            print("🎯 Applying audio preprocessing...")
-            audio_bytes = preprocess_audio(audio_bytes)
+            print("🎯 Skipping audio preprocessing for WEBM OPUS format...")
+            # Don't process WEBM OPUS - it's already compressed and optimized
 
         # Create the audio content from bytes
         audio = speech.RecognitionAudio(content=audio_bytes)
@@ -324,10 +328,13 @@ def transcribe_audio(audio_bytes, language=None, student_names=None, enable_prep
                 )
             )
 
-        # 🎯 ENHANCED: More comprehensive recognition config
+        # 🔧 FIXED: Configuration for WEBM OPUS audio
         config = speech.RecognitionConfig(
-            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-            sample_rate_hertz=16000,
+            # 🔧 CHANGE: Use WEBM_OPUS encoding instead of LINEAR16
+            encoding=speech.RecognitionConfig.AudioEncoding.WEBM_OPUS,
+            # 🔧 REMOVE: Don't specify sample_rate_hertz for WEBM_OPUS
+            # Google will auto-detect the rate from the WEBM header
+            # sample_rate_hertz=16000,  # Remove this line
             language_code=language or "en-US",
 
             # 🎯 ACCURACY IMPROVEMENTS
@@ -341,15 +348,16 @@ def transcribe_audio(audio_bytes, language=None, student_names=None, enable_prep
             model="latest_short",
             use_enhanced=True,
 
-            # 🎯 AUDIO PROCESSING
-            audio_channel_count=1,
+            # 🔧 REMOVE: Don't specify audio_channel_count for WEBM_OPUS
+            # Google will auto-detect from the WEBM header
+            # audio_channel_count=1,  # Remove this line
             enable_separate_recognition_per_channel=False,
 
             # 🎯 SPEECH CONTEXTS: Apply our enhanced contexts
             speech_contexts=speech_contexts,
 
             # 🎯 ALTERNATIVES: Get multiple alternatives
-            max_alternatives=5,  # Increased from 3 to 5 for better options
+            max_alternatives=5,
 
             # 🎯 PROFANITY FILTER
             profanity_filter=False,
@@ -415,7 +423,7 @@ def transcribe_audio(audio_bytes, language=None, student_names=None, enable_prep
                 "success": True,
                 "confidence": highest_confidence,
                 "alternatives": alternatives_info,
-                "preprocessing_applied": enable_preprocessing,
+                "preprocessing_applied": False,  # Changed to False since we skip it
                 "corrections_made": len(tracker.error_log)
             }
         else:

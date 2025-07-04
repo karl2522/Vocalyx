@@ -1,0 +1,42 @@
+[
+  {
+    "timestamp": "2025-07-04T04:38:11.255708+00:00",
+    "original": "This one Omen 50.",
+    "corrected": "this one omen 50.",
+    "student_name": null,
+    "confidence": 0.26500552892684937,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-04T04:38:43.406607+00:00",
+    "original": "Chris Brown Omen 60.",
+    "corrected": "chris brown omen 60.",
+    "student_name": null,
+    "confidence": 0.33499181270599365,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-04T04:49:23.305980+00:00",
+    "original": "Grease 4, Omen 50.",
+    "corrected": "grease 4, omen 50.",
+    "student_name": null,
+    "confidence": 0.5748615264892578,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-04T04:54:39.390029+00:00",
+    "original": "Greensboro Omen 50.",
+    "corrected": "greensboro omen 50.",
+    "student_name": null,
+    "confidence": 0.48707032203674316,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-04T04:54:56.321723+00:00",
+    "original": "Greensburg capuras 50.",
+    "corrected": "greensburg capuras 50.",
+    "student_name": null,
+    "confidence": 0.5559065937995911,
+    "correction_type": "automatic"
+  }
+]
