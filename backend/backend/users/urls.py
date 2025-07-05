@@ -12,7 +12,8 @@ from .views import (
     sheets_add_student_service_account, sheets_add_student_with_auto_number_service_account,
     sheets_auto_number_students_service_account, get_class_records_with_live_counts_cached,
     sheets_get_all_sheets_data_service_account, sheets_list_all_sheets_service_account,
-    sheets_get_specific_sheet_data_service_account, sheets_update_cell_specific_sheet_service_account
+    sheets_get_specific_sheet_data_service_account, sheets_update_cell_specific_sheet_service_account,
+    sheets_import_students_preview, sheets_import_students_execute
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -72,4 +73,7 @@ urlpatterns = [
     path('activities/', UserActivityListView.as_view(), name='user-activities'),
     path('activities/create/', create_activity, name='create-activity'),
     path('activities/stats/', get_activity_stats, name='activity-stats'),
+
+    path('sheets/<str:sheet_id>/import-students-preview/', sheets_import_students_preview, name='sheets_import_students_preview'),
+    path('sheets/<str:sheet_id>/import-students-execute/', sheets_import_students_execute, name='sheets_import_students_execute'),
 ]

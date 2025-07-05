@@ -13,6 +13,8 @@ import autoTable from 'jspdf-autotable';
 import BatchGradingModal from './modals/BatchGradingModal';
 import VoiceGuideModal from './modals/VoiceGuideModal';
 import OverrideConfirmationModal from './modals/OverrideConfirmationModal';
+import ImportStudentsModal from './modals/ImportStudentsModal';
+import ImportProgressIndicator from './modals/ImportProgressIndicator';
 
 
 const ClassRecordExcel = () => {
@@ -28,6 +30,10 @@ const ClassRecordExcel = () => {
   const [currentBatchColumn, setCurrentBatchColumn] = useState('');
   const [batchEntries, setBatchEntries] = useState([]);
   const [isProcessingBatch, setIsProcessingBatch] = useState(false);
+
+  const [importProgress, setImportProgress] = useState(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importConflicts, setImportConflicts] = useState([]);
 
   const [availableSheets, setAvailableSheets] = useState([]);
   const [currentSheet, setCurrentSheet] = useState(null);
@@ -556,6 +562,170 @@ const handleBatchRowRangeCommand = async (data) => {
   console.log('🎯 Handling batch row range command:', data);
   toast(`Batch row range command detected: rows ${data.startRow + 1} to ${data.endRow + 1}`);
   // TODO: Implement row range batch processing
+};
+
+const handleImportStudents = () => {
+  // Create hidden file input
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.xlsx,.xls,.csv';
+  input.style.display = 'none';
+  
+  input.onchange = async (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      await processImportFile(file);
+    }
+  };
+  
+  document.body.appendChild(input);
+  input.click();
+  document.body.removeChild(input);
+};
+
+const processImportFile = async (file) => {
+  if (!classRecord?.google_sheet_id) {
+    toast.error('No Google Sheet connected');
+    return;
+  }
+
+  try {
+    setImportProgress({ status: 'reading', message: 'Reading Excel file...' });
+    
+    // Read Excel file
+    const data = await file.arrayBuffer();
+    const workbook = XLSX.read(data, { type: 'array' });
+    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+    const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+    
+    if (jsonData.length < 2) {
+      throw new Error('Excel file must have at least a header row and one data row');
+    }
+    
+    setImportProgress({ status: 'parsing', message: 'Parsing student data...' });
+    
+    // Parse headers and find name columns
+    const headers = jsonData[0].map(h => String(h || '').trim());
+    const students = [];
+    
+    // Smart column detection
+    const lastNameIndex = findColumnIndex(headers, ['last name', 'lastname', 'surname', 'family name']);
+    const firstNameIndex = findColumnIndex(headers, ['first name', 'firstname', 'given name']);
+    
+    if (lastNameIndex === -1 || firstNameIndex === -1) {
+      throw new Error('Could not find "Last Name" and "First Name" columns in the Excel file');
+    }
+    
+    // Extract student data (skip header row)
+    for (let i = 1; i < jsonData.length; i++) {
+      const row = jsonData[i];
+      const lastName = String(row[lastNameIndex] || '').trim();
+      const firstName = String(row[firstNameIndex] || '').trim();
+      
+      if (lastName && firstName) {
+        students.push({
+          LASTNAME: lastName,
+          'FIRST NAME': firstName,
+          originalRow: i + 1
+        });
+      }
+    }
+    
+    if (students.length === 0) {
+      throw new Error('No valid student records found in the Excel file');
+    }
+    
+    setImportProgress({ status: 'checking', message: 'Checking for duplicates...' });
+    
+    // Check for conflicts with existing students
+    await checkImportConflicts(students);
+    
+  } catch (error) {
+    console.error('Import error:', error);
+    toast.error(`Import failed: ${error.message}`);
+    setImportProgress(null);
+  }
+};
+
+const findColumnIndex = (headers, possibleNames) => {
+  for (const name of possibleNames) {
+    const index = headers.findIndex(h => 
+      h.toLowerCase().includes(name.toLowerCase()) || 
+      name.toLowerCase().includes(h.toLowerCase())
+    );
+    if (index !== -1) return index;
+  }
+  return -1;
+};
+
+const checkImportConflicts = async (studentsToImport) => {
+  try {
+    setImportProgress({ status: 'checking', message: 'Checking for duplicates...' });
+    
+    // Call backend preview endpoint
+    const response = await classRecordService.importStudentsPreview(
+      classRecord.google_sheet_id,
+      studentsToImport,
+      currentSheet?.sheet_name
+    );
+    
+    if (!response.data?.success) {
+      throw new Error(response.data?.error || 'Preview failed');
+    }
+    
+    const { preview } = response.data;
+    
+    setImportProgress({ 
+      status: 'conflicts', 
+      message: `Found ${preview.conflictCount} conflicts, ${preview.newCount} new students` 
+    });
+    
+    if (preview.conflictCount > 0) {
+      setImportConflicts(preview.conflicts);
+      setShowImportModal(true);
+    } else {
+      // No conflicts, proceed with import
+      await executeImport(preview.newStudents, []);
+    }
+    
+  } catch (error) {
+    throw new Error(`Conflict check failed: ${error.message}`);
+  }
+};
+
+const executeImport = async (newStudents, resolvedConflicts) => {
+  try {
+    setImportProgress({ status: 'importing', message: 'Adding students to Google Sheets...' });
+    
+    const response = await classRecordService.importStudentsExecute(
+      classRecord.google_sheet_id,
+      newStudents,
+      resolvedConflicts,
+      currentSheet?.sheet_name
+    );
+    
+    if (!response.data?.success) {
+      throw new Error(response.data?.error || 'Import failed');
+    }
+    
+    const { results, summary } = response.data;
+    const sheetInfo = currentSheet ? ` in ${currentSheet.sheet_name}` : '';
+    
+    toast.success(`✅ ${summary}${sheetInfo}`);
+    if (voiceEnabled) {
+      speakText(`Import completed. ${summary}${sheetInfo}`);
+    }
+    
+    // Clean up
+    setImportProgress(null);
+    setShowImportModal(false);
+    setImportConflicts([]);
+    
+  } catch (error) {
+    console.error('Import execution error:', error);
+    toast.error(`Import failed: ${error.message}`);
+    setImportProgress(null);
+  }
 };
 
 const handleAddStudentVoice = async (data) => {
@@ -1548,6 +1718,20 @@ const handleExportToPDF = async () => {
                   </button>
                   
                   <hr className="my-2 border-slate-200" />
+
+                  <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                    Import Options
+                  </div>
+                  <button
+                    onClick={() => {
+                      handleImportStudents();
+                      closeAllDropdowns();
+                    }}
+                    className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                  >
+                    <Upload className="w-4 h-4 text-blue-600" />
+                    <span>Import Students</span>
+                  </button>
                   
                   {/* Batch Mode & Auto-number options */}
                   <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
@@ -1860,6 +2044,19 @@ const handleExportToPDF = async () => {
             </div>
           </div>
         )}
+
+        <ImportStudentsModal 
+          showImportModal={showImportModal}
+          importConflicts={importConflicts}
+          setImportConflicts={setImportConflicts}
+          setShowImportModal={setShowImportModal}
+          setImportProgress={setImportProgress}
+          executeImport={executeImport}
+        />
+
+         <ImportProgressIndicator 
+          importProgress={importProgress}
+        />
 
         {/* 📖 Voice Guide Modal */}
         <VoiceGuideModal

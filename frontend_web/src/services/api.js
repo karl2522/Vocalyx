@@ -345,6 +345,23 @@ export const classRecordService = {
             sheet_name: sheetName
         });
     },
+
+    importStudentsPreview: (sheetId, students, sheetName = null) => {
+        const payload = { students };
+        if (sheetName) payload.sheet_name = sheetName;
+        
+        return api.post(`/sheets/${sheetId}/import-students-preview/`, payload);
+    },
+
+    importStudentsExecute: (sheetId, newStudents, resolvedConflicts, sheetName = null) => {
+        const payload = { 
+            newStudents, 
+            resolvedConflicts 
+        };
+        if (sheetName) payload.sheet_name = sheetName;
+        
+        return api.post(`/sheets/${sheetId}/import-students-execute/`, payload);
+    },
 };
 
 export const enhancedClassRecordService = {

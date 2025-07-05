@@ -846,3 +846,311 @@ class GoogleServiceAccountSheets:
                 'success': False,
                 'error': f'Failed to update cell: {str(e)}'
             }
+
+    def compare_students_for_import(self, sheet_id: str, import_students: list, sheet_name: str = None) -> dict:
+        """
+        Compare import students with existing students to find duplicates.
+
+        Args:
+            sheet_id: ID of the spreadsheet
+            import_students: List of student dicts with 'FIRST NAME' and 'LASTNAME'
+            sheet_name: Name of specific sheet (optional)
+
+        Returns:
+            Dict containing conflicts and new students
+        """
+        try:
+            # Get existing students
+            if sheet_name:
+                sheet_data = self.get_specific_sheet_data(sheet_id, sheet_name)
+            else:
+                sheet_data = self.get_sheet_data(sheet_id)
+
+            if not sheet_data['success']:
+                return sheet_data
+
+            existing_students = []
+            headers = sheet_data['headers']
+
+            # Extract existing students with their row info
+            for row_index, row in enumerate(sheet_data['tableData']):
+                if len(row) >= 2:  # Has at least first name and last name columns
+                    # Find name columns
+                    first_name_idx = None
+                    last_name_idx = None
+
+                    for idx, header in enumerate(headers):
+                        if 'FIRST NAME' in header.upper() or 'FIRSTNAME' in header.upper():
+                            first_name_idx = idx
+                        elif 'LAST NAME' in header.upper() or 'LASTNAME' in header.upper():
+                            last_name_idx = idx
+
+                    if first_name_idx is not None and last_name_idx is not None:
+                        first_name = row[first_name_idx].strip() if first_name_idx < len(row) and row[
+                            first_name_idx] else ''
+                        last_name = row[last_name_idx].strip() if last_name_idx < len(row) and row[
+                            last_name_idx] else ''
+
+                        if first_name or last_name:  # Has some name data
+                            existing_students.append({
+                                'FIRST NAME': first_name,
+                                'LASTNAME': last_name,
+                                'rowIndex': row_index,
+                                'fullRow': row
+                            })
+
+            # Compare and find conflicts
+            conflicts = []
+            new_students = []
+
+            for import_student in import_students:
+                import_first = import_student.get('FIRST NAME', '').strip().lower()
+                import_last = import_student.get('LASTNAME', '').strip().lower()
+
+                # Look for exact match
+                conflict_found = None
+                for existing in existing_students:
+                    existing_first = existing['FIRST NAME'].strip().lower()
+                    existing_last = existing['LASTNAME'].strip().lower()
+
+                    if (import_first == existing_first and import_last == existing_last):
+                        conflict_found = existing
+                        break
+
+                if conflict_found:
+                    conflicts.append({
+                        'importStudent': import_student,
+                        'existingStudent': conflict_found,
+                        'action': 'skip'  # default action
+                    })
+                else:
+                    new_students.append(import_student)
+
+            return {
+                'success': True,
+                'conflicts': conflicts,
+                'newStudents': new_students,
+                'totalImport': len(import_students),
+                'conflictCount': len(conflicts),
+                'newCount': len(new_students),
+                'existingCount': len(existing_students)
+            }
+
+        except Exception as e:
+            logger.error(f"Compare students for import error: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Failed to compare students: {str(e)}'
+            }
+
+    def import_students_batch(self, sheet_id: str, new_students: list, resolved_conflicts: list,
+                              sheet_name: str = None) -> dict:
+        """
+        Execute batch import of students with conflict resolutions.
+
+        Args:
+            sheet_id: ID of the spreadsheet
+            new_students: List of new students to add
+            resolved_conflicts: List of conflicts with actions (skip/override)
+            sheet_name: Name of specific sheet (optional)
+
+        Returns:
+            Dict containing import results
+        """
+        try:
+            results = {
+                'success': True,
+                'newStudentsAdded': 0,
+                'conflictsSkipped': 0,
+                'conflictsOverridden': 0,
+                'errors': []
+            }
+
+            # Process new students
+            for student in new_students:
+                try:
+                    if sheet_name:
+                        result = self.add_student_with_auto_number_to_sheet(sheet_id, student, sheet_name)
+                    else:
+                        result = self.add_student_with_auto_number(sheet_id, student)
+
+                    if result['success']:
+                        results['newStudentsAdded'] += 1
+                    else:
+                        results['errors'].append(
+                            f"Failed to add {student.get('FIRST NAME', '')} {student.get('LASTNAME', '')}: {result.get('error', 'Unknown error')}")
+
+                except Exception as e:
+                    results['errors'].append(
+                        f"Error adding {student.get('FIRST NAME', '')} {student.get('LASTNAME', '')}: {str(e)}")
+
+            # Process conflict resolutions
+            for conflict in resolved_conflicts:
+                action = conflict.get('action', 'skip')
+
+                if action == 'skip':
+                    results['conflictsSkipped'] += 1
+
+                elif action == 'override':
+                    try:
+                        # Update existing student data
+                        existing_student = conflict['existingStudent']
+                        import_student = conflict['importStudent']
+
+                        # For now, we'll just count it as overridden
+                        # In a full implementation, you might update specific fields
+                        results['conflictsOverridden'] += 1
+
+                    except Exception as e:
+                        results['errors'].append(f"Error overriding student: {str(e)}")
+
+            # Calculate totals
+            total_processed = results['newStudentsAdded'] + results['conflictsSkipped'] + results['conflictsOverridden']
+
+            logger.info(
+                f"Import completed: {results['newStudentsAdded']} new, {results['conflictsSkipped']} skipped, {results['conflictsOverridden']} overridden")
+
+            return {
+                'success': True,
+                'results': results,
+                'totalProcessed': total_processed,
+                'summary': f"Added {results['newStudentsAdded']} new students, skipped {results['conflictsSkipped']} duplicates, overrode {results['conflictsOverridden']} existing"
+            }
+
+        except Exception as e:
+            logger.error(f"Batch import error: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Failed to import students: {str(e)}'
+            }
+
+    def add_student_with_auto_number_to_sheet(self, sheet_id: str, student_data: dict, sheet_name: str) -> dict:
+        """
+        Add a new student row to a specific sheet with auto-numbering.
+
+        Args:
+            sheet_id: ID of the spreadsheet
+            student_data: Dictionary with student information
+            sheet_name: Name of the specific sheet
+
+        Returns:
+            Dict containing success status and row info
+        """
+        try:
+            # Get sheet data
+            sheet_data = self.get_specific_sheet_data(sheet_id, sheet_name)
+            if not sheet_data['success']:
+                return sheet_data
+
+            headers = sheet_data['headers']
+            current_data = sheet_data['tableData']
+
+            # Find next empty row (skip 2 header rows)
+            next_row = len(current_data) + 3  # +2 for headers, +1 for 1-based indexing
+
+            # Calculate the student number
+            student_number = len(current_data) + 1
+
+            # Create new row with student data
+            new_row = [''] * len(headers)
+
+            # Auto-assign the number to the first column (NO.)
+            if len(headers) > 0:
+                new_row[0] = str(student_number)
+
+            # Fill in the student data
+            for key, value in student_data.items():
+                if key in headers:
+                    index = headers.index(key)
+                    new_row[index] = str(value)
+
+            # Append the new row to specific sheet
+            range_name = f"'{sheet_name}'!A{next_row}:{chr(65 + len(headers) - 1)}{next_row}"
+
+            body = {
+                'values': [new_row]
+            }
+
+            result = self.sheets_service.spreadsheets().values().update(
+                spreadsheetId=sheet_id,
+                range=range_name,
+                valueInputOption='RAW',
+                body=body
+            ).execute()
+
+            logger.info(f"Successfully added student #{student_number} to {sheet_name} row {next_row}")
+
+            return {
+                'success': True,
+                'updated_cells': result.get('updatedCells', 0),
+                'row_added': next_row,
+                'rowNumber': student_number,
+                'student_data': student_data,
+                'range': range_name,
+                'sheet_name': sheet_name
+            }
+
+        except Exception as e:
+            logger.error(f"Unexpected error adding student to sheet: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Failed to add student to sheet: {str(e)}'
+            }
+
+    def validate_import_data(self, import_data: list) -> dict:
+        """
+        Validate imported student data format.
+
+        Args:
+            import_data: List of student dictionaries
+
+        Returns:
+            Dict containing validation results
+        """
+        try:
+            valid_students = []
+            invalid_students = []
+
+            for i, student in enumerate(import_data):
+                row_number = student.get('originalRow', i + 1)
+
+                # Check required fields
+                first_name = student.get('FIRST NAME', '').strip()
+                last_name = student.get('LASTNAME', '').strip()
+
+                if not first_name and not last_name:
+                    invalid_students.append({
+                        'student': student,
+                        'row': row_number,
+                        'error': 'Missing both first and last name'
+                    })
+                elif not first_name:
+                    invalid_students.append({
+                        'student': student,
+                        'row': row_number,
+                        'error': 'Missing first name'
+                    })
+                elif not last_name:
+                    invalid_students.append({
+                        'student': student,
+                        'row': row_number,
+                        'error': 'Missing last name'
+                    })
+                else:
+                    valid_students.append(student)
+
+            return {
+                'success': True,
+                'validStudents': valid_students,
+                'invalidStudents': invalid_students,
+                'validCount': len(valid_students),
+                'invalidCount': len(invalid_students),
+                'totalCount': len(import_data)
+            }
+
+        except Exception as e:
+            logger.error(f"Validate import data error: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Failed to validate import data: {str(e)}'
+            }

@@ -1073,3 +1073,84 @@ def sheets_update_cell_specific_sheet_service_account(request, sheet_id):
         logger.error(f"Update cell in specific sheet error: {str(e)}")
         return Response({'error': str(e)}, status=500)
 
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def sheets_import_students_preview(request, sheet_id):
+    """Preview import conflicts before actual import"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+
+        import_students = request.data.get('students', [])
+        sheet_name = request.data.get('sheet_name')  # Optional specific sheet
+
+        if not import_students:
+            return Response({'error': 'No students provided for import'}, status=400)
+
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+
+        # Validate import data first
+        validation_result = service.validate_import_data(import_students)
+        if not validation_result['success']:
+            return Response(validation_result, status=400)
+
+        if validation_result['invalidCount'] > 0:
+            return Response({
+                'success': False,
+                'error': 'Invalid student data found',
+                'validation': validation_result
+            }, status=400)
+
+        # Compare with existing students
+        comparison_result = service.compare_students_for_import(
+            sheet_id,
+            validation_result['validStudents'],
+            sheet_name
+        )
+
+        if not comparison_result['success']:
+            return Response(comparison_result, status=500)
+
+        return Response({
+            'success': True,
+            'preview': comparison_result,
+            'validation': validation_result
+        })
+
+    except Exception as e:
+        logger.error(f"Import preview error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def sheets_import_students_execute(request, sheet_id):
+    """Execute the student import with conflict resolutions"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+
+        new_students = request.data.get('newStudents', [])
+        resolved_conflicts = request.data.get('resolvedConflicts', [])
+        sheet_name = request.data.get('sheet_name')  # Optional specific sheet
+
+        if not new_students and not resolved_conflicts:
+            return Response({'error': 'No students to import'}, status=400)
+
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+
+        # Execute the import
+        import_result = service.import_students_batch(
+            sheet_id,
+            new_students,
+            resolved_conflicts,
+            sheet_name
+        )
+
+        return Response(import_result)
+
+    except Exception as e:
+        logger.error(f"Import execute error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+
