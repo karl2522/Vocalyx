@@ -13,7 +13,8 @@ from .views import (
     sheets_auto_number_students_service_account, get_class_records_with_live_counts_cached,
     sheets_get_all_sheets_data_service_account, sheets_list_all_sheets_service_account,
     sheets_get_specific_sheet_data_service_account, sheets_update_cell_specific_sheet_service_account,
-    sheets_import_students_preview, sheets_import_students_execute
+    sheets_import_students_preview, sheets_import_students_execute, sheets_preview_column_import,
+    sheets_analyze_columns_mapping, sheets_execute_column_import, sheets_rename_column_header
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -76,4 +77,9 @@ urlpatterns = [
 
     path('sheets/<str:sheet_id>/import-students-preview/', sheets_import_students_preview, name='sheets_import_students_preview'),
     path('sheets/<str:sheet_id>/import-students-execute/', sheets_import_students_execute, name='sheets_import_students_execute'),
+
+    path('sheets/<str:sheet_id>/preview-column-import/', sheets_preview_column_import, name='sheets_preview_column_import'),
+    path('sheets/<str:sheet_id>/analyze-columns-mapping/', sheets_analyze_columns_mapping, name='sheets_analyze_columns_mapping'),
+    path('sheets/<str:sheet_id>/execute-column-import/', sheets_execute_column_import, name='sheets_execute_column_import'),
+    path('sheets/<str:sheet_id>/rename-column-header/', sheets_rename_column_header, name='sheets_rename_column_header'),
 ]

@@ -362,6 +362,40 @@ export const classRecordService = {
         
         return api.post(`/sheets/${sheetId}/import-students-execute/`, payload);
     },
+
+    previewColumnImport: (sheetId, excelData, sheetName = null) => {
+        const payload = { excel_data: excelData };
+        if (sheetName) payload.sheet_name = sheetName;
+        
+        return api.post(`/sheets/${sheetId}/preview-column-import/`, payload);
+    },
+
+    analyzeColumnsForMapping: (sheetId, importColumns, sheetName = null) => {
+        const payload = { import_columns: importColumns };
+        if (sheetName) payload.sheet_name = sheetName;
+        
+        return api.post(`/sheets/${sheetId}/analyze-columns-mapping/`, payload);
+    },
+
+    executeColumnImport: (sheetId, columnMappings, importData, sheetName = null) => {
+        const payload = { 
+            column_mappings: columnMappings,
+            import_data: importData
+        };
+        if (sheetName) payload.sheet_name = sheetName;
+        
+        return api.post(`/sheets/${sheetId}/execute-column-import/`, payload);
+    },
+
+    renameColumnHeader: (sheetId, columnIndex, newName, sheetName = null) => {
+        const payload = { 
+            column_index: columnIndex,
+            new_name: newName
+        };
+        if (sheetName) payload.sheet_name = sheetName;
+        
+        return api.post(`/sheets/${sheetId}/rename-column-header/`, payload);
+    },
 };
 
 export const enhancedClassRecordService = {

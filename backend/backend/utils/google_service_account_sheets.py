@@ -1154,3 +1154,480 @@ class GoogleServiceAccountSheets:
                 'success': False,
                 'error': f'Failed to validate import data: {str(e)}'
             }
+
+    def analyze_columns_for_mapping(self, sheet_id: str, import_columns: list, sheet_name: str = None) -> dict:
+        """
+        Analyze existing columns to find available slots for mapping imported columns.
+
+        Args:
+            sheet_id: ID of the spreadsheet
+            import_columns: List of column names from imported Excel (excluding student info)
+            sheet_name: Name of specific sheet (optional)
+
+        Returns:
+            Dict containing available mapping options for each import column
+        """
+        try:
+            # Get existing sheet structure
+            if sheet_name:
+                sheet_data = self.get_specific_sheet_data(sheet_id, sheet_name)
+            else:
+                sheet_data = self.get_sheet_data(sheet_id)
+
+            if not sheet_data['success']:
+                return sheet_data
+
+            headers = sheet_data['headers']
+            table_data = sheet_data['tableData']
+
+            # Analyze each existing column to see if it has data
+            column_analysis = []
+            for col_index, column_name in enumerate(headers):
+                # 🔥 FIXED: Exclude student info columns (including STUDENT ID)
+                excluded_columns = [
+                    'NO.', 'NO', 'NUM', 'NUMBER',
+                    'LASTNAME', 'LAST NAME', 'SURNAME',
+                    'FIRSTNAME', 'FIRST NAME', 'GIVEN NAME',
+                    'STUDENT ID', 'STUDENTID', 'ID', 'STUDENT_ID',  # 🔥 Added STUDENT ID exclusions
+                    'EMAIL', 'CONTACT', 'PHONE'  # 🔥 Added other common student info fields
+                ]
+
+                if any(excluded.upper() in column_name.upper() for excluded in excluded_columns):
+                    continue  # Skip this column - it's student info
+
+                # Check if column has any data
+                has_data = False
+                data_count = 0
+                sample_values = []
+
+                for row in table_data:
+                    if col_index < len(row) and row[col_index] and str(row[col_index]).strip():
+                        has_data = True
+                        data_count += 1
+                        if len(sample_values) < 3:  # Get sample values
+                            sample_values.append(str(row[col_index]).strip())
+
+                column_analysis.append({
+                    'columnName': column_name,
+                    'columnIndex': col_index,
+                    'hasData': has_data,
+                    'dataCount': data_count,
+                    'totalRows': len(table_data),
+                    'sampleValues': sample_values,
+                    'isEmpty': not has_data,
+                    'isPartiallyFilled': has_data and data_count < len(table_data) * 0.8,  # Less than 80% filled
+                    'availability': 'empty' if not has_data else (
+                        'partial' if data_count < len(table_data) * 0.8 else 'full')
+                })
+
+            # Create mapping suggestions for each import column
+            mapping_suggestions = []
+            for import_col in import_columns:
+                suggestions = {
+                    'importColumn': import_col,
+                    'suggestions': []
+                }
+
+                # Find best matches based on availability
+                for col_info in column_analysis:
+                    if col_info['isEmpty']:
+                        suggestions['suggestions'].append({
+                            'targetColumn': col_info['columnName'],
+                            'targetIndex': col_info['columnIndex'],
+                            'recommendation': 'perfect',  # Empty column - perfect match
+                            'risk': 'none',
+                            'description': f"Empty column - safe to use",
+                            'dataCount': 0
+                        })
+                    elif col_info['isPartiallyFilled']:
+                        suggestions['suggestions'].append({
+                            'targetColumn': col_info['columnName'],
+                            'targetIndex': col_info['columnIndex'],
+                            'recommendation': 'caution',  # Has some data
+                            'risk': 'medium',
+                            'description': f"Has {col_info['dataCount']} existing entries out of {col_info['totalRows']} students",
+                            'dataCount': col_info['dataCount'],
+                            'sampleValues': col_info['sampleValues']
+                        })
+                    else:
+                        suggestions['suggestions'].append({
+                            'targetColumn': col_info['columnName'],
+                            'targetIndex': col_info['columnIndex'],
+                            'recommendation': 'risky',  # Column is full
+                            'risk': 'high',
+                            'description': f"Column is full ({col_info['dataCount']} entries) - will overwrite existing data",
+                            'dataCount': col_info['dataCount'],
+                            'sampleValues': col_info['sampleValues']
+                        })
+
+                # Sort suggestions by safety (empty first, then partial, then full)
+                suggestions['suggestions'].sort(key=lambda x: {
+                    'perfect': 0,
+                    'caution': 1,
+                    'risky': 2
+                }.get(x['recommendation'], 3))
+
+                mapping_suggestions.append(suggestions)
+
+            return {
+                'success': True,
+                'columnAnalysis': column_analysis,
+                'mappingSuggestions': mapping_suggestions,
+                'totalColumns': len(headers),
+                'availableEmptyColumns': len([c for c in column_analysis if c['isEmpty']]),
+                'partiallyFilledColumns': len([c for c in column_analysis if c['isPartiallyFilled']]),
+                'fullColumns': len([c for c in column_analysis if c['availability'] == 'full'])
+            }
+
+        except Exception as e:
+            logger.error(f"Analyze columns for mapping error: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Failed to analyze columns: {str(e)}'
+            }
+
+    def import_column_data_with_mapping(self, sheet_id: str, column_mappings: list, import_data: dict,
+                                        sheet_name: str = None) -> dict:
+        """
+        Import column data with custom mappings and rename headers.
+
+        Args:
+            sheet_id: ID of the spreadsheet
+            column_mappings: List of mappings [{'importColumn': 'HTML Activity', 'targetColumn': 'QUIZ 1', 'action': 'replace'}]
+            import_data: Dict with student data and column scores
+            sheet_name: Name of specific sheet (optional)
+
+        Returns:
+            Dict containing import results
+        """
+        try:
+            results = {
+                'success': True,
+                'columnsRenamed': 0,
+                'studentsUpdated': 0,
+                'cellsUpdated': 0,
+                'errors': []
+            }
+
+            # Get sheet data
+            if sheet_name:
+                sheet_data = self.get_specific_sheet_data(sheet_id, sheet_name)
+            else:
+                sheet_data = self.get_sheet_data(sheet_id)
+
+            if not sheet_data['success']:
+                return sheet_data
+
+            headers = sheet_data['headers']
+            table_data = sheet_data['tableData']
+            target_sheet_name = sheet_data['sheet_name']
+
+            # Process each column mapping
+            for mapping in column_mappings:
+                import_column = mapping['importColumn']
+                target_column = mapping['targetColumn']
+                action = mapping.get('action', 'replace')  # replace, merge, skip
+
+                if action == 'skip':
+                    continue
+
+                try:
+                    # Find target column index
+                    target_index = headers.index(target_column)
+
+                    # Step 1: Rename the header if it's different
+                    if import_column != target_column:
+                        rename_result = self.rename_column_header(
+                            sheet_id, target_index, import_column, target_sheet_name
+                        )
+                        if rename_result['success']:
+                            results['columnsRenamed'] += 1
+                            # Update local headers for subsequent operations
+                            headers[target_index] = import_column
+                        else:
+                            results['errors'].append(f"Failed to rename {target_column} to {import_column}")
+
+                    # Step 2: Import the data for this column
+                    column_data = import_data.get('columnData', {}).get(import_column, {})
+
+                    if not column_data:
+                        results['errors'].append(f"No data found for column {import_column}")
+                        continue
+
+                    # Step 3: Update student scores
+                    students_in_column = 0
+                    for student_key, score in column_data.items():
+                        # Find student row by matching names
+                        student_row_index = self.find_student_row_by_name(
+                            student_key, table_data, headers
+                        )
+
+                        if student_row_index is not None:
+                            # Update the cell
+                            update_result = self.update_cell_in_sheet(
+                                sheet_id, student_row_index, import_column, score, target_sheet_name
+                            )
+
+                            if update_result['success']:
+                                students_in_column += 1
+                                results['cellsUpdated'] += 1
+                            else:
+                                results['errors'].append(f"Failed to update {student_key} in {import_column}")
+
+                    results['studentsUpdated'] += students_in_column
+                    logger.info(f"Successfully imported {students_in_column} scores for column {import_column}")
+
+                except ValueError:
+                    results['errors'].append(f"Target column {target_column} not found in sheet")
+                except Exception as e:
+                    results['errors'].append(f"Error importing {import_column}: {str(e)}")
+
+            return {
+                'success': True,
+                'results': results,
+                'summary': f"Renamed {results['columnsRenamed']} columns, updated {results['cellsUpdated']} cells for {results['studentsUpdated']} student entries"
+            }
+
+        except Exception as e:
+            logger.error(f"Import column data with mapping error: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Failed to import column data: {str(e)}'
+            }
+
+    def rename_column_header(self, sheet_id: str, column_index: int, new_name: str, sheet_name: str) -> dict:
+        """
+        Rename a column header in the Google Sheet.
+
+        Args:
+            sheet_id: ID of the spreadsheet
+            column_index: 0-based index of the column to rename
+            new_name: New name for the column
+            sheet_name: Name of the sheet
+
+        Returns:
+            Dict containing success status
+        """
+        try:
+            # Convert column index to letter
+            column_letter = chr(65 + column_index)
+
+            # Update the sub-header (row 2) - this is where the actual column names are
+            cell_range = f"'{sheet_name}'!{column_letter}2"
+
+            body = {
+                'values': [[new_name]]
+            }
+
+            result = self.sheets_service.spreadsheets().values().update(
+                spreadsheetId=sheet_id,
+                range=cell_range,
+                valueInputOption='RAW',
+                body=body
+            ).execute()
+
+            logger.info(f"Successfully renamed column {column_letter} to '{new_name}'")
+
+            return {
+                'success': True,
+                'updated_cells': result.get('updatedCells', 0),
+                'cell_range': cell_range,
+                'new_name': new_name,
+                'column_index': column_index
+            }
+
+        except Exception as e:
+            logger.error(f"Rename column header error: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Failed to rename column header: {str(e)}'
+            }
+
+    def find_student_row_by_name(self, student_identifier: str, table_data: list, headers: list) -> int:
+        """
+        Find a student's row index by name matching.
+
+        Args:
+            student_identifier: String like "John Smith" or "Smith, John"
+            table_data: List of table rows
+            headers: List of column headers
+
+        Returns:
+            Row index (0-based) or None if not found
+        """
+        try:
+            # Find name column indices
+            first_name_idx = None
+            last_name_idx = None
+
+            for idx, header in enumerate(headers):
+                if 'FIRST NAME' in header.upper() or 'FIRSTNAME' in header.upper():
+                    first_name_idx = idx
+                elif 'LAST NAME' in header.upper() or 'LASTNAME' in header.upper():
+                    last_name_idx = idx
+
+            if first_name_idx is None or last_name_idx is None:
+                logger.warning(f"Could not find name columns. Headers: {headers}")
+                return None
+
+            # 🔥 ENHANCED: Parse the student identifier with multiple format support
+            search_first = ""
+            search_last = ""
+
+            if ',' in student_identifier:
+                # Format: "Smith, John" (Last, First)
+                parts = [p.strip() for p in student_identifier.split(',')]
+                search_last = parts[0].lower() if len(parts) > 0 else ''
+                search_first = parts[1].lower() if len(parts) > 1 else ''
+            else:
+                # Format: "John Smith" (First Last) - assume first word is first name, rest is last name
+                parts = student_identifier.strip().split()
+                if len(parts) == 1:
+                    # Only one name provided - could be first or last
+                    single_name = parts[0].lower()
+                    search_first = single_name
+                    search_last = single_name
+                elif len(parts) >= 2:
+                    search_first = parts[0].lower()
+                    search_last = ' '.join(parts[1:]).lower()
+
+            logger.info(
+                f"🔍 Searching for student: '{student_identifier}' -> First: '{search_first}', Last: '{search_last}'")
+
+            # 🔥 ENHANCED: Search for matching student with multiple strategies
+            for row_index, row in enumerate(table_data):
+                if first_name_idx < len(row) and last_name_idx < len(row):
+                    row_first = str(row[first_name_idx]).strip().lower() if row[first_name_idx] else ''
+                    row_last = str(row[last_name_idx]).strip().lower() if row[last_name_idx] else ''
+
+                    # Strategy 1: Exact match
+                    if search_first == row_first and search_last == row_last:
+                        logger.info(f"✅ EXACT match found at row {row_index}: {row_first} {row_last}")
+                        return row_index
+
+                    # Strategy 2: Reversed order match (in case Excel is "First Last" but we expect "Last First")
+                    if search_first == row_last and search_last == row_first:
+                        logger.info(f"✅ REVERSED match found at row {row_index}: {row_first} {row_last}")
+                        return row_index
+
+                    # Strategy 3: Partial contains match
+                    if (search_first in row_first or row_first in search_first) and \
+                            (search_last in row_last or row_last in search_last):
+                        logger.info(f"✅ PARTIAL match found at row {row_index}: {row_first} {row_last}")
+                        return row_index
+
+                    # Strategy 4: Single name match (when only one name is provided)
+                    if len(student_identifier.strip().split()) == 1:
+                        single_name = student_identifier.strip().lower()
+                        if single_name in row_first or single_name in row_last:
+                            logger.info(f"✅ SINGLE NAME match found at row {row_index}: {row_first} {row_last}")
+                            return row_index
+
+            logger.warning(f"❌ No match found for: '{student_identifier}'")
+            logger.warning(f"Available students in sheet:")
+            for i, row in enumerate(table_data[:5]):  # Show first 5 for debugging
+                if first_name_idx < len(row) and last_name_idx < len(row):
+                    sheet_first = str(row[first_name_idx]).strip() if row[first_name_idx] else ''
+                    sheet_last = str(row[last_name_idx]).strip() if row[last_name_idx] else ''
+                    logger.warning(f"  Row {i}: '{sheet_first}' '{sheet_last}'")
+
+            return None
+
+        except Exception as e:
+            logger.error(f"Find student row by name error: {str(e)}")
+            return None
+
+    def preview_column_import(self, sheet_id: str, import_excel_data: dict, sheet_name: str = None) -> dict:
+        """
+        Preview what will happen when importing columns from Excel.
+
+        Args:
+            sheet_id: ID of the spreadsheet
+            import_excel_data: Dict containing parsed Excel data with columns and student scores
+            sheet_name: Name of specific sheet (optional)
+
+        Returns:
+            Dict containing preview of import operation
+        """
+        try:
+            # Extract import columns (exclude student info columns)
+            import_columns = []
+            student_columns = {'NO.', 'NO', 'LASTNAME', 'LAST NAME', 'FIRSTNAME', 'FIRST NAME'}
+
+            for column in import_excel_data.get('columns', []):
+                if not any(term in column.upper() for term in student_columns):
+                    import_columns.append(column)
+
+            if not import_columns:
+                return {
+                    'success': False,
+                    'error': 'No gradeable columns found in import file (only student info detected)'
+                }
+
+            # Analyze available mapping options
+            analysis_result = self.analyze_columns_for_mapping(sheet_id, import_columns, sheet_name)
+            if not analysis_result['success']:
+                return analysis_result
+
+            # Count students and data points
+            column_data = import_excel_data.get('columnData', {})
+            student_count = len(import_excel_data.get('students', []))
+            total_data_points = sum(len(scores) for scores in column_data.values())
+
+            return {
+                'success': True,
+                'preview': {
+                    'importColumns': import_columns,
+                    'studentCount': student_count,
+                    'totalDataPoints': total_data_points,
+                    'analysis': analysis_result,
+                    'recommendations': self.generate_mapping_recommendations(analysis_result['mappingSuggestions'])
+                }
+            }
+
+        except Exception as e:
+            logger.error(f"Preview column import error: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Failed to preview import: {str(e)}'
+            }
+
+    def generate_mapping_recommendations(self, mapping_suggestions: list) -> list:
+        """
+        Generate smart mapping recommendations based on analysis.
+
+        Args:
+            mapping_suggestions: List of mapping suggestions from analysis
+
+        Returns:
+            List of recommended mappings
+        """
+        recommendations = []
+
+        for suggestion in mapping_suggestions:
+            import_col = suggestion['importColumn']
+
+            # Find the best suggestion (first one is already sorted by safety)
+            if suggestion['suggestions']:
+                best_option = suggestion['suggestions'][0]
+
+                recommendations.append({
+                    'importColumn': import_col,
+                    'recommendedTarget': best_option['targetColumn'],
+                    'confidence': 'high' if best_option['recommendation'] == 'perfect' else 'medium' if best_option[
+                                                                                                            'recommendation'] == 'caution' else 'low',
+                    'reason': best_option['description'],
+                    'risk': best_option['risk'],
+                    'action': 'replace'  # default action
+                })
+            else:
+                recommendations.append({
+                    'importColumn': import_col,
+                    'recommendedTarget': None,
+                    'confidence': 'none',
+                    'reason': 'No available columns found',
+                    'risk': 'high',
+                    'action': 'skip'
+                })
+
+        return recommendations

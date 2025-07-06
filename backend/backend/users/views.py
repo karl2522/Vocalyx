@@ -1153,4 +1153,119 @@ def sheets_import_students_execute(request, sheet_id):
         return Response({'error': str(e)}, status=500)
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def sheets_preview_column_import(request, sheet_id):
+    """Preview column import before execution"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+
+        excel_data = request.data.get('excel_data', {})
+        sheet_name = request.data.get('sheet_name')  # Optional specific sheet
+
+        if not excel_data:
+            return Response({'error': 'Excel data is required'}, status=400)
+
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+
+        # Preview the column import
+        preview_result = service.preview_column_import(sheet_id, excel_data, sheet_name)
+
+        return Response(preview_result)
+
+    except Exception as e:
+        logger.error(f"Preview column import error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def sheets_analyze_columns_mapping(request, sheet_id):
+    """Analyze existing columns to find mapping options for import columns"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+
+        import_columns = request.data.get('import_columns', [])
+        sheet_name = request.data.get('sheet_name')  # Optional specific sheet
+
+        if not import_columns:
+            return Response({'error': 'Import columns list is required'}, status=400)
+
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+
+        # Analyze columns for mapping
+        analysis_result = service.analyze_columns_for_mapping(sheet_id, import_columns, sheet_name)
+
+        return Response(analysis_result)
+
+    except Exception as e:
+        logger.error(f"Analyze columns mapping error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def sheets_execute_column_import(request, sheet_id):
+    """Execute column import with mappings"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+
+        column_mappings = request.data.get('column_mappings', [])
+        import_data = request.data.get('import_data', {})
+        sheet_name = request.data.get('sheet_name')  # Optional specific sheet
+
+        if not column_mappings:
+            return Response({'error': 'Column mappings are required'}, status=400)
+
+        if not import_data:
+            return Response({'error': 'Import data is required'}, status=400)
+
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+
+        # Execute the column import
+        import_result = service.import_column_data_with_mapping(
+            sheet_id,
+            column_mappings,
+            import_data,
+            sheet_name
+        )
+
+        return Response(import_result)
+
+    except Exception as e:
+        logger.error(f"Execute column import error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def sheets_rename_column_header(request, sheet_id):
+    """Rename a column header in Google Sheet"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+
+        column_index = request.data.get('column_index')  # 0-based index
+        new_name = request.data.get('new_name')
+        sheet_name = request.data.get('sheet_name')
+
+        if column_index is None or not new_name:
+            return Response({'error': 'column_index and new_name are required'}, status=400)
+
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+
+        # Get the target sheet name if not provided
+        if not sheet_name:
+            sheet_data = service.get_sheet_data(sheet_id)
+            if not sheet_data['success']:
+                return Response(sheet_data, status=500)
+            sheet_name = sheet_data['sheet_name']
+
+        # Rename the column header
+        rename_result = service.rename_column_header(sheet_id, column_index, new_name, sheet_name)
+
+        return Response(rename_result)
+
+    except Exception as e:
+        logger.error(f"Rename column header error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
 

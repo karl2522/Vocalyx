@@ -1,4 +1,4 @@
-import { AlertCircle, ArrowLeft, ChevronDown, Download, Edit2, FileSpreadsheet, HelpCircle, Mic, MicOff, MoreVertical, Plus, RotateCcw, RotateCw, Save, Target, Upload, Users, Volume2, VolumeX, X } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ChevronDown, Download, Edit2, FileSpreadsheet, HelpCircle, Mic, MicOff, MoreVertical, Plus, RotateCcw, RotateCw, Save, Target, Upload, Users, Volume2, VolumeX, X, BarChart3} from 'lucide-react';
 import { useCallback, useEffect, useState, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -15,6 +15,7 @@ import VoiceGuideModal from './modals/VoiceGuideModal';
 import OverrideConfirmationModal from './modals/OverrideConfirmationModal';
 import ImportStudentsModal from './modals/ImportStudentsModal';
 import ImportProgressIndicator from './modals/ImportProgressIndicator';
+import ColumnMappingModal from './modals/ColumnMappingModal';
 
 
 const ClassRecordExcel = () => {
@@ -30,6 +31,10 @@ const ClassRecordExcel = () => {
   const [currentBatchColumn, setCurrentBatchColumn] = useState('');
   const [batchEntries, setBatchEntries] = useState([]);
   const [isProcessingBatch, setIsProcessingBatch] = useState(false);
+
+  const [showColumnImportModal, setShowColumnImportModal] = useState(false);
+  const [columnAnalysis, setColumnAnalysis] = useState(null);
+  const [pendingImportData, setPendingImportData] = useState(null);
 
   const [importProgress, setImportProgress] = useState(null);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -360,6 +365,173 @@ const ClassRecordExcel = () => {
     }
     
     return false; // Command not handled
+  };
+
+  const handleImportScores = () => {
+    // Create hidden file input for scores
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx,.xls,.csv';
+    input.style.display = 'none';
+    
+    input.onchange = async (event) => {
+      const file = event.target.files[0];
+      if (file) {
+        await processScoresImportFile(file);
+      }
+    };
+    
+    document.body.appendChild(input);
+    input.click();
+    document.body.removeChild(input);
+  };
+
+  const processScoresImportFile = async (file) => {
+    if (!classRecord?.google_sheet_id) {
+      toast.error('No Google Sheet connected');
+      return;
+    }
+
+    try {
+      setImportProgress({ status: 'reading', message: 'Reading Excel file...' });
+      
+      // Read Excel file
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'array' });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+      
+      if (jsonData.length < 2) {
+        throw new Error('Excel file must have at least a header row and one data row');
+      }
+      
+      setImportProgress({ status: 'parsing', message: 'Parsing columns and scores...' });
+      
+      // Parse headers and data
+      const headers = jsonData[0].map(h => String(h || '').trim());
+      const dataRows = jsonData.slice(1);
+      
+      // Separate student info columns from score columns
+      const studentColumns = ['NO.', 'NO', 'LASTNAME', 'LAST NAME', 'FIRSTNAME', 'FIRST NAME', 'STUDENT ID'];
+      const scoreColumns = headers.filter(header => 
+        !studentColumns.some(sc => header.toUpperCase().includes(sc.toUpperCase()))
+      );
+      
+      if (scoreColumns.length === 0) {
+        throw new Error('No score columns found in the Excel file');
+      }
+      
+      // Find name column indices for student identification
+      const lastNameIndex = findColumnIndex(headers, ['last name', 'lastname', 'surname']);
+      const firstNameIndex = findColumnIndex(headers, ['first name', 'firstname', 'given name']);
+      
+      if (lastNameIndex === -1 || firstNameIndex === -1) {
+        throw new Error('Could not find student name columns in the Excel file');
+      }
+      
+      // Parse student scores for each column
+      const columnData = {};
+      const students = [];
+      
+      for (const scoreColumn of scoreColumns) {
+        const columnIndex = headers.indexOf(scoreColumn);
+        columnData[scoreColumn] = {};
+        
+        for (let i = 0; i < dataRows.length; i++) {
+        const row = dataRows[i];
+        const lastName = String(row[lastNameIndex] || '').trim();
+        const firstName = String(row[firstNameIndex] || '').trim();
+        const score = String(row[columnIndex] || '').trim();
+        
+        if (lastName && firstName && score) {
+          const studentKey1 = `${firstName} ${lastName}`;  // "Zachary Banks"
+          const studentKey2 = `${lastName}, ${firstName}`; // "Banks, Zachary" 
+          const studentKey3 = `${lastName} ${firstName}`;  // "Banks Zachary"
+          
+          // Use the first format as primary, but log all for debugging
+          const studentKey = studentKey1;
+          
+          columnData[scoreColumn][studentKey] = score;
+          
+          // Track students
+          if (!students.find(s => s.key === studentKey)) {
+            students.push({
+              key: studentKey,
+              firstName,
+              lastName,
+              originalRow: i + 2
+            });
+          }
+        }
+      }
+    }
+      
+      const importData = {
+        columns: scoreColumns,
+        columnData,
+        students,
+        totalDataPoints: Object.values(columnData).reduce((sum, scores) => sum + Object.keys(scores).length, 0)
+      };
+      
+      setImportProgress({ status: 'analyzing', message: 'Analyzing column mapping options...' });
+      
+      // Analyze columns for mapping
+      const analysisResponse = await classRecordService.analyzeColumnsForMapping(
+        classRecord.google_sheet_id,
+        scoreColumns,
+        currentSheet?.sheet_name
+      );
+      
+      if (!analysisResponse.data?.success) {
+        throw new Error(analysisResponse.data?.error || 'Failed to analyze columns');
+      }
+      
+      setPendingImportData(importData);
+      setColumnAnalysis(analysisResponse.data);
+      setShowColumnImportModal(true);
+      setImportProgress(null);
+      
+    } catch (error) {
+      console.error('Scores import error:', error);
+      toast.error(`Import failed: ${error.message}`);
+      setImportProgress(null);
+    }
+  };
+
+  const handleConfirmColumnMapping = async (mappings) => {
+    try {
+      setImportProgress({ status: 'importing', message: 'Importing column data and renaming headers...' });
+      
+      const response = await classRecordService.executeColumnImport(
+        classRecord.google_sheet_id,
+        mappings,
+        pendingImportData,
+        currentSheet?.sheet_name
+      );
+      
+      if (!response.data?.success) {
+        throw new Error(response.data?.error || 'Import failed');
+      }
+      
+      const { results, summary } = response.data;
+      const sheetInfo = currentSheet ? ` in ${currentSheet.sheet_name}` : '';
+      
+      toast.success(`✅ ${summary}${sheetInfo}`);
+      if (voiceEnabled) {
+        speakText(`Column import completed. ${summary}${sheetInfo}`);
+      }
+      
+      // Clean up
+      setImportProgress(null);
+      setShowColumnImportModal(false);
+      setColumnAnalysis(null);
+      setPendingImportData(null);
+      
+    } catch (error) {
+      console.error('Column import execution error:', error);
+      toast.error(`Import failed: ${error.message}`);
+      setImportProgress(null);
+    }
   };
 
  const executeCommand = (command) => {
@@ -1732,6 +1904,17 @@ const handleExportToPDF = async () => {
                     <Upload className="w-4 h-4 text-blue-600" />
                     <span>Import Students</span>
                   </button>
+
+                  <button
+                    onClick={() => {
+                      handleImportScores();
+                      closeAllDropdowns();
+                    }}
+                    className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                  >
+                    <BarChart3 className="w-4 h-4 text-purple-600" />
+                    <span>Import Scores</span>
+                  </button>
                   
                   {/* Batch Mode & Auto-number options */}
                   <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
@@ -2044,6 +2227,15 @@ const handleExportToPDF = async () => {
             </div>
           </div>
         )}
+
+        <ColumnMappingModal
+          showMappingModal={showColumnImportModal}
+          setShowMappingModal={setShowColumnImportModal}
+          importData={pendingImportData}
+          columnAnalysis={columnAnalysis}
+          onConfirmMapping={handleConfirmColumnMapping}
+          setImportProgress={setImportProgress}
+        />
 
         <ImportStudentsModal 
           showImportModal={showImportModal}
