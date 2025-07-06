@@ -476,9 +476,10 @@ const ClassRecordExcel = () => {
       setImportProgress({ status: 'analyzing', message: 'Analyzing column mapping options...' });
       
       // Analyze columns for mapping
-      const analysisResponse = await classRecordService.analyzeColumnsForMapping(
+      const analysisResponse = await classRecordService.analyzeColumnsForMappingEnhanced(
         classRecord.google_sheet_id,
         scoreColumns,
+        classRecord.id, // 🔥 NEW: Pass class record ID for history tracking
         currentSheet?.sheet_name
       );
       
@@ -502,10 +503,11 @@ const ClassRecordExcel = () => {
     try {
       setImportProgress({ status: 'importing', message: 'Importing column data and renaming headers...' });
       
-      const response = await classRecordService.executeColumnImport(
+     const response = await classRecordService.executeColumnImportEnhanced(
         classRecord.google_sheet_id,
         mappings,
         pendingImportData,
+        classRecord.id, // 🔥 NEW: Pass class record ID for history tracking
         currentSheet?.sheet_name
       );
       
@@ -2235,6 +2237,7 @@ const handleExportToPDF = async () => {
           columnAnalysis={columnAnalysis}
           onConfirmMapping={handleConfirmColumnMapping}
           setImportProgress={setImportProgress}
+          classRecordId={classRecord?.id}
         />
 
         <ImportStudentsModal 

@@ -150,3 +150,35 @@ class Grade(models.Model):
         if self.score is not None and self.max_score > 0:
             return (self.score / self.max_score) * 100
         return None
+
+
+class ColumnImportHistory(models.Model):
+    """Track which Excel columns have been imported to prevent duplicates"""
+
+    # Link to the class record and Google Sheet
+    class_record = models.ForeignKey(ClassRecord, on_delete=models.CASCADE, related_name='import_history')
+    google_sheet_id = models.CharField(max_length=255)  # ID of the Google Sheet
+    sheet_name = models.CharField(max_length=255, blank=True, null=True)  # Specific sheet name
+
+    # Import details
+    excel_column_name = models.CharField(max_length=255)  # Original Excel column name
+    target_column_name = models.CharField(max_length=255)  # Google Sheet column it was mapped to
+
+    # Tracking info
+    imported_at = models.DateTimeField(auto_now_add=True)
+    import_session_id = models.CharField(max_length=100)  # UUID to group imports
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+
+    # Metadata
+    import_action = models.CharField(max_length=20, default='replace')  # replace, merge
+    data_points_imported = models.IntegerField(default=0)  # Number of student scores imported
+
+    class Meta:
+        ordering = ['-imported_at']
+        indexes = [
+            models.Index(fields=['google_sheet_id', 'excel_column_name']),
+            models.Index(fields=['class_record', 'imported_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.excel_column_name} → {self.target_column_name} ({self.imported_at.strftime('%Y-%m-%d')})"

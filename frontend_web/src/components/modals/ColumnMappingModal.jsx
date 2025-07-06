@@ -8,7 +8,9 @@ import {
   Database,
   Shuffle,
   Eye,
-  BarChart3
+  BarChart3,
+  Clock,  // 🔥 NEW
+  RefreshCw  // 🔥 NEW
 } from 'lucide-react';
 
 const ColumnMappingModal = ({ 
@@ -17,14 +19,15 @@ const ColumnMappingModal = ({
   importData,
   columnAnalysis,
   onConfirmMapping,
-  setImportProgress
+  setImportProgress,
+  classRecordId // 🔥 NEW: Need class record ID for history tracking
 }) => {
   const [mappings, setMappings] = useState([]);
-  const [selectedTab, setSelectedTab] = useState('mapping'); // 'mapping' or 'preview'
+  const [selectedTab, setSelectedTab] = useState('mapping');
+  const [forceReimportColumns, setForceReimportColumns] = useState([]); // 🔥 NEW
 
   useEffect(() => {
     if (columnAnalysis?.mappingSuggestions) {
-      // Initialize mappings with recommendations
       const initialMappings = columnAnalysis.mappingSuggestions.map(suggestion => ({
         importColumn: suggestion.importColumn,
         targetColumn: suggestion.suggestions[0]?.targetColumn || '',
@@ -43,21 +46,29 @@ const ColumnMappingModal = ({
     ));
   };
 
-  // 🔥 NEW: Function to get available options for a specific mapping (excluding already selected columns)
+  // 🔥 NEW: Handle force re-import
+  const handleForceReimport = (columnName) => {
+    setForceReimportColumns(prev => [...prev, columnName]);
+    // Trigger re-analysis with force re-import
+    // You'll need to implement this in your parent component
+    if (window.reAnalyzeWithForceReimport) {
+      window.reAnalyzeWithForceReimport([columnName]);
+    }
+  };
+
   const getAvailableOptions = (currentIndex, allOptions) => {
-    // Get all currently selected target columns (except for the current mapping)
     const selectedTargetColumns = mappings
       .map((mapping, index) => index !== currentIndex ? mapping.targetColumn : null)
-      .filter(targetColumn => targetColumn && targetColumn !== ''); // Remove empty selections
+      .filter(targetColumn => targetColumn && targetColumn !== '');
 
-    // Filter out already selected columns from the options
     return allOptions.filter(option => 
       !selectedTargetColumns.includes(option.targetColumn)
     );
   };
 
   const handleConfirm = () => {
-    onConfirmMapping(mappings);
+    // 🔥 NEW: Include class record ID for history tracking
+    onConfirmMapping(mappings, classRecordId);
   };
 
   const handleCancel = () => {
@@ -85,6 +96,7 @@ const ColumnMappingModal = ({
 
   const validMappings = mappings.filter(m => m.targetColumn && m.action !== 'skip');
   const skippedMappings = mappings.filter(m => m.action === 'skip');
+  const alreadyImported = columnAnalysis?.alreadyImported || []; // 🔥 NEW
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -113,9 +125,52 @@ const ColumnMappingModal = ({
                   <div className="text-lg font-bold text-green-800">{validMappings.length}</div>
                   <div className="text-xs text-green-600">Will Import</div>
                 </div>
+                {/* 🔥 NEW: Already imported count */}
+                {alreadyImported.length > 0 && (
+                  <div className="bg-orange-100 px-3 py-2 rounded-lg text-center">
+                    <div className="text-lg font-bold text-orange-800">{alreadyImported.length}</div>
+                    <div className="text-xs text-orange-600">Already Imported</div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
+
+          {/* 🔥 NEW: Already Imported Notification */}
+          {alreadyImported.length > 0 && (
+            <div className="mt-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+              <div className="flex items-start space-x-3">
+                <Clock className="w-5 h-5 text-orange-600 mt-0.5" />
+                <div>
+                  <h4 className="font-medium text-orange-800">
+                    {alreadyImported.length} column{alreadyImported.length > 1 ? 's' : ''} already imported
+                  </h4>
+                  <p className="text-sm text-orange-700 mt-1">
+                    These columns have been previously imported and will be skipped:
+                  </p>
+                  <div className="mt-2 space-y-1">
+                    {alreadyImported.map((col, index) => (
+                      <div key={index} className="flex items-center justify-between bg-white p-2 rounded border border-orange-200">
+                        <div className="flex items-center space-x-2">
+                          <span className="font-medium text-orange-800">"{col.columnName}"</span>
+                          <span className="text-sm text-orange-600">
+                            → {col.targetColumn} (imported {col.importedDate})
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => handleForceReimport(col.columnName)}
+                          className="flex items-center space-x-1 px-2 py-1 text-xs bg-orange-100 text-orange-700 rounded hover:bg-orange-200 transition-colors"
+                        >
+                          <RefreshCw className="w-3 h-3" />
+                          <span>Force Re-import</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           
           {/* Tab Navigation */}
           <div className="flex space-x-4 mt-4">
@@ -144,7 +199,7 @@ const ColumnMappingModal = ({
           </div>
         </div>
 
-        {/* Content */}
+        {/* Content - Rest of your existing content stays the same */}
         <div className="flex-1 overflow-hidden">
           {selectedTab === 'mapping' ? (
             <div className="p-6 overflow-y-auto max-h-[65vh]">
@@ -152,14 +207,7 @@ const ColumnMappingModal = ({
                 {mappings.map((mapping, index) => {
                   const suggestion = columnAnalysis?.mappingSuggestions?.find(s => s.importColumn === mapping.importColumn);
                   const allOptions = suggestion?.suggestions || [];
-                  
-                  // 🔥 FIXED: Get only available options (excluding already selected columns)
                   const availableOptions = getAvailableOptions(index, allOptions);
-                  
-                  // 🔥 NEW: Check if current selection is still valid (might have been taken by another mapping)
-                  const isCurrentSelectionValid = mapping.targetColumn === '' || 
-                    availableOptions.some(opt => opt.targetColumn === mapping.targetColumn) ||
-                    allOptions.some(opt => opt.targetColumn === mapping.targetColumn); // Allow current selection even if taken
                   
                   return (
                     <div key={index} className="border border-slate-200 rounded-lg overflow-hidden bg-white shadow-sm">
@@ -200,24 +248,21 @@ const ColumnMappingModal = ({
                             >
                               <option value="">Select target column...</option>
                               
-                              {/* 🔥 FIXED: Show current selection even if it would normally be filtered out */}
                               {mapping.targetColumn && !availableOptions.some(opt => opt.targetColumn === mapping.targetColumn) && (
                                 <option value={mapping.targetColumn} className="text-orange-600">
                                   {mapping.targetColumn} (currently selected)
                                 </option>
                               )}
                               
-                              {/* 🔥 FIXED: Show only available options */}
                               {availableOptions.map((option, optIndex) => (
                                 <option key={optIndex} value={option.targetColumn}>
                                   {option.targetColumn} ({option.recommendation} - {option.dataCount} existing entries)
                                 </option>
                               ))}
                               
-                              {/* 🔥 NEW: Show unavailable options as disabled for reference */}
                               {allOptions
                                 .filter(option => !availableOptions.some(avail => avail.targetColumn === option.targetColumn))
-                                .filter(option => option.targetColumn !== mapping.targetColumn) // Don't duplicate current selection
+                                .filter(option => option.targetColumn !== mapping.targetColumn)
                                 .map((option, optIndex) => (
                                 <option key={`unavailable-${optIndex}`} value={option.targetColumn} disabled className="text-slate-400">
                                   {option.targetColumn} (already assigned)
@@ -225,7 +270,6 @@ const ColumnMappingModal = ({
                               ))}
                             </select>
                             
-                            {/* 🔥 NEW: Show warning if no available options */}
                             {availableOptions.length === 0 && mapping.targetColumn === '' && (
                               <p className="text-sm text-orange-600 mt-1">
                                 ⚠️ All suitable columns have been assigned to other imports
@@ -250,7 +294,6 @@ const ColumnMappingModal = ({
                           </div>
                         </div>
                         
-                        {/* Show selected option details */}
                         {mapping.targetColumn && (
                           <div className="mt-4 p-3 bg-slate-50 rounded-lg">
                             {(() => {
@@ -283,7 +326,7 @@ const ColumnMappingModal = ({
               </div>
             </div>
           ) : (
-            /* Preview Tab */
+            /* Preview Tab - Keep your existing preview tab content */
             <div className="p-6 overflow-y-auto max-h-[65vh]">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Import Summary */}
@@ -303,6 +346,14 @@ const ColumnMappingModal = ({
                       <div className="text-sm text-red-700">Columns to Skip</div>
                     </div>
                   </div>
+
+                  {/* 🔥 NEW: Already imported summary */}
+                  {alreadyImported.length > 0 && (
+                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                      <div className="text-lg font-bold text-orange-800">{alreadyImported.length}</div>
+                      <div className="text-sm text-orange-700">Already Imported</div>
+                    </div>
+                  )}
                 </div>
                 
                 {/* Actions Preview */}
@@ -329,6 +380,8 @@ const ColumnMappingModal = ({
                   <li>• Student scores will be mapped by matching names</li>
                   <li>• Existing data in target columns may be overwritten</li>
                   <li>• Template structure will be preserved</li>
+                  {/* 🔥 NEW: History tracking notice */}
+                  <li>• Import history will be tracked to prevent future duplicates</li>
                   {validMappings.length > 0 && (
                     <li>• Total data points to import: {validMappings.reduce((sum, mapping) => {
                       const columnData = importData?.columnData?.[mapping.importColumn] || {};

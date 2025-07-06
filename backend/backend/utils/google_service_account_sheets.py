@@ -1155,20 +1155,33 @@ class GoogleServiceAccountSheets:
                 'error': f'Failed to validate import data: {str(e)}'
             }
 
-    def analyze_columns_for_mapping(self, sheet_id: str, import_columns: list, sheet_name: str = None) -> dict:
+    def analyze_columns_for_mapping(self, sheet_id: str, import_columns: list, sheet_name: str = None,
+                                    user_id: int = None, force_reimport: list = None) -> dict:
         """
         Analyze existing columns to find available slots for mapping imported columns.
-
-        Args:
-            sheet_id: ID of the spreadsheet
-            import_columns: List of column names from imported Excel (excluding student info)
-            sheet_name: Name of specific sheet (optional)
-
-        Returns:
-            Dict containing available mapping options for each import column
+        Now includes filtering of already imported columns.
         """
         try:
-            # Get existing sheet structure
+            # 🔥 NEW: Filter already imported columns first
+            available_columns = import_columns
+            already_imported_info = []
+
+            if user_id:
+                filter_result = self.filter_already_imported_columns(
+                    import_columns, sheet_id, user_id, sheet_name
+                )
+
+                if filter_result['success']:
+                    available_columns = filter_result['available_columns']
+                    already_imported_info = filter_result['already_imported']
+
+                    # 🔥 Add force re-import columns back if specified
+                    if force_reimport:
+                        for col in force_reimport:
+                            if col not in available_columns and col in import_columns:
+                                available_columns.append(col)
+
+            # Continue with existing analysis logic but use available_columns instead of import_columns
             if sheet_name:
                 sheet_data = self.get_specific_sheet_data(sheet_id, sheet_name)
             else:
@@ -1180,22 +1193,21 @@ class GoogleServiceAccountSheets:
             headers = sheet_data['headers']
             table_data = sheet_data['tableData']
 
-            # Analyze each existing column to see if it has data
+            # [Keep all your existing column analysis logic here - just replace import_columns with available_columns]
             column_analysis = []
             for col_index, column_name in enumerate(headers):
-                # 🔥 FIXED: Exclude student info columns (including STUDENT ID)
                 excluded_columns = [
                     'NO.', 'NO', 'NUM', 'NUMBER',
                     'LASTNAME', 'LAST NAME', 'SURNAME',
                     'FIRSTNAME', 'FIRST NAME', 'GIVEN NAME',
-                    'STUDENT ID', 'STUDENTID', 'ID', 'STUDENT_ID',  # 🔥 Added STUDENT ID exclusions
-                    'EMAIL', 'CONTACT', 'PHONE'  # 🔥 Added other common student info fields
+                    'STUDENT ID', 'STUDENTID', 'ID', 'STUDENT_ID',
+                    'EMAIL', 'CONTACT', 'PHONE'
                 ]
 
                 if any(excluded.upper() in column_name.upper() for excluded in excluded_columns):
-                    continue  # Skip this column - it's student info
+                    continue
 
-                # Check if column has any data
+                # [Keep your existing column analysis logic...]
                 has_data = False
                 data_count = 0
                 sample_values = []
@@ -1204,7 +1216,7 @@ class GoogleServiceAccountSheets:
                     if col_index < len(row) and row[col_index] and str(row[col_index]).strip():
                         has_data = True
                         data_count += 1
-                        if len(sample_values) < 3:  # Get sample values
+                        if len(sample_values) < 3:
                             sample_values.append(str(row[col_index]).strip())
 
                 column_analysis.append({
@@ -1215,26 +1227,26 @@ class GoogleServiceAccountSheets:
                     'totalRows': len(table_data),
                     'sampleValues': sample_values,
                     'isEmpty': not has_data,
-                    'isPartiallyFilled': has_data and data_count < len(table_data) * 0.8,  # Less than 80% filled
+                    'isPartiallyFilled': has_data and data_count < len(table_data) * 0.8,
                     'availability': 'empty' if not has_data else (
                         'partial' if data_count < len(table_data) * 0.8 else 'full')
                 })
 
-            # Create mapping suggestions for each import column
+            # Create mapping suggestions for available columns only
             mapping_suggestions = []
-            for import_col in import_columns:
+            for import_col in available_columns:  # 🔥 CHANGED: Use filtered columns
                 suggestions = {
                     'importColumn': import_col,
                     'suggestions': []
                 }
 
-                # Find best matches based on availability
+                # [Keep your existing suggestion logic...]
                 for col_info in column_analysis:
                     if col_info['isEmpty']:
                         suggestions['suggestions'].append({
                             'targetColumn': col_info['columnName'],
                             'targetIndex': col_info['columnIndex'],
-                            'recommendation': 'perfect',  # Empty column - perfect match
+                            'recommendation': 'perfect',
                             'risk': 'none',
                             'description': f"Empty column - safe to use",
                             'dataCount': 0
@@ -1243,7 +1255,7 @@ class GoogleServiceAccountSheets:
                         suggestions['suggestions'].append({
                             'targetColumn': col_info['columnName'],
                             'targetIndex': col_info['columnIndex'],
-                            'recommendation': 'caution',  # Has some data
+                            'recommendation': 'caution',
                             'risk': 'medium',
                             'description': f"Has {col_info['dataCount']} existing entries out of {col_info['totalRows']} students",
                             'dataCount': col_info['dataCount'],
@@ -1253,14 +1265,13 @@ class GoogleServiceAccountSheets:
                         suggestions['suggestions'].append({
                             'targetColumn': col_info['columnName'],
                             'targetIndex': col_info['columnIndex'],
-                            'recommendation': 'risky',  # Column is full
+                            'recommendation': 'risky',
                             'risk': 'high',
                             'description': f"Column is full ({col_info['dataCount']} entries) - will overwrite existing data",
                             'dataCount': col_info['dataCount'],
                             'sampleValues': col_info['sampleValues']
                         })
 
-                # Sort suggestions by safety (empty first, then partial, then full)
                 suggestions['suggestions'].sort(key=lambda x: {
                     'perfect': 0,
                     'caution': 1,
@@ -1273,6 +1284,8 @@ class GoogleServiceAccountSheets:
                 'success': True,
                 'columnAnalysis': column_analysis,
                 'mappingSuggestions': mapping_suggestions,
+                'alreadyImported': already_imported_info,  # 🔥 NEW
+                'filteredColumnsCount': len(import_columns) - len(available_columns),  # 🔥 NEW
                 'totalColumns': len(headers),
                 'availableEmptyColumns': len([c for c in column_analysis if c['isEmpty']]),
                 'partiallyFilledColumns': len([c for c in column_analysis if c['isPartiallyFilled']]),
@@ -1492,7 +1505,7 @@ class GoogleServiceAccountSheets:
                     search_last = ' '.join(parts[1:]).lower()
 
             logger.info(
-                f"🔍 Searching for student: '{student_identifier}' -> First: '{search_first}', Last: '{search_last}'")
+                f"Searching for student: '{student_identifier}' -> First: '{search_first}', Last: '{search_last}'")
 
             # 🔥 ENHANCED: Search for matching student with multiple strategies
             for row_index, row in enumerate(table_data):
@@ -1631,3 +1644,190 @@ class GoogleServiceAccountSheets:
                 })
 
         return recommendations
+
+    def get_import_history(self, sheet_id: str, user_id: int) -> dict:
+        """
+        Get import history for a specific Google Sheet.
+
+        Args:
+            sheet_id: ID of the Google Sheet
+            user_id: ID of the user
+
+        Returns:
+            Dict containing import history
+        """
+        try:
+            # Import here to avoid circular imports
+            from classrecord.models import ColumnImportHistory
+
+            history_records = ColumnImportHistory.objects.filter(
+                google_sheet_id=sheet_id,
+                user_id=user_id
+            ).order_by('-imported_at')
+
+            import_history = []
+            for record in history_records:
+                import_history.append({
+                    'excel_column_name': record.excel_column_name,
+                    'target_column_name': record.target_column_name,
+                    'imported_at': record.imported_at.isoformat(),
+                    'import_action': record.import_action,
+                    'data_points_imported': record.data_points_imported,
+                    'sheet_name': record.sheet_name
+                })
+
+            return {
+                'success': True,
+                'import_history': import_history,
+                'total_imports': len(import_history)
+            }
+
+        except Exception as e:
+            logger.error(f"Get import history error: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Failed to get import history: {str(e)}'
+            }
+
+    def filter_already_imported_columns(self, import_columns: list, sheet_id: str, user_id: int,
+                                        sheet_name: str = None) -> dict:
+        """
+        Filter out already imported columns from the import list.
+
+        Args:
+            import_columns: List of column names from Excel
+            sheet_id: ID of the Google Sheet
+            user_id: ID of the user
+            sheet_name: Name of specific sheet (optional)
+
+        Returns:
+            Dict containing filtered columns and already imported info
+        """
+        try:
+            # Import here to avoid circular imports
+            from classrecord.models import ColumnImportHistory
+
+            # Get import history for this sheet
+            history_query = ColumnImportHistory.objects.filter(
+                google_sheet_id=sheet_id,
+                user_id=user_id,
+                excel_column_name__in=import_columns
+            )
+
+            if sheet_name:
+                history_query = history_query.filter(sheet_name=sheet_name)
+
+            already_imported_records = list(history_query)
+
+            # Build sets for fast lookup
+            already_imported_names = {record.excel_column_name for record in already_imported_records}
+
+            # Filter columns
+            available_columns = [col for col in import_columns if col not in already_imported_names]
+
+            # Build already imported info
+            already_imported = []
+            for record in already_imported_records:
+                already_imported.append({
+                    'columnName': record.excel_column_name,
+                    'importedDate': record.imported_at.strftime('%Y-%m-%d'),
+                    'targetColumn': record.target_column_name,
+                    'canForceReimport': True,  # Always allow force re-import
+                    'dataPointsImported': record.data_points_imported,
+                    'importAction': record.import_action
+                })
+
+            return {
+                'success': True,
+                'available_columns': available_columns,
+                'already_imported': already_imported,
+                'filtered_count': len(import_columns) - len(available_columns),
+                'available_count': len(available_columns)
+            }
+
+        except Exception as e:
+            logger.error(f"Filter already imported columns error: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Failed to filter columns: {str(e)}'
+            }
+
+    def save_import_history(self, column_mappings: list, import_data: dict, sheet_id: str,
+                            user_id: int, class_record_id: int, sheet_name: str = None) -> dict:
+        """
+        Save import history after successful column import.
+
+        Args:
+            column_mappings: List of successful column mappings
+            import_data: Dict with import data and statistics
+            sheet_id: ID of the Google Sheet
+            user_id: ID of the user
+            class_record_id: ID of the class record
+            sheet_name: Name of specific sheet (optional)
+
+        Returns:
+            Dict containing save results
+        """
+        try:
+            # Import here to avoid circular imports
+            from classrecord.models import ColumnImportHistory, ClassRecord
+            import uuid
+
+            session_id = str(uuid.uuid4())  # Group this import session
+
+            saved_records = []
+
+            for mapping in column_mappings:
+                if mapping.get('action', 'replace') == 'skip':
+                    continue  # Don't save skipped columns
+
+                excel_column = mapping['importColumn']
+                target_column = mapping['targetColumn']
+                import_action = mapping.get('action', 'replace')
+
+                # Count data points for this column
+                column_data = import_data.get('columnData', {}).get(excel_column, {})
+                data_points = len(column_data)
+
+                # Get class record
+                try:
+                    class_record = ClassRecord.objects.get(id=class_record_id, user_id=user_id)
+                except ClassRecord.DoesNotExist:
+                    logger.warning(f"Class record {class_record_id} not found for user {user_id}")
+                    continue
+
+                # Create history record
+                history_record = ColumnImportHistory.objects.create(
+                    class_record=class_record,
+                    google_sheet_id=sheet_id,
+                    sheet_name=sheet_name,
+                    excel_column_name=excel_column,
+                    target_column_name=target_column,
+                    import_session_id=session_id,
+                    user_id=user_id,
+                    import_action=import_action,
+                    data_points_imported=data_points
+                )
+
+                saved_records.append({
+                    'id': history_record.id,
+                    'excel_column': excel_column,
+                    'target_column': target_column,
+                    'data_points': data_points
+                })
+
+            logger.info(f"Saved {len(saved_records)} import history records for session {session_id}")
+
+            return {
+                'success': True,
+                'session_id': session_id,
+                'records_saved': len(saved_records),
+                'saved_records': saved_records
+            }
+
+        except Exception as e:
+            logger.error(f"Save import history error: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Failed to save import history: {str(e)}'
+            }

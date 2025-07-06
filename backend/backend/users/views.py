@@ -1269,3 +1269,116 @@ def sheets_rename_column_header(request, sheet_id):
         logger.error(f"Rename column header error: {str(e)}")
         return Response({'error': str(e)}, status=500)
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def sheets_analyze_columns_mapping_enhanced(request, sheet_id):
+    """Enhanced column analysis with import history filtering"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+        from classrecord.models import ClassRecord
+
+        import_columns = request.data.get('import_columns', [])
+        sheet_name = request.data.get('sheet_name')
+        force_reimport = request.data.get('force_reimport', [])  # 🔥 NEW: Allow force re-import
+        class_record_id = request.data.get('class_record_id')  # 🔥 NEW: Need class record ID
+
+        if not import_columns:
+            return Response({'error': 'Import columns list is required'}, status=400)
+
+        # Validate class record ownership
+        if class_record_id:
+            try:
+                class_record = ClassRecord.objects.get(id=class_record_id, user=request.user)
+            except ClassRecord.DoesNotExist:
+                return Response({'error': 'Class record not found or access denied'}, status=404)
+
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+
+        # 🔥 NEW: Enhanced analysis with history filtering
+        analysis_result = service.analyze_columns_for_mapping(
+            sheet_id,
+            import_columns,
+            sheet_name,
+            user_id=request.user.id,
+            force_reimport=force_reimport
+        )
+
+        return Response(analysis_result)
+
+    except Exception as e:
+        logger.error(f"Enhanced analyze columns mapping error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def sheets_execute_column_import_enhanced(request, sheet_id):
+    """Enhanced column import with history tracking"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+        from classrecord.models import ClassRecord
+
+        column_mappings = request.data.get('column_mappings', [])
+        import_data = request.data.get('import_data', {})
+        sheet_name = request.data.get('sheet_name')
+        class_record_id = request.data.get('class_record_id')  # 🔥 NEW: Need class record ID
+
+        if not column_mappings:
+            return Response({'error': 'Column mappings are required'}, status=400)
+
+        if not import_data:
+            return Response({'error': 'Import data is required'}, status=400)
+
+        # Validate class record ownership
+        if class_record_id:
+            try:
+                class_record = ClassRecord.objects.get(id=class_record_id, user=request.user)
+            except ClassRecord.DoesNotExist:
+                return Response({'error': 'Class record not found or access denied'}, status=404)
+
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+
+        # Execute the column import
+        import_result = service.import_column_data_with_mapping(
+            sheet_id,
+            column_mappings,
+            import_data,
+            sheet_name
+        )
+
+        # 🔥 NEW: Save import history after successful import
+        if import_result['success'] and class_record_id:
+            history_result = service.save_import_history(
+                column_mappings,
+                import_data,
+                sheet_id,
+                request.user.id,
+                class_record_id,
+                sheet_name
+            )
+
+            if history_result['success']:
+                import_result['import_history'] = history_result
+
+        return Response(import_result)
+
+    except Exception as e:
+        logger.error(f"Enhanced execute column import error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_import_history(request, sheet_id):
+    """Get import history for a specific Google Sheet"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+        history_result = service.get_import_history(sheet_id, request.user.id)
+
+        return Response(history_result)
+
+    except Exception as e:
+        logger.error(f"Get import history error: {str(e)}")
+        return Response({'error': str(e)}, status=500)

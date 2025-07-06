@@ -14,7 +14,8 @@ from .views import (
     sheets_get_all_sheets_data_service_account, sheets_list_all_sheets_service_account,
     sheets_get_specific_sheet_data_service_account, sheets_update_cell_specific_sheet_service_account,
     sheets_import_students_preview, sheets_import_students_execute, sheets_preview_column_import,
-    sheets_analyze_columns_mapping, sheets_execute_column_import, sheets_rename_column_header
+    sheets_analyze_columns_mapping, sheets_execute_column_import, sheets_rename_column_header,
+    sheets_analyze_columns_mapping_enhanced, sheets_execute_column_import_enhanced, get_import_history
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -82,4 +83,8 @@ urlpatterns = [
     path('sheets/<str:sheet_id>/analyze-columns-mapping/', sheets_analyze_columns_mapping, name='sheets_analyze_columns_mapping'),
     path('sheets/<str:sheet_id>/execute-column-import/', sheets_execute_column_import, name='sheets_execute_column_import'),
     path('sheets/<str:sheet_id>/rename-column-header/', sheets_rename_column_header, name='sheets_rename_column_header'),
+
+    path('sheets/<str:sheet_id>/analyze-columns-mapping-enhanced/', sheets_analyze_columns_mapping_enhanced, name='sheets_analyze_columns_mapping_enhanced'),
+    path('sheets/<str:sheet_id>/execute-column-import-enhanced/', sheets_execute_column_import_enhanced, name='sheets_execute_column_import_enhanced'),
+    path('sheets/<str:sheet_id>/import-history/', get_import_history, name='get_import_history'),
 ]

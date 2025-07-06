@@ -396,6 +396,32 @@ export const classRecordService = {
         
         return api.post(`/sheets/${sheetId}/rename-column-header/`, payload);
     },
+
+    analyzeColumnsForMappingEnhanced: (sheetId, importColumns, classRecordId, sheetName = null, forceReimport = []) => {
+        const payload = { 
+            import_columns: importColumns,
+            class_record_id: classRecordId,
+            force_reimport: forceReimport
+        };
+        if (sheetName) payload.sheet_name = sheetName;
+        
+        return api.post(`/sheets/${sheetId}/analyze-columns-mapping-enhanced/`, payload);
+    },
+
+    executeColumnImportEnhanced: (sheetId, columnMappings, importData, classRecordId, sheetName = null) => {
+        const payload = { 
+            column_mappings: columnMappings,
+            import_data: importData,
+            class_record_id: classRecordId
+        };
+        if (sheetName) payload.sheet_name = sheetName;
+        
+        return api.post(`/sheets/${sheetId}/execute-column-import-enhanced/`, payload);
+    },
+
+    getImportHistory: (sheetId) => {
+        return api.get(`/sheets/${sheetId}/import-history/`);
+    },
 };
 
 export const enhancedClassRecordService = {
