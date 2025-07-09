@@ -85,6 +85,82 @@ class ClassRecord(models.Model):
         """Returns template data ONLY (for template mode)"""
         return self.spreadsheet_data
 
+    def get_template_structure(self):
+        """Get the structure from this class record's individual sheet"""
+        if self.google_sheet_id and settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS:
+            try:
+                from utils.google_service_account_sheets import GoogleServiceAccountSheets
+                service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+
+                # Get data from THIS class record's individual sheet
+                sheet_data = service.get_sheet_data(self.google_sheet_id)
+
+                if sheet_data['success']:
+                    return {
+                        'headers': sheet_data.get('headers', []),
+                        'main_headers': sheet_data.get('main_headers', []),
+                        'sub_headers': sheet_data.get('sub_headers', []),
+                        'template_url': f"https://docs.google.com/spreadsheets/d/{self.google_sheet_id}/edit",
+                        'embed_url': f"https://docs.google.com/spreadsheets/d/{self.google_sheet_id}/edit?usp=sharing&rm=embedded"
+                    }
+            except Exception as e:
+                print(f"Failed to get individual sheet structure: {e}")
+
+        # Fallback to default structure
+        return {
+            'headers': ['No.', 'Student ID', 'Last Name', 'First Name', 'Quiz 1', 'Quiz 2', 'Midterm', 'Final',
+                        'Grade'],
+            'main_headers': ['STUDENT INFORMATION', '', '', '', 'QUIZZES', '', 'EXAMS', '', 'GRADE'],
+            'sub_headers': ['No.', 'Student ID', 'Last Name', 'First Name', 'Quiz 1', 'Quiz 2', 'Midterm', 'Final',
+                            'Grade'],
+            'template_url': '',
+            'embed_url': ''
+        }
+
+    def get_individual_sheet_url(self):
+        """Get the URL for this class record's individual Google Sheet"""
+        if self.google_sheet_id:
+            return f"https://docs.google.com/spreadsheets/d/{self.google_sheet_id}/edit"
+        return None
+
+    def get_embed_url(self):
+        """Get the embed URL for this class record's individual Google Sheet"""
+        if self.google_sheet_id:
+            return f"https://docs.google.com/spreadsheets/d/{self.google_sheet_id}/edit?usp=sharing&rm=embedded"
+        return None
+
+    def export_to_user_sheet(self, export_name: str = None):
+        """Create a user's own copy with their current data"""
+        if not export_name:
+            export_name = f"{self.name} - Export"
+
+        if self.google_sheet_id and settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS:
+            try:
+                from utils.google_service_account_sheets import GoogleServiceAccountSheets
+                service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+
+                # Get current data
+                current_data = self.spreadsheet_data if self.spreadsheet_data else []
+
+                # Create user's copy
+                result = service.create_user_copy_from_template(
+                    self.google_sheet_id,
+                    export_name,
+                    current_data
+                )
+
+                return result
+            except Exception as e:
+                return {
+                    'success': False,
+                    'error': f'Export failed: {str(e)}'
+                }
+
+        return {
+            'success': False,
+            'error': 'No template reference available'
+        }
+
 
 class Student(models.Model):
     class_record = models.ForeignKey(ClassRecord, on_delete=models.CASCADE, related_name='students')

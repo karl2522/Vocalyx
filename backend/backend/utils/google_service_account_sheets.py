@@ -29,48 +29,6 @@ class GoogleServiceAccountSheets:
         self.drive_service = build('drive', 'v3', credentials=self.credentials)
         self.sheets_service = build('sheets', 'v4', credentials=self.credentials)
 
-    def copy_template_sheet(self, template_file_id: str, new_name: str) -> Dict:
-        """
-        Copy a template Google Sheet to the service account's Drive.
-
-        Args:
-            template_file_id: ID of the template sheet to copy.
-            new_name: Name for the copied sheet.
-
-        Returns:
-            Dict containing copied file info or error.
-        """
-        try:
-            copied_file = self.drive_service.files().copy(
-                fileId=template_file_id,
-                body={'name': new_name}
-            ).execute()
-
-            return {
-                'success': True,
-                'file': {
-                    'id': copied_file.get('id'),
-                    'name': copied_file.get('name'),
-                    'webViewLink': copied_file.get('webViewLink'),
-                    'embedLink': f"https://docs.google.com/spreadsheets/d/{copied_file.get('id')}/edit?usp=sharing&rm=embedded"
-                }
-            }
-        except HttpError as e:
-            error_details = e.content.decode('utf-8') if e.content else str(e)
-            logger.error(f"Service account sheets copy template failed: {error_details}")
-            return {
-                'success': False,
-                'error': f'Failed to copy template: {e.status_code}',
-                'details': error_details
-            }
-        except Exception as e:
-            logger.error(f"Service account sheets copy template failed: {str(e)}")
-            return {
-                'success': False,
-                'error': f'Failed to copy template: {str(e)}',
-                'details': str(e)
-            }
-
     def share_file_with_user(self, file_id: str, user_email: str) -> Dict:
         """
         Share a file (owned by the service account) with a specific user by email.
@@ -1830,4 +1788,245 @@ class GoogleServiceAccountSheets:
             return {
                 'success': False,
                 'error': f'Failed to save import history: {str(e)}'
+            }
+
+    def create_user_copy_from_template(self, template_id: str, new_name: str, user_data: list = None) -> Dict:
+        """
+        Create a user's own copy of the template with their data.
+        This is for when users want to export to their own Google Drive.
+
+        Args:
+            template_id: ID of the template
+            new_name: Name for the new sheet
+            user_data: Optional data to populate the new sheet
+
+        Returns:
+            Dict containing new sheet info
+        """
+        try:
+            # Create a new blank spreadsheet with the template structure
+            template_structure = self.access_template_structure(template_id)
+
+            if not template_structure['success']:
+                return template_structure
+
+            # Create new spreadsheet
+            spreadsheet_body = {
+                'properties': {
+                    'title': new_name
+                },
+                'sheets': [{
+                    'properties': {
+                        'title': 'Class Record',
+                        'gridProperties': {
+                            'rowCount': 100,
+                            'columnCount': 20
+                        }
+                    }
+                }]
+            }
+
+            new_spreadsheet = self.sheets_service.spreadsheets().create(
+                body=spreadsheet_body
+            ).execute()
+
+            new_sheet_id = new_spreadsheet['spreadsheetId']
+
+            # Copy template headers
+            template_headers = template_structure['template']
+            headers_data = [
+                template_headers.get('structure', []),
+                template_headers.get('sub_headers', [])
+            ]
+
+            if headers_data[0] or headers_data[1]:
+                self.sheets_service.spreadsheets().values().update(
+                    spreadsheetId=new_sheet_id,
+                    range='A1:Z2',
+                    valueInputOption='RAW',
+                    body={'values': headers_data}
+                ).execute()
+
+            # Add user data if provided
+            if user_data:
+                self.sheets_service.spreadsheets().values().update(
+                    spreadsheetId=new_sheet_id,
+                    range='A3:Z',
+                    valueInputOption='RAW',
+                    body={'values': user_data}
+                ).execute()
+
+            return {
+                'success': True,
+                'file': {
+                    'id': new_sheet_id,
+                    'name': new_name,
+                    'webViewLink': f"https://docs.google.com/spreadsheets/d/{new_sheet_id}/edit"
+                }
+            }
+
+        except Exception as e:
+            logger.error(f"Create user copy failed: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Failed to create user copy: {str(e)}'
+            }
+
+    def create_individual_class_sheet(self, template_id: str, class_name: str, semester: str) -> Dict:
+        """
+        Create an individual Google Sheet for a class record based on template structure.
+        Each class gets its own sheet, not shared with others.
+
+        Args:
+            template_id: ID of the template to base structure on
+            class_name: Name of the class
+            semester: Semester info
+
+        Returns:
+            Dict containing new sheet info
+        """
+        try:
+            # Get template structure
+            template_access = self.access_template_structure(template_id)
+
+            if not template_access['success']:
+                # If template access fails, create with default structure
+                print(f"⚠️ Template access failed, using default structure: {template_access.get('error')}")
+                template_headers = {
+                    'main_headers': ['STUDENT INFORMATION', '', '', '', 'QUIZZES', '', 'EXAMS', '', 'GRADE'],
+                    'sub_headers': ['No.', 'Student ID', 'Last Name', 'First Name', 'Quiz 1', 'Quiz 2', 'Midterm',
+                                    'Final', 'Grade']
+                }
+            else:
+                template_headers = template_access['template']
+
+            # Create unique sheet name
+            sheet_name = f"{class_name} - {semester}"
+
+            # Create new spreadsheet
+            spreadsheet_body = {
+                'properties': {
+                    'title': sheet_name
+                },
+                'sheets': [{
+                    'properties': {
+                        'title': 'Class Record',
+                        'gridProperties': {
+                            'rowCount': 100,
+                            'columnCount': 20
+                        }
+                    }
+                }]
+            }
+
+            new_spreadsheet = self.sheets_service.spreadsheets().create(
+                body=spreadsheet_body
+            ).execute()
+
+            new_sheet_id = new_spreadsheet['spreadsheetId']
+
+            # Set up headers based on template
+            headers_data = []
+
+            # Add main headers (row 1)
+            main_headers = template_headers.get('structure', template_headers.get('main_headers', []))
+            if main_headers:
+                headers_data.append(main_headers)
+
+            # Add sub headers (row 2)
+            sub_headers = template_headers.get('sub_headers', [])
+            if sub_headers:
+                headers_data.append(sub_headers)
+
+            # If no template headers, use defaults
+            if not headers_data:
+                headers_data = [
+                    ['STUDENT INFORMATION', '', '', '', 'QUIZZES', '', 'EXAMS', '', 'GRADE'],
+                    ['No.', 'Student ID', 'Last Name', 'First Name', 'Quiz 1', 'Quiz 2', 'Midterm', 'Final', 'Grade']
+                ]
+
+            # Apply headers to the new sheet
+            if headers_data:
+                self.sheets_service.spreadsheets().values().update(
+                    spreadsheetId=new_sheet_id,
+                    range='A1:Z2',
+                    valueInputOption='RAW',
+                    body={'values': headers_data}
+                ).execute()
+
+                print(f"✅ Headers applied to new sheet: {headers_data}")
+
+            # Make the sheet publicly readable for embedding
+            try:
+                permission = {
+                    'type': 'anyone',
+                    'role': 'reader'
+                }
+                self.drive_service.permissions().create(
+                    fileId=new_sheet_id,
+                    body=permission,
+                    fields='id'
+                ).execute()
+                print(f"✅ Sheet made publicly readable for embedding")
+            except Exception as perm_error:
+                print(f"⚠️ Warning: Could not make sheet public: {str(perm_error)}")
+                # Continue anyway - sheet is still usable
+
+            return {
+                'success': True,
+                'file': {
+                    'id': new_sheet_id,
+                    'name': sheet_name,
+                    'webViewLink': f"https://docs.google.com/spreadsheets/d/{new_sheet_id}/edit",
+                    'embedLink': f"https://docs.google.com/spreadsheets/d/{new_sheet_id}/edit?usp=sharing&rm=embedded"
+                }
+            }
+
+        except Exception as e:
+            logger.error(f"Create individual class sheet failed: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Failed to create individual sheet: {str(e)}',
+                'details': str(e)
+            }
+
+    def access_template_structure(self, template_file_id: str) -> Dict:
+        """
+        Access template structure directly without copying.
+
+        Args:
+            template_file_id: ID of the template sheet to access.
+
+        Returns:
+            Dict containing template structure info.
+        """
+        try:
+            # Just get the template structure for reference
+            template_data = self.get_sheet_data(template_file_id)
+
+            if template_data['success']:
+                return {
+                    'success': True,
+                    'template': {
+                        'id': template_file_id,
+                        'headers': template_data.get('headers', []),
+                        'structure': template_data.get('main_headers', []),
+                        'sub_headers': template_data.get('sub_headers', []),
+                        'webViewLink': f"https://docs.google.com/spreadsheets/d/{template_file_id}/edit",
+                        'embedLink': f"https://docs.google.com/spreadsheets/d/{template_file_id}/edit?usp=sharing&rm=embedded"
+                    }
+                }
+            else:
+                return {
+                    'success': False,
+                    'error': f'Failed to access template: {template_data.get("error", "Unknown error")}',
+                    'details': template_data.get('error', 'Could not access template structure')
+                }
+
+        except Exception as e:
+            logger.error(f"Template access failed: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Failed to access template: {str(e)}',
+                'details': str(e)
             }
