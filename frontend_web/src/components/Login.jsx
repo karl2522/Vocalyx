@@ -51,7 +51,7 @@ function Login() {
         const authResult = await googleLogin();
         if (authResult && authResult.token) {
           showToast.success("Login successful!", "Google Authentication");
-          navigate("/dashboard");
+          navigate("/class-records");
         } else {
           throw new Error('Login failed');
         }
@@ -93,7 +93,7 @@ function Login() {
             localStorage.setItem('user', JSON.stringify(data.user));
             setUser(data.user); // Add this line to update context
             showToast.success("Microsoft login successful!");
-            navigate("/dashboard");
+            navigate("/class-records");
           } else {
             throw new Error(data.error || 'Microsoft login failed');
           }
@@ -126,7 +126,7 @@ function Login() {
 
               // Force navigation after context is updated
               setTimeout(() => {
-                  navigate("/dashboard", { replace: true });
+                  navigate("/class-records", { replace: true });
               }, 100);
           } else {
               throw new Error('Invalid response from server');

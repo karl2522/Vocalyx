@@ -14,8 +14,8 @@ from .serializers import (
     GradeSerializer
 )
 from users.google_sheets_service import GoogleSheetsService
-from utils.google_service_account_sheets import GoogleServiceAccountSheets
-from utils.google_service_account_sheets import GoogleServiceAccountSheets
+# Remove the service account imports since we're switching to user-based approach
+# from utils.google_service_account_sheets import GoogleServiceAccountSheets
 
 
 class ClassRecordViewSet(viewsets.ModelViewSet):
@@ -39,21 +39,25 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
             
             print(f"✅ ClassRecord created successfully: {class_record.id}")
 
-            # Check if service account credentials are available
-            if not settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS:
-                print("❌ No Google Service Account credentials found. Skipping Google Sheets creation.")
+            # Check for user's Google access token
+            access_token = self.request.headers.get('X-Google-Access-Token')
+            if not access_token:
+                print("❌ No Google access token found in request headers. Skipping Google Sheets creation.")
+                print("   Please ensure the frontend sends the user's Google access token in the X-Google-Access-Token header.")
                 return
 
-            service_account_sheets = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+            # Initialize Google Sheets service with user's access token
+            user_sheets_service = GoogleSheetsService(access_token)
             template_id = getattr(settings, 'GOOGLE_SHEETS_TEMPLATE_ID', None)
             
             print(f"🔍 Template ID: {template_id}")
             print(f"🔍 User email: {self.request.user.email}")
+            print(f"🔍 Using user's Google access token for Google Drive operations")
             
             if template_id:
-                # Step 1: Copy the template using the service account
-                print(f"🔄 Copying template sheet: {template_id}")
-                copy_result = service_account_sheets.copy_template_sheet(
+                # Step 1: Copy the template using the user's access token (will be owned by user)
+                print(f"🔄 Copying template sheet to user's Google Drive: {template_id}")
+                copy_result = user_sheets_service.copy_template_sheet(
                     template_file_id=template_id,
                     new_name=f"{class_record.name} - {class_record.semester}"
                 )
@@ -64,61 +68,48 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
                     copied_file_info = copy_result['file']
                     copied_sheet_id = copied_file_info['id']
                     
-                    print(f"✅ Sheet copied successfully: {copied_sheet_id}")
+                    print(f"✅ Sheet copied successfully to user's Drive: {copied_sheet_id}")
+                    print(f"✅ File is now owned by user: {self.request.user.email}")
                     
-                    # Step 2: Share the copied sheet with the authenticated user
-                    print(f"🔄 Sharing sheet with user: {self.request.user.email}")
-                    share_result = service_account_sheets.share_file_with_user(
-                        file_id=copied_sheet_id,
-                        user_email=self.request.user.email
+                    # Step 2: Make the sheet publicly editable for iframe embedding
+                    print(f"🔄 Making sheet publicly editable for embedding...")
+                    public_result = user_sheets_service.update_sheet_permissions(
+                        file_id=copied_sheet_id, 
+                        make_editable=True
                     )
                     
-                    print(f"🔍 Share result: {share_result}")
+                    print(f"🔍 Public result: {public_result}")
                     
-                    if share_result['success']:
-                        # Step 3: Make the sheet publicly readable for iframe embedding
-                        print(f"🔄 Making sheet publicly readable for embedding...")
-                        public_result = service_account_sheets.make_file_public_readable(copied_sheet_id)
+                    if public_result['success']:
+                        # Update the class record with the new sheet information
+                        class_record.google_sheet_id = copied_sheet_id
+                        class_record.google_sheet_url = copied_file_info.get('webViewLink')
+                        class_record.save()
                         
-                        print(f"🔍 Public result: {public_result}")
-                        
-                        if public_result['success']:
-                            # Get the proper webViewLink after making it public
-                            sheet_info = service_account_sheets.drive_service.files().get(
-                                fileId=copied_sheet_id,
-                                fields='webViewLink'
-                            ).execute()
-                            
-                            # Update the class record with the new sheet information
-                            class_record.google_sheet_id = copied_sheet_id
-                            class_record.google_sheet_url = sheet_info.get('webViewLink')
-                            class_record.save() # Save only if copy, share, and public are successful
-                            
-                            print(f"✅ Google Sheet created, shared, and made public successfully!")
-                            print(f"   Sheet ID: {copied_sheet_id}")
-                            print(f"   View URL: {sheet_info.get('webViewLink')}")
-                            print(f"   Embed URL: https://docs.google.com/spreadsheets/d/{copied_sheet_id}/edit?rm=embedded")
-                        else:
-                            print(f"❌ Failed to make Google Sheet public: {public_result.get('error', 'Unknown error')}")
-                            print(f"   Details: {public_result.get('details', 'No details provided')}")
-                            print(f"   Sheet is shared with user but may not embed properly")
-                            
-                            # Still save with user access, but warn about embedding issues
-                            class_record.google_sheet_id = copied_sheet_id
-                            class_record.google_sheet_url = copied_file_info.get('webViewLink')
-                            class_record.save()
+                        print(f"✅ Google Sheet created in user's Drive and made publicly editable successfully!")
+                        print(f"   Sheet ID: {copied_sheet_id}")
+                        print(f"   View URL: {copied_file_info.get('webViewLink')}")
+                        print(f"   Embed URL: {copied_file_info.get('embedLink')}")
+                        print(f"   File owner: User ({self.request.user.email})")
+                        print(f"   Permissions: Anyone with link can edit")
                     else:
-                        print(f"❌ Failed to share copied Google Sheet with user: {share_result.get('error', 'Unknown error')}")
-                        print(f"   Details: {share_result.get('details', 'No details provided')}")
-                        # Note: Sheet was created but not shared - user won't have access
+                        print(f"⚠️ Sheet created in user's Drive but failed to make publicly editable: {public_result.get('error', 'Unknown error')}")
+                        print(f"   Details: {public_result.get('details', 'No details provided')}")
+                        print(f"   Sheet may be view-only in embedded mode but user has full access")
+                        
+                        # Still save with user access
+                        class_record.google_sheet_id = copied_sheet_id
+                        class_record.google_sheet_url = copied_file_info.get('webViewLink')
+                        class_record.save()
                 else:
-                    print(f"❌ Failed to copy Google Sheet template: {copy_result.get('error', 'Unknown error')}")
+                    print(f"❌ Failed to copy Google Sheet template to user's Drive: {copy_result.get('error', 'Unknown error')}")
                     print(f"   Details: {copy_result.get('details', 'No details provided')}")
+                    print(f"   Make sure the template is accessible to the user or publicly readable")
             else:
                 print("❌ No Google Sheets template ID configured in settings.")
                 
         except Exception as e:
-            print(f"❌ Error during Google Sheets service account operation: {str(e)}")
+            print(f"❌ Error during Google Sheets user operation: {str(e)}")
             import traceback
             print(f"   Full traceback: {traceback.format_exc()}")
             # Don't re-raise - allow ClassRecord creation to succeed even if Google Sheets fails

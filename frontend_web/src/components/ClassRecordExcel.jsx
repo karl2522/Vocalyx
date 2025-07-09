@@ -1,21 +1,20 @@
-import { AlertCircle, ArrowLeft, ChevronDown, Download, Edit2, FileSpreadsheet, HelpCircle, Mic, MicOff, MoreVertical, Plus, RotateCcw, RotateCw, Save, Target, Upload, Users, Volume2, VolumeX, X, BarChart3} from 'lucide-react';
-import { useCallback, useEffect, useState, useRef } from 'react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { ArrowLeft, BarChart3, ChevronDown, Download, FileSpreadsheet, HelpCircle, Mic, MicOff, MoreVertical, Upload, Users, X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useNavigate, useParams } from 'react-router-dom';
+import * as XLSX from 'xlsx';
 import { classRecordService } from '../services/api';
 import { speakText, stopSpeaking } from '../utils/speechSynthesis';
 import useVoiceRecognition from '../utils/useVoiceRecognition';
-import { findEmptyRow, findStudentRow, findStudentRowSmart, parseVoiceCommand } from '../utils/voicecommandParser';
-import BatchEntryItem from './BatchEntryItem';
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import { findStudentRowSmart, parseVoiceCommand } from '../utils/voicecommandParser';
 import BatchGradingModal from './modals/BatchGradingModal';
-import VoiceGuideModal from './modals/VoiceGuideModal';
-import OverrideConfirmationModal from './modals/OverrideConfirmationModal';
-import ImportStudentsModal from './modals/ImportStudentsModal';
-import ImportProgressIndicator from './modals/ImportProgressIndicator';
 import ColumnMappingModal from './modals/ColumnMappingModal';
+import ImportProgressIndicator from './modals/ImportProgressIndicator';
+import ImportStudentsModal from './modals/ImportStudentsModal';
+import OverrideConfirmationModal from './modals/OverrideConfirmationModal';
+import VoiceGuideModal from './modals/VoiceGuideModal';
 
 
 const ClassRecordExcel = () => {
@@ -243,7 +242,7 @@ const ClassRecordExcel = () => {
     } catch (error) {
       console.error('Error fetching class record:', error);
       toast.error('Failed to load class record');
-      navigate('/dashboard/class-records/view');
+              navigate('/class-records');
     } finally {
       setLoading(false);
     }
@@ -365,6 +364,40 @@ const ClassRecordExcel = () => {
     }
     
     return false; // Command not handled
+  };
+
+  // Function to fix permissions for existing sheets that are view-only
+  const fixSheetPermissions = async () => {
+    if (!classRecord?.google_sheet_id) {
+      toast.error('No Google Sheet found for this record');
+      return;
+    }
+
+    try {
+      toast('Updating sheet permissions...', { duration: 2000 });
+      
+      const googleSheetsService = (await import('../services/googleSheetsService.js')).default;
+      
+      const result = await googleSheetsService.updatePermissions(
+        classRecord.google_sheet_id, 
+        false, // make_public_readable
+        true   // make_editable
+      );
+
+      if (result.success) {
+        toast.success('Sheet permissions updated! Please refresh the page.');
+        
+        // Auto-refresh after 2 seconds
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
+      } else {
+        toast.error('Failed to update permissions: ' + result.error);
+      }
+    } catch (error) {
+      console.error('Error updating permissions:', error);
+      toast.error('Error updating sheet permissions');
+    }
   };
 
   const handleImportScores = () => {
@@ -1770,7 +1803,7 @@ const handleExportToPDF = async () => {
               {/* Left Section - Navigation & Title */}
               <div className="flex items-center space-x-4">
                 <button
-                  onClick={() => navigate('/dashboard/class-records/view')}
+                  onClick={() => navigate('/class-records')}
                   className="flex items-center space-x-2 text-slate-600 hover:text-slate-800 transition-colors group"
                 >
                   <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
@@ -1781,7 +1814,6 @@ const handleExportToPDF = async () => {
                   <h1 className="text-xl font-semibold text-slate-900">{classRecord?.name}</h1>
                   <div className="flex items-center space-x-3 text-sm text-slate-500">
                     <span>{classRecord?.semester}</span>
-                    <span>•</span>
                     <span>{classRecord?.teacher_name}</span>
 
                     {lastSaved && (
@@ -1803,57 +1835,66 @@ const handleExportToPDF = async () => {
                   Data is saved automatically in Google Sheets
                 </div>
 
-                {/* Voice Controls */}
+
+                {/* 🔥 NEW: Sheet Selector Dropdown */}
+              {availableSheets.length > 1 && (
                 <div className="relative" onClick={(e) => e.stopPropagation()}>
                   <button
-                    onClick={() => toggleDropdown('voice')}
-                    className="flex items-center space-x-2 bg-blue-50 text-blue-700 px-3 py-2 rounded-lg font-medium hover:bg-blue-100 transition-colors shadow-sm"
+                    onClick={() => setShowSheetSelector(!showSheetSelector)}
+                    disabled={loadingSheets}
+                    className="flex items-center space-x-2 bg-indigo-50 text-indigo-700 px-3 py-2 rounded-lg font-medium hover:bg-indigo-100 transition-colors shadow-sm border border-indigo-200 disabled:opacity-50"
                   >
-                    {voiceEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-                    <span>Voice</span>
-                    <ChevronDown className={`w-4 h-4 transition-transform ${dropdowns.voice ? 'rotate-180' : ''}`} />
+                    <FileSpreadsheet className="w-4 h-4" />
+                    <span className="max-w-24 truncate">
+                      {loadingSheets ? 'Loading...' : (currentSheet?.sheet_name || 'Select Sheet')}
+                    </span>
+                    <ChevronDown className={`w-4 h-4 transition-transform ${showSheetSelector ? 'rotate-180' : ''}`} />
                   </button>
                   
-                  {dropdowns.voice && (
-                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-slate-200 py-2 z-50">
-                      <button
-                        onClick={() => {
-                          handleVoiceRecord();
-                          closeAllDropdowns();
-                        }}
-                        className={`flex items-center space-x-3 px-4 py-2 text-sm w-full text-left ${
-                          isListening 
-                            ? 'text-red-700 bg-red-50 hover:bg-red-100' 
-                            : 'text-slate-700 hover:bg-slate-50'
-                        }`}
-                      >
-                        {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                        <span>{isListening ? 'Stop Recording' : 'Start Recording'}</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          toggleVoiceFeedback();
-                          closeAllDropdowns();
-                        }}
-                        className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
-                      >
-                        {voiceEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-                        <span>{voiceEnabled ? 'Disable Voice' : 'Enable Voice'}</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          setShowVoiceGuide(true);
-                          closeAllDropdowns();
-                        }}
-                        className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
-                      >
-                        <HelpCircle className="w-4 h-4" />
-                        <span>Voice Guide</span>
-                      </button>
+                  {showSheetSelector && (
+                    <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-xl border border-slate-200 py-2 z-50 max-h-60 overflow-y-auto">
+                      <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                        Available Sheets ({availableSheets.length})
+                      </div>
+                      {availableSheets.map((sheet, index) => (
+                        <button
+                          key={sheet.sheet_id}
+                          onClick={() => switchToSheet(sheet)}
+                          disabled={loadingSheets}
+                          className={`flex items-center space-x-3 px-4 py-2 text-sm w-full text-left transition-colors disabled:opacity-50 ${
+                            currentSheet?.sheet_name === sheet.sheet_name
+                              ? 'bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500'
+                              : 'text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span className="w-6 h-6 bg-slate-100 rounded text-xs flex items-center justify-center font-medium">
+                            {index + 1}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium truncate">{sheet.sheet_name}</div>
+                            <div className="text-xs text-slate-500">
+                              Sheet {index + 1}
+                              {currentSheet?.sheet_name === sheet.sheet_name && (
+                                <span className="ml-1 text-indigo-600">• Active</span>
+                              )}
+                            </div>
+                          </div>
+                          {currentSheet?.sheet_name === sheet.sheet_name && (
+                            <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
+                          )}
+                        </button>
+                      ))}
+                      
+                      {/* Voice command hint */}
+                      <div className="mt-2 px-4 py-2 text-xs text-slate-500 border-t border-slate-200">
+                        💡 Say "switch to [sheet name]" to change sheets with voice
+                      </div>
                     </div>
                   )}
                 </div>
-                {/* 🔥 ADD THE TOOLS DROPDOWN HERE! */}
+              )}
+
+                {/* Tools Dropdown */}
               <div className="relative" onClick={(e) => e.stopPropagation()}>
                 <button
                   onClick={() => toggleDropdown('tools')}
@@ -1945,68 +1986,27 @@ const handleExportToPDF = async () => {
                     <span className="w-4 h-4 text-blue-600 text-center font-bold">#</span>
                     <span>Auto-Number Students</span>
                   </button>
+
+                  {/* Troubleshooting section */}
+                  <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                    Troubleshooting
+                  </div>
+                  
+                  <button
+                    onClick={() => {
+                      fixSheetPermissions();
+                      closeAllDropdowns();
+                    }}
+                    className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                  >
+                    <span className="w-4 h-4 text-orange-600 text-center font-bold">🔧</span>
+                    <span>Fix "View Only" Issue</span>
+                  </button>
                 </div>
               )}
               </div>
 
-              {/* 🔥 NEW: Sheet Selector Dropdown */}
-              {availableSheets.length > 1 && (
-                <div className="relative" onClick={(e) => e.stopPropagation()}>
-                  <button
-                    onClick={() => setShowSheetSelector(!showSheetSelector)}
-                    disabled={loadingSheets}
-                    className="flex items-center space-x-2 bg-indigo-50 text-indigo-700 px-3 py-2 rounded-lg font-medium hover:bg-indigo-100 transition-colors shadow-sm border border-indigo-200 disabled:opacity-50"
-                  >
-                    <FileSpreadsheet className="w-4 h-4" />
-                    <span className="max-w-24 truncate">
-                      {loadingSheets ? 'Loading...' : (currentSheet?.sheet_name || 'Select Sheet')}
-                    </span>
-                    <ChevronDown className={`w-4 h-4 transition-transform ${showSheetSelector ? 'rotate-180' : ''}`} />
-                  </button>
-                  
-                  {showSheetSelector && (
-                    <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-xl border border-slate-200 py-2 z-50 max-h-60 overflow-y-auto">
-                      <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
-                        Available Sheets ({availableSheets.length})
-                      </div>
-                      {availableSheets.map((sheet, index) => (
-                        <button
-                          key={sheet.sheet_id}
-                          onClick={() => switchToSheet(sheet)}
-                          disabled={loadingSheets}
-                          className={`flex items-center space-x-3 px-4 py-2 text-sm w-full text-left transition-colors disabled:opacity-50 ${
-                            currentSheet?.sheet_name === sheet.sheet_name
-                              ? 'bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500'
-                              : 'text-slate-700 hover:bg-slate-50'
-                          }`}
-                        >
-                          <span className="w-6 h-6 bg-slate-100 rounded text-xs flex items-center justify-center font-medium">
-                            {index + 1}
-                          </span>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium truncate">{sheet.sheet_name}</div>
-                            <div className="text-xs text-slate-500">
-                              Sheet {index + 1}
-                              {currentSheet?.sheet_name === sheet.sheet_name && (
-                                <span className="ml-1 text-indigo-600">• Active</span>
-                              )}
-                            </div>
-                          </div>
-                          {currentSheet?.sheet_name === sheet.sheet_name && (
-                            <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
-                          )}
-                        </button>
-                      ))}
-                      
-                      {/* Voice command hint */}
-                      <div className="mt-2 px-4 py-2 text-xs text-slate-500 border-t border-slate-200">
-                        💡 Say "switch to [sheet name]" to change sheets with voice
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-                {/* Open in Google Sheets Button */}
+                                {/* Open in Google Sheets Button */}
                 <a
                   href={classRecord.google_sheet_url || `https://docs.google.com/spreadsheets/d/${classRecord.google_sheet_id}/edit`}
                   target="_blank"
@@ -2022,24 +2022,26 @@ const handleExportToPDF = async () => {
         </div>
 
         {/* Embedded Google Sheet */}
-        <div className="flex-1 p-0">
-          <div className="h-full bg-white overflow-hidden">
+        <div className="flex-1 p-4">
+          <div className="h-full bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
             {/* 🔥 ENHANCED: Dynamic iframe that switches sheets */}
             <iframe
               key={currentSheet?.sheet_id || 'default'} // 🔥 Force re-render when sheet changes
               src={currentSheet 
-                ? `https://docs.google.com/spreadsheets/d/${classRecord.google_sheet_id}/edit#gid=${currentSheet.sheet_id}&widget=true&headers=false&rm=embedded`
-                : `https://docs.google.com/spreadsheets/d/${classRecord.google_sheet_id}/edit?usp=sharing&widget=true&headers=false&rm=embedded`
+                ? `https://docs.google.com/spreadsheets/d/${classRecord.google_sheet_id}/edit#gid=${currentSheet.sheet_id}&rm=minimal&widget=true&chrome=false&headers=false`
+                : `https://docs.google.com/spreadsheets/d/${classRecord.google_sheet_id}/edit?usp=sharing&rm=minimal&widget=true&chrome=false&headers=false`
               }
               width="100%"
               height="100%"
               frameBorder="0"
-              className="w-full h-full border-0"
+              className="w-full h-full border-0 rounded-lg"
               title={`${classRecord.name} - ${currentSheet?.sheet_name || 'Class Record'} Sheet`}
               allowFullScreen
               style={{
                 border: 'none',
-                outline: 'none'
+                outline: 'none',
+                borderRadius: '8px',
+                boxShadow: 'inset 0 0 0 1px rgba(0, 0, 0, 0.1)'
               }}
             />
             
@@ -2296,7 +2298,7 @@ const handleExportToPDF = async () => {
         <h2 className="text-xl font-semibold text-slate-900 mb-2">No Google Sheet Connected</h2>
         <p className="text-slate-600 mb-4">This class record needs a Google Sheet to function.</p>
         <button
-          onClick={() => navigate('/dashboard/class-records/view')}
+                                onClick={() => navigate('/class-records')}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
         >
           Back to Records

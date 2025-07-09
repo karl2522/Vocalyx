@@ -60,15 +60,14 @@ class GoogleSheetsService:
                         'id': file_info.get('id'),
                         'name': file_info.get('name'),
                         'webViewLink': file_info.get('webViewLink'),
-                        'embedLink': f"https://docs.google.com/spreadsheets/d/{file_info.get('id')}/edit?usp=sharing&rm=embedded"
+                        'embedLink': f"https://docs.google.com/spreadsheets/d/{file_info.get('id')}/edit?usp=sharing&rm=minimal&chrome=false&widget=true&headers=false"
                     }
                 }
             else:
-                return {
-                    'success': False,
-                    'error': f'Failed to copy template: {response.status_code}',
-                    'details': response.text
-                }
+                # If direct copy fails (e.g., due to scope limitations), try alternative approach
+                logger.warning(f"Direct copy failed with {response.status_code}, trying alternative approach")
+                print(f"🔄 Direct copy failed with {response.status_code}, trying alternative approach to copy template content")
+                return self.create_from_template_content(template_file_id, new_name)
 
         except requests.exceptions.RequestException as e:
             logger.error(f"Sheets copy template failed: {str(e)}")
@@ -76,6 +75,147 @@ class GoogleSheetsService:
                 'success': False,
                 'error': f'Request failed: {str(e)}'
             }
+
+    def create_from_template_content(self, template_file_id: str, new_name: str) -> Dict:
+        """
+        Alternative approach: Create a new spreadsheet and copy template content.
+        This works with drive.file scope when direct file copying doesn't.
+
+        Args:
+            template_file_id: ID of the template sheet to copy content from
+            new_name: Name for the new sheet
+
+        Returns:
+            Dict containing new file info or error
+        """
+        try:
+            # Step 1: Create a new blank spreadsheet
+            create_url = "https://sheets.googleapis.com/v4/spreadsheets"
+            create_data = {
+                "properties": {
+                    "title": new_name
+                }
+            }
+
+            response = requests.post(
+                create_url,
+                headers=self.headers,
+                json=create_data,
+                timeout=15
+            )
+
+            if response.status_code != 200:
+                return {
+                    'success': False,
+                    'error': f'Failed to create new spreadsheet: {response.status_code}',
+                    'details': response.text
+                }
+
+            new_sheet_info = response.json()
+            new_sheet_id = new_sheet_info.get('spreadsheetId')
+            print(f"📝 Created new blank spreadsheet: {new_sheet_id}")
+
+            # Step 2: Read template content directly using public access
+            # Try to read the template as a public sheet (no authentication required)
+            template_values_url = f"https://sheets.googleapis.com/v4/spreadsheets/{template_file_id}/values/A1:ZZ1000"
+            print(f"🔍 Attempting to read template content from: {template_file_id}")
+            
+            # Try with user token first
+            template_response = requests.get(
+                template_values_url,
+                headers=self.headers,
+                timeout=15
+            )
+            
+            template_values = []
+            if template_response.status_code == 200:
+                template_data = template_response.json()
+                template_values = template_data.get('values', [])
+                print(f"✅ Successfully read template content with user auth: {len(template_values)} rows")
+            else:
+                # Try without authentication (public sheet)
+                print(f"⚠️ Reading template with user auth failed ({template_response.status_code}), trying public API key access")
+                print(f"   Error details: {template_response.text[:200]}...")
+                
+                api_key = self._get_api_key()
+                if api_key:
+                    template_response = requests.get(
+                        f"{template_values_url}?key={api_key}",
+                        timeout=15
+                    )
+                    
+                    if template_response.status_code == 200:
+                        template_data = template_response.json()
+                        template_values = template_data.get('values', [])
+                        print(f"✅ Successfully read template content via public API: {len(template_values)} rows")
+                    else:
+                        print(f"❌ Failed to read template content via API key: {template_response.status_code}")
+                        print(f"   Error details: {template_response.text[:200]}...")
+                else:
+                    print("❌ No Google API key configured - cannot read public template")
+
+            # Step 3: Write template content to new sheet (if we have any content)
+            if template_values:
+                print(f"📋 Writing {len(template_values)} rows to new spreadsheet")
+                update_url = f"https://sheets.googleapis.com/v4/spreadsheets/{new_sheet_id}/values/A1"
+                update_data = {
+                    "values": template_values,
+                    "majorDimension": "ROWS"
+                }
+
+                update_response = requests.put(
+                    update_url,
+                    headers=self.headers,
+                    json=update_data,
+                    params={'valueInputOption': 'RAW'},
+                    timeout=15
+                )
+                
+                if update_response.status_code == 200:
+                    print("✅ Successfully wrote template content to new sheet")
+                else:
+                    print(f"❌ Failed to write template content: {update_response.status_code}")
+                    print(f"   Error details: {update_response.text[:200]}...")
+            else:
+                print("⚠️ No template content found or accessible - created blank sheet")
+
+            # Step 4: Get the web view link
+            file_info_url = f"{self.DRIVE_API_BASE_URL}/files/{new_sheet_id}"
+            file_response = requests.get(
+                file_info_url,
+                headers=self.headers,
+                params={'fields': 'webViewLink'},
+                timeout=10
+            )
+
+            web_view_link = None
+            if file_response.status_code == 200:
+                web_view_link = file_response.json().get('webViewLink')
+
+            return {
+                'success': True,
+                'file': {
+                    'id': new_sheet_id,
+                    'name': new_name,
+                    'webViewLink': web_view_link or f"https://docs.google.com/spreadsheets/d/{new_sheet_id}/edit",
+                    'embedLink': f"https://docs.google.com/spreadsheets/d/{new_sheet_id}/edit?usp=sharing&rm=minimal&chrome=false&widget=true&headers=false"
+                }
+            }
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Create from template content failed: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Request failed: {str(e)}'
+            }
+
+    def _get_api_key(self):
+        """
+        Get Google API key for public sheet access.
+        This should be configured in Django settings.
+        """
+        from django.conf import settings
+        return getattr(settings, 'GOOGLE_API_KEY', None)
 
     def get_sheet_info(self, spreadsheet_id: str) -> Dict:
         """
@@ -130,13 +270,14 @@ class GoogleSheetsService:
                 'error': f'Request failed: {str(e)}'
             }
 
-    def update_sheet_permissions(self, file_id: str, make_public_readable: bool = False) -> Dict:
+    def update_sheet_permissions(self, file_id: str, make_public_readable: bool = False, make_editable: bool = False) -> Dict:
         """
         Update sheet permissions.
 
         Args:
             file_id: ID of the sheet file
-            make_public_readable: Whether to make sheet publicly readable
+            make_public_readable: Whether to make sheet publicly readable (view-only)
+            make_editable: Whether to make sheet publicly editable (for embedded editing)
 
         Returns:
             Dict containing success status
@@ -144,9 +285,12 @@ class GoogleSheetsService:
         try:
             permissions_url = f"{self.DRIVE_API_BASE_URL}/files/{file_id}/permissions"
 
-            if make_public_readable:
+            if make_public_readable or make_editable:
+                # Use 'writer' role for editing, 'reader' for view-only
+                role = "writer" if make_editable else "reader"
+                
                 permission_data = {
-                    "role": "reader",
+                    "role": role,
                     "type": "anyone"
                 }
 
@@ -158,9 +302,10 @@ class GoogleSheetsService:
                 )
 
                 if response.status_code == 200:
+                    message = 'Sheet made publicly editable' if make_editable else 'Sheet made publicly readable'
                     return {
                         'success': True,
-                        'message': 'Sheet made publicly readable'
+                        'message': message
                     }
                 else:
                     return {
@@ -214,7 +359,7 @@ class GoogleSheetsService:
                             'createdTime': file.get('createdTime'),
                             'modifiedTime': file.get('modifiedTime'),
                             'webViewLink': file.get('webViewLink'),
-                            'embedLink': f"https://docs.google.com/spreadsheets/d/{file.get('id')}/edit?usp=sharing&rm=embedded"
+                            'embedLink': f"https://docs.google.com/spreadsheets/d/{file.get('id')}/edit?usp=sharing&rm=minimal&chrome=false&widget=true&headers=false"
                         }
                         for file in files_data.get('files', [])
                     ]

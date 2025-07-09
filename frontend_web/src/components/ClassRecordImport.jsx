@@ -1,13 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Upload, FileSpreadsheet, Download, AlertCircle, CheckCircle, Mic, MicOff, Volume2, VolumeX, Save } from 'lucide-react';
-import { classRecordService } from '../services/api';
+import { AlertCircle, ArrowLeft, CheckCircle, Download, FileSpreadsheet, Mic, MicOff, Save, Upload, Volume2, VolumeX } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
+import { useNavigate, useParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
-import useVoiceRecognition from '../utils/useVoiceRecognition';
-import { parseVoiceCommand, findStudentRowSmart } from '../utils/voicecommandParser';
+import { classRecordService } from '../services/api';
 import { speakText, stopSpeaking } from '../utils/speechSynthesis';
-import axios from 'axios';
+import useVoiceRecognition from '../utils/useVoiceRecognition';
+import { findStudentRowSmart, parseVoiceCommand } from '../utils/voicecommandParser';
 
 const ClassRecordImport = () => {
   const { id } = useParams();
@@ -71,7 +70,7 @@ const ClassRecordImport = () => {
     } catch (error) {
       console.error('Error fetching class record:', error);
       toast.error('Failed to load class record');
-      navigate('/dashboard/class-records/view');
+      navigate('/class-records');
     } finally {
       setLoading(false);
     }
@@ -319,7 +318,7 @@ const ClassRecordImport = () => {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <button
-              onClick={() => navigate('/dashboard/class-records/view')}
+                              onClick={() => navigate('/class-records')}
               className="flex items-center space-x-2 text-gray-600 hover:text-gray-800 transition-colors"
             >
               <ArrowLeft className="w-5 h-5" />

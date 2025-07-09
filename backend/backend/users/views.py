@@ -826,9 +826,10 @@ def sheets_update_permissions(request, sheet_id):
             return Response({'error': 'Google access token required in X-Google-Access-Token header'}, status=400)
         
         make_public = request.data.get('make_public_readable', False)
+        make_editable = request.data.get('make_editable', False)
         
         sheets_service = GoogleSheetsService(access_token)
-        result = sheets_service.update_sheet_permissions(sheet_id, make_public)
+        result = sheets_service.update_sheet_permissions(sheet_id, make_public, make_editable)
         
         return Response(result)
         

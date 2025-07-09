@@ -7,7 +7,6 @@ import { AuthProvider } from './auth/AuthContext'
 import ClassRecordExcel from './components/ClassRecordExcel.jsx'
 import ClassRecordImport from './components/ClassRecordImport.jsx'
 import ClassRecords from './components/ClassRecords.jsx'
-import Dashboard from './components/Dashboard'
 import LandingPage from './components/LandingPage'
 import Login from './components/Login'
 import Profile from './components/Profile'
@@ -100,44 +99,35 @@ function App() {
                   </PublicRoute>
                 } />
 
-                <Route path="/dashboard" element={
-                  <ProtectedRoute>
-                    <Dashboard />
-                  </ProtectedRoute>
-                } />
-                
-                {/* Class Records Routes */}
-                <Route path="/dashboard/class-records" element={
-                  <ProtectedRoute>
-                    <ClassRecords />
-                  </ProtectedRoute>
-                } />
-                <Route path="/dashboard/class-records/view" element={
+                {/* Class Records Routes - Default Route */}
+                <Route path="/class-records" element={
                   <ProtectedRoute>
                     <ClassRecords />
                   </ProtectedRoute>
                 } />
 
-                <Route path="/dashboard/class-records/:id/excel" element={
+                <Route path="/class-records/:id/excel" element={
                   <ProtectedRoute>
                     <ClassRecordExcel />
                   </ProtectedRoute>
                 } />
 
-                <Route path="/dashboard/class-records/:id/import" element={
+                <Route path="/class-records/:id/import" element={
                   <ProtectedRoute>
                     <ClassRecordImport />
                   </ProtectedRoute>
                 } />
                 
-                <Route path="/dashboard/profile" element={
+                <Route path="/profile" element={
                   <ProtectedRoute>
                     <Profile />
                   </ProtectedRoute>
                 } />
+                
+                {/* Redirect any unknown routes to class-records */}
                 <Route path="*" element={
                   <ProtectedRoute>
-                    <Navigate to="/dashboard" replace />
+                    <Navigate to="/class-records" replace />
                   </ProtectedRoute>
                 } />
               </Routes>

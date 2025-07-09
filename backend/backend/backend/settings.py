@@ -360,6 +360,9 @@ import json
 # Google Sheets Template Configuration
 GOOGLE_SHEETS_TEMPLATE_ID = os.getenv('GOOGLE_SHEETS_TEMPLATE_ID', '1h-dR0ergnvgqxXsS6nLFb7lAthuoJ5MVKya4NbYHT2c')
 
+# Google API Key for public sheet access (fallback when user auth fails)
+GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
+
 # Load Google Service Account Credentials from JSON file
 GOOGLE_SERVICE_ACCOUNT_CREDENTIALS = {}
 SERVICE_ACCOUNT_FILE = os.path.join(BASE_DIR.parent, 'vocalyx-service-account.json')

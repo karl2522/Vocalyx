@@ -183,8 +183,14 @@ function GoogleSheetsManager() {
                 width="100%"
                 height="600"
                 frameBorder="0"
-                className="w-full"
+                className="w-full rounded-lg"
                 title={`Google Sheet: ${selectedSheet.name}`}
+                style={{
+                  border: 'none',
+                  outline: 'none',
+                  borderRadius: '8px',
+                  boxShadow: 'inset 0 0 0 1px rgba(0, 0, 0, 0.1)'
+                }}
               />
             </div>
           </div>

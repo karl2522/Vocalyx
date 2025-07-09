@@ -21,8 +21,8 @@ export const auth = getAuth(app);
 // Initialize Google Auth Provider
 export const googleProvider = new GoogleAuthProvider();
 
-// 🔥 FIXED - Add ALL necessary scopes
-googleProvider.addScope('https://www.googleapis.com/auth/drive.file');
+// 🔥 UPDATED - Change from drive.file to drive scope for copying shared templates
+googleProvider.addScope('https://www.googleapis.com/auth/drive');
 googleProvider.addScope('https://www.googleapis.com/auth/spreadsheets');
 googleProvider.addScope('https://www.googleapis.com/auth/spreadsheets.readonly');
 googleProvider.addScope('profile');

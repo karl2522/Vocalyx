@@ -99,13 +99,14 @@ class GoogleSheetsService {
   /**
    * Update sheet permissions
    */
-  async updatePermissions(sheetId, makePublic = false) {
+  async updatePermissions(sheetId, makePublic = false, makeEditable = false) {
     try {
       const response = await fetch(`${this.baseURL}/sheets/permissions/${sheetId}/`, {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify({
-          make_public_readable: makePublic
+          make_public_readable: makePublic,
+          make_editable: makeEditable
         })
       });
 
@@ -131,7 +132,7 @@ class GoogleSheetsService {
    * Generate embed URL for Google Sheet
    */
   getEmbedUrl(sheetId) {
-    return `https://docs.google.com/spreadsheets/d/${sheetId}/edit?usp=sharing&rm=embedded`;
+    return `https://docs.google.com/spreadsheets/d/${sheetId}/edit?usp=sharing&rm=minimal&chrome=false&widget=true&headers=false`;
   }
 
   /**
