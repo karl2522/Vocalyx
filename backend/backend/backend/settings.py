@@ -365,7 +365,7 @@ GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 
 # Load Google Service Account Credentials from JSON file
 GOOGLE_SERVICE_ACCOUNT_CREDENTIALS = {}
-SERVICE_ACCOUNT_FILE = os.path.join(BASE_DIR.parent, 'vocalyx-service-account.json')
+SERVICE_ACCOUNT_FILE = os.path.join(BASE_DIR.parent, 'vocalyx2-service-account.json')
 if os.path.exists(SERVICE_ACCOUNT_FILE):
     with open(SERVICE_ACCOUNT_FILE, 'r') as f:
         GOOGLE_SERVICE_ACCOUNT_CREDENTIALS = json.load(f)
@@ -375,7 +375,7 @@ else:
     print(f"📁 Checking current directory: {BASE_DIR}")
     print(f"📁 Checking parent directory: {BASE_DIR.parent}")
     # Also check in current directory
-    current_service_file = os.path.join(BASE_DIR, 'vocalyx-service-account.json')
+    current_service_file = os.path.join(BASE_DIR, 'vocalyx2-service-account.json')
     if os.path.exists(current_service_file):
         with open(current_service_file, 'r') as f:
             GOOGLE_SERVICE_ACCOUNT_CREDENTIALS = json.load(f)

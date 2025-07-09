@@ -29,7 +29,7 @@ def test_google_sheets_service():
     print("\n1. Checking Service Account Credentials:")
     if not settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS:
         print("❌ No service account credentials found!")
-        print(f"   Looking for file at: {os.path.join(settings.BASE_DIR.parent, 'vocalyx-service-account.json')}")
+        print(f"   Looking for file at: {os.path.join(settings.BASE_DIR.parent, 'vocalyx2-service-account.json')}")
         return False
     
     print("✅ Service account credentials loaded")
