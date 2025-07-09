@@ -15,6 +15,7 @@ import ImportProgressIndicator from './modals/ImportProgressIndicator';
 import ImportStudentsModal from './modals/ImportStudentsModal';
 import OverrideConfirmationModal from './modals/OverrideConfirmationModal';
 import VoiceGuideModal from './modals/VoiceGuideModal';
+import DuplicateStudentModal from './modals/DuplicateStudentModal.jsx';
 
 
 const ClassRecordExcel = () => {
@@ -38,6 +39,10 @@ const ClassRecordExcel = () => {
   const [importProgress, setImportProgress] = useState(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importConflicts, setImportConflicts] = useState([]);
+  const [tableData, setTableData] = useState([]);
+
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [duplicateModalData, setDuplicateModalData] = useState(null);
 
   const [availableSheets, setAvailableSheets] = useState([]);
   const [currentSheet, setCurrentSheet] = useState(null);
@@ -267,6 +272,8 @@ const ClassRecordExcel = () => {
             });
             return rowObject;
           });
+
+          setTableData(convertedTableData);
           
           buildContextDictionary(convertedTableData, sheetsResponse.data.headers);
         }
@@ -300,6 +307,8 @@ const ClassRecordExcel = () => {
             });
             return rowObject;
           });
+
+          setTableData(convertedTableData);
           
           buildContextDictionary(convertedTableData, sheetsResponse.data.headers);
         }
@@ -764,14 +773,187 @@ const handleBatchEveryoneCommand = async (data) => {
 
 const handleBatchStudentListCommand = async (data) => {
   console.log('🎯 Handling batch student list command:', data);
-  toast(`Batch student list command detected: ${data.students.length} students`);
-  // TODO: Implement student list batch processing
+  
+  const { students, column } = data;
+  
+  try {
+    // 🔥 STEP 1: Find the column by name from the voice command
+    if (!column || column.trim() === '') {
+      toast.error('No column specified in voice command');
+      return;
+    }
+    
+    const columnName = column.trim();
+    const foundColumn = headers.find(header => 
+      header.toLowerCase().includes(columnName.toLowerCase()) ||
+      columnName.toLowerCase().includes(header.toLowerCase())
+    );
+    
+    if (!foundColumn) {
+      toast.error(`Column "${columnName}" not found`);
+      return;
+    }
+    
+    console.log(`🎯 Found column: "${foundColumn}" for "${columnName}"`);
+    
+    // 🔥 STEP 2: Find and update students
+    const updatedData = [...tableData];
+    let updatedCount = 0;
+    const updates = [];
+    
+    students.forEach(({ name, score }) => {
+      const studentIndex = findStudentIndex(name);
+      if (studentIndex !== -1) {
+        updatedData[studentIndex][foundColumn] = score;
+        updates.push({
+          row: studentIndex + 3, // +3 for header rows
+          column: foundColumn,
+          value: score
+        });
+        updatedCount++;
+        console.log(`✅ Updated ${name} = ${score}`);
+      } else {
+        console.log(`⚠️ Student "${name}" not found`);
+      }
+    });
+    
+    // 🔥 STEP 3: Save to Google Sheets
+    if (updates.length > 0) {
+      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL_DEV}/api/gradebook/update-scores/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+        },
+        body: JSON.stringify({
+          google_sheet_id: classRecord.google_sheet_id,
+          updates: updates
+        })
+      });
+      
+      if (response.ok) {
+        setTableData(updatedData);
+        toast.success(`✅ Updated ${updatedCount} students in ${foundColumn}`);
+        
+        if (voiceEnabled) {
+          speakText(`Successfully updated ${updatedCount} students in ${foundColumn}`);
+        }
+      } else {
+        toast.error('Failed to save batch updates to Google Sheets');
+      }
+    } else {
+      toast.error('No students were found to update');
+    }
+    
+  } catch (error) {
+    console.error('❌ Batch student list error:', error);
+    toast.error(`Batch student list failed: ${error.message}`);
+  }
 };
 
 const handleBatchRowRangeCommand = async (data) => {
   console.log('🎯 Handling batch row range command:', data);
-  toast(`Batch row range command detected: rows ${data.startRow + 1} to ${data.endRow + 1}`);
-  // TODO: Implement row range batch processing
+  
+  const { startRow, endRow, score, column } = data;
+  
+  try {
+    // 🔥 STEP 1: Find the column by name from the voice command
+    if (!column || column.trim() === '') {
+      toast.error('No column specified in voice command');
+      return;
+    }
+    
+    const columnName = column.trim();
+    const foundColumn = headers.find(header => 
+      header.toLowerCase().includes(columnName.toLowerCase()) ||
+      columnName.toLowerCase().includes(header.toLowerCase())
+    );
+    
+    if (!foundColumn) {
+      toast.error(`Column "${columnName}" not found`);
+      return;
+    }
+    
+    console.log(`🎯 Found column: "${foundColumn}" for "${columnName}"`);
+    
+    // 🔥 STEP 2: Validate rows
+    if (startRow < 0 || endRow < 0 || startRow > endRow) {
+      toast.error('Invalid row range');
+      return;
+    }
+    
+    if (endRow >= tableData.length) {
+      toast.error(`Row range exceeds table size (${tableData.length} rows)`);
+      return;
+    }
+    
+    // 🔥 STEP 3: Apply scores to the range (UPDATE LOCAL STATE FIRST)
+    const updatedData = [...tableData];
+    let updatedCount = 0;
+    
+    for (let i = startRow; i <= endRow; i++) {
+      if (updatedData[i]) {
+        updatedData[i][foundColumn] = score;
+        updatedCount++;
+        console.log(`✅ Updated row ${i + 1}: ${updatedData[i]['FIRST NAME']} ${updatedData[i]['LASTNAME']} = ${score}`);
+      }
+    }
+    
+    // 🔥 STEP 4: Update local state IMMEDIATELY (so user sees changes)
+    setTableData(updatedData);
+    
+    // 🔥 STEP 5: Show success feedback IMMEDIATELY
+    toast.success(`✅ Updated ${updatedCount} students in ${foundColumn} (rows ${startRow + 1}-${endRow + 1}) with score ${score}`);
+    
+    if (voiceEnabled) {
+      speakText(`Successfully updated ${updatedCount} students in ${foundColumn} with score ${score}`);
+    }
+    
+    // 🔥 STEP 6: Save to Google Sheets using YOUR EXISTING ENDPOINT
+    console.log('💾 Saving batch row range updates to Google Sheets...');
+    
+    try {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL_DEV;
+      
+      // 🔥 FIXED: Let backend handle all the indexing - just pass the raw row index
+      for (let i = startRow; i <= endRow; i++) {
+        if (updatedData[i]) {
+          console.log(`🔄 Updating local row ${i} (student ${i + 1}), column ${foundColumn}, value ${score}`);
+          
+          const updateResponse = await fetch(`${backendUrl}/api/sheets/service-account/${classRecord.google_sheet_id}/update-cell/`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+            },
+            body: JSON.stringify({
+              row: i, // 🔥 FIXED: Just pass the raw index - backend handles all the header offset
+              column: foundColumn,
+              value: score
+            })
+          });
+          
+          if (!updateResponse.ok) {
+            const errorText = await updateResponse.text();
+            console.error(`❌ Failed to update row ${i}:`, updateResponse.status, errorText);
+          } else {
+            console.log(`✅ Synced local row ${i} successfully`);
+          }
+        }
+      }
+      
+      toast.success(`🔄 All changes synced to Google Sheets`);
+      console.log(`🎯 Batch row range complete: ${updatedCount} students updated in ${foundColumn}`);
+      
+    } catch (networkError) {
+      console.error('❌ Network error during sync:', networkError);
+      toast.error('⚠️ Local update successful, but sync failed (network error)');
+    }
+    
+  } catch (error) {
+    console.error('❌ Batch row range error:', error);
+    toast.error(`Batch row range failed: ${error.message}`);
+  }
 };
 
 const handleImportStudents = () => {
@@ -1224,35 +1406,27 @@ const handleAutoNumberStudents = async () => {
 
       // 🔥 Handle duplicates first
       if (result.needsConfirmation && result.possibleMatches.length > 1) {
-          setDuplicateOptions({
-              matches: result.possibleMatches,
-              command: data,
-              searchName: data.searchName,
-              convertedTableData
-          });
-          
-          toast(
-              `🤔 Multiple students found named "${data.searchName}". Say "option 1", "option 2", etc. to choose.`,
-              { 
-                  duration: 10000,
-                  icon: '🤔',
-                  style: {
-                      background: '#fef3c7',
-                      color: '#92400e',
-                      border: '1px solid #f59e0b'
-                  }
-              }
-          );
-          
-          if (voiceEnabled) {
-              const optionsText = result.possibleMatches
-                  .map((match, index) => `Option ${index + 1}: ${match.student}`)
-                  .slice(0, 3)
-                  .join('. ');
-              speakText(`Found multiple students named ${data.searchName}. ${optionsText}. Say option 1, option 2, etc. to choose.`);
-          }
-          return;
-      }
+        setDuplicateModalData({
+            matches: result.possibleMatches,
+            command: data,
+            searchName: data.searchName,
+            convertedTableData
+        });
+        setShowDuplicateModal(true);
+        
+        toast(
+            `🤔 Multiple students found named "${data.searchName}". Please select from the modal.`,
+            { 
+                duration: 5000,
+                icon: '🤔'
+            }
+        );
+        
+        if (voiceEnabled) {
+            speakText(`Found multiple students named ${data.searchName}. Please select the correct student from the options shown.`);
+        }
+        return;
+    }
 
       if (result.bestMatch !== -1) {
           const student = convertedTableData[result.bestMatch];
@@ -1404,7 +1578,58 @@ const handleOverrideCancel = () => {
     setDuplicateOptions(null);
 };
 
+const handleDuplicateStudentSelect = async (selectedIndex) => {
+    if (!duplicateModalData) return;
+    
+    const { matches, command, convertedTableData } = duplicateModalData;
+    const selectedMatch = matches[selectedIndex];
+    
+    // 🔥 FIXED: Use rowData instead of studentData
+    const student = selectedMatch.rowData || {};
+    const studentName = selectedMatch.student;
+    const correctRowIndex = student._originalTableIndex;
+    
+    console.log('🎯 Selected student:', studentName);
+    console.log('🎯 Student data:', student);
+    console.log('🎯 Row index:', correctRowIndex);
+    
+    if (correctRowIndex === undefined) {
+        toast.error('Could not determine student row. Please try again.');
+        return;
+    }
+    
+    // Check for existing score
+    const existingScore = student[command.column];
+    const hasExistingScore = existingScore && 
+                            String(existingScore).trim() !== '' && 
+                            String(existingScore).trim() !== '0';
 
+    if (hasExistingScore) {
+        setOverrideConfirmation({
+            studentName,
+            columnName: command.column,
+            currentScore: existingScore,
+            newScore: command.value,
+            rowIndex: correctRowIndex,
+            command,
+            convertedTableData
+        });
+        
+        toast(
+            `${studentName} already has a score of ${existingScore} for ${command.column}. Confirm to override.`,
+            { duration: 8000 }
+        );
+        return;
+    }
+
+    // Update the score
+    await performScoreUpdate(correctRowIndex, command, studentName, convertedTableData);
+};
+
+const handleDuplicateModalClose = () => {
+    setShowDuplicateModal(false);
+    setDuplicateModalData(null);
+};
 
    const handleVoiceCommand = (transcript) => {
   if (!transcript.trim()) return;
@@ -2397,6 +2622,15 @@ const handleExportToPDF = async () => {
           setImportProgress={setImportProgress}
           classRecordId={classRecord?.id}
         />
+
+        <DuplicateStudentModal
+          isOpen={showDuplicateModal}
+          onClose={handleDuplicateModalClose}
+          matches={duplicateModalData?.matches || []}
+          searchName={duplicateModalData?.searchName || ''}
+          command={duplicateModalData?.command}
+          onSelectStudent={handleDuplicateStudentSelect}
+      />
 
         <ImportStudentsModal 
           showImportModal={showImportModal}

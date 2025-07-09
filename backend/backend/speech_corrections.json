@@ -78,5 +78,125 @@
     "student_name": null,
     "confidence": 0.6911984086036682,
     "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T15:34:48.987878+00:00",
+    "original": "Grease 5 Rowen through 5 all gets 45.",
+    "corrected": "grease 5 owen through 5 all gets 45.",
+    "student_name": null,
+    "confidence": 0.6644656658172607,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T15:36:34.629377+00:00",
+    "original": "Grease 5 Rowen through 5. All get 50.",
+    "corrected": "grease 5 owen through 5. all get 50.",
+    "student_name": null,
+    "confidence": 0.672318696975708,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T15:39:57.775183+00:00",
+    "original": "Grease 5 Rowen through 5 gets 20.",
+    "corrected": "grease 5 owen through 5 gets 20.",
+    "student_name": null,
+    "confidence": 0.6164482831954956,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T15:40:09.251870+00:00",
+    "original": "Grease 5 Rowen through 5 all gets 45.",
+    "corrected": "grease 5 owen through 5 all gets 45.",
+    "student_name": null,
+    "confidence": 0.5589368939399719,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T15:40:14.129901+00:00",
+    "original": "Grease 5 Rowen through 5 gets 20.",
+    "corrected": "grease 5 owen through 5 gets 20.",
+    "student_name": null,
+    "confidence": 0.7864829301834106,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T15:43:50.550282+00:00",
+    "original": "Grease 5 Rowen through 5 all gets 20.",
+    "corrected": "grease 5 owen through 5 all gets 20.",
+    "student_name": null,
+    "confidence": 0.6979689002037048,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T15:44:07.278340+00:00",
+    "original": "Grease 5 Rowen through 5 all gets 20.",
+    "corrected": "grease 5 owen through 5 all gets 20.",
+    "student_name": null,
+    "confidence": 0.6979689002037048,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T15:44:23.001969+00:00",
+    "original": "He's 5 Rowen to 5 all gets 20.",
+    "corrected": "he's 5 owen to 5 all gets 20.",
+    "student_name": null,
+    "confidence": 0.5711758732795715,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T15:50:41.274734+00:00",
+    "original": "Grease 5 Rowen through 5 all gets 20.",
+    "corrected": "grease 5 owen through 5 all gets 20.",
+    "student_name": null,
+    "confidence": 0.7069949507713318,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T15:54:58.766930+00:00",
+    "original": "Grease 5 Rowen through 5 all gets 20.",
+    "corrected": "grease 5 owen through 5 all gets 20.",
+    "student_name": null,
+    "confidence": 0.7576214075088501,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T15:59:44.220314+00:00",
+    "original": "Grease 5, Omen score, 20.",
+    "corrected": "grease 5, owen score, 20.",
+    "student_name": null,
+    "confidence": 0.6839100122451782,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T15:59:48.029874+00:00",
+    "original": "Grease 5. Omen score. 30.",
+    "corrected": "grease 5. owen score. 30.",
+    "student_name": null,
+    "confidence": 0.5640032887458801,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T16:00:05.863891+00:00",
+    "original": "Grease 5, Omen score, 20.",
+    "corrected": "grease 5, owen score, 20.",
+    "student_name": null,
+    "confidence": 0.6680266261100769,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T16:00:34.018784+00:00",
+    "original": "Grease 5, Omen score, 20.",
+    "corrected": "grease 5, owen score, 20.",
+    "student_name": null,
+    "confidence": 0.6680266261100769,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T16:26:22.235636+00:00",
+    "original": "Capuras Grease, 3.",
+    "corrected": "capuras grease, 3.",
+    "student_name": null,
+    "confidence": 0.442147821187973,
+    "correction_type": "automatic"
   }
 ]

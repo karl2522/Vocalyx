@@ -620,6 +620,33 @@ const useVoiceRecognition = () => {
     return Math.min(confidence, 1.0);
   }, [studentNamesArray, calculateAdvancedSimilarity, enhanceWithAIPatterns]);
 
+ const enhanceRowRangeRecognition = useCallback((transcript) => {
+    console.log('🔧 BEFORE row range enhancement:', transcript);
+    
+    let enhanced = transcript;
+    
+    // 🔥 STEP 1: Fix "rowan" → "row 1"
+    enhanced = enhanced.replace(/\browan\b/gi, 'row 1');
+    enhanced = enhanced.replace(/\brow\s*and\b/gi, 'row 1');
+    enhanced = enhanced.replace(/\broland\b/gi, 'row 1');
+    enhanced = enhanced.replace(/\broman\b/gi, 'row 1');
+    
+    enhanced = enhanced.replace(/\bquiz\s*tree\b/gi, 'quiz 3');  
+    enhanced = enhanced.replace(/\bquiz\s*free\b/gi, 'quiz 3');  
+    
+    enhanced = enhanced.replace(/\bforty.?five\b/gi, '95');      
+    enhanced = enhanced.replace(/\bfor\s*tea\s*five\b/gi, '95'); 
+    enhanced = enhanced.replace(/\bnight\s*tea\s*five\b/gi, '95'); 
+    
+    // 🔥 STEP 4: Fix range words
+    enhanced = enhanced.replace(/\bthrew\b/gi, 'through');
+    enhanced = enhanced.replace(/\bthru\b/gi, 'through');
+    enhanced = enhanced.replace(/\btrue\b/gi, 'through');
+    
+    console.log('🔧 AFTER row range enhancement:', enhanced);
+    return enhanced;
+  }, []);
+
   // 🚀 ENHANCED: Multi-engine transcript correction
   const correctTranscriptWithContext = useCallback((rawTranscript) => {
     if (lastProcessedCommand.current === rawTranscript) {
@@ -637,6 +664,8 @@ const useVoiceRecognition = () => {
     
     corrected = enhanceStudentNameRecognition(corrected);
     corrected = enhanceNumberRecognition(corrected);
+
+    corrected = enhanceRowRangeRecognition(corrected);
     
     realTimeCorrections.forEach((correction, mistake) => {
       const regex = new RegExp(`\\b${mistake}\\b`, 'gi');

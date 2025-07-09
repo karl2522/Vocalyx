@@ -118,8 +118,22 @@ const phoneticCorrections = {
   'because': 'bikada', 'because of the': 'bikada', 'be cada': 'bikada',
   'karl': 'carl', 'carlos': 'carl',
   'anna': 'ana', 'anne': 'ana', 'ann': 'ana',
-  'joseph': 'jose', 'joey': 'jose', 'josep': 'jose'
+  'joseph': 'jose', 'joey': 'jose', 'josep': 'jose',
 
+  'rowan': 'row 1',
+  'row and': 'row 1', 
+  'roland': 'row 1',
+  'roman': 'row 1',
+  'rowing': 'row 1',
+  'ro one': 'row 1',
+  'roe one': 'row 1',
+
+  'true': 'through',
+  'tru': 'through', 
+  'threw': 'through',
+  'thru': 'through',
+  'through': 'through',
+  'to': 'through'
 
 };
 
@@ -209,32 +223,54 @@ const parseBatchCommand = (transcript) => {
   
   // 🔥 Pattern 2: Enhanced row range patterns
   const rowRangePatterns = [
+    // 🔥 NEW: Handle "rowan" → "row 1" phonetic correction
+    /^(.+?):\s*(?:rowan|row\s*one|row\s*1)\s*(?:through|to|thru|until)\s*(\d+).*?(?:all\s*(?:score|get|gets?))?\s*(\d+)$/i,
+    /^(.+?)\s+(?:rowan|row\s*one|row\s*1)\s*(?:through|to|thru|until)\s*(\d+).*?(?:all\s*(?:score|get|gets?))?\s*(\d+)$/i,
+    
+    // 🔥 EXISTING: Standard row range patterns (keep these)
     /^(.+?):\s*row\s*(\d+)\s*(?:through|to|thru|until)\s*(\d+).*?(?:all\s*(?:score|get|gets?))?\s*(\d+)$/i,
     /^(.+?):\s*(?:row|rows)\s*(\d+)\s*(?:through|to|thru|until)\s*(\d+).*?(\d+)$/i,
-    /^(.+?):\s*students?\s*(\d+)\s*(?:through|to|thru|until)\s*(\d+).*?(\d+)$/i
+    /^(.+?):\s*students?\s*(\d+)\s*(?:through|to|thru|until)\s*(\d+).*?(\d+)$/i,
+    
+    // 🔥 NEW: Handle cases without colon
+    /^(.+?)\s+row\s*(\d+)\s*(?:through|to|thru|until)\s*(\d+).*?(?:all\s*(?:score|get|gets?))?\s*(\d+)$/i,
+    /^(.+?)\s+(?:rowan|row\s*one)\s*(?:through|to|thru|until)\s*(\d+).*?(?:all\s*(?:score|get|gets?))?\s*(\d+)$/i
   ];
   
   for (const pattern of rowRangePatterns) {
-    const match = transcript.match(pattern);
-    if (match) {
-      const column = match[1].trim();
-      const startRow = parseInt(match[2]);
-      const endRow = parseInt(match[3]);
-      const score = match[4];
-      
-      console.log('✅ Row range batch detected:', { column, startRow, endRow, score });
-      return {
-        type: 'BATCH_ROW_RANGE',
-        data: {
-          column,
-          startRow: startRow - 1, // Convert to 0-based index
-          endRow: endRow - 1,
-          score,
-          confidence: 'high'
-        }
-      };
+  const match = transcript.match(pattern);
+  if (match) {
+    console.log('🔍 Row range match found:', match);
+    
+    let column, startRow, endRow, score;
+    
+    // Handle "rowan" special case patterns (first 2 patterns)
+    if (pattern.source.includes('rowan')) {
+      column = match[1].trim();
+      startRow = 1; // "rowan" always means "row 1"
+      endRow = parseInt(match[2]);
+      score = match[3];
+    } else {
+      // Standard patterns
+      column = match[1].trim();
+      startRow = parseInt(match[2]);
+      endRow = parseInt(match[3]);
+      score = match[4];
     }
+    
+    console.log('✅ Row range batch detected:', { column, startRow, endRow, score });
+    return {
+      type: 'BATCH_ROW_RANGE',
+      data: {
+        column,
+        startRow: startRow - 1, // Convert to 0-based index
+        endRow: endRow - 1,
+        score,
+        confidence: 'high'
+      }
+    };
   }
+}
   
   // 🔥 Pattern 3: Enhanced "everyone" patterns
   const everyonePatterns = [
