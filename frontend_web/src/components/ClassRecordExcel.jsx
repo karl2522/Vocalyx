@@ -1027,13 +1027,30 @@ const handleAutoNumberStudents = async () => {
       }
 
       // Convert array data to objects for search
-      const convertedTableData = sheetsResponse.data.tableData.map(row => {
+      const convertedTableData = [];
+      let studentIndex = 0;
+
+      sheetsResponse.data.tableData.forEach((row, originalIndex) => {
           const rowObject = {};
           sheetsResponse.data.headers.forEach((header, index) => {
               rowObject[header] = row[index] || '';
           });
-          return rowObject;
+          
+          // Only include rows that have actual student names
+          const firstName = (rowObject['FIRST NAME'] || '').trim();
+          const lastName = (rowObject['LASTNAME'] || '').trim();
+          
+          if (firstName || lastName) {
+              // This is a real student row - use the originalIndex from tableData
+              rowObject._originalIndex = originalIndex;  // This maps correctly to backend tableData
+              rowObject._studentNumber = studentIndex;   // For debugging
+              convertedTableData.push(rowObject);
+              studentIndex++;
+          }
       });
+
+      console.log('🔍 Filtered student data:', convertedTableData);
+      console.log('🔍 First student mapping:', convertedTableData[0]?._originalIndex);
 
       const result = findStudentRowSmart(convertedTableData, data.searchName, recentStudents, data.column);
       
@@ -1074,6 +1091,7 @@ const handleAutoNumberStudents = async () => {
       if (result.bestMatch !== -1) {
           const student = convertedTableData[result.bestMatch];
           const studentName = `${student['FIRST NAME']} ${student['LASTNAME']}`;
+          const originalRowIndex = student._originalIndex;
           
           // 🔥 NEW: Check for existing score and show override confirmation
           const existingScore = student[data.column];
@@ -1107,7 +1125,7 @@ const handleAutoNumberStudents = async () => {
           }
 
           // 🔥 No existing score - proceed normally
-          await performScoreUpdate(result.bestMatch, data, studentName, convertedTableData);
+          await performScoreUpdate(originalRowIndex, data, studentName, convertedTableData);
           
       } else {
           toast.error(`Student "${data.searchName}" not found`);

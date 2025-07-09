@@ -116,6 +116,7 @@ class GoogleServiceAccountSheets:
     def get_sheet_data(self, sheet_id: str) -> dict:
         """
         Get data from a Google Sheet using service account.
+        Updated to handle 3-row header structure.
 
         Args:
             sheet_id: ID of the spreadsheet
@@ -130,7 +131,7 @@ class GoogleServiceAccountSheets:
             # Get the first sheet name
             first_sheet = spreadsheet['sheets'][0]['properties']['title']
 
-            # 🔥 Get MORE data to capture both header rows
+            # 🔥 Get MORE data to capture all header rows
             range_name = f"{first_sheet}!A1:Z100"  # Increased range
             result = self.sheets_service.spreadsheets().values().get(
                 spreadsheetId=sheet_id,
@@ -145,28 +146,37 @@ class GoogleServiceAccountSheets:
                     'error': 'No data found in sheet'
                 }
 
-            # 🔥 Get BOTH header rows for voice commands
+            # 🔥 UPDATED: Handle 3-row header structure
             main_headers = values[0] if len(values) > 0 else []  # Row 1: Categories
             sub_headers = values[1] if len(values) > 1 else []  # Row 2: Column names
+            max_scores = values[2] if len(values) > 2 else []  # Row 3: Max scores/totals
 
-            # 🔥 Combine headers for better voice recognition
+            # 🔥 Use sub_headers (Row 2) as the actual column names for voice recognition
             combined_headers = []
-            for i, (main, sub) in enumerate(zip(main_headers, sub_headers)):
-                if sub and sub.strip():  # If sub-header exists and is not empty
-                    combined_headers.append(sub.strip())
-                elif main and main.strip():  # Fall back to main header
-                    combined_headers.append(main.strip())
+            for i, header in enumerate(sub_headers):
+                if header and str(header).strip():  # If header exists and is not empty
+                    combined_headers.append(str(header).strip())
+                elif i < len(main_headers) and main_headers[i] and str(main_headers[i]).strip():
+                    combined_headers.append(str(main_headers[i]).strip())
                 else:
                     combined_headers.append(f"Column_{i + 1}")
 
-            # Rest of the data (skip first 2 rows which are headers)
-            tableData = values[2:] if len(values) > 2 else []
+            # 🔥 FIXED: Skip first 3 rows (categories, column names, max scores)
+            tableData = values[3:] if len(values) > 3 else []
+
+            print(f"🔍 DEBUG: Sheet structure detected:")
+            print(f"   Row 1 (Categories): {main_headers}")
+            print(f"   Row 2 (Column Names): {sub_headers}")
+            print(f"   Row 3 (Max Scores): {max_scores}")
+            print(f"   Combined Headers: {combined_headers}")
+            print(f"   Student Data Rows: {len(tableData)}")
 
             return {
                 'success': True,
                 'headers': combined_headers,
                 'main_headers': main_headers,
                 'sub_headers': sub_headers,
+                'max_scores': max_scores,  # 🔥 NEW: Include max scores
                 'tableData': tableData,
                 'sheet_name': first_sheet
             }
@@ -182,15 +192,7 @@ class GoogleServiceAccountSheets:
     def update_cell(self, sheet_id: str, row_index: int, column_name: str, value: str) -> dict:
         """
         Update a single cell in the Google Sheet.
-
-        Args:
-            sheet_id: ID of the spreadsheet
-            row_index: 0-based row index (0 = first data row, skipping headers)
-            column_name: Name of the column (e.g., 'QUIZ 1')
-            value: Value to set in the cell
-
-        Returns:
-            Dict containing success status and update info
+        Updated for 3-row header structure.
         """
         try:
             # Get sheet data to find column index and sheet name
@@ -212,10 +214,10 @@ class GoogleServiceAccountSheets:
                 }
 
             # Convert column index to letter (A, B, C, etc.)
-            column_letter = chr(65 + column_index)  # A=65, B=66, etc.
+            column_letter = chr(65 + column_index)
 
-            # Calculate actual sheet row (skip 2 header rows, convert to 1-based)
-            sheet_row = row_index + 3  # +2 for headers, +1 for 1-based indexing
+            # 🔥 FIXED: Skip 3 header rows now, convert to 1-based
+            sheet_row = row_index + 4  # +3 for headers, +1 for 1-based indexing
 
             cell_range = f"{sheet_name}!{column_letter}{sheet_row}"
 
@@ -244,14 +246,6 @@ class GoogleServiceAccountSheets:
                 'column_name': column_name
             }
 
-        except HttpError as e:
-            error_details = e.content.decode('utf-8') if e.content else str(e)
-            logger.error(f"Google Sheets API error updating cell: {error_details}")
-            return {
-                'success': False,
-                'error': f'Google Sheets API error: {e.status_code}',
-                'details': error_details
-            }
         except Exception as e:
             logger.error(f"Unexpected error updating cell: {str(e)}")
             return {
@@ -282,7 +276,7 @@ class GoogleServiceAccountSheets:
             current_data = sheet_data['tableData']
 
             # Find next empty row (skip 2 header rows)
-            next_row = len(current_data) + 3  # +2 for headers, +1 for 1-based indexing
+            next_row = len(current_data) + 4 # +2 for headers, +1 for 1-based indexing
 
             # Create new row with student data
             new_row = [''] * len(headers)
@@ -333,13 +327,7 @@ class GoogleServiceAccountSheets:
     def add_student_with_auto_number(self, sheet_id: str, student_data: dict) -> dict:
         """
         Add a new student row to the Google Sheet with auto-numbering.
-
-        Args:
-            sheet_id: ID of the spreadsheet
-            student_data: Dictionary with student information (e.g., {'LASTNAME': 'Smith', 'FIRST NAME': 'John'})
-
-        Returns:
-            Dict containing success status and row info
+        Updated for 3-row header structure and smart student counting.
         """
         try:
             # Get sheet data
@@ -351,16 +339,43 @@ class GoogleServiceAccountSheets:
             sheet_name = sheet_data['sheet_name']
             current_data = sheet_data['tableData']
 
-            # Find next empty row (skip 2 header rows)
-            next_row = len(current_data) + 3  # +2 for headers, +1 for 1-based indexing
+            # 🔥 SMART COUNTING: Count only rows with actual student data
+            actual_student_count = 0
+            first_empty_row_index = None
 
-            # 🔥 Calculate the student number (how many students currently exist + 1)
-            student_number = len(current_data) + 1
+            for i, row in enumerate(current_data):
+                # Check if row has actual student name data
+                has_student_data = False
+                if len(row) >= 3:  # Check LASTNAME and FIRST NAME columns
+                    lastname = str(row[1]).strip() if len(row) > 1 and row[1] else ''
+                    firstname = str(row[2]).strip() if len(row) > 2 and row[2] else ''
+
+                    if lastname or firstname:
+                        has_student_data = True
+                        actual_student_count += 1
+
+                # Find first truly empty row
+                if not has_student_data and first_empty_row_index is None:
+                    first_empty_row_index = i
+
+            # 🔥 FIXED: Use first empty row instead of last row
+            if first_empty_row_index is not None:
+                # Insert at the first empty row
+                next_row = first_empty_row_index + 4  # +3 for headers, +1 for 1-based indexing
+                student_number = actual_student_count + 1
+            else:
+                # No empty rows found, append at the end
+                next_row = len(current_data) + 4
+                student_number = actual_student_count + 1
+
+            print(f"🔍 DEBUG: Found {actual_student_count} actual students")
+            print(f"🔍 DEBUG: Using row index {first_empty_row_index} (sheet row {next_row})")
+            print(f"🔍 DEBUG: Assigning student number {student_number}")
 
             # Create new row with student data
             new_row = [''] * len(headers)
 
-            # 🔥 Auto-assign the number to the first column (NO.)
+            # Auto-assign the number to the first column (NO.)
             if len(headers) > 0:
                 new_row[0] = str(student_number)
 
@@ -390,19 +405,11 @@ class GoogleServiceAccountSheets:
                 'success': True,
                 'updated_cells': result.get('updatedCells', 0),
                 'row_added': next_row,
-                'rowNumber': student_number,  # 🔥 Return the assigned number
+                'rowNumber': student_number,
                 'student_data': student_data,
                 'range': range_name
             }
 
-        except HttpError as e:
-            error_details = e.content.decode('utf-8') if e.content else str(e)
-            logger.error(f"Google Sheets API error adding student with auto-number: {error_details}")
-            return {
-                'success': False,
-                'error': f'Google Sheets API error: {e.status_code}',
-                'details': error_details
-            }
         except Exception as e:
             logger.error(f"Unexpected error adding student with auto-number: {str(e)}")
             return {
@@ -458,7 +465,7 @@ class GoogleServiceAccountSheets:
 
                 if has_data:
                     # Calculate cell position (skip 2 header rows)
-                    cell_row = i + 3  # +2 for headers, +1 for 1-based indexing
+                    cell_row = i + 4  # +2 for headers, +1 for 1-based indexing
                     cell_range = f"{sheet_name}!A{cell_row}"
 
                     updates.append({
@@ -585,7 +592,7 @@ class GoogleServiceAccountSheets:
                             else:
                                 combined_headers.append(f"Column_{i + 1}")
 
-                        tableData = values[2:] if len(values) > 2 else []
+                        tableData = values[3:] if len(values) > 3 else []
 
                         all_sheets.append({
                             'sheet_name': sheet_name,
@@ -666,7 +673,7 @@ class GoogleServiceAccountSheets:
                     combined_headers.append(f"Column_{i + 1}")
 
             # Rest of the data (skip first 2 rows which are headers)
-            tableData = values[2:] if len(values) > 2 else []
+            tableData = values[3:] if len(values) > 3 else []
 
             return {
                 'success': True,
@@ -768,7 +775,7 @@ class GoogleServiceAccountSheets:
             column_letter = chr(65 + column_index)
 
             # Calculate actual sheet row (skip 2 header rows, convert to 1-based)
-            sheet_row = row_index + 3  # +2 for headers, +1 for 1-based indexing
+            sheet_row = row_index + 4  # +2 for headers, +1 for 1-based indexing
 
             cell_range = f"'{target_sheet_name}'!{column_letter}{sheet_row}"
 
@@ -1004,7 +1011,7 @@ class GoogleServiceAccountSheets:
             current_data = sheet_data['tableData']
 
             # Find next empty row (skip 2 header rows)
-            next_row = len(current_data) + 3  # +2 for headers, +1 for 1-based indexing
+            next_row = len(current_data) + 4 # +2 for headers, +1 for 1-based indexing
 
             # Calculate the student number
             student_number = len(current_data) + 1
