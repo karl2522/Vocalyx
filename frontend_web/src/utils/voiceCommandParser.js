@@ -71,6 +71,14 @@ const phoneticCorrections = {
   // 🔥 Midterm variations (enhanced)
   'midterm': 'midterm', 'mid': 'midterm', 'middle': 'midterm', 'medium': 'midterm',
   'mid term': 'midterm', 'middle term': 'midterm', 'meet term': 'midterm',
+
+  // 🔥 NEW: Student ID dash corrections
+  'dash': '-', 'dashed': '-', 'hyphen': '-', 'minus': '-', 'dash dash': '--',
+  'with dash': '-', 'and dash': '-', 'then dash': '-', 'plus dash': '-',
+
+  'twenty two': '22', 'twenty-two': '22',
+  'twenty seven': '27', 'twenty-seven': '27',
+  'seven twenty six': '726', 'seven two six': '726',
   
   // 🔥 Final variations (enhanced)
   'final': 'final', 'finale': 'final', 'find': 'final', 'file': 'final', 'fine': 'final',
@@ -308,6 +316,67 @@ const parseBatchCommand = (transcript) => {
   }
   
   return null;
+};
+
+const parseStudentId = (idText) => {
+  console.log('🆔 Parsing Student ID:', idText);
+  
+  // Clean the text
+  let cleanId = idText.trim();
+  
+  // Replace dash words with actual dashes
+  cleanId = cleanId.replace(/\b(dash|dashed|hyphen|minus)\b/gi, '-');
+  
+  // Handle multiple dash patterns
+  cleanId = cleanId.replace(/\s*-\s*/g, '-'); // Remove spaces around dashes
+  cleanId = cleanId.replace(/\s+/g, ''); // Remove all remaining spaces
+  
+  // Convert word numbers to digits in ID context
+  const idNumberMap = {
+    'zero': '0', 'one': '1', 'two': '2', 'three': '3', 'four': '4', 'five': '5',
+    'six': '6', 'seven': '7', 'eight': '8', 'nine': '9',
+    'ten': '10', 'eleven': '11', 'twelve': '12', 'thirteen': '13', 'fourteen': '14',
+    'fifteen': '15', 'sixteen': '16', 'seventeen': '17', 'eighteen': '18', 'nineteen': '19',
+    'twenty': '20', 'thirty': '30', 'forty': '40', 'fifty': '50'
+  };
+  
+  // Handle compound numbers for years (like "twenty two" -> "22")
+  cleanId = cleanId.replace(/twenty[\s-]?two/gi, '22');
+  cleanId = cleanId.replace(/twenty[\s-]?one/gi, '21');
+  cleanId = cleanId.replace(/twenty[\s-]?three/gi, '23');
+  cleanId = cleanId.replace(/twenty[\s-]?four/gi, '24');
+  cleanId = cleanId.replace(/twenty[\s-]?five/gi, '25');
+  cleanId = cleanId.replace(/twenty[\s-]?six/gi, '26');
+  cleanId = cleanId.replace(/twenty[\s-]?seven/gi, '27');
+  cleanId = cleanId.replace(/twenty[\s-]?eight/gi, '28');
+  cleanId = cleanId.replace(/twenty[\s-]?nine/gi, '29');
+  
+  // Replace individual word numbers
+  Object.entries(idNumberMap).forEach(([word, digit]) => {
+    const regex = new RegExp(`\\b${word}\\b`, 'gi');
+    cleanId = cleanId.replace(regex, digit);
+  });
+  
+  // Validate the format (should be like XX-XXXX-XXX)
+  const idPattern = /^(\d{2})-?(\d{4})-?(\d{3})$/;
+  const match = cleanId.match(idPattern);
+  
+  if (match) {
+    const formattedId = `${match[1]}-${match[2]}-${match[3]}`;
+    console.log('✅ Formatted Student ID:', formattedId);
+    return formattedId;
+  }
+  
+  // If no exact match, try to extract numbers and format them
+  const numbers = cleanId.match(/\d+/g);
+  if (numbers && numbers.length >= 3) {
+    const formattedId = `${numbers[0]}-${numbers[1]}-${numbers[2]}`;
+    console.log('✅ Constructed Student ID:', formattedId);
+    return formattedId;
+  }
+  
+  console.log('⚠️ Could not parse Student ID, returning as-is:', cleanId);
+  return cleanId;
 };
 
 // 🚀 ENHANCED: Levenshtein with better performance
@@ -728,15 +797,29 @@ const findBestColumnMatch = (transcript, headers) => {
 // 🚀 ENHANCED: Better score extraction with more patterns
 const extractScoreFromEnd = (transcript) => {
   const patterns = [
-    /(\d+(?:\.\d+)?)\s*$/,                    // "85"
-    /(\d+)\s*(?:percent|%)\s*$/,              // "85 percent"
-    /(\d+)\s*(?:points?|pts?)\s*$/,           // "85 points"
-    /(\d+)\s*out\s*of\s*\d+\s*$/,             // "85 out of 100"
-    /score\s*(?:is\s*)?(\d+(?:\.\d+)?)\s*$/,  // "score is 85"
-    /grade\s*(?:is\s*)?(\d+(?:\.\d+)?)\s*$/,  // "grade is 85"
-    /got\s*(\d+(?:\.\d+)?)\s*$/,              // "got 85"
-    /received\s*(\d+(?:\.\d+)?)\s*$/,         // "received 85"
-    /earned\s*(\d+(?:\.\d+)?)\s*$/            // "earned 85"
+    // 🔥 NEW: Score keyword patterns (highest priority)
+    /score\s+(\d+(?:\.\d+)?)\s*$/i,                      // "score 30"
+    /score\s+is\s+(\d+(?:\.\d+)?)\s*$/i,                 // "score is 30"  
+    /score\s+of\s+(\d+(?:\.\d+)?)\s*$/i,                 // "score of 30"
+    /gets?\s+score\s+(\d+(?:\.\d+)?)\s*$/i,              // "gets score 30"
+    /has\s+score\s+(\d+(?:\.\d+)?)\s*$/i,                // "has score 30"
+    /received\s+score\s+(\d+(?:\.\d+)?)\s*$/i,           // "received score 30"
+    /earned\s+score\s+(\d+(?:\.\d+)?)\s*$/i,             // "earned score 30"
+    
+    // 🔥 NEW: Grade keyword patterns  
+    /grade\s+(\d+(?:\.\d+)?)\s*$/i,                      // "grade 30"
+    /grade\s+is\s+(\d+(?:\.\d+)?)\s*$/i,                 // "grade is 30"
+    /grade\s+of\s+(\d+(?:\.\d+)?)\s*$/i,                 // "grade of 30"
+    /gets?\s+grade\s+(\d+(?:\.\d+)?)\s*$/i,              // "gets grade 30"
+    
+    // 🔥 Existing patterns (keep these for compatibility)
+    /(\d+(?:\.\d+)?)\s*$/,                               // "30" (plain number)
+    /(\d+)\s*(?:percent|%)\s*$/,                         // "30 percent"
+    /(\d+)\s*(?:points?|pts?)\s*$/,                      // "30 points"
+    /(\d+)\s*out\s*of\s*\d+\s*$/,                        // "30 out of 100"
+    /got\s*(\d+(?:\.\d+)?)\s*$/,                         // "got 30"
+    /received\s*(\d+(?:\.\d+)?)\s*$/,                    // "received 30"
+    /earned\s*(\d+(?:\.\d+)?)\s*$/                       // "earned 30"
   ];
   
   for (const pattern of patterns) {
@@ -744,7 +827,7 @@ const extractScoreFromEnd = (transcript) => {
     if (match) {
       const score = parseFloat(match[1]);
       if (score >= 0 && score <= 100) { // Validate score range
-        console.log('✅ Score found:', match[1]);
+        console.log('✅ Score found with pattern:', pattern, 'Score:', match[1]);
         return match[1];
       }
     }
@@ -871,7 +954,7 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
   if (score) {
     // Remove score from transcript to get name + column part
     const withoutScore = processedTranscript.replace(
-      /\s*\d+(?:\.\d+)?(?:\s*(?:percent|%|points?|pts?|out\s*of\s*\d+|score|grade|got|received|earned))?\s*$/,
+      /\s*(?:score\s+(?:is\s+|of\s+)?|grade\s+(?:is\s+|of\s+)?|gets?\s+(?:score\s+|grade\s+)?|has\s+score\s+|received\s+(?:score\s+)?|earned\s+(?:score\s+)?|got\s+)?\d+(?:\.\d+)?(?:\s*(?:percent|%|points?|pts?|out\s*of\s*\d+))?\s*$/i,
       ''
     ).trim();
     console.log('📝 Text without score:', withoutScore);
@@ -943,6 +1026,55 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
     }
   }
 
+  // 🔥 NEW Stage 7.5: Student ID addition patterns
+const studentIdPatterns = [
+    /^(.+?)\s+(?:add|set)\s+(?:student\s+)?id\s+(.+)$/i,
+    /^(.+?)\s+(?:student\s+)?id\s+(.+)$/i,
+    /^(.+?)\s+(?:with\s+)?(?:student\s+)?id\s+(.+)$/i,
+    /^(?:set|add)\s+(?:student\s+)?id\s+(.+?)\s+(?:for|to)\s+(.+)$/i
+  ];
+
+  for (const pattern of studentIdPatterns) {
+    const studentIdMatch = processedTranscript.match(pattern);
+    if (studentIdMatch) {
+      let studentName = '';
+      let studentIdValue = '';
+      
+      // Different patterns have different group arrangements
+      if (pattern.toString().includes('(?:for|to)')) {
+        // Pattern: "set student id 22-2711-726 for Owen"
+        studentIdValue = parseStudentId(studentIdMatch[1].trim());
+        studentName = studentIdMatch[2].trim();
+      } else {
+        // Pattern: "Owen add student id 22-2711-726"
+        studentName = studentIdMatch[1].trim();
+        studentIdValue = parseStudentId(studentIdMatch[2].trim());
+      }
+      
+      console.log('🆔 STUDENT_ID_UPDATE detected:', { studentName, studentIdValue });
+      
+      // Apply context-aware corrections to student name
+      const contextWords = [
+        ...headers.map(h => h.toLowerCase()),
+        ...recentStudents.map(s => s.toLowerCase())
+      ];
+      const enhancedName = applyContextPhoneticCorrections(studentName, contextWords);
+      const cleanedName = cleanName(enhancedName);
+      
+      return {
+        type: 'UPDATE_STUDENT_ID',
+        data: {
+          searchName: cleanedName,
+          studentId: studentIdValue,
+          column: 'STUDENT ID',
+          value: studentIdValue,
+          confidence: 'high',
+          extractedName: enhancedName
+        }
+      };
+    }
+  }
+
   // Stage 8: Check for confirmation/rejection patterns
   const confirmPattern = /(?:yes|yeah|yep|correct|right|that's\s*right|confirm|okay|ok|good|perfect)/i;
   if (confirmPattern.test(processedTranscript)) {
@@ -964,23 +1096,34 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
 
   // Stage 9: Enhanced student addition patterns
   const addStudentPatterns = [
-  /(?:add|new|create)\s+student\s+(.+)$/i,
-  /(?:register|enroll)\s+(.+?)(?:\s+as\s+(?:new\s+)?student)?$/i,
-  /(?:student|pupil)\s+(.+?)(?:\s+(?:add|new|create))?$/i
-];
+    // 🔥 NEW: Patterns with Student ID
+    /(?:add|new|create)\s+student\s+(.+?)\s+(?:with\s+)?(?:student\s+)?id\s+(.+)$/i,
+    /(?:add|new|create)\s+student\s+(.+)$/i,
+    /(?:register|enroll)\s+(.+?)(?:\s+as\s+(?:new\s+)?student)?$/i,
+    /(?:student|pupil)\s+(.+?)(?:\s+(?:add|new|create))?$/i
+  ];
 
 for (const pattern of addStudentPatterns) {
   const addStudentMatch = processedTranscript.match(pattern);
   if (addStudentMatch) {
     const fullCommand = addStudentMatch[1].trim();
-    console.log('🔥 Full student command to parse:', fullCommand);
+    const studentIdPart = addStudentMatch[2] ? addStudentMatch[2].trim() : '';
     
-    // 🔧 COMPLETELY FIXED: Better field extraction logic
+    console.log('🔥 Full student command to parse:', fullCommand);
+    console.log('🔥 Student ID part:', studentIdPart);
+    
+    // 🔧 ENHANCED: Better field extraction logic
     let lastName = '';
     let firstName = '';
     let studentId = '';
     
-    // 🔧 METHOD 1: Handle "last name X first name Y" pattern
+    // 🔥 NEW: Parse Student ID if provided in the pattern
+    if (studentIdPart) {
+      studentId = parseStudentId(studentIdPart);
+      console.log('🆔 Parsed Student ID from pattern:', studentId);
+    }
+    
+    // 🔧 METHOD 1: Handle "lastname X firstname Y" pattern
     const lastFirstPattern = /(?:last\s*name|lastname)\s+([^\s]+)(?:\s+(?:first\s*name|firstname)\s+([^\s]+))?/i;
     const lastFirstMatch = fullCommand.match(lastFirstPattern);
     
@@ -992,7 +1135,7 @@ for (const pattern of addStudentPatterns) {
       console.log('🎯 Method 1 - Last First pattern:', { lastName, firstName });
     }
     
-    // 🔧 METHOD 2: Handle "first name X last name Y" pattern  
+    // 🔧 METHOD 2: Handle "firstname X lastname Y" pattern  
     const firstLastPattern = /(?:first\s*name|firstname)\s+([^\s]+)(?:\s+(?:last\s*name|lastname)\s+([^\s]+))?/i;
     const firstLastMatch = fullCommand.match(firstLastPattern);
     
@@ -1034,11 +1177,23 @@ for (const pattern of addStudentPatterns) {
       }
     }
     
-    // Extract student ID if present
-    const idPattern = /(?:student\s+)?id\s+(\w+)/i;
-    const idMatch = fullCommand.match(idPattern);
-    if (idMatch) {
-      studentId = idMatch[1];
+    // 🔥 NEW: Extract Student ID if not already found
+    if (!studentId) {
+      // Look for ID patterns in the full command
+      const idPatterns = [
+        /(?:with\s+)?(?:student\s+)?id\s+(.+?)(?:\s|$)/i,
+        /(?:student\s+)?(?:id|number)\s+(.+?)(?:\s|$)/i,
+        /id\s*[:=]\s*(.+?)(?:\s|$)/i
+      ];
+      
+      for (const idPattern of idPatterns) {
+        const idMatch = fullCommand.match(idPattern);
+        if (idMatch) {
+          studentId = parseStudentId(idMatch[1]);
+          console.log('🆔 Extracted Student ID:', studentId);
+          break;
+        }
+      }
     }
     
     console.log('✅ ADD_STUDENT final result:', { 
@@ -1051,9 +1206,9 @@ for (const pattern of addStudentPatterns) {
     return {
       type: 'ADD_STUDENT',
       data: {
-        'Last Name': lastName,      // 🔧 FIXED: Match handleAddStudentVoice expectations
-        'First Name': firstName,    // 🔧 FIXED: Match handleAddStudentVoice expectations  
-        'Student ID': studentId,    // 🔧 FIXED: Match handleAddStudentVoice expectations
+        'LASTNAME': lastName,      // ✅ Always use these exact field names
+        'FIRST NAME': firstName,   // ✅ Always use these exact field names
+        'STUDENT ID': studentId,   // ✅ Always use these exact field names
         confidence: 'high'
       }
     };

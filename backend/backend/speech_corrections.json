@@ -38,5 +38,45 @@
     "student_name": null,
     "confidence": 0.5559065937995911,
     "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T10:45:09.169103+00:00",
+    "original": "Chris 1, Omen 30.",
+    "corrected": "chris 1, owen 30.",
+    "student_name": null,
+    "confidence": 0.5071477293968201,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T11:26:39.807884+00:00",
+    "original": "Grease, 2, Omen score, 30.",
+    "corrected": "grease, 2, owen score, 30.",
+    "student_name": null,
+    "confidence": 0.700630784034729,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T11:33:31.764862+00:00",
+    "original": "Grease, 2, Omen score, 30.",
+    "corrected": "grease, 2, owen score, 30.",
+    "student_name": null,
+    "confidence": 0.6585140824317932,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T11:34:08.642599+00:00",
+    "original": "Grease, 2, Omen score, 30.",
+    "corrected": "grease, 2, owen score, 30.",
+    "student_name": null,
+    "confidence": 0.658514142036438,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T11:45:47.715139+00:00",
+    "original": "Accident last name. Chavez first name, Jess with student ID. 22 - 2711 - 726.",
+    "corrected": "accident last name. chavez first name, jess with student id. 22 - 2711 - 726.",
+    "student_name": null,
+    "confidence": 0.6911984086036682,
+    "correction_type": "automatic"
   }
 ]

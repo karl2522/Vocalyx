@@ -592,6 +592,9 @@ const ClassRecordExcel = () => {
       case 'BATCH_EVERYONE':
         handleBatchEveryoneCommand(command.data);
         break;
+      case 'UPDATE_STUDENT_ID':
+        handleUpdateStudentId(command.data);
+        break;
       case 'BATCH_STUDENT_LIST':
         handleBatchStudentListCommand(command.data);
         break;
@@ -811,13 +814,19 @@ const processImportFile = async (file) => {
     
     setImportProgress({ status: 'parsing', message: 'Parsing student data...' });
     
-    // Parse headers and find name columns
+    // Parse headers and find columns
     const headers = jsonData[0].map(h => String(h || '').trim());
     const students = [];
     
-    // Smart column detection
+    // 🔥 ENHANCED: Smart column detection including Student ID
     const lastNameIndex = findColumnIndex(headers, ['last name', 'lastname', 'surname', 'family name']);
     const firstNameIndex = findColumnIndex(headers, ['first name', 'firstname', 'given name']);
+    const studentIdIndex = findColumnIndex(headers, ['student id', 'studentid', 'id', 'student_id', 'student number']);  // 🔥 NEW
+    
+    console.log('🔍 DEBUG: Column detection:');
+    console.log(`   Last Name: index ${lastNameIndex} (${headers[lastNameIndex]})`);
+    console.log(`   First Name: index ${firstNameIndex} (${headers[firstNameIndex]})`);
+    console.log(`   Student ID: index ${studentIdIndex} (${studentIdIndex >= 0 ? headers[studentIdIndex] : 'Not found'})`);
     
     if (lastNameIndex === -1 || firstNameIndex === -1) {
       throw new Error('Could not find "Last Name" and "First Name" columns in the Excel file');
@@ -828,19 +837,30 @@ const processImportFile = async (file) => {
       const row = jsonData[i];
       const lastName = String(row[lastNameIndex] || '').trim();
       const firstName = String(row[firstNameIndex] || '').trim();
+      const studentId = studentIdIndex >= 0 ? String(row[studentIdIndex] || '').trim() : '';  // 🔥 NEW
       
       if (lastName && firstName) {
-        students.push({
+        const student = {
           LASTNAME: lastName,
           'FIRST NAME': firstName,
           originalRow: i + 1
-        });
+        };
+        
+        // 🔥 NEW: Include Student ID if it exists
+        if (studentId) {
+          student['STUDENT ID'] = studentId;
+          console.log(`🆔 DEBUG: Added Student ID "${studentId}" for ${firstName} ${lastName}`);
+        }
+        
+        students.push(student);
       }
     }
     
     if (students.length === 0) {
       throw new Error('No valid student records found in the Excel file');
     }
+    
+    console.log('🔍 DEBUG: Parsed students:', students);
     
     setImportProgress({ status: 'checking', message: 'Checking for duplicates...' });
     
@@ -1007,6 +1027,129 @@ const handleAddStudentVoice = async (data) => {
     }
 };
 
+const handleUpdateStudentId = async (data) => {
+    console.log('🆔 Updating student ID:', data);
+    
+    if (!classRecord?.google_sheet_id) {
+        toast.error('No Google Sheet connected');
+        return;
+    }
+
+    try {
+        // Get fresh data for student search
+        let sheetsResponse;
+        if (currentSheet) {
+            sheetsResponse = await classRecordService.getSpecificSheetData(
+                classRecord.google_sheet_id, 
+                currentSheet.sheet_name
+            );
+        } else {
+            sheetsResponse = await classRecordService.getGoogleSheetsDataServiceAccount(classRecord.google_sheet_id);
+        }
+        
+        if (!sheetsResponse.data?.success || !sheetsResponse.data.tableData?.length) {
+            toast.error('Could not load student data');
+            return;
+        }
+
+        // Convert array data to objects for search
+        const convertedTableData = [];
+        
+        sheetsResponse.data.tableData.forEach((row, originalIndex) => {
+            const rowObject = {};
+            sheetsResponse.data.headers.forEach((header, index) => {
+                rowObject[header] = row[index] || '';
+            });
+            
+            rowObject._originalTableIndex = originalIndex;
+            convertedTableData.push(rowObject);
+        });
+
+        console.log('🔍 Searching for student to update ID:', data.searchName);
+
+        const result = findStudentRowSmart(convertedTableData, data.searchName, recentStudents, 'STUDENT ID');
+        
+        console.log('🔍 Student search result:', result);
+
+        if (result.bestMatch !== -1) {
+            const student = convertedTableData[result.bestMatch];
+            const studentName = `${student['FIRST NAME']} ${student['LASTNAME']}`;
+            const correctRowIndex = student._originalTableIndex;
+            
+            // Check if student already has a Student ID
+            const existingId = student['STUDENT ID'];
+            const hasExistingId = existingId && String(existingId).trim() !== '';
+
+            if (hasExistingId) {
+                console.log('🆔 EXISTING ID DETECTED:', existingId);
+                
+                // Show override confirmation
+                setOverrideConfirmation({
+                    studentName,
+                    columnName: 'STUDENT ID',
+                    currentScore: existingId,
+                    newScore: data.studentId,
+                    rowIndex: correctRowIndex,
+                    command: data,
+                    convertedTableData
+                });
+                
+                toast(
+                    `${studentName} already has Student ID: ${existingId}. Confirm to override.`,
+                    { duration: 8000 }
+                );
+                
+                if (voiceEnabled) {
+                    speakText(`${studentName} already has Student ID ${existingId}. Say yes to override or no to cancel.`);
+                }
+                return;
+            }
+
+            // No existing ID - proceed to update
+            let response;
+            if (currentSheet) {
+                response = await classRecordService.updateGoogleSheetsCellSpecific(
+                    classRecord.google_sheet_id,
+                    correctRowIndex,
+                    'STUDENT ID',
+                    data.studentId,
+                    currentSheet.sheet_name
+                );
+            } else {
+                response = await classRecordService.updateGoogleSheetsCell(
+                    classRecord.google_sheet_id,
+                    correctRowIndex,
+                    'STUDENT ID',
+                    data.studentId
+                );
+            }
+
+            if (response.data?.success) {
+                addRecentStudent(studentName);
+                
+                toast.success(`✅ ${studentName} - Student ID: ${data.studentId}`);
+                if (voiceEnabled) {
+                    speakText(`Updated Student ID to ${data.studentId} for ${studentName}`);
+                }
+            } else {
+                throw new Error(response.data?.error || 'Failed to update Student ID');
+            }
+            
+        } else {
+            toast.error(`Student "${data.searchName}" not found`);
+            if (voiceEnabled) {
+                speakText(`Student ${data.searchName} not found`);
+            }
+        }
+    } catch (error) {
+        console.error('Update Student ID error:', error);
+        toast.error('Failed to update Student ID');
+        if (voiceEnabled) {
+            speakText('Failed to update the Student ID. Please try again.');
+        }
+    }
+};
+
 const handleAutoNumberStudents = async () => {
     if (!classRecord?.google_sheet_id) {
         toast.error('No Google Sheet connected');
@@ -1059,14 +1202,21 @@ const handleAutoNumberStudents = async () => {
           return;
       }
 
-      // Convert array data to objects for search
-      const convertedTableData = sheetsResponse.data.tableData.map(row => {
+      // 🔥 FIXED: Don't filter - use original tableData indices
+      const convertedTableData = [];
+      
+      sheetsResponse.data.tableData.forEach((row, originalIndex) => {
           const rowObject = {};
           sheetsResponse.data.headers.forEach((header, index) => {
               rowObject[header] = row[index] || '';
           });
-          return rowObject;
+          
+          // 🔥 CRITICAL FIX: Always use the original index from tableData
+          rowObject._originalTableIndex = originalIndex;  // This is the key!
+          convertedTableData.push(rowObject);
       });
+
+      console.log('🔍 Full table data (including empty rows):', convertedTableData);
 
       const result = findStudentRowSmart(convertedTableData, data.searchName, recentStudents, data.column);
       
@@ -1108,6 +1258,12 @@ const handleAutoNumberStudents = async () => {
           const student = convertedTableData[result.bestMatch];
           const studentName = `${student['FIRST NAME']} ${student['LASTNAME']}`;
           
+          // 🔥 FIXED: Use the original table index
+          const correctRowIndex = student._originalTableIndex;
+          
+          console.log('🔍 DEBUG: Using row index:', correctRowIndex);
+          console.log('🔍 DEBUG: For student:', studentName);
+          
           // 🔥 NEW: Check for existing score and show override confirmation
           const existingScore = student[data.column];
           const hasExistingScore = existingScore && 
@@ -1123,7 +1279,7 @@ const handleAutoNumberStudents = async () => {
                   columnName: data.column,
                   currentScore: existingScore,
                   newScore: data.value,
-                  rowIndex: result.bestMatch,
+                  rowIndex: correctRowIndex,  // 🔥 FIXED: Use correct index
                   command: data,
                   convertedTableData
               });
@@ -1139,8 +1295,8 @@ const handleAutoNumberStudents = async () => {
               return;
           }
 
-          // 🔥 No existing score - proceed normally
-          await performScoreUpdate(result.bestMatch, data, studentName, convertedTableData);
+          // 🔥 FIXED: Use correct row index
+          await performScoreUpdate(correctRowIndex, data, studentName, convertedTableData);
           
       } else {
           toast.error(`Student "${data.searchName}" not found`);
