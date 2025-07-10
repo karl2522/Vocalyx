@@ -198,5 +198,29 @@
     "student_name": null,
     "confidence": 0.442147821187973,
     "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-10T06:47:16.654293+00:00",
+    "original": "Grease, 2 capuras score, 20.",
+    "corrected": "grease, 2 capuras score, 20.",
+    "student_name": null,
+    "confidence": 0.5733031034469604,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-10T06:54:55.341877+00:00",
+    "original": "Accident last name. Omen first name, Jared?",
+    "corrected": "accident last name. owen first name, jared?",
+    "student_name": null,
+    "confidence": 0.8290615081787109,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-10T07:38:18.974466+00:00",
+    "original": "Accident last name. Amen. First name, Jared.",
+    "corrected": "accident last name. amen. first name, jared",
+    "student_name": null,
+    "confidence": 0.8232299089431763,
+    "correction_type": "automatic"
   }
 ]

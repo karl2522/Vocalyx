@@ -366,19 +366,32 @@ class GoogleServiceAccountSheets:
                 'error': f'Failed to add student: {str(e)}'
             }
 
-    def add_student_with_auto_number(self, sheet_id: str, student_data: dict) -> dict:
+    def add_student_with_auto_number(self, sheet_id: str, student_data: dict, sheet_name: str = None) -> dict:
         """
         Add a new student row to the Google Sheet with auto-numbering.
         Updated for 3-row header structure and smart student counting.
         """
         try:
-            # Get sheet data
-            sheet_data = self.get_sheet_data(sheet_id)
+            # Get sheet data - use specific sheet if provided
+            print(f"🔍 ADD STUDENT: Starting with sheet_id={sheet_id}, sheet_name={sheet_name}")
+
+            if sheet_name:
+                print(f"🔍 ADD STUDENT: Using specific sheet: {sheet_name}")
+                sheet_data = self.get_specific_sheet_data(sheet_id, sheet_name)
+            else:
+                print(f"🔍 ADD STUDENT: No sheet name provided, using default sheet")
+                sheet_data = self.get_sheet_data(sheet_id)
+
             if not sheet_data['success']:
+                print(f"🔍 ADD STUDENT: Failed to get sheet data: {sheet_data.get('error')}")
                 return sheet_data
 
             headers = sheet_data['headers']
-            sheet_name = sheet_data['sheet_name']
+
+            # CRITICAL FIX: Use the explicitly passed sheet_name if provided, otherwise use the one from sheet_data
+            active_sheet_name = sheet_name if sheet_name else sheet_data['sheet_name']
+            print(f"🔍 ADD STUDENT: CRITICAL - Using active sheet: {active_sheet_name}")
+
             current_data = sheet_data['tableData']
 
             # 🔥 SMART COUNTING: Count only rows with actual student data
@@ -410,9 +423,9 @@ class GoogleServiceAccountSheets:
                 next_row = len(current_data) + 4
                 student_number = actual_student_count + 1
 
-            print(f"🔍 DEBUG: Found {actual_student_count} actual students")
-            print(f"🔍 DEBUG: Using row index {first_empty_row_index} (sheet row {next_row})")
-            print(f"🔍 DEBUG: Assigning student number {student_number}")
+            print(f"🔍 ADD STUDENT: Found {actual_student_count} actual students")
+            print(f"🔍 ADD STUDENT: Using row index {first_empty_row_index} (sheet row {next_row})")
+            print(f"🔍 ADD STUDENT: Assigning student number {student_number}")
 
             # Create new row with student data
             new_row = [''] * len(headers)
@@ -427,8 +440,9 @@ class GoogleServiceAccountSheets:
                     index = headers.index(key)
                     new_row[index] = str(value)
 
-            # Append the new row
-            range_name = f"{sheet_name}!A{next_row}:{chr(65 + len(headers) - 1)}{next_row}"
+            # CRITICAL FIX: Always use the active_sheet_name variable with quotes for safety
+            range_name = f"'{active_sheet_name}'!A{next_row}:{chr(65 + len(headers) - 1)}{next_row}"
+            print(f"🔍 ADD STUDENT: Range for update: {range_name}")
 
             body = {
                 'values': [new_row]
@@ -441,7 +455,8 @@ class GoogleServiceAccountSheets:
                 body=body
             ).execute()
 
-            logger.info(f"Successfully added student #{student_number} to row {next_row}")
+            print(
+                f"🔍 ADD STUDENT: Successfully added student #{student_number} to sheet '{active_sheet_name}' row {next_row}")
 
             return {
                 'success': True,
@@ -449,11 +464,14 @@ class GoogleServiceAccountSheets:
                 'row_added': next_row,
                 'rowNumber': student_number,
                 'student_data': student_data,
-                'range': range_name
+                'range': range_name,
+                'sheet_name': active_sheet_name  # CRITICAL FIX: Return the active sheet name
             }
 
         except Exception as e:
             logger.error(f"Unexpected error adding student with auto-number: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return {
                 'success': False,
                 'error': f'Failed to add student with auto-number: {str(e)}'
@@ -679,8 +697,13 @@ class GoogleServiceAccountSheets:
         Updated to handle 3-row header structure.
         """
         try:
+            # Log the input parameters for debugging
+            print(f"🔍 GET SPECIFIC SHEET: sheet_id={sheet_id}, sheet_name={sheet_name}")
+
             # Get data from the specific sheet
             range_name = f"'{sheet_name}'!A1:Z100"  # Use specific sheet name in quotes
+            print(f"🔍 GET SPECIFIC SHEET: Requesting range: {range_name}")
+
             result = self.sheets_service.spreadsheets().values().get(
                 spreadsheetId=sheet_id,
                 range=range_name
@@ -689,6 +712,7 @@ class GoogleServiceAccountSheets:
             values = result.get('values', [])
 
             if not values:
+                print(f"🔍 GET SPECIFIC SHEET: No data found in sheet '{sheet_name}'")
                 return {
                     'success': False,
                     'error': f'No data found in sheet "{sheet_name}"'
@@ -718,6 +742,7 @@ class GoogleServiceAccountSheets:
             print(f"   Row 3 (Max Scores): {max_scores}")
             print(f"   Combined Headers: {combined_headers}")
             print(f"   Student Data Rows: {len(tableData)}")
+            print(f"🔍 GET SPECIFIC SHEET: Successfully got data from '{sheet_name}'")
 
             return {
                 'success': True,
@@ -726,11 +751,13 @@ class GoogleServiceAccountSheets:
                 'sub_headers': sub_headers,
                 'max_scores': max_scores,  # 🔥 NEW: Include max scores
                 'tableData': tableData,
-                'sheet_name': sheet_name
+                'sheet_name': sheet_name  # IMPORTANT: Return the requested sheet name, not a derived one
             }
 
         except Exception as e:
-            logger.error(f"Get specific sheet data error: {str(e)}")
+            print(f"🔍 GET SPECIFIC SHEET ERROR: {str(e)}")
+            import traceback
+            print(f"🔍 GET SPECIFIC SHEET TRACEBACK: {traceback.format_exc()}")
             return {
                 'success': False,
                 'error': f'Failed to get sheet data: {str(e)}'

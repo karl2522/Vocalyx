@@ -930,8 +930,19 @@ def sheets_add_student_with_auto_number_service_account(request, sheet_id):
         if not student_data:
             return Response({'error': 'student_data is required'}, status=400)
 
+        # CRITICAL FIX: Extract sheet_name from request.data
+        sheet_name = request.data.get('sheet_name')
+        print(f"🔍 API ENDPOINT: Received sheet_name: {sheet_name}")
+
         service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
-        result = service.add_student_with_auto_number(sheet_id, student_data)
+
+        # CRITICAL FIX: Pass sheet_name to add_student_with_auto_number
+        if sheet_name:
+            print(f"🔍 API ENDPOINT: Calling add_student_with_auto_number with sheet_name: {sheet_name}")
+            result = service.add_student_with_auto_number(sheet_id, student_data, sheet_name)
+        else:
+            print(f"🔍 API ENDPOINT: Calling add_student_with_auto_number without sheet_name")
+            result = service.add_student_with_auto_number(sheet_id, student_data)
 
         return Response(result)
 

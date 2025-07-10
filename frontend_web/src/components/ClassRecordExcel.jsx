@@ -255,10 +255,11 @@ const ClassRecordExcel = () => {
 
   const loadSheetData = async (sheetId, sheetName) => {
     try {
-      console.log(`📊 Loading data from sheet: ${sheetName}`);
+      console.log(`📊 LOAD SHEET: Loading data from sheet: "${sheetName}"`);
       
       const sheetsResponse = await classRecordService.getSpecificSheetData(sheetId, sheetName);
-      console.log("📊 Specific sheet data response:", sheetsResponse.data);
+      console.log(`📊 LOAD SHEET: API response success: ${sheetsResponse.data?.success}`);
+      console.log(`📊 LOAD SHEET: Returned sheet name: ${sheetsResponse.data?.sheet_name}`);
       
       if (sheetsResponse.data?.success && sheetsResponse.data.headers?.length > 0) {
         setHeaders(sheetsResponse.data.headers);
@@ -276,16 +277,22 @@ const ClassRecordExcel = () => {
           setTableData(convertedTableData);
           
           buildContextDictionary(convertedTableData, sheetsResponse.data.headers);
+          
+          // Update the sheet name in voice command context
+          if (window.voiceCommandContext) {
+            window.voiceCommandContext.activeSheet = sheetName;
+            console.log(`📊 LOAD SHEET: Updated voice command context with sheet: "${sheetName}"`);
+          }
         }
         
-        console.log(`✅ Sheet "${sheetName}" data loaded successfully!`);
+        console.log(`✅ LOAD SHEET: Sheet "${sheetName}" data loaded successfully!`);
         toast.success(`Switched to sheet: ${sheetName}`);
       } else {
-        console.log(`⚠️ No data available for sheet: ${sheetName}`);
+        console.log(`⚠️ LOAD SHEET: No data available for sheet: "${sheetName}"`);
         toast(`No data found in sheet: ${sheetName}`);
       }
     } catch (error) {
-      console.error(`❌ Failed to load sheet data for: ${sheetName}`, error);
+      console.error(`❌ LOAD SHEET ERROR for "${sheetName}":`, error);
       toast.error(`Failed to load sheet: ${sheetName}`);
     }
   };
@@ -325,11 +332,35 @@ const ClassRecordExcel = () => {
   const switchToSheet = async (sheet) => {
     if (!classRecord?.google_sheet_id || !sheet) return;
     
+    console.log(`🔄 SWITCHING SHEET: Attempting to switch to sheet "${sheet.sheet_name}"`);
     setLoadingSheets(true);
-    setCurrentSheet(sheet);
     
     try {
+      console.log(`🔄 SWITCHING SHEET: Current sheet before load: ${currentSheet?.sheet_name}`);
+      console.log(`🔄 SWITCHING SHEET: New sheet target: ${sheet.sheet_name}`);
+      
+      // IMPORTANT: Update state first and then wait for it to complete
+      // Use the callback function to ensure we have the updated state value
+      setCurrentSheet(sheet);
+      
+      // Store the sheet name in localStorage for persistence
+      localStorage.setItem('activeSheetName', sheet.sheet_name);
+      console.log(`🔄 SWITCHING SHEET: Saved active sheet to localStorage: ${sheet.sheet_name}`);
+      
+      // Add a global variable to track the current sheet name
+      window.currentActiveSheet = sheet.sheet_name;
+      console.log(`🔄 SWITCHING SHEET: Set global current sheet to: ${window.currentActiveSheet}`);
+      
       await loadSheetData(classRecord.google_sheet_id, sheet.sheet_name);
+      
+      // After loading the data, set a flag in the voice command context
+      if (window.voiceCommandContext) {
+        window.voiceCommandContext.activeSheet = sheet.sheet_name;
+      }
+      console.log(`🔄 SWITCHING SHEET: Updated voice command context with sheet name: ${sheet.sheet_name}`);
+      
+      // Force-set the sheet again to make sure
+      setCurrentSheet(sheet);
       
       // 🔥 If batch mode is active, we need to refresh the column options
       if (batchMode) {
@@ -338,11 +369,22 @@ const ClassRecordExcel = () => {
       }
       
     } catch (error) {
-      console.error('Error switching sheet:', error);
+      console.error('❌ SWITCHING SHEET ERROR:', error);
       toast.error('Failed to switch sheet');
     } finally {
       setLoadingSheets(false);
       setShowSheetSelector(false);
+      
+      // Check if the state was actually updated correctly
+      setTimeout(() => {
+        console.log(`🔄 SWITCHING SHEET: Final current sheet value: ${currentSheet?.sheet_name}`);
+        
+        // If it still didn't update correctly, force it one more time
+        if (currentSheet?.sheet_name !== sheet.sheet_name) {
+          console.log(`🔄 SWITCHING SHEET: State not updated correctly, forcing update...`);
+          setCurrentSheet(sheet);
+        }
+      }, 100);
     }
   };
 
@@ -1175,20 +1217,37 @@ const handleAddStudentVoice = async (data) => {
             throw new Error('Missing required student name data');
         }
         
-        // 🔥 Call the API with auto-numbering
+        // 🔥 CRITICAL FIX: Get the active sheet name from multiple sources
+        const activeSheetName = 
+            window.currentActiveSheet || 
+            localStorage.getItem('activeSheetName') ||
+            (window.voiceCommandContext && window.voiceCommandContext.activeSheet) ||
+            (currentSheet && currentSheet.sheet_name);
+            
+        console.log('🎯 ACTIVE SHEET DETECTION:', {
+            windowCurrentActiveSheet: window.currentActiveSheet,
+            localStorageActiveSheetName: localStorage.getItem('activeSheetName'),
+            voiceCommandContextActiveSheet: window.voiceCommandContext?.activeSheet,
+            currentSheetState: currentSheet?.sheet_name,
+            finalDetermination: activeSheetName
+        });
+        
+        // 🔥 CRITICAL FIX: Pass the sheet name to the API
         const response = await classRecordService.addStudentToGoogleSheetsWithAutoNumber(
             classRecord.google_sheet_id,
-            studentData
+            studentData,
+            activeSheetName  // Add this parameter!
         );
 
         console.log('🔧 API Response:', response);
 
         if (response.data?.success) {
             const studentName = `${studentData['FIRST NAME'] || ''} ${studentData['LASTNAME'] || ''}`.trim();
+            const sheetUsed = response.data.sheet_name || 'unknown';
             
-            toast.success(`✅ Student added: ${studentName} (Row ${response.data.rowNumber})`);
+            toast.success(`✅ Student added to ${sheetUsed} sheet: ${studentName} (Row ${response.data.rowNumber})`);
             if (voiceEnabled) {
-                speakText(`Successfully added student ${studentName} as number ${response.data.rowNumber}`);
+                speakText(`Successfully added student ${studentName} as number ${response.data.rowNumber} to ${sheetUsed} sheet`);
             }
             
         } else {

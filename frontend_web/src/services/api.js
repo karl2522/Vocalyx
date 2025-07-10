@@ -317,8 +317,11 @@ export const classRecordService = {
         });
     },
 
-    addStudentToGoogleSheetsWithAutoNumber: (sheetId, studentData) => 
-        api.post(`/sheets/${sheetId}/add-student-auto-number/`, { student_data: studentData }),
+    addStudentToGoogleSheetsWithAutoNumber: (sheetId, studentData, sheetName = null) => 
+        api.post(`/sheets/${sheetId}/add-student-auto-number/`, { 
+            student_data: studentData,
+            sheet_name: sheetName  // Include the sheet name in the request
+        }),
 
     autoNumberGoogleSheetsStudents: (sheetId) => 
         api.post(`/sheets/${sheetId}/auto-number-students/`),
