@@ -2070,6 +2070,80 @@ const handleExportToExcel = async () => {
   }
 };
 
+const handleExportToCSV = async () => {
+  try {
+    if (!classRecord?.google_sheet_id) {
+      toast.error('No Google Sheet connected');
+      return;
+    }
+
+    toast('📄 Preparing CSV export...');
+
+    // Get fresh data from Google Sheets
+    const sheetsResponse = await classRecordService.getGoogleSheetsDataServiceAccount(classRecord.google_sheet_id);
+    
+    if (!sheetsResponse.data?.success || !sheetsResponse.data.tableData?.length) {
+      toast.error('Could not load data for export');
+      return;
+    }
+
+    // Prepare CSV data
+    const csvData = [];
+    
+    // Add headers
+    csvData.push(sheetsResponse.data.headers);
+    
+    // Add student data
+    sheetsResponse.data.tableData.forEach(row => {
+      csvData.push(row);
+    });
+
+    // Convert to CSV format
+    const csvContent = csvData.map(row => {
+      return row.map(cell => {
+        // Handle cells that contain commas, quotes, or line breaks
+        const cellValue = String(cell || '');
+        if (cellValue.includes(',') || cellValue.includes('"') || cellValue.includes('\n')) {
+          // Escape quotes by doubling them and wrap in quotes
+          return `"${cellValue.replace(/"/g, '""')}"`;
+        }
+        return cellValue;
+      }).join(',');
+    }).join('\n');
+
+    // Create blob and download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    
+    // Generate filename with timestamp
+    const timestamp = new Date().toISOString().slice(0, 10);
+    const filename = `${classRecord.name || 'ClassRecord'}_${timestamp}.csv`;
+    
+    if (link.download !== undefined) {
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', filename);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+    
+    toast.success(`✅ CSV file exported: ${filename}`);
+    if (voiceEnabled) {
+      speakText('CSV file has been exported successfully');
+    }
+
+  } catch (error) {
+    console.error('CSV export error:', error);
+    toast.error('Failed to export CSV file');
+    if (voiceEnabled) {
+      speakText('Failed to export CSV file');
+    }
+  }
+};
+
 const handleExportToPDF = async () => {
   try {
     if (!classRecord?.google_sheet_id) {
@@ -2365,6 +2439,17 @@ const handleExportToPDF = async () => {
                     <FileSpreadsheet className="w-4 h-4 text-green-600" />
                     <span>Export to Excel (clean)</span>
                   </button>
+                  <button
+                    onClick={() => {
+                      handleExportToPDF();
+                      closeAllDropdowns();
+                    }}
+                    className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                  >
+                    <Download className="w-4 h-4 text-red-600" />
+                    <span>Export to PDF (clean)</span>
+                  </button>
+
                   <button
                     onClick={() => {
                       handleExportToPDF();
