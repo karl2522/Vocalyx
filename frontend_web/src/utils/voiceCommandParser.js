@@ -1401,6 +1401,38 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
   
   console.log('🔍 Multiple matches found:', allMatches);
   
+  const uniqueStudentNames = new Set(allMatches.map(match => match.student.toLowerCase()));
+  
+  // Case 1: Different people (like Michelle Capuras vs Vaness Capuras)
+  if (uniqueStudentNames.size > 1) {
+    console.log('🚨 DIFFERENT PEOPLE DETECTED - FORCING CONFIRMATION:', Array.from(uniqueStudentNames));
+    return {
+      bestMatch: -1,
+      possibleMatches: allMatches.slice(0, 5),
+      confidence: 'ambiguous',
+      hasDuplicates: true,
+      needsConfirmation: true,
+      resolvedBy: 'forced_different_people_confirmation'
+    };
+  }
+  
+  // Case 2: Same person but multiple entries (like Owen Jared appears twice)
+  if (uniqueStudentNames.size === 1 && allMatches.length > 1) {
+    console.log('🚨 SAME PERSON - MULTIPLE ENTRIES DETECTED:', allMatches[0].student);
+    console.log('📋 All entries:', allMatches.map(m => `Row ${m.index}: ${m.student}`));
+    
+    // Show modal so teacher can choose which row/entry to update
+    return {
+      bestMatch: -1,
+      possibleMatches: allMatches.slice(0, 5),
+      confidence: 'ambiguous',
+      hasDuplicates: true,
+      needsConfirmation: true,
+      resolvedBy: 'same_person_multiple_entries'
+    };
+  }
+  
+  
   // 🔥 Strategy 1: Single exact match resolution
   const exactMatches = allMatches.filter(match => match.score === 0);
   if (exactMatches.length === 1) {
@@ -1414,114 +1446,45 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
     };
   }
   
-  // 🔥 NEW Strategy 2: Smart duplicate detection - check if they're the SAME person
-  if (exactMatches.length > 1) {
-    // Check if all exact matches are actually the same student (duplicate entries)
-    const uniqueStudents = new Set(exactMatches.map(match => 
-      `${match.rowData['FIRST NAME']}|${match.rowData['LASTNAME']}`
-    ));
-    
-    if (uniqueStudents.size === 1) {
-      // 🚀 SMART: All matches are the same person - prefer empty score column
-      if (targetColumn) {
-        const emptyMatch = exactMatches.find(match => !match.hasExistingScore);
-        if (emptyMatch) {
-          console.log('🎯 AUTO-SELECTED: Same person, chose empty score cell:', emptyMatch);
-          return {
-            bestMatch: emptyMatch.index,
-            possibleMatches: exactMatches,
-            confidence: 'high',
-            hasDuplicates: false,
-            needsConfirmation: false,
-            resolvedBy: 'smart_duplicate_resolution'
-          };
-        }
+  // 🔥 Strategy 2: Recent context resolution (only for single matches now)
+  if (recentStudents.length > 0) {
+    for (const recent of recentStudents) {
+      const recentMatch = allMatches.find(match => 
+        match.student.toLowerCase() === recent.toLowerCase() ||
+        soundsLike(match.student, recent)
+      );
+      if (recentMatch && recentMatch.confidence > 0.7) {
+        console.log('✅ Found recent context match:', recentMatch);
+        return {
+          bestMatch: recentMatch.index,
+          possibleMatches: allMatches.slice(0, 3),
+          confidence: 'high',
+          hasDuplicates: false,
+          needsConfirmation: false,
+          resolvedBy: 'recent_context'
+        };
       }
-      
-      // If no empty cells, just pick the first one
-      console.log('🎯 AUTO-SELECTED: Same person, picked first occurrence:', exactMatches[0]);
+    }
+  }
+  
+  // 🔥 Strategy 3: Empty score preference (only for single matches now)
+  if (targetColumn) {
+    const emptyMatches = allMatches.filter(match => !match.hasExistingScore);
+    
+    if (emptyMatches.length === 1 && emptyMatches[0].confidence > 0.7) {
+      console.log('✅ Found single empty score match:', emptyMatches[0]);
       return {
-        bestMatch: exactMatches[0].index,
-        possibleMatches: exactMatches,
+        bestMatch: emptyMatches[0].index,
+        possibleMatches: allMatches.slice(0, 3),
         confidence: 'high',
         hasDuplicates: false,
         needsConfirmation: false,
-        resolvedBy: 'same_person_auto_select'
+        resolvedBy: 'empty_score'
       };
     }
-    
-    // Different people with same search term - still need confirmation
-    console.log('🤔 Multiple different people need confirmation:', exactMatches);
-    return {
-      bestMatch: -1,
-      possibleMatches: exactMatches,
-      confidence: 'ambiguous',
-      hasDuplicates: true,
-      needsConfirmation: true
-    };
   }
   
-  // 🔥 Strategy 3: Recent context resolution
-  if (recentStudents.length > 0) {
-    // 🔥 NEW: First check if we have multiple different people
-    const uniqueNames = new Set(allMatches.map(match => match.student.toLowerCase()));
-    
-    if (uniqueNames.size === 1) {
-      // Only one person (duplicate entries) - use recent context
-      for (const recent of recentStudents) {
-        const recentMatch = allMatches.find(match => 
-          match.student.toLowerCase() === recent.toLowerCase() ||
-          soundsLike(match.student, recent)
-        );
-        if (recentMatch && recentMatch.confidence > 0.7) {
-          console.log('✅ Found recent context match (same person):', recentMatch);
-          return {
-            bestMatch: recentMatch.index,
-            possibleMatches: allMatches.slice(0, 3),
-            confidence: 'high',
-            hasDuplicates: false,
-            needsConfirmation: false,
-            resolvedBy: 'recent_context'
-          };
-        }
-      }
-    }
-    // If multiple different people, don't use recent context - let other strategies handle it
-  }
-  
-  // 🔥 Strategy 4: Empty score preference
-  if (targetColumn) {
-  const emptyMatches = allMatches.filter(match => !match.hasExistingScore);
-  
-  // 🔥 NEW: Check if there are multiple people with same name (even if only one has empty score)
-  const uniqueNames = new Set(allMatches.map(match => match.student.toLowerCase()));
-  if (uniqueNames.size > 1) {
-    // Multiple different people - always ask for confirmation
-    console.log('🤔 Multiple different people found, need confirmation:', allMatches);
-    return {
-      bestMatch: -1,
-      possibleMatches: allMatches.slice(0, 3),
-      confidence: 'ambiguous',
-      hasDuplicates: true,
-      needsConfirmation: true
-    };
-  }
-  
-  // Same person, multiple entries - prefer empty score
-  if (emptyMatches.length === 1 && emptyMatches[0].confidence > 0.7) {
-    console.log('✅ Found single empty score match (same person):', emptyMatches[0]);
-    return {
-      bestMatch: emptyMatches[0].index,
-      possibleMatches: allMatches.slice(0, 3),
-      confidence: 'high',
-      hasDuplicates: false,
-      needsConfirmation: false,
-      resolvedBy: 'empty_score'
-    };
-  }
-}
-  
-  // 🔥 Strategy 5: High confidence single match
+  // 🔥 Strategy 4: High confidence single match
   const highConfidenceMatches = allMatches.filter(match => match.confidence > 0.85);
   if (highConfidenceMatches.length === 1) {
     console.log('✅ Found high confidence match:', highConfidenceMatches[0]);
@@ -1535,68 +1498,7 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
     };
   }
   
-  // 🔥 NEW Strategy 6: Very similar matches - auto-pick best one
-  const bestScore = allMatches[0].score;
-  const veryCloseMatches = allMatches.filter(match => 
-    match.score <= bestScore + 1 && match.confidence > 0.8
-  );
-  
-  if (veryCloseMatches.length > 1) {
-    // Check if they're very similar students (probably same person)
-    const firstMatch = veryCloseMatches[0];
-    const areSimilar = veryCloseMatches.every(match => 
-      soundsLike(match.student, firstMatch.student) || 
-      calculateWordSimilarity(match.student.toLowerCase(), firstMatch.student.toLowerCase()) > 0.85
-    );
-    
-    if (areSimilar) {
-      // Prefer empty score cell if available
-      const emptyMatch = veryCloseMatches.find(match => !match.hasExistingScore);
-      const chosenMatch = emptyMatch || veryCloseMatches[0];
-      
-      console.log('🎯 AUTO-SELECTED: Very similar matches, picked best:', chosenMatch);
-      return {
-        bestMatch: chosenMatch.index,
-        possibleMatches: veryCloseMatches,
-        confidence: 'high',
-        hasDuplicates: false,
-        needsConfirmation: false,
-        resolvedBy: 'similar_auto_select'
-      };
-    }
-  }
-  
-  // 🔥 Strategy 7: Regular similar matches - still ask for confirmation if very different
-  const similarMatches = allMatches.filter(match => 
-    match.score <= bestScore + 3 && match.confidence > 0.6
-  );
-  
-  if (similarMatches.length > 1) {
-    // Check confidence gap - if big gap, auto-select best
-    const confidenceGap = similarMatches[0].confidence - similarMatches[1].confidence;
-    if (confidenceGap > 0.2) {
-      console.log('🎯 AUTO-SELECTED: Clear confidence winner:', similarMatches[0]);
-      return {
-        bestMatch: similarMatches[0].index,
-        possibleMatches: similarMatches.slice(0, 3),
-        confidence: 'medium',
-        hasDuplicates: false,
-        needsConfirmation: false,
-        resolvedBy: 'confidence_gap'
-      };
-    }
-    
-    console.log('🤔 Multiple similar matches need confirmation:', similarMatches);
-    return {
-      bestMatch: -1,
-      possibleMatches: similarMatches.slice(0, 3), // Limit to 3 options
-      confidence: 'ambiguous',
-      hasDuplicates: true,
-      needsConfirmation: true
-    };
-  }
-  
-  // 🔥 Strategy 8: Best available match
+  // Strategy 5: Best available match
   const bestMatch = allMatches[0];
   if (bestMatch.confidence > 0.6) {
     console.log('✅ Using best available match:', bestMatch);
@@ -1606,19 +1508,6 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
       confidence: bestMatch.confidence > 0.8 ? 'medium' : 'low',
       hasDuplicates: false,
       needsConfirmation: false
-    };
-  }
-  
-  // 🔥 Strategy 9: Low confidence - auto-pick if only small differences
-  if (allMatches.length <= 2 && allMatches[0].confidence > 0.5) {
-    console.log('🎯 AUTO-SELECTED: Limited options, picked best:', allMatches[0]);
-    return {
-      bestMatch: allMatches[0].index,
-      possibleMatches: allMatches,
-      confidence: 'low',
-      hasDuplicates: false,
-      needsConfirmation: false,
-      resolvedBy: 'limited_options'
     };
   }
   
