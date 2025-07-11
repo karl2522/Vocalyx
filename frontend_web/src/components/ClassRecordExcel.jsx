@@ -1420,6 +1420,10 @@ const handleAutoNumberStudents = async () => {
 
   const handleSmartNameGradeEntryVoice = async (data) => {
   console.log('🎯 Smart name search for:', data);
+  console.log('🎯 RECEIVED DATA FROM PARSER:', data);
+  console.log('🎯 searchName:', data.searchName);
+  console.log('🎯 column:', data.column);
+  console.log('🎯 value:', data.value);
   
   if (!classRecord?.google_sheet_id) {
       toast.error('No Google Sheet connected');
@@ -1710,7 +1714,7 @@ const handleDuplicateModalClose = () => {
           handleOverrideCancel();
           return;
       } else {
-          toast.warning('Please say "yes" to override or "no" to cancel');
+          toast('Please say "yes" to override or "no" to cancel');
           if (voiceEnabled) {
               speakText('Please say yes to override or no to cancel');
           }

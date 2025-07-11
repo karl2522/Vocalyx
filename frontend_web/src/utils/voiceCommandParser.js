@@ -1463,40 +1463,63 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
   
   // 🔥 Strategy 3: Recent context resolution
   if (recentStudents.length > 0) {
-    for (const recent of recentStudents) {
-      const recentMatch = allMatches.find(match => 
-        match.student.toLowerCase() === recent.toLowerCase() ||
-        soundsLike(match.student, recent)
-      );
-      if (recentMatch && recentMatch.confidence > 0.7) {
-        console.log('✅ Found recent context match:', recentMatch);
-        return {
-          bestMatch: recentMatch.index,
-          possibleMatches: allMatches.slice(0, 3),
-          confidence: 'high',
-          hasDuplicates: false,
-          needsConfirmation: false,
-          resolvedBy: 'recent_context'
-        };
+    // 🔥 NEW: First check if we have multiple different people
+    const uniqueNames = new Set(allMatches.map(match => match.student.toLowerCase()));
+    
+    if (uniqueNames.size === 1) {
+      // Only one person (duplicate entries) - use recent context
+      for (const recent of recentStudents) {
+        const recentMatch = allMatches.find(match => 
+          match.student.toLowerCase() === recent.toLowerCase() ||
+          soundsLike(match.student, recent)
+        );
+        if (recentMatch && recentMatch.confidence > 0.7) {
+          console.log('✅ Found recent context match (same person):', recentMatch);
+          return {
+            bestMatch: recentMatch.index,
+            possibleMatches: allMatches.slice(0, 3),
+            confidence: 'high',
+            hasDuplicates: false,
+            needsConfirmation: false,
+            resolvedBy: 'recent_context'
+          };
+        }
       }
     }
+    // If multiple different people, don't use recent context - let other strategies handle it
   }
   
   // 🔥 Strategy 4: Empty score preference
   if (targetColumn) {
-    const emptyMatches = allMatches.filter(match => !match.hasExistingScore);
-    if (emptyMatches.length === 1 && emptyMatches[0].confidence > 0.7) {
-      console.log('✅ Found single empty score match:', emptyMatches[0]);
-      return {
-        bestMatch: emptyMatches[0].index,
-        possibleMatches: allMatches.slice(0, 3),
-        confidence: 'high',
-        hasDuplicates: false,
-        needsConfirmation: false,
-        resolvedBy: 'empty_score'
-      };
-    }
+  const emptyMatches = allMatches.filter(match => !match.hasExistingScore);
+  
+  // 🔥 NEW: Check if there are multiple people with same name (even if only one has empty score)
+  const uniqueNames = new Set(allMatches.map(match => match.student.toLowerCase()));
+  if (uniqueNames.size > 1) {
+    // Multiple different people - always ask for confirmation
+    console.log('🤔 Multiple different people found, need confirmation:', allMatches);
+    return {
+      bestMatch: -1,
+      possibleMatches: allMatches.slice(0, 3),
+      confidence: 'ambiguous',
+      hasDuplicates: true,
+      needsConfirmation: true
+    };
   }
+  
+  // Same person, multiple entries - prefer empty score
+  if (emptyMatches.length === 1 && emptyMatches[0].confidence > 0.7) {
+    console.log('✅ Found single empty score match (same person):', emptyMatches[0]);
+    return {
+      bestMatch: emptyMatches[0].index,
+      possibleMatches: allMatches.slice(0, 3),
+      confidence: 'high',
+      hasDuplicates: false,
+      needsConfirmation: false,
+      resolvedBy: 'empty_score'
+    };
+  }
+}
   
   // 🔥 Strategy 5: High confidence single match
   const highConfidenceMatches = allMatches.filter(match => match.confidence > 0.85);
