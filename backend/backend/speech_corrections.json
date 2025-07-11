@@ -222,5 +222,77 @@
     "student_name": null,
     "confidence": 0.8232299089431763,
     "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-11T14:13:22.648587+00:00",
+    "original": "Grease 5. Omen score. 30.",
+    "corrected": "grease 5. owen score. 30.",
+    "student_name": null,
+    "confidence": 0.6840610504150391,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-11T14:13:25.721797+00:00",
+    "original": "Grease 4, Omen score 30.",
+    "corrected": "grease 4, owen score 30.",
+    "student_name": null,
+    "confidence": 0.6200343370437622,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-11T14:22:43.480864+00:00",
+    "original": "Chris Street, Omen score 40.",
+    "corrected": "chris street, owen score 40.",
+    "student_name": null,
+    "confidence": 0.6468127965927124,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-11T14:22:48.550693+00:00",
+    "original": "Chris Street, Omen score 40.",
+    "corrected": "chris street, owen score 40.",
+    "student_name": null,
+    "confidence": 0.6299447417259216,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-11T14:25:36.052420+00:00",
+    "original": "Chris Street, Omen score 30.",
+    "corrected": "chris street, owen score 30.",
+    "student_name": null,
+    "confidence": 0.5499167442321777,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-11T14:25:41.690710+00:00",
+    "original": "Chris Street, Omen score 20.",
+    "corrected": "chris street, owen score 20.",
+    "student_name": null,
+    "confidence": 0.5570287108421326,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-11T14:25:51.503029+00:00",
+    "original": "Chris Street, Omen score 30.",
+    "corrected": "chris street, owen score 30.",
+    "student_name": null,
+    "confidence": 0.5499168038368225,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-11T14:25:56.516645+00:00",
+    "original": "Chris Street, Omen score 20.",
+    "corrected": "chris street, owen score 20.",
+    "student_name": null,
+    "confidence": 0.546164333820343,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-11T14:26:26.207179+00:00",
+    "original": "Chris Street, Omen score 30.",
+    "corrected": "chris street, owen score 30.",
+    "student_name": null,
+    "confidence": 0.5499168038368225,
+    "correction_type": "automatic"
   }
 ]
