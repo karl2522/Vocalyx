@@ -1431,39 +1431,27 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
     };
   }
   
-  // 🔥 NEW Strategy 2: Smart duplicate detection - check if they're the SAME person
+  // 🔥 Strategy 2: Smart duplicate detection - check if they're the SAME person
   if (exactMatches.length > 1) {
     // Check if all exact matches are actually the same student (duplicate entries)
     const uniqueStudents = new Set(exactMatches.map(match => 
       `${match.rowData['FIRST NAME']}|${match.rowData['LASTNAME']}`
     ));
     
+    console.log('🔥 EXACT MATCHES DETECTED:', exactMatches.length);
+    console.log('🔥 UNIQUE STUDENTS:', uniqueStudents.size);
+    console.log('🔥 STUDENT NAMES:', Array.from(uniqueStudents));
+    
     if (uniqueStudents.size === 1) {
-      // 🚀 SMART: All matches are the same person - prefer empty score column
-      if (targetColumn) {
-        const emptyMatch = exactMatches.find(match => !match.hasExistingScore);
-        if (emptyMatch) {
-          console.log('🎯 AUTO-SELECTED: Same person, chose empty score cell:', emptyMatch);
-          return {
-            bestMatch: emptyMatch.index,
-            possibleMatches: exactMatches,
-            confidence: 'high',
-            hasDuplicates: false,
-            needsConfirmation: false,
-            resolvedBy: 'smart_duplicate_resolution'
-          };
-        }
-      }
-      
-      // If no empty cells, just pick the first one
-      console.log('🎯 AUTO-SELECTED: Same person, picked first occurrence:', exactMatches[0]);
+      // 🔥 🔥 🔥 CRITICAL CHANGE: ALWAYS force modal for same person duplicates
+      console.log('🚨 SAME PERSON WITH MULTIPLE EXACT MATCHES - FORCING MODAL');
       return {
-        bestMatch: exactMatches[0].index,
+        bestMatch: -1,
         possibleMatches: exactMatches,
-        confidence: 'high',
-        hasDuplicates: false,
-        needsConfirmation: false,
-        resolvedBy: 'same_person_auto_select'
+        confidence: 'ambiguous',
+        hasDuplicates: true,
+        needsConfirmation: true,
+        resolvedBy: 'same_person_exact_matches_forced_modal'
       };
     }
     
@@ -1478,7 +1466,7 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
     };
   }
   
-  // 🔥 🔥 🔥 IMPROVED DUPLICATE DETECTION - Check for both different people AND same person duplicates
+  // 🔥 🔥 🔥 PRIORITY DUPLICATE DETECTION - Check for both different people AND same person duplicates
   const uniqueStudentNames = new Set(allMatches.map(match => match.student.toLowerCase()));
   
   // Case 1: Different people (like Michelle Capuras vs Vaness Capuras)
@@ -1495,37 +1483,33 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
   }
   
   // Case 2: Same person but multiple entries (like Owen Jared appears twice)
+  // 🔥 🔥 🔥 CRITICAL FIX: ALWAYS force modal for multiple entries, ignore recent context
   if (uniqueStudentNames.size === 1 && allMatches.length > 1) {
     console.log('🚨 SAME PERSON - MULTIPLE ENTRIES DETECTED:', allMatches[0].student);
     console.log('📋 All entries:', allMatches.map(m => `Row ${m.index}: ${m.student}`));
+    console.log('🚨 FORCING DUPLICATE MODAL - BYPASSING ALL OTHER STRATEGIES');
     
-    // Show modal so teacher can choose which row/entry to update
+    // ALWAYS show modal for multiple entries of the same person
     return {
       bestMatch: -1,
       possibleMatches: allMatches.slice(0, 5),
       confidence: 'ambiguous',
       hasDuplicates: true,
       needsConfirmation: true,
-      resolvedBy: 'same_person_multiple_entries'
+      resolvedBy: 'same_person_multiple_entries_forced_modal'
     };
   }
   
-  // Rest of strategies remain the same...
-  
-  // 🔥 Strategy 3: Recent context resolution
+  // 🔥 Strategy 3: Recent context resolution - MOVED AFTER duplicate detection
   if (recentStudents.length > 0) {
-  // 🚨 CRITICAL: Don't use recent context if multiple people detected
-  const uniqueStudentNames = new Set(allMatches.map(match => match.student.toLowerCase()));
-  
-  if (uniqueStudentNames.size === 1) {
-    // Only one unique person - safe to use recent context
+    // Only use recent context if we haven't detected multiple entries above
     for (const recent of recentStudents) {
       const recentMatch = allMatches.find(match => 
         match.student.toLowerCase() === recent.toLowerCase() ||
         soundsLike(match.student, recent)
       );
       if (recentMatch && recentMatch.confidence > 0.7) {
-        console.log('✅ Found recent context match (single person):', recentMatch);
+        console.log('✅ Found recent context match (no duplicates detected):', recentMatch);
         return {
           bestMatch: recentMatch.index,
           possibleMatches: allMatches.slice(0, 3),
@@ -1536,10 +1520,7 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
         };
       }
     }
-  } else {
-    console.log('🚫 Skipping recent context - multiple people detected');
   }
-}
   
   // 🔥 Strategy 4: Empty score preference
   if (targetColumn) {

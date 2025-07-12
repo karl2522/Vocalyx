@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { ArrowLeft, BarChart3, ChevronDown, Download, FileSpreadsheet, HelpCircle, Mic, MicOff, MoreVertical, Upload, Users, X } from 'lucide-react';
+import { ArrowLeft, BarChart3, ChevronDown, Download, FileSpreadsheet, FileText, HelpCircle, Mic, MicOff, MoreVertical, Upload, Users, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -31,6 +31,7 @@ const ClassRecordExcel = () => {
   const [currentBatchColumn, setCurrentBatchColumn] = useState('');
   const [batchEntries, setBatchEntries] = useState([]);
   const [isProcessingBatch, setIsProcessingBatch] = useState(false);
+  const [maxScores, setMaxScores] = useState({});
 
   const [showColumnImportModal, setShowColumnImportModal] = useState(false);
   const [columnAnalysis, setColumnAnalysis] = useState(null);
@@ -253,6 +254,42 @@ const ClassRecordExcel = () => {
     }
   };
 
+  const validateScore = (columnName, score) => {
+    const maxScore = maxScores[columnName];
+    
+    if (!maxScore) {
+      return { valid: true };
+    }
+    
+    const numericScore = Number(score);
+    
+    if (isNaN(numericScore)) {
+      return { 
+        valid: false, 
+        error: `"${score}" is not a valid number`,
+        suggestion: `Please enter a number between 0 and ${maxScore}`
+      };
+    }
+    
+    if (numericScore > maxScore) {
+      return { 
+        valid: false, 
+        error: `Score ${score} exceeds maximum of ${maxScore} for ${columnName}`,
+        suggestion: `Please enter a score between 0 and ${maxScore}`
+      };
+    }
+    
+    if (numericScore < 0) {
+      return { 
+        valid: false, 
+        error: `Score cannot be negative`,
+        suggestion: `Please enter a score between 0 and ${maxScore}`
+      };
+    }
+    
+    return { valid: true };
+  };
+
   const loadSheetData = async (sheetId, sheetName) => {
     try {
       console.log(`📊 LOAD SHEET: Loading data from sheet: "${sheetName}"`);
@@ -263,6 +300,21 @@ const ClassRecordExcel = () => {
       
       if (sheetsResponse.data?.success && sheetsResponse.data.headers?.length > 0) {
         setHeaders(sheetsResponse.data.headers);
+
+        const maxScores = sheetsResponse.data.max_scores || [];
+        console.log('📊 MAX SCORES:', maxScores);
+
+        const maxScoreMap = {};
+        sheetsResponse.data.headers.forEach((header, index) => {
+          const maxScore = maxScores[index];
+          if (maxScore && !isNaN(Number(maxScore)) && Number(maxScore) > 0) {
+            maxScoreMap[header] = Number(maxScore);
+          }
+        });
+
+        console.log('📊 MAX SCORE MAP:', maxScoreMap);
+
+        setMaxScores(maxScoreMap);
         
         // Convert table data for voice commands context
         if (sheetsResponse.data.tableData?.length > 0) {
@@ -662,6 +714,15 @@ const ClassRecordExcel = () => {
 
 const handleBatchEveryoneCommand = async (data) => {
   console.log('🎯 Handling batch everyone command:', data);
+
+   const validation = validateScore(data.column, data.score);
+    if (!validation.valid) {
+      toast.error(`❌ Batch command failed: ${validation.error}`);
+      if (voiceEnabled) {
+        speakText(`Batch command failed. ${validation.error}`);
+      }
+      return;
+    }
   
   if (!classRecord?.google_sheet_id) {
     toast.error('No Google Sheet connected');
@@ -1429,6 +1490,15 @@ const handleAutoNumberStudents = async () => {
       toast.error('No Google Sheet connected');
       return;
   }
+
+   const validation = validateScore(data.column, data.value);
+    if (!validation.valid) {
+      toast.error(`❌ ${validation.error}`);
+      if (voiceEnabled) {
+        speakText(validation.error);
+      }
+      return;
+    }
 
   try {
       // Get fresh data for student search
@@ -2452,13 +2522,13 @@ const handleExportToPDF = async () => {
 
                   <button
                     onClick={() => {
-                      handleExportToPDF();
+                      handleExportToCSV();
                       closeAllDropdowns();
                     }}
                     className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
                   >
-                    <Download className="w-4 h-4 text-red-600" />
-                    <span>Export to PDF (clean)</span>
+                    <FileText className="w-4 h-4 text-green-600" />
+                    <span>Export to CSV (clean)</span>
                   </button>
                   
                   <hr className="my-2 border-slate-200" />
@@ -2745,9 +2815,9 @@ const handleExportToPDF = async () => {
                         key={index}
                         className="text-xs text-slate-600 bg-slate-100 rounded px-2 py-1 cursor-pointer hover:bg-slate-200 transition-colors"
                         onClick={() => {
-                          // Use alternative transcript
-                          setTranscript(alt.transcript);
-                          toast(`Switched to: "${alt.transcript}"`);
+                          clearTranscript();
+                          handleVoiceCommand(alt.transcript);
+                          toast(`Using alternative: "${alt.transcript}"`);
                         }}
                         title={`Confidence: ${(alt.confidence * 100).toFixed(1)}%`}
                       >
