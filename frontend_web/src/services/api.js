@@ -226,7 +226,16 @@ export const classRecordService = {
     updateClassRecord: (id, recordData) => api.patch(`/class-records/${id}/`, recordData),
     
     // Delete a class record
-    deleteClassRecord: (id) => api.delete(`/class-records/${id}/`),
+    deleteClassRecord: (id) => {
+        const googleAccessToken = localStorage.getItem('googleAccessToken');
+        const config = {};
+        if (googleAccessToken) {
+            config.headers = {
+                'X-Google-Access-Token': googleAccessToken
+            };
+        }
+        return api.delete(`/class-records/${id}/`, config);
+    },
     
     // Get students for a specific class record
     getClassRecordStudents: (id) => api.get(`/class-records/${id}/students/`),

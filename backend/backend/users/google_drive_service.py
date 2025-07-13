@@ -272,4 +272,37 @@ class GoogleDriveService:
             return {
                 'success': False,
                 'error': f'Download request failed: {str(e)}'
+            }
+    
+    def delete_file(self, file_id: str) -> Dict:
+        """
+        Permanently delete a file from Google Drive.
+
+        Args:
+            file_id: The ID of the file to delete.
+
+        Returns:
+            Dict containing success status or error message.
+        """
+        try:
+            response = requests.delete(
+                f"{self.DRIVE_API_BASE_URL}/files/{file_id}",
+                headers=self.headers,
+                timeout=15
+            )
+
+            if response.status_code == 204:
+                return {'success': True}
+            else:
+                return {
+                    'success': False,
+                    'error': f'File deletion failed: {response.status_code}',
+                    'details': response.text
+                }
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Drive API delete file failed: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Request failed: {str(e)}'
             } 

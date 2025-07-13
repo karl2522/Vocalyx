@@ -14,6 +14,7 @@ from .serializers import (
     GradeSerializer
 )
 from users.google_sheets_service import GoogleSheetsService
+from users.google_drive_service import GoogleDriveService
 # Remove the service account imports since we're switching to user-based approach
 # from utils.google_service_account_sheets import GoogleServiceAccountSheets
 
@@ -114,6 +115,62 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
             print(f"   Full traceback: {traceback.format_exc()}")
             # Don't re-raise - allow ClassRecord creation to succeed even if Google Sheets fails
             print("📝 ClassRecord created successfully, but Google Sheets integration failed.")
+
+    def perform_destroy(self, instance):
+        """Extend the default destroy method to delete the Google Sheet."""
+        print("--- Entering perform_destroy for ClassRecord ---")
+        
+        try:
+            # Log initial state
+            print(f"Attempting to delete ClassRecord with ID: {instance.id}")
+            print(f"Associated Google Sheet ID: {instance.google_sheet_id}")
+
+            # Check for Google Sheet ID
+            if not instance.google_sheet_id:
+                print("No Google Sheet ID associated with this record. Skipping Drive deletion.")
+                instance.delete()
+                print(f"ClassRecord with ID: {instance.id} deleted successfully from database.")
+                return
+
+            # Check for access token
+            access_token = self.request.headers.get('X-Google-Access-Token')
+            if not access_token:
+                print("❌ CRITICAL: No 'X-Google-Access-Token' found in request headers.")
+                print("   The frontend must send this header for Google Drive deletion to work.")
+                print("   Skipping Drive deletion, but proceeding with database deletion.")
+                instance.delete()
+                print(f"ClassRecord with ID: {instance.id} deleted successfully from database.")
+                return
+            
+            print(f"✅ Found 'X-Google-Access-Token'. Proceeding with Google Drive deletion.")
+            
+            # Attempt to delete from Google Drive
+            print(f"🗑️ Initializing GoogleDriveService to delete file: {instance.google_sheet_id}")
+            drive_service = GoogleDriveService(access_token)
+            delete_result = drive_service.delete_file(instance.google_sheet_id)
+            
+            # Log the result from Google Drive
+            print(f"🔍 Google Drive API response: {delete_result}")
+            
+            if delete_result.get('success'):
+                print(f"✅ Google Sheet '{instance.google_sheet_id}' deleted successfully from user's Drive.")
+            else:
+                # Log the error but don't block the ClassRecord deletion
+                print(f"⚠️ FAILED to delete Google Sheet '{instance.google_sheet_id}'.")
+                print(f"   Error: {delete_result.get('error')}")
+                print(f"   Details: {delete_result.get('details')}")
+                print("   The ClassRecord will still be deleted from the database.")
+
+        except Exception as e:
+            import traceback
+            print(f"❌ An unexpected error occurred during the deletion process: {str(e)}")
+            print(f"   Traceback: {traceback.format_exc()}")
+
+        # Finally, delete the ClassRecord instance from the database
+        print(f"Proceeding to delete ClassRecord '{instance.id}' from the database.")
+        instance.delete()
+        print(f"✅ ClassRecord '{instance.id}' has been deleted from the database.")
+        print("--- Exiting perform_destroy ---")
 
     @action(detail=True, methods=['post'])
     def save_spreadsheet(self, request, pk=None):
