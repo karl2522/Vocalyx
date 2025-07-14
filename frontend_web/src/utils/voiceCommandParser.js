@@ -11,13 +11,19 @@ const nameVariations = {
   'james': ['james', 'jim', 'jimmy', 'jaimes', 'jamie'],
   'jessica': ['jessica', 'jess', 'jesica', 'jessie'],
   'jared': ['jared', 'jarod', 'jerrod', 'jarrod'],
-  'owen': ['owen', 'omen', 'owin', 'owain'],
+  'owen': ['owen', 'owin', 'owain', 'owen\'s', 'owens'],        
+  'omen': ['omen', 'omein', 'omens', 'omen\'s'],             
   'bikada': ['bikada', 'because', 'because of the', 'be cada', 'picked up'],
   'carl': ['carl', 'karl', 'carlos'],
   'ana': ['ana', 'anna', 'anne', 'ann'],
   'jose': ['jose', 'josep', 'joseph', 'joey'],
   'marie': ['marie', 'maria', 'mary', 'mari'],
-  'capuras': ['capuras', 'kapuras', 'copperas', 'copras', 'cabras']
+  'capuras': ['capuras', 'kapuras', 'copperas', 'copras', 'cabras'],
+  'michelle': ['michelle', 'michel', 'mitchell', 'mishelle'],
+  'vaness': ['vaness', 'vanessa', 'vanesa', 'venetia'],
+  'angelo': ['angelo', 'angel', 'anjelo', 'angela'],
+  'christian': ['christian', 'cristian', 'kristen', 'kristian'],
+  'patricia': ['patricia', 'patty', 'pat', 'tricia']
 };
 
 // 🚀 ENHANCED: More batch pattern recognition
@@ -30,6 +36,9 @@ const batchPatterns = {
   'everybody': 'EVERYONE',
   'all pupils': 'ALL_STUDENTS',
   'complete class': 'ALL_STUDENTS',
+  'full class': 'ALL_STUDENTS',
+  'total class': 'ALL_STUDENTS',
+  'the class': 'ALL_STUDENTS',
   
   // Range keywords with more variations
   'through': 'THROUGH',
@@ -40,6 +49,8 @@ const batchPatterns = {
   'until': 'TO',
   'up to': 'TO',
   'down to': 'TO',
+  'between': 'BETWEEN',
+  'range': 'RANGE',
   
   // Conditional keywords
   'present': 'PRESENT',
@@ -48,7 +59,9 @@ const batchPatterns = {
   'filled': 'FILLED',
   'blank': 'EMPTY',
   'completed': 'FILLED',
-  'done': 'FILLED'
+  'done': 'FILLED',
+  'missing': 'EMPTY',
+  'unfinished': 'EMPTY'
 };
 
 // 🚀 MASSIVELY ENHANCED: Comprehensive phonetic corrections
@@ -58,50 +71,61 @@ const phoneticCorrections = {
   'live': 'lab', 'lived': 'lab', 'living': 'lab', 'leave': 'lab', 'left': 'lab', 'let': 'lab',
   'laboratory': 'lab', 'laboratories': 'lab', 'lab': 'lab',
   'love one': 'lab 1', 'love to': 'lab 2', 'love tree': 'lab 3', 'love for': 'lab 4', 'love five': 'lab 5',
+  'level': 'lab', 'label': 'lab', 'lap': 'lab', 'liberal': 'lab',
   
   // 🔥 Quiz variations (enhanced)
   'quizzes': 'quiz', 'quick': 'quiz', 'quite': 'quiz', 'quiet': 'quiz', 'quest': 'quiz', 'question': 'quiz',
   'kids': 'quiz', 'chris': 'quiz', 'quests': 'quiz', 'queries': 'quiz',
   'quiz one': 'quiz 1', 'quiz to': 'quiz 2', 'quiz tree': 'quiz 3', 'quiz for': 'quiz 4', 'quiz five': 'quiz 5',
+  'queens': 'quiz', 'quill': 'quiz', 'quit': 'quiz', 'quotes': 'quiz',
   
   // 🔥 Exam variations (enhanced)
   'example': 'exam', 'examine': 'exam', 'exact': 'exam', 'exit': 'exam', 'eggs am': 'exam',
   'examination': 'exam', 'examinations': 'exam', 'eggs': 'exam',
+  'exam one': 'exam 1', 'exam to': 'exam 2', 'exam tree': 'exam 3',
   
   // 🔥 Midterm variations (enhanced)
   'midterm': 'midterm', 'mid': 'midterm', 'middle': 'midterm', 'medium': 'midterm',
   'mid term': 'midterm', 'middle term': 'midterm', 'meet term': 'midterm',
+  'midnight': 'midterm', 'midday': 'midterm',
 
-  // 🔥 NEW: Student ID dash corrections
+  // 🔥 ENHANCED: Student ID dash corrections
   'dash': '-', 'dashed': '-', 'hyphen': '-', 'minus': '-', 'dash dash': '--',
   'with dash': '-', 'and dash': '-', 'then dash': '-', 'plus dash': '-',
+  'stroke': '-', 'line': '-', 'bar': '-', 'separator': '-',
 
+  // 🔥 ENHANCED: Complex number combinations
   'twenty two': '22', 'twenty-two': '22',
   'twenty seven': '27', 'twenty-seven': '27',
   'seven twenty six': '726', 'seven two six': '726',
+  'twenty twenty': '2020', 'twenty twenty one': '2021',
+  'nineteen ninety': '1990', 'two thousand': '2000',
   
   // 🔥 Final variations (enhanced)
   'final': 'final', 'finale': 'final', 'find': 'final', 'file': 'final', 'fine': 'final',
   'finals': 'final', 'finding': 'final', 'finally': 'final',
+  'finished': 'final', 'finish': 'final',
 
-  // 🔥 Academic terms (new)
+  // 🔥 Academic terms (enhanced)
   'assessment': 'quiz', 'assessments': 'quiz', 'evaluation': 'exam', 'evaluations': 'exam',
   'practicum': 'lab', 'practical': 'lab', 'activity': 'lab', 'activities': 'lab',
   'assignment': 'quiz', 'assignments': 'quiz', 'homework': 'quiz',
+  'project': 'assignment', 'projects': 'assignment', 'task': 'assignment',
+  'test': 'quiz', 'tests': 'quiz', 'testing': 'quiz',
   
   // 🔥 Numbers with phonetic mishearings (massively enhanced)
-  'want': '1', 'once': '1', 'won': '1', 'one': '1', 'wand': '1',
-  'to': '2', 'too': '2', 'two': '2', 'tune': '2', 'tooth': '2',
-  'tree': '3', 'free': '3', 'three': '3', 'tea': '3', 'the': '3',
-  'for': '4', 'fore': '4', 'four': '4', 'floor': '4', 'door': '4',
-  'five': '5', 'dive': '5', 'hive': '5', 'life': '5',
-  'six': '6', 'sick': '6', 'sex': '6', 'fix': '6',
-  'seven': '7', 'heaven': '7', 'eleven': '7',
-  'ate': '8', 'eight': '8', 'late': '8', 'gate': '8',
-  'night': '9', 'nine': '9', 'line': '9', 'mine': '9',
-  'teen': '10', 'ten': '10', 'hen': '10',
+  'want': '1', 'once': '1', 'won': '1', 'one': '1', 'wand': '1', 'wine': '1',
+  'to': '2', 'too': '2', 'two': '2', 'tune': '2', 'tooth': '2', 'true': '2',
+  'tree': '3', 'free': '3', 'three': '3', 'tea': '3', 'the': '3', 'see': '3',
+  'for': '4', 'fore': '4', 'four': '4', 'floor': '4', 'door': '4', 'more': '4',
+  'five': '5', 'dive': '5', 'hive': '5', 'life': '5', 'wife': '5',
+  'six': '6', 'sick': '6', 'sex': '6', 'fix': '6', 'mix': '6',
+  'seven': '7', 'heaven': '7', 'eleven': '7', 'even': '7',
+  'ate': '8', 'eight': '8', 'late': '8', 'gate': '8', 'hate': '8', 'rate': '8',
+  'night': '9', 'nine': '9', 'line': '9', 'mine': '9', 'fine': '9', 'wine': '9',
+  'teen': '10', 'ten': '10', 'hen': '10', 'pen': '10',
 
-  // 🔥 Common mishearings for names (enhanced)
+  // 🔥 Name corrections (FIXED - separate Owen and Omen)
   'marry': 'mary', 'marie': 'mary', 'maria': 'maria', 'mary': 'mary',
   'jon': 'john', 'johny': 'johnny', 'johnny': 'johnny', 'jonathan': 'john',
   'mike': 'michael', 'mick': 'michael', 'mikey': 'michael',
@@ -112,32 +136,40 @@ const phoneticCorrections = {
   'jim': 'james', 'jimmy': 'james', 'jamie': 'james',
   'jess': 'jessica', 'jessie': 'jessica',
   
-  // 🔥 NEW: Filipino name corrections
   'jarred': 'jared', 'jarod': 'jared', 'jerrod': 'jared',
-  'omen': 'owen', 'owin': 'owen', 'owain': 'owen',
-  'because': 'bikada', 'because of the': 'bikada', 'be cada': 'bikada',
-  'karl': 'carl', 'carlos': 'carl',
-  'anna': 'ana', 'anne': 'ana', 'ann': 'ana',
-  'joseph': 'jose', 'joey': 'jose', 'josep': 'jose',
+  'owin': 'owen', 'owain': 'owen', 'open': 'owen', 'ocean': 'owen',
+  'because': 'bikada', 'because of the': 'bikada', 'be cada': 'bikada', 'picked up': 'bikada',
+  'karl': 'carl', 'carlos': 'carl', 'carla': 'carl',
+  'anna': 'ana', 'anne': 'ana', 'ann': 'ana', 'hannah': 'ana',
+  'joseph': 'jose', 'joey': 'jose', 'josep': 'jose', 'jos': 'jose',
+  'michelle': 'michelle', 'michel': 'michelle', 'mitchell': 'michelle',
+  'vanessa': 'vaness', 'vanesa': 'vaness', 'venetia': 'vaness',
 
-  'rowan': 'row 1',
-  'row and': 'row 1', 
-  'roland': 'row 1',
-  'roman': 'row 1',
-  'rowing': 'row 1',
-  'ro one': 'row 1',
-  'roe one': 'row 1',
+  // 🔥 ENHANCED: Row corrections
+  'rowan': 'row 1', 'row and': 'row 1', 'roland': 'row 1', 'roman': 'row 1',
+  'rowing': 'row 1', 'ro one': 'row 1', 'roe one': 'row 1', 'road': 'row',
+  'row to': 'row 2', 'row tree': 'row 3', 'row for': 'row 4', 'row five': 'row 5',
 
-  'true': 'through',
-  'tru': 'through', 
-  'threw': 'through',
-  'thru': 'through',
-  'through': 'through',
-  'to': 'through'
+  // 🔥 ENHANCED: Direction words
+  'true': 'through', 'tru': 'through', 'threw': 'through', 'thru': 'through',
+  'through': 'through', 'throw': 'through', 'throne': 'through',
 
+  // 🔥 NEW: Score-related corrections
+  'score': 'score', 'store': 'score', 'scored': 'score', 'scores': 'score',
+  'points': 'score', 'point': 'score', 'grade': 'score', 'grades': 'score',
+  'mark': 'score', 'marks': 'score', 'rating': 'score',
+
+  // 🔥 NEW: Common voice recognition errors (CAREFUL - don't remove important words!)
+  'please': '', 'thank you': '', 'thanks': '', 'okay': '', 'ok': '', 'yes': '', 'no': '',
+
+  // 🔥 NEW: Subject variations
+  'mathematics': 'math', 'maths': 'math', 'mathematical': 'math',
+  'english': 'english', 'literature': 'english', 'writing': 'english',
+  'science': 'science', 'physics': 'science', 'chemistry': 'science', 'biology': 'science',
+  'history': 'history', 'social studies': 'history', 'geography': 'history',
 };
 
-// 🚀 ENHANCED: More comprehensive word-to-number mapping
+// 🚀 ENHANCED: More comprehensive word-to-number mapping (FIXED - removed ordinals)
 const wordsToNumbers = {
   // Basic numbers
   'zero': '0', 'one': '1', 'two': '2', 'three': '3', 'four': '4', 'five': '5',
@@ -147,26 +179,36 @@ const wordsToNumbers = {
   
   // Compound numbers (with and without hyphens)
   'twenty-one': '21', 'twenty-two': '22', 'twenty-three': '23', 'twenty-four': '24', 'twenty-five': '25',
+  'twenty-six': '26', 'twenty-seven': '27', 'twenty-eight': '28', 'twenty-nine': '29',
   'twenty one': '21', 'twenty two': '22', 'twenty three': '23', 'twenty four': '24', 'twenty five': '25',
-  'thirty': '30', 'thirty-five': '35', 'thirty five': '35',
-  'forty': '40', 'forty-five': '45', 'forty five': '45',
-  'fifty': '50', 'fifty-five': '55', 'fifty five': '55',
-  'sixty': '60', 'sixty-five': '65', 'sixty five': '65',
-  'seventy': '70', 'seventy-five': '75', 'seventy five': '75',
-  'eighty': '80', 'eighty-five': '85', 'eighty five': '85',
-  'ninety': '90', 'ninety-five': '95', 'ninety five': '95',
-  'hundred': '100',
+  'twenty six': '26', 'twenty seven': '27', 'twenty eight': '28', 'twenty nine': '29',
+  'thirty': '30', 'thirty-one': '31', 'thirty-five': '35', 'thirty one': '31', 'thirty five': '35',
+  'forty': '40', 'forty-five': '45', 'forty five': '45', 'forty-one': '41', 'forty one': '41',
+  'fifty': '50', 'fifty-five': '55', 'fifty five': '55', 'fifty-one': '51', 'fifty one': '51',
+  'sixty': '60', 'sixty-five': '65', 'sixty five': '65', 'sixty-one': '61', 'sixty one': '61',
+  'seventy': '70', 'seventy-five': '75', 'seventy five': '75', 'seventy-one': '71', 'seventy one': '71',
+  'eighty': '80', 'eighty-five': '85', 'eighty five': '85', 'eighty-one': '81', 'eighty one': '81',
+  'ninety': '90', 'ninety-five': '95', 'ninety five': '95', 'ninety-one': '91', 'ninety one': '91',
+  'hundred': '100', 'one hundred': '100',
   
   // Alternative words for zero
-  'oh': '0', 'zip': '0', 'nil': '0', 'nothing': '0', 'nada': '0',
+  'oh': '0', 'zip': '0', 'nil': '0', 'nothing': '0', 'nada': '0', 'blank': '0', 'empty': '0',
   
-  // 🔥 NEW: Phonetic number variations
-  'won': '1', 'want': '1', 'wand': '1',
-  'too': '2', 'to': '2', 'tune': '2',
-  'tree': '3', 'free': '3', 'tea': '3',
-  'for': '4', 'fore': '4', 'floor': '4',
-  'ate': '8', 'late': '8', 'gate': '8',
-  'night': '9', 'line': '9', 'mine': '9'
+  // 🔥 ENHANCED: Phonetic number variations
+  'won': '1', 'want': '1', 'wand': '1', 'wine': '1', 'when': '1',
+  'too': '2', 'to': '2', 'tune': '2', 'true': '2', 'tooth': '2',
+  'tree': '3', 'free': '3', 'tea': '3', 'see': '3', 'the': '3',
+  'for': '4', 'fore': '4', 'floor': '4', 'more': '4', 'door': '4',
+  'ate': '8', 'late': '8', 'gate': '8', 'hate': '8', 'rate': '8',
+  'night': '9', 'line': '9', 'mine': '9', 'fine': '9', 'wine': '9',
+  
+  // ❌ REMOVED ORDINALS - they were breaking student name parsing!
+  // 'first': '1st', 'second': '2nd', etc. - REMOVED!
+  
+  // 🔥 NEW: Decimal numbers (spoken)
+  'point five': '.5', 'point zero': '.0', 'point one': '.1', 'point two': '.2',
+  'point three': '.3', 'point four': '.4', 'point six': '.6', 'point seven': '.7',
+  'point eight': '.8', 'point nine': '.9', 'half': '0.5', 'quarter': '0.25'
 };
 
 // 🚀 ENHANCED: More undo/redo patterns
@@ -174,13 +216,15 @@ const undoRedoPatterns = {
   undo: [
     'undo', 'undo that', 'cancel', 'cancel that', 'go back', 'reverse', 'take back',
     'wrong', 'mistake', 'error', 'oops', 'delete that', 'remove that', 'clear that',
-    'not that', 'incorrect', 'fix that', 'change that back'
+    'not that', 'incorrect', 'fix that', 'change that back', 'revert', 'rollback',
+    'that was wrong', 'my mistake', 'wrong student', 'wrong score', 'delete', 'remove'
   ],
   redo: [
     'redo', 'redo that', 'do again', 'repeat that', 'restore', 'bring back',
-    'put back', 'return', 'again', 'once more', 'try again'
+    'put back', 'return', 'again', 'once more', 'try again', 'do it again',
+    'repeat', 'restore that', 'bring that back'
   ]
-};
+}
 
 // 🚀 MASSIVELY ENHANCED: Batch command parsing with more patterns
 const parseBatchCommand = (transcript) => {
@@ -670,18 +714,37 @@ const extractNameFromText = (text, recentStudents = []) => {
   
   const words = text.split(/\s+/).filter(word => word.length > 1);
   
-  // 🔥 ENHANCED: Check recent students with fuzzy matching
+  // 🔥 FIXED: Check recent students with MUCH HIGHER threshold and better logic
   for (const recent of recentStudents) {
     const recentWords = recent.toLowerCase().split(' ');
-    const hasRecentMatch = recentWords.some(rw => 
-      words.some(w => {
-        const similarity = calculateWordSimilarity(w.toLowerCase(), rw);
-        return similarity > 0.7 || soundsLike(w, rw);
-      })
-    );
     
-    if (hasRecentMatch) {
-      console.log('🎯 Found recent student context:', recent);
+    // 🔥 NEW: Check if the ENTIRE input text closely matches a recent student
+    const fullTextSimilarity = calculateWordSimilarity(text.toLowerCase().trim(), recent.toLowerCase());
+    
+    if (fullTextSimilarity > 0.85) {
+      console.log('🎯 Found EXACT recent student match:', recent);
+      return recent;
+    }
+    
+    // 🔥 FIXED: Only match if MOST words match, not just ANY word
+    let matchingWords = 0;
+    let totalRecentWords = recentWords.length;
+    
+    recentWords.forEach(rw => {
+      const hasWordMatch = words.some(w => {
+        const similarity = calculateWordSimilarity(w.toLowerCase(), rw);
+        return similarity > 0.90;  // 🔥 MUCH HIGHER THRESHOLD (was 0.7)
+      });
+      
+      if (hasWordMatch) {
+        matchingWords++;
+      }
+    });
+    
+    // 🔥 FIXED: Only return recent student if MAJORITY of words match
+    const matchRatio = matchingWords / totalRecentWords;
+    if (matchRatio > 0.7 && matchingWords >= 2) {  // Need at least 70% match AND at least 2 words
+      console.log(`🎯 Found recent student with ${matchingWords}/${totalRecentWords} words matching:`, recent);
       return recent;
     }
   }
@@ -696,7 +759,11 @@ const extractNameFromText = (text, recentStudents = []) => {
              !/^(one|two|three|four|five|six|seven|eight|nine|ten)$/i.test(word); // Remove number words
     });
   
-  return nameWords.join(' ').trim();
+  // 🔥 FIXED: Return the ORIGINAL filtered text, not a recent student
+  const extractedName = nameWords.join(' ').trim();
+  console.log(`🔍 Extracted name from text "${text}": "${extractedName}"`);
+  
+  return extractedName;
 };
 
 // 🚀 ENHANCED: Better gradeable column detection
@@ -1062,11 +1129,151 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
     }
   }
 
-  // 🔥 NEW Stage 7.5: Student ID addition patterns
-const studentIdPatterns = [
-    /^(.+?)\s+(?:add|set)\s+(?:student\s+)?id\s+(.+)$/i,
-    /^(.+?)\s+(?:student\s+)?id\s+(.+)$/i,
-    /^(.+?)\s+(?:with\s+)?(?:student\s+)?id\s+(.+)$/i,
+  // Stage 8: Check for confirmation/rejection patterns
+  const confirmPattern = /(?:yes|yeah|yep|correct|right|that's\s*right|confirm|okay|ok|good|perfect)/i;
+  if (confirmPattern.test(processedTranscript)) {
+    console.log('✅ CONFIRMATION detected');
+    return {
+      type: 'CONFIRM_COMMAND',
+      data: { originalText: transcript, confidence: 'high' }
+    };
+  }
+
+  const rejectPattern = /(?:no|nope|wrong|incorrect|cancel|not\s*that|false|negative)/i;
+  if (rejectPattern.test(processedTranscript)) {
+    console.log('✅ REJECTION detected');
+    return {
+      type: 'REJECT_COMMAND',
+      data: { originalText: transcript, confidence: 'high' }
+    };
+  }
+
+  // 🔥 FIXED: Stage 9 - Enhanced student addition patterns (MOVED UP - HIGHEST PRIORITY!)
+  const addStudentPatterns = [
+    // 🔥 NEW: Patterns with Student ID
+    /(?:add|new|create)\s+student\s+(.+?)\s+(?:with\s+)?(?:student\s+)?id\s+(.+)$/i,
+    /(?:add|new|create)\s+student\s+(.+)$/i,
+    /(?:register|enroll)\s+(.+?)(?:\s+as\s+(?:new\s+)?student)?$/i,
+    /(?:student|pupil)\s+(.+?)(?:\s+(?:add|new|create))?$/i
+  ];
+
+  for (const pattern of addStudentPatterns) {
+    const addStudentMatch = processedTranscript.match(pattern);
+    if (addStudentMatch) {
+      const fullCommand = addStudentMatch[1].trim();
+      const studentIdPart = addStudentMatch[2] ? addStudentMatch[2].trim() : '';
+      
+      console.log('🔥 Full student command to parse:', fullCommand);
+      console.log('🔥 Student ID part:', studentIdPart);
+      
+      // 🔧 ENHANCED: Better field extraction logic
+      let lastName = '';
+      let firstName = '';
+      let studentId = '';
+      
+      // 🔥 NEW: Parse Student ID if provided in the pattern
+      if (studentIdPart) {
+        studentId = parseStudentId(studentIdPart);
+        console.log('🆔 Parsed Student ID from pattern:', studentId);
+      }
+      
+      // 🔧 METHOD 1: Handle "lastname X firstname Y" pattern
+      const lastFirstPattern = /(?:last\s*name|lastname)\s+([^\s]+)(?:\s+(?:first\s*name|firstname)\s+([^\s]+))?/i;
+      const lastFirstMatch = fullCommand.match(lastFirstPattern);
+      
+      if (lastFirstMatch) {
+        lastName = lastFirstMatch[1];
+        if (lastFirstMatch[2]) {
+          firstName = lastFirstMatch[2];
+        }
+        console.log('🎯 Method 1 - Last First pattern:', { lastName, firstName });
+      }
+      
+      // 🔧 METHOD 2: Handle "firstname X lastname Y" pattern  
+      const firstLastPattern = /(?:first\s*name|firstname)\s+([^\s]+)(?:\s+(?:last\s*name|lastname)\s+([^\s]+))?/i;
+      const firstLastMatch = fullCommand.match(firstLastPattern);
+      
+      if (firstLastMatch && !lastName && !firstName) {
+        firstName = firstLastMatch[1];
+        if (firstLastMatch[2]) {
+          lastName = firstLastMatch[2];
+        }
+        console.log('🎯 Method 2 - First Last pattern:', { firstName, lastName });
+      }
+      
+      // 🔧 METHOD 3: Handle mixed patterns - extract both separately
+      if (!lastName || !firstName) {
+        // Extract last name separately
+        const lastNameOnlyPattern = /(?:last\s*name|lastname)\s+([^\s]+)/i;
+        const lastNameMatch = fullCommand.match(lastNameOnlyPattern);
+        if (lastNameMatch) {
+          lastName = lastNameMatch[1];
+        }
+        
+        // Extract first name separately  
+        const firstNameOnlyPattern = /(?:first\s*name|firstname)\s+([^\s]+)/i;
+        const firstNameMatch = fullCommand.match(firstNameOnlyPattern);
+        if (firstNameMatch) {
+          firstName = firstNameMatch[1];
+        }
+        
+        console.log('🎯 Method 3 - Separate extraction:', { lastName, firstName });
+      }
+      
+      // 🔧 METHOD 4: Simple "name X Y" format fallback
+      if (!lastName && !firstName) {
+        const simpleNamePattern = /(?:name)\s+([^\s]+)\s+([^\s]+)/i;
+        const simpleMatch = fullCommand.match(simpleNamePattern);
+        if (simpleMatch) {
+          firstName = simpleMatch[1];
+          lastName = simpleMatch[2];
+          console.log('🎯 Method 4 - Simple name pattern:', { firstName, lastName });
+        }
+      }
+      
+      // 🔥 NEW: Extract Student ID if not already found
+      if (!studentId) {
+        // Look for ID patterns in the full command
+        const idPatterns = [
+          /(?:with\s+)?(?:student\s+)?id\s+(.+?)(?:\s|$)/i,
+          /(?:student\s+)?(?:id|number)\s+(.+?)(?:\s|$)/i,
+          /id\s*[:=]\s*(.+?)(?:\s|$)/i
+        ];
+        
+        for (const idPattern of idPatterns) {
+          const idMatch = fullCommand.match(idPattern);
+          if (idMatch) {
+            studentId = parseStudentId(idMatch[1]);
+            console.log('🆔 Extracted Student ID:', studentId);
+            break;
+          }
+        }
+      }
+      
+      console.log('✅ ADD_STUDENT final result:', { 
+        fullCommand, 
+        lastName, 
+        firstName, 
+        studentId 
+      });
+      
+      return {
+        type: 'ADD_STUDENT',
+        data: {
+          'LASTNAME': lastName,      // ✅ Always use these exact field names
+          'FIRST NAME': firstName,   // ✅ Always use these exact field names
+          'STUDENT ID': studentId,   // ✅ Always use these exact field names
+          confidence: 'high'
+        }
+      };
+    }
+  }
+
+  // 🔥 FIXED: Stage 10 - Student ID addition patterns (MOVED DOWN - LOWER PRIORITY!)
+  const studentIdPatterns = [
+    /^(?!.*add\s+student)(.+?)\s+(?:add|set)\s+(?:student\s+)?id\s+(.+)$/i,  // 🔥 Exclude "add student"
+    /^(?!.*add\s+student)(.+?)\s+(?:student\s+)?id\s+(.+)$/i,                // 🔥 Exclude "add student"  
+    /^(?!.*add\s+student)(.+?)\s+(?:with\s+)?(?:student\s+)?id\s+(.+)$/i,    // 🔥 Exclude "add student"
     /^(?:set|add)\s+(?:student\s+)?id\s+(.+?)\s+(?:for|to)\s+(.+)$/i
   ];
 
@@ -1111,170 +1318,15 @@ const studentIdPatterns = [
     }
   }
 
-  // Stage 8: Check for confirmation/rejection patterns
-  const confirmPattern = /(?:yes|yeah|yep|correct|right|that's\s*right|confirm|okay|ok|good|perfect)/i;
-  if (confirmPattern.test(processedTranscript)) {
-    console.log('✅ CONFIRMATION detected');
-    return {
-      type: 'CONFIRM_COMMAND',
-      data: { originalText: transcript, confidence: 'high' }
-    };
-  }
-
-  const rejectPattern = /(?:no|nope|wrong|incorrect|cancel|not\s*that|false|negative)/i;
-  if (rejectPattern.test(processedTranscript)) {
-    console.log('✅ REJECTION detected');
-    return {
-      type: 'REJECT_COMMAND',
-      data: { originalText: transcript, confidence: 'high' }
-    };
-  }
-
-  // Stage 9: Enhanced student addition patterns
-  const addStudentPatterns = [
-    // 🔥 NEW: Patterns with Student ID
-    /(?:add|new|create)\s+student\s+(.+?)\s+(?:with\s+)?(?:student\s+)?id\s+(.+)$/i,
-    /(?:add|new|create)\s+student\s+(.+)$/i,
-    /(?:register|enroll)\s+(.+?)(?:\s+as\s+(?:new\s+)?student)?$/i,
-    /(?:student|pupil)\s+(.+?)(?:\s+(?:add|new|create))?$/i
-  ];
-
-for (const pattern of addStudentPatterns) {
-  const addStudentMatch = processedTranscript.match(pattern);
-  if (addStudentMatch) {
-    const fullCommand = addStudentMatch[1].trim();
-    const studentIdPart = addStudentMatch[2] ? addStudentMatch[2].trim() : '';
-    
-    console.log('🔥 Full student command to parse:', fullCommand);
-    console.log('🔥 Student ID part:', studentIdPart);
-    
-    // 🔧 ENHANCED: Better field extraction logic
-    let lastName = '';
-    let firstName = '';
-    let studentId = '';
-    
-    // 🔥 NEW: Parse Student ID if provided in the pattern
-    if (studentIdPart) {
-      studentId = parseStudentId(studentIdPart);
-      console.log('🆔 Parsed Student ID from pattern:', studentId);
-    }
-    
-    // 🔧 METHOD 1: Handle "lastname X firstname Y" pattern
-    const lastFirstPattern = /(?:last\s*name|lastname)\s+([^\s]+)(?:\s+(?:first\s*name|firstname)\s+([^\s]+))?/i;
-    const lastFirstMatch = fullCommand.match(lastFirstPattern);
-    
-    if (lastFirstMatch) {
-      lastName = lastFirstMatch[1];
-      if (lastFirstMatch[2]) {
-        firstName = lastFirstMatch[2];
-      }
-      console.log('🎯 Method 1 - Last First pattern:', { lastName, firstName });
-    }
-    
-    // 🔧 METHOD 2: Handle "firstname X lastname Y" pattern  
-    const firstLastPattern = /(?:first\s*name|firstname)\s+([^\s]+)(?:\s+(?:last\s*name|lastname)\s+([^\s]+))?/i;
-    const firstLastMatch = fullCommand.match(firstLastPattern);
-    
-    if (firstLastMatch && !lastName && !firstName) {
-      firstName = firstLastMatch[1];
-      if (firstLastMatch[2]) {
-        lastName = firstLastMatch[2];
-      }
-      console.log('🎯 Method 2 - First Last pattern:', { firstName, lastName });
-    }
-    
-    // 🔧 METHOD 3: Handle mixed patterns - extract both separately
-    if (!lastName || !firstName) {
-      // Extract last name separately
-      const lastNameOnlyPattern = /(?:last\s*name|lastname)\s+([^\s]+)/i;
-      const lastNameMatch = fullCommand.match(lastNameOnlyPattern);
-      if (lastNameMatch) {
-        lastName = lastNameMatch[1];
-      }
-      
-      // Extract first name separately  
-      const firstNameOnlyPattern = /(?:first\s*name|firstname)\s+([^\s]+)/i;
-      const firstNameMatch = fullCommand.match(firstNameOnlyPattern);
-      if (firstNameMatch) {
-        firstName = firstNameMatch[1];
-      }
-      
-      console.log('🎯 Method 3 - Separate extraction:', { lastName, firstName });
-    }
-    
-    // 🔧 METHOD 4: Simple "name X Y" format fallback
-    if (!lastName && !firstName) {
-      const simpleNamePattern = /(?:name)\s+([^\s]+)\s+([^\s]+)/i;
-      const simpleMatch = fullCommand.match(simpleNamePattern);
-      if (simpleMatch) {
-        firstName = simpleMatch[1];
-        lastName = simpleMatch[2];
-        console.log('🎯 Method 4 - Simple name pattern:', { firstName, lastName });
-      }
-    }
-    
-    // 🔥 NEW: Extract Student ID if not already found
-    if (!studentId) {
-      // Look for ID patterns in the full command
-      const idPatterns = [
-        /(?:with\s+)?(?:student\s+)?id\s+(.+?)(?:\s|$)/i,
-        /(?:student\s+)?(?:id|number)\s+(.+?)(?:\s|$)/i,
-        /id\s*[:=]\s*(.+?)(?:\s|$)/i
-      ];
-      
-      for (const idPattern of idPatterns) {
-        const idMatch = fullCommand.match(idPattern);
-        if (idMatch) {
-          studentId = parseStudentId(idMatch[1]);
-          console.log('🆔 Extracted Student ID:', studentId);
-          break;
-        }
-      }
-    }
-    
-    console.log('✅ ADD_STUDENT final result:', { 
-      fullCommand, 
-      lastName, 
-      firstName, 
-      studentId 
-    });
-    
-    return {
-      type: 'ADD_STUDENT',
-      data: {
-        'LASTNAME': lastName,      // ✅ Always use these exact field names
-        'FIRST NAME': firstName,   // ✅ Always use these exact field names
-        'STUDENT ID': studentId,   // ✅ Always use these exact field names
-        confidence: 'high'
-      }
-    };
-  }
-}
-
-  // Stage 10: Unknown command with enhanced alternatives
-  console.log('❌ No pattern matched for:', processedTranscript);
-  
-  if (alternatives.length > 1) {
-    console.log('🤔 Found alternatives:', alternatives.map(alt => alt.transcript));
-    return {
-      type: 'UNKNOWN',
-      data: { 
-        originalText: transcript,
-        alternatives: alternatives.map(alt => alt.transcript),
-        confidence: 'low',
-        hasAlternatives: true,
-        suggestions: alternatives.slice(0, 3) // Limit suggestions
-      }
-    };
-  }
+  // 🔥 If no patterns matched, this is likely a fallback case
+  console.log('❌ No specific pattern matched, falling back to basic processing');
   
   return {
-    type: 'UNKNOWN',
-    data: { 
+    type: 'UNKNOWN_COMMAND',
+    data: {
       originalText: transcript,
-      alternatives: [],
-      confidence: 'very_low',
-      suggestions: []
+      processedText: processedTranscript,
+      confidence: 'low'
     }
   };
 };
