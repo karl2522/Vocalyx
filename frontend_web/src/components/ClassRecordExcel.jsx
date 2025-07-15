@@ -16,6 +16,7 @@ import ImportStudentsModal from './modals/ImportStudentsModal';
 import OverrideConfirmationModal from './modals/OverrideConfirmationModal';
 import VoiceGuideModal from './modals/VoiceGuideModal';
 import DuplicateStudentModal from './modals/DuplicateStudentModal.jsx';
+import ImportStudentsInfoModal from './modals/ImportStudentsInfoModal.jsx';
 
 
 const ClassRecordExcel = () => {
@@ -32,6 +33,8 @@ const ClassRecordExcel = () => {
   const [batchEntries, setBatchEntries] = useState([]);
   const [isProcessingBatch, setIsProcessingBatch] = useState(false);
   const [maxScores, setMaxScores] = useState({});
+  const [newStudentsData, setNewStudentsData] = useState([]);
+  const [showImportInfoModal, setShowImportInfoModal] = useState(false);
 
   const [showColumnImportModal, setShowColumnImportModal] = useState(false);
   const [columnAnalysis, setColumnAnalysis] = useState(null);
@@ -1174,7 +1177,6 @@ const checkImportConflicts = async (studentsToImport) => {
   try {
     setImportProgress({ status: 'checking', message: 'Checking for duplicates...' });
     
-    // Call backend preview endpoint
     const response = await classRecordService.importStudentsPreview(
       classRecord.google_sheet_id,
       studentsToImport,
@@ -1186,6 +1188,9 @@ const checkImportConflicts = async (studentsToImport) => {
     }
     
     const { preview } = response.data;
+    
+    
+    setNewStudentsData(preview.newStudents);
     
     setImportProgress({ 
       status: 'conflicts', 
@@ -2538,7 +2543,7 @@ const handleExportToPDF = async () => {
                   </div>
                   <button
                     onClick={() => {
-                      handleImportStudents();
+                      setShowImportInfoModal(true); 
                       closeAllDropdowns();
                     }}
                     className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
@@ -2857,6 +2862,8 @@ const handleExportToPDF = async () => {
           setShowImportModal={setShowImportModal}
           setImportProgress={setImportProgress}
           executeImport={executeImport}
+          newStudentsCount={newStudentsData.length} 
+          newStudentsData={newStudentsData} 
         />
 
          <ImportProgressIndicator 
@@ -2878,6 +2885,15 @@ const handleExportToPDF = async () => {
           currentScore={overrideConfirmation?.currentScore}
           newScore={overrideConfirmation?.newScore}
           isProcessing={false}
+        />
+
+        <ImportStudentsInfoModal 
+          showModal={showImportInfoModal}
+          onClose={() => setShowImportInfoModal(false)}
+          onProceed={() => {
+            setShowImportInfoModal(false);
+            handleImportStudents();
+          }}
         />
 
 

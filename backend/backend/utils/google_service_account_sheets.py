@@ -887,7 +887,7 @@ class GoogleServiceAccountSheets:
     def compare_students_for_import(self, sheet_id: str, import_students: list, sheet_name: str = None) -> dict:
         """
         Compare import students with existing students to find duplicates.
-        Updated to include Student ID comparison.
+        FIXED: Now uses fuzzy name matching for better duplicate detection.
         """
         try:
             # Get existing students
@@ -908,14 +908,14 @@ class GoogleServiceAccountSheets:
                     # Find name and ID columns
                     first_name_idx = None
                     last_name_idx = None
-                    student_id_idx = None  # 🔥 NEW
+                    student_id_idx = None
 
                     for idx, header in enumerate(headers):
                         if 'FIRST NAME' in header.upper() or 'FIRSTNAME' in header.upper():
                             first_name_idx = idx
                         elif 'LAST NAME' in header.upper() or 'LASTNAME' in header.upper():
                             last_name_idx = idx
-                        elif 'STUDENT ID' in header.upper() or 'STUDENTID' in header.upper():  # 🔥 NEW
+                        elif 'STUDENT ID' in header.upper() or 'STUDENTID' in header.upper():
                             student_id_idx = idx
 
                     if first_name_idx is not None and last_name_idx is not None:
@@ -924,13 +924,13 @@ class GoogleServiceAccountSheets:
                         last_name = row[last_name_idx].strip() if last_name_idx < len(row) and row[
                             last_name_idx] else ''
                         student_id = row[student_id_idx].strip() if student_id_idx is not None and student_id_idx < len(
-                            row) and row[student_id_idx] else ''  # 🔥 NEW
+                            row) and row[student_id_idx] else ''
 
                         if first_name or last_name:  # Has some name data
                             existing_students.append({
                                 'FIRST NAME': first_name,
                                 'LASTNAME': last_name,
-                                'STUDENT ID': student_id,  # 🔥 NEW
+                                'STUDENT ID': student_id,
                                 'rowIndex': row_index,
                                 'fullRow': row
                             })
@@ -942,21 +942,47 @@ class GoogleServiceAccountSheets:
             for import_student in import_students:
                 import_first = import_student.get('FIRST NAME', '').strip().lower()
                 import_last = import_student.get('LASTNAME', '').strip().lower()
-                import_id = import_student.get('STUDENT ID', '').strip().lower()  # 🔥 NEW
+                import_id = import_student.get('STUDENT ID', '').strip().lower()
 
-                # Look for exact match (names OR student ID)
+                # Look for match (exact ID or similar name)
                 conflict_found = None
                 for existing in existing_students:
                     existing_first = existing['FIRST NAME'].strip().lower()
                     existing_last = existing['LASTNAME'].strip().lower()
-                    existing_id = existing['STUDENT ID'].strip().lower()  # 🔥 NEW
+                    existing_id = existing['STUDENT ID'].strip().lower()
 
-                    # 🔥 ENHANCED: Match by name OR by Student ID
-                    name_match = (import_first == existing_first and import_last == existing_last)
+                    # 🔥 FIXED: Better name matching logic
+                    # 1. ID match (exact)
                     id_match = (import_id and existing_id and import_id == existing_id)
 
-                    if name_match or id_match:
+                    # 2. Last name match (exact) AND first name match (either contains the other)
+                    last_name_exact = (import_last == existing_last)
+                    first_name_similar = (
+                            import_first in existing_first or
+                            existing_first in import_first or
+                            import_first.split()[0] == existing_first.split()[0]  # Match first word
+                    )
+
+                    # 3. First name match (exact) AND last name match (similar)
+                    first_name_exact = (import_first == existing_first)
+                    last_name_similar = (
+                            import_last in existing_last or
+                            existing_last in import_last
+                    )
+
+                    # 4. Full name combination check (for cases like "Jared Omen" vs "Jared Karl Omen")
+                    import_full = f"{import_first} {import_last}".lower()
+                    existing_full = f"{existing_first} {existing_last}".lower()
+                    full_name_match = (
+                            import_full in existing_full or
+                            existing_full in import_full
+                    )
+
+                    if id_match or (last_name_exact and first_name_similar) or (
+                            first_name_exact and last_name_similar) or full_name_match:
                         conflict_found = existing
+                        print(
+                            f"🔍 DUPLICATE found: '{import_first} {import_last}' matches '{existing_first} {existing_last}'")
                         break
 
                 if conflict_found:
@@ -989,15 +1015,7 @@ class GoogleServiceAccountSheets:
                               sheet_name: str = None) -> dict:
         """
         Execute batch import of students with conflict resolutions.
-
-        Args:
-            sheet_id: ID of the spreadsheet
-            new_students: List of new students to add
-            resolved_conflicts: List of conflicts with actions (skip/override)
-            sheet_name: Name of specific sheet (optional)
-
-        Returns:
-            Dict containing import results
+        FIXED: Now properly implements override functionality.
         """
         try:
             results = {
@@ -1008,7 +1026,7 @@ class GoogleServiceAccountSheets:
                 'errors': []
             }
 
-            # Process new students
+            # Process new students (no conflicts)
             for student in new_students:
                 try:
                     if sheet_name:
@@ -1018,6 +1036,7 @@ class GoogleServiceAccountSheets:
 
                     if result['success']:
                         results['newStudentsAdded'] += 1
+                        print(f"✅ Added new student: {student.get('FIRST NAME', '')} {student.get('LASTNAME', '')}")
                     else:
                         results['errors'].append(
                             f"Failed to add {student.get('FIRST NAME', '')} {student.get('LASTNAME', '')}: {result.get('error', 'Unknown error')}")
@@ -1026,25 +1045,86 @@ class GoogleServiceAccountSheets:
                     results['errors'].append(
                         f"Error adding {student.get('FIRST NAME', '')} {student.get('LASTNAME', '')}: {str(e)}")
 
-            # Process conflict resolutions
+            # 🔥 FIXED: Process conflict resolutions with ACTUAL override implementation
             for conflict in resolved_conflicts:
                 action = conflict.get('action', 'skip')
+                existing_student = conflict.get('existingStudent', {})
+                import_student = conflict.get('importStudent', {})
+
+                print(
+                    f"🔍 Processing conflict: {import_student.get('FIRST NAME', '')} {import_student.get('LASTNAME', '')} - Action: {action}")
 
                 if action == 'skip':
                     results['conflictsSkipped'] += 1
+                    print(
+                        f"⏭️ Skipped duplicate: {import_student.get('FIRST NAME', '')} {import_student.get('LASTNAME', '')}")
 
                 elif action == 'override':
                     try:
-                        # Update existing student data
-                        existing_student = conflict['existingStudent']
-                        import_student = conflict['importStudent']
+                        # 🔥 FIXED: Actually update the existing student row with new data
+                        existing_row_index = existing_student.get('rowIndex')
 
-                        # For now, we'll just count it as overridden
-                        # In a full implementation, you might update specific fields
-                        results['conflictsOverridden'] += 1
+                        if existing_row_index is not None:
+                            # Update each field that has new data
+                            updates_made = 0
+
+                            # Update First Name if different
+                            if import_student.get('FIRST NAME'):
+                                update_result = self.update_cell_in_sheet(
+                                    sheet_id, existing_row_index, 'FIRST NAME',
+                                    import_student['FIRST NAME'], sheet_name
+                                )
+                                if update_result['success']:
+                                    updates_made += 1
+                                    print(
+                                        f"✅ Updated First Name: {existing_student.get('FIRST NAME', '')} → {import_student['FIRST NAME']}")
+                                else:
+                                    results['errors'].append(
+                                        f"Failed to update first name: {update_result.get('error')}")
+
+                            # Update Last Name if different
+                            if import_student.get('LASTNAME'):
+                                update_result = self.update_cell_in_sheet(
+                                    sheet_id, existing_row_index, 'LASTNAME',
+                                    import_student['LASTNAME'], sheet_name
+                                )
+                                if update_result['success']:
+                                    updates_made += 1
+                                    print(
+                                        f"✅ Updated Last Name: {existing_student.get('LASTNAME', '')} → {import_student['LASTNAME']}")
+                                else:
+                                    results['errors'].append(
+                                        f"Failed to update last name: {update_result.get('error')}")
+
+                            # Update Student ID if provided and different
+                            if import_student.get('STUDENT ID'):
+                                update_result = self.update_cell_in_sheet(
+                                    sheet_id, existing_row_index, 'STUDENT ID',
+                                    import_student['STUDENT ID'], sheet_name
+                                )
+                                if update_result['success']:
+                                    updates_made += 1
+                                    print(
+                                        f"✅ Updated Student ID: {existing_student.get('STUDENT ID', 'None')} → {import_student['STUDENT ID']}")
+                                else:
+                                    results['errors'].append(
+                                        f"Failed to update student ID: {update_result.get('error')}")
+
+                            if updates_made > 0:
+                                results['conflictsOverridden'] += 1
+                                print(
+                                    f"✅ Override completed: {import_student.get('FIRST NAME', '')} {import_student.get('LASTNAME', '')} ({updates_made} fields updated)")
+                            else:
+                                results['errors'].append(
+                                    f"No updates made for {import_student.get('FIRST NAME', '')} {import_student.get('LASTNAME', '')}")
+                        else:
+                            results['errors'].append(
+                                f"Could not find row index for existing student: {existing_student}")
 
                     except Exception as e:
-                        results['errors'].append(f"Error overriding student: {str(e)}")
+                        results['errors'].append(
+                            f"Error overriding student {import_student.get('FIRST NAME', '')} {import_student.get('LASTNAME', '')}: {str(e)}")
+                        logger.error(f"Override error: {str(e)}")
 
             # Calculate totals
             total_processed = results['newStudentsAdded'] + results['conflictsSkipped'] + results['conflictsOverridden']
@@ -1455,6 +1535,7 @@ class GoogleServiceAccountSheets:
 
                     # Step 3: Update student scores
                     students_in_column = 0
+                    students_not_found = []  # 🔥 NEW: Track students not found
                     for student_key, score in column_data.items():
                         # Find student row by matching names
                         student_row_index = self.find_student_row_by_name(
@@ -1470,8 +1551,15 @@ class GoogleServiceAccountSheets:
                             if update_result['success']:
                                 students_in_column += 1
                                 results['cellsUpdated'] += 1
+                                print(f"✅ Updated {student_key} with score {score} in {import_column}")
                             else:
                                 results['errors'].append(f"Failed to update {student_key} in {import_column}")
+                        else:
+                            students_not_found.append(student_key)
+                            print(f"⚠️ Student '{student_key}' not found in sheet - skipping score import")
+
+                    if students_not_found:
+                        logger.info(f"Students not found in sheet for column {import_column}: {students_not_found}")
 
                     results['studentsUpdated'] += students_in_column
                     logger.info(f"Successfully imported {students_in_column} scores for column {import_column}")
@@ -1545,14 +1633,7 @@ class GoogleServiceAccountSheets:
     def find_student_row_by_name(self, student_identifier: str, table_data: list, headers: list) -> int:
         """
         Find a student's row index by name matching.
-
-        Args:
-            student_identifier: String like "John Smith" or "Smith, John"
-            table_data: List of table rows
-            headers: List of column headers
-
-        Returns:
-            Row index (0-based) or None if not found
+        FIXED: More strict matching to prevent false positives.
         """
         try:
             # Find name column indices
@@ -1591,44 +1672,79 @@ class GoogleServiceAccountSheets:
                     search_last = ' '.join(parts[1:]).lower()
 
             logger.info(
-                f"Searching for student: '{student_identifier}' -> First: '{search_first}', Last: '{search_last}'")
+                f"🔍 Searching for student: '{student_identifier}' -> First: '{search_first}', Last: '{search_last}'")
 
-            # 🔥 ENHANCED: Search for matching student with multiple strategies
+            # 🔥 FIXED: More strict matching strategies
             for row_index, row in enumerate(table_data):
                 if first_name_idx < len(row) and last_name_idx < len(row):
                     row_first = str(row[first_name_idx]).strip().lower() if row[first_name_idx] else ''
                     row_last = str(row[last_name_idx]).strip().lower() if row[last_name_idx] else ''
 
-                    # Strategy 1: Exact match
+                    # Skip empty rows
+                    if not row_first and not row_last:
+                        continue
+
+                    # 🔥 STRATEGY 1: Exact match (highest priority)
                     if search_first == row_first and search_last == row_last:
                         logger.info(f"✅ EXACT match found at row {row_index}: {row_first} {row_last}")
                         return row_index
 
-                    # Strategy 2: Reversed order match (in case Excel is "First Last" but we expect "Last First")
+                    # 🔥 STRATEGY 2: Reversed order match
                     if search_first == row_last and search_last == row_first:
                         logger.info(f"✅ REVERSED match found at row {row_index}: {row_first} {row_last}")
                         return row_index
 
-                    # Strategy 3: Partial contains match
-                    if (search_first in row_first or row_first in search_first) and \
-                            (search_last in row_last or row_last in search_last):
-                        logger.info(f"✅ PARTIAL match found at row {row_index}: {row_first} {row_last}")
-                        return row_index
+                    # 🔥 STRATEGY 3: Last name exact + first name contains (STRICTER)
+                    # This handles "Jared" in sheet matching "Jared Karl" in import
+                    if (search_last == row_last and
+                            len(search_first) >= 3 and len(row_first) >= 3 and
+                            (search_first in row_first or row_first in search_first)):
 
-                    # Strategy 4: Single name match (when only one name is provided)
-                    if len(student_identifier.strip().split()) == 1:
-                        single_name = student_identifier.strip().lower()
-                        if single_name in row_first or single_name in row_last:
-                            logger.info(f"✅ SINGLE NAME match found at row {row_index}: {row_first} {row_last}")
+                        # Additional validation: ensure it's a reasonable match
+                        first_similarity = len(set(search_first) & set(row_first)) / max(len(search_first),
+                                                                                         len(row_first))
+                        if first_similarity >= 0.6:  # At least 60% character overlap
+                            logger.info(
+                                f"✅ LAST EXACT + FIRST CONTAINS match found at row {row_index}: {row_first} {row_last}")
                             return row_index
 
+                    # 🔥 STRATEGY 4: First name exact + last name contains (STRICTER)
+                    if (search_first == row_first and
+                            len(search_last) >= 3 and len(row_last) >= 3 and
+                            (search_last in row_last or row_last in search_last)):
+
+                        # Additional validation
+                        last_similarity = len(set(search_last) & set(row_last)) / max(len(search_last), len(row_last))
+                        if last_similarity >= 0.6:  # At least 60% character overlap
+                            logger.info(
+                                f"✅ FIRST EXACT + LAST CONTAINS match found at row {row_index}: {row_first} {row_last}")
+                            return row_index
+
+                    # 🔥 STRATEGY 5: Full name matching (for cases like "Jared Karl" vs "Jared Karl Omen")
+                    import_full = f"{search_first} {search_last}".strip()
+                    sheet_full = f"{row_first} {row_last}".strip()
+
+                    # Check if one full name is contained in the other (with minimum length requirement)
+                    if (len(import_full) >= 6 and len(sheet_full) >= 6 and
+                            (import_full in sheet_full or sheet_full in import_full)):
+
+                        # Ensure it's not a coincidental substring match
+                        word_overlap = len(set(import_full.split()) & set(sheet_full.split()))
+                        total_words = max(len(import_full.split()), len(sheet_full.split()))
+
+                        if word_overlap >= 2 or (total_words <= 2 and word_overlap >= 1):
+                            logger.info(f"✅ FULL NAME CONTAINS match found at row {row_index}: {row_first} {row_last}")
+                            return row_index
+
+            # 🔥 NO MATCH FOUND - Log available students for debugging
             logger.warning(f"❌ No match found for: '{student_identifier}'")
-            logger.warning(f"Available students in sheet:")
-            for i, row in enumerate(table_data[:5]):  # Show first 5 for debugging
+            logger.warning(f"Available students in sheet (first 5):")
+            for i, row in enumerate(table_data[:5]):
                 if first_name_idx < len(row) and last_name_idx < len(row):
                     sheet_first = str(row[first_name_idx]).strip() if row[first_name_idx] else ''
                     sheet_last = str(row[last_name_idx]).strip() if row[last_name_idx] else ''
-                    logger.warning(f"  Row {i}: '{sheet_first}' '{sheet_last}'")
+                    if sheet_first or sheet_last:  # Only show non-empty rows
+                        logger.warning(f"  Row {i}: '{sheet_first}' '{sheet_last}'")
 
             return None
 

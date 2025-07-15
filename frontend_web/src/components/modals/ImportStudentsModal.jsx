@@ -8,7 +8,8 @@ const ImportStudentsModal = ({
   setShowImportModal,
   setImportProgress,
   executeImport,
-  newStudentsCount = 0 // Add this prop from parent
+  newStudentsCount = 0,
+  newStudentsData = [],
 }) => {
   const [showDetails, setShowDetails] = useState(true);
   const [selectedTab, setSelectedTab] = useState('conflicts'); // 'conflicts' or 'summary'
@@ -22,9 +23,20 @@ const ImportStudentsModal = ({
   };
   
   const handleProceedImport = () => {
-    const newStudents = []; // Students with no conflicts
+    const newStudents = newStudentsData; 
     const resolvedConflicts = importConflicts;
     
+    // 🔥 FIXED: Close modal immediately for better UX
+    setShowImportModal(false);
+    setImportConflicts([]);
+    
+    // 🔥 FIXED: Set importing status right away
+    setImportProgress({ 
+      status: 'importing', 
+      message: 'Processing import... Please wait.' 
+    });
+    
+    // Execute import (this will update progress as it goes)
     executeImport(newStudents, resolvedConflicts);
   };
   
