@@ -1325,7 +1325,7 @@ class GoogleServiceAccountSheets:
                                     user_id: int = None, force_reimport: list = None) -> dict:
         """
         Analyze existing columns to find available slots for mapping imported columns.
-        Now includes filtering of already imported columns.
+        ENHANCED: Now shows ALL columns (empty, partial, full) with detailed risk analysis.
         """
         try:
             # 🔥 NEW: Filter already imported columns first
@@ -1359,7 +1359,7 @@ class GoogleServiceAccountSheets:
             headers = sheet_data['headers']
             table_data = sheet_data['tableData']
 
-            # [Keep all your existing column analysis logic here - just replace import_columns with available_columns]
+            # 🔥 ENHANCED: Analyze ALL columns (not just empty ones)
             column_analysis = []
             for col_index, column_name in enumerate(headers):
                 excluded_columns = [
@@ -1373,40 +1373,85 @@ class GoogleServiceAccountSheets:
                 if any(excluded.upper() in column_name.upper() for excluded in excluded_columns):
                     continue
 
-                # [Keep your existing column analysis logic...]
+                # 🔥 ENHANCED: Detailed column analysis with student-level data
                 has_data = False
                 data_count = 0
                 sample_values = []
+                student_data = []  # 🔥 NEW: Track which students have scores
 
-                for row in table_data:
+                for row_index, row in enumerate(table_data):
                     if col_index < len(row) and row[col_index] and str(row[col_index]).strip():
                         has_data = True
                         data_count += 1
+                        value = str(row[col_index]).strip()
+
                         if len(sample_values) < 3:
-                            sample_values.append(str(row[col_index]).strip())
+                            sample_values.append(value)
+
+                        # 🔥 NEW: Track student names with existing scores
+                        if len(student_data) < 5:  # Only store first 5 for preview
+                            first_name_idx = None
+                            last_name_idx = None
+
+                            for idx, header in enumerate(headers):
+                                if 'FIRST NAME' in header.upper() or 'FIRSTNAME' in header.upper():
+                                    first_name_idx = idx
+                                elif 'LAST NAME' in header.upper() or 'LASTNAME' in header.upper():
+                                    last_name_idx = idx
+
+                            if (first_name_idx is not None and last_name_idx is not None and
+                                    first_name_idx < len(row) and last_name_idx < len(row)):
+                                first_name = str(row[first_name_idx]).strip() if row[first_name_idx] else ''
+                                last_name = str(row[last_name_idx]).strip() if row[last_name_idx] else ''
+
+                                if first_name or last_name:
+                                    student_data.append({
+                                        'name': f"{first_name} {last_name}".strip(),
+                                        'score': value,
+                                        'rowIndex': row_index
+                                    })
+
+                # 🔥 ENHANCED: More detailed availability classification
+                total_students = len(
+                    [row for row in table_data if any(str(cell).strip() for cell in row[:2])])  # Count non-empty rows
+                fill_percentage = (data_count / total_students) if total_students > 0 else 0
+
+                availability = 'empty'
+                if data_count == 0:
+                    availability = 'empty'
+                elif data_count >= total_students * 0.8:  # 80% or more filled
+                    if total_students <= 2:  # 🔥 NEW: For small classes, be more lenient
+                        availability = 'partial' if data_count < total_students else 'full'
+                    else:
+                        availability = 'full'
+                elif data_count >= total_students * 0.3:  # 30% or more filled
+                    availability = 'partial'
+                else:
+                    availability = 'empty'
 
                 column_analysis.append({
                     'columnName': column_name,
                     'columnIndex': col_index,
                     'hasData': has_data,
                     'dataCount': data_count,
-                    'totalRows': len(table_data),
+                    'totalStudents': total_students,
+                    'fillPercentage': fill_percentage,
                     'sampleValues': sample_values,
+                    'studentData': student_data,  # 🔥 NEW
                     'isEmpty': not has_data,
-                    'isPartiallyFilled': has_data and data_count < len(table_data) * 0.8,
-                    'availability': 'empty' if not has_data else (
-                        'partial' if data_count < len(table_data) * 0.8 else 'full')
+                    'isPartiallyFilled': availability == 'partial',
+                    'availability': availability
                 })
 
-            # Create mapping suggestions for available columns only
+            # 🔥 ENHANCED: Create mapping suggestions for available columns with ALL options
             mapping_suggestions = []
-            for import_col in available_columns:  # 🔥 CHANGED: Use filtered columns
+            for import_col in available_columns:
                 suggestions = {
                     'importColumn': import_col,
                     'suggestions': []
                 }
 
-                # [Keep your existing suggestion logic...]
+                # 🔥 ENHANCED: Show ALL columns with detailed risk assessment
                 for col_info in column_analysis:
                     if col_info['isEmpty']:
                         suggestions['suggestions'].append({
@@ -1415,7 +1460,24 @@ class GoogleServiceAccountSheets:
                             'recommendation': 'perfect',
                             'risk': 'none',
                             'description': f"Empty column - safe to use",
-                            'dataCount': 0
+                            'dataCount': 0,
+                            'sampleValues': [],
+                            'studentData': [],
+                            'fillPercentage': 0,
+                            'conflictPreview': 'No existing data will be affected'
+                        })
+                    elif col_info['dataCount'] <= 2:  # 🔥 FIXED: Complete suggestion object
+                        suggestions['suggestions'].append({
+                            'targetColumn': col_info['columnName'],  # 🔥 FIX: Added missing fields
+                            'targetIndex': col_info['columnIndex'],
+                            'recommendation': 'caution',
+                            'risk': 'low',
+                            'description': f"Has {col_info['dataCount']} existing score(s) - low risk",
+                            'dataCount': col_info['dataCount'],
+                            'sampleValues': col_info['sampleValues'],
+                            'studentData': col_info['studentData'],
+                            'fillPercentage': col_info['fillPercentage'],
+                            'conflictPreview': f"Will affect {col_info['dataCount']} existing score(s)"
                         })
                     elif col_info['isPartiallyFilled']:
                         suggestions['suggestions'].append({
@@ -1423,9 +1485,12 @@ class GoogleServiceAccountSheets:
                             'targetIndex': col_info['columnIndex'],
                             'recommendation': 'caution',
                             'risk': 'medium',
-                            'description': f"Has {col_info['dataCount']} existing entries out of {col_info['totalRows']} students",
+                            'description': f"Has {col_info['dataCount']} existing entries ({col_info['fillPercentage']:.1%} filled)",
                             'dataCount': col_info['dataCount'],
-                            'sampleValues': col_info['sampleValues']
+                            'sampleValues': col_info['sampleValues'],
+                            'studentData': col_info['studentData'],
+                            'fillPercentage': col_info['fillPercentage'],
+                            'conflictPreview': f"Will affect {col_info['dataCount']} existing scores"
                         })
                     else:
                         suggestions['suggestions'].append({
@@ -1435,14 +1500,18 @@ class GoogleServiceAccountSheets:
                             'risk': 'high',
                             'description': f"Column is full ({col_info['dataCount']} entries) - will overwrite existing data",
                             'dataCount': col_info['dataCount'],
-                            'sampleValues': col_info['sampleValues']
+                            'sampleValues': col_info['sampleValues'],
+                            'studentData': col_info['studentData'],
+                            'fillPercentage': col_info['fillPercentage'],
+                            'conflictPreview': f"Will overwrite ALL {col_info['dataCount']} existing scores"
                         })
 
+                # 🔥 ENHANCED: Sort by safety (empty first, then low risk, then partial, then full)
                 suggestions['suggestions'].sort(key=lambda x: {
                     'perfect': 0,
-                    'caution': 1,
-                    'risky': 2
-                }.get(x['recommendation'], 3))
+                    'caution': 1 if x['risk'] == 'low' else 2,
+                    'risky': 3
+                }.get(x['recommendation'], 4))
 
                 mapping_suggestions.append(suggestions)
 
@@ -1450,8 +1519,8 @@ class GoogleServiceAccountSheets:
                 'success': True,
                 'columnAnalysis': column_analysis,
                 'mappingSuggestions': mapping_suggestions,
-                'alreadyImported': already_imported_info,  # 🔥 NEW
-                'filteredColumnsCount': len(import_columns) - len(available_columns),  # 🔥 NEW
+                'alreadyImported': already_imported_info,
+                'filteredColumnsCount': len(import_columns) - len(available_columns),
                 'totalColumns': len(headers),
                 'availableEmptyColumns': len([c for c in column_analysis if c['isEmpty']]),
                 'partiallyFilledColumns': len([c for c in column_analysis if c['isPartiallyFilled']]),
@@ -1468,16 +1537,8 @@ class GoogleServiceAccountSheets:
     def import_column_data_with_mapping(self, sheet_id: str, column_mappings: list, import_data: dict,
                                         sheet_name: str = None) -> dict:
         """
-        Import column data with custom mappings and rename headers.
-
-        Args:
-            sheet_id: ID of the spreadsheet
-            column_mappings: List of mappings [{'importColumn': 'HTML Activity', 'targetColumn': 'QUIZ 1', 'action': 'replace'}]
-            import_data: Dict with student data and column scores
-            sheet_name: Name of specific sheet (optional)
-
-        Returns:
-            Dict containing import results
+        Import column data with custom mappings and enhanced merge strategies.
+        ENHANCED: Supports multiple merge strategies for handling existing data.
         """
         try:
             results = {
@@ -1485,7 +1546,11 @@ class GoogleServiceAccountSheets:
                 'columnsRenamed': 0,
                 'studentsUpdated': 0,
                 'cellsUpdated': 0,
-                'errors': []
+                'cellsSkipped': 0,  # 🔥 NEW
+                'cellsMerged': 0,  # 🔥 NEW
+                'conflictsResolved': 0,  # 🔥 NEW
+                'errors': [],
+                'actionSummary': {}  # 🔥 NEW: Track what happened per action
             }
 
             # Get sheet data
@@ -1505,7 +1570,7 @@ class GoogleServiceAccountSheets:
             for mapping in column_mappings:
                 import_column = mapping['importColumn']
                 target_column = mapping['targetColumn']
-                action = mapping.get('action', 'replace')  # replace, merge, skip
+                action = mapping.get('action', 'replace')  # 🔥 ENHANCED: More action types
 
                 if action == 'skip':
                     continue
@@ -1523,6 +1588,7 @@ class GoogleServiceAccountSheets:
                             results['columnsRenamed'] += 1
                             # Update local headers for subsequent operations
                             headers[target_index] = import_column
+                            print(f"✅ Renamed column '{target_column}' → '{import_column}'")
                         else:
                             results['errors'].append(f"Failed to rename {target_column} to {import_column}")
 
@@ -1533,46 +1599,146 @@ class GoogleServiceAccountSheets:
                         results['errors'].append(f"No data found for column {import_column}")
                         continue
 
-                    # Step 3: Update student scores
-                    students_in_column = 0
-                    students_not_found = []  # 🔥 NEW: Track students not found
-                    for student_key, score in column_data.items():
+                    # 🔥 ENHANCED: Step 3 - Process with different merge strategies
+                    action_stats = {
+                        'studentsProcessed': 0,
+                        'cellsUpdated': 0,
+                        'cellsSkipped': 0,
+                        'conflictsResolved': 0,
+                        'studentsNotFound': []
+                    }
+
+                    for student_key, import_score in column_data.items():
                         # Find student row by matching names
                         student_row_index = self.find_student_row_by_name(
                             student_key, table_data, headers
                         )
 
-                        if student_row_index is not None:
-                            # Update the cell
+                        if student_row_index is None:
+                            action_stats['studentsNotFound'].append(student_key)
+                            print(f"⚠️ Student '{student_key}' not found in sheet - skipping")
+                            continue
+
+                        action_stats['studentsProcessed'] += 1
+
+                        # 🔥 ENHANCED: Get existing value for merge strategies
+                        existing_value = None
+                        if student_row_index < len(table_data) and target_index < len(table_data[student_row_index]):
+                            existing_cell = table_data[student_row_index][target_index]
+                            existing_value = str(existing_cell).strip() if existing_cell else None
+
+                        # 🔥 ENHANCED: Apply merge strategy
+                        should_update = False
+                        final_score = import_score
+                        conflict_resolved = False
+
+                        if action == 'replace':
+                            # Replace all data (original behavior)
+                            should_update = True
+                            final_score = import_score
+                            if existing_value:
+                                conflict_resolved = True
+
+                        elif action == 'merge_skip':
+                            # Skip students with existing scores
+                            if existing_value:
+                                print(f"🔄 MERGE_SKIP: Skipping {student_key} - has existing score '{existing_value}'")
+                                action_stats['cellsSkipped'] += 1
+                                should_update = False
+                            else:
+                                should_update = True
+                                final_score = import_score
+
+                        elif action == 'merge_update':
+                            # Only update empty cells
+                            if existing_value:
+                                print(f"🔄 MERGE_UPDATE: Keeping existing score for {student_key}: '{existing_value}'")
+                                action_stats['cellsSkipped'] += 1
+                                should_update = False
+                            else:
+                                should_update = True
+                                final_score = import_score
+
+                        elif action == 'merge_add':
+                            # Add to existing scores (sum)
+                            if existing_value and existing_value.replace('.', '').replace('-', '').isdigit():
+                                try:
+                                    existing_num = float(existing_value)
+                                    import_num = float(str(import_score))
+                                    final_score = existing_num + import_num
+                                    should_update = True
+                                    conflict_resolved = True
+                                    print(
+                                        f"🔄 MERGE_ADD: {student_key}: {existing_value} + {import_score} = {final_score}")
+                                except ValueError:
+                                    print(f"⚠️ MERGE_ADD: Cannot add non-numeric values for {student_key}")
+                                    should_update = False
+                            else:
+                                should_update = True
+                                final_score = import_score
+
+                        elif action == 'merge':
+                            # Default merge behavior (same as merge_skip for backward compatibility)
+                            if existing_value:
+                                action_stats['cellsSkipped'] += 1
+                                should_update = False
+                            else:
+                                should_update = True
+                                final_score = import_score
+
+                        # 🔥 ENHANCED: Execute the update if needed
+                        if should_update:
                             update_result = self.update_cell_in_sheet(
-                                sheet_id, student_row_index, import_column, score, target_sheet_name
+                                sheet_id, student_row_index, import_column, final_score, target_sheet_name
                             )
 
                             if update_result['success']:
-                                students_in_column += 1
-                                results['cellsUpdated'] += 1
-                                print(f"✅ Updated {student_key} with score {score} in {import_column}")
+                                action_stats['cellsUpdated'] += 1
+                                if conflict_resolved:
+                                    action_stats['conflictsResolved'] += 1
+                                print(
+                                    f"✅ Updated {student_key}: '{existing_value}' → '{final_score}' in {import_column}")
                             else:
                                 results['errors'].append(f"Failed to update {student_key} in {import_column}")
-                        else:
-                            students_not_found.append(student_key)
-                            print(f"⚠️ Student '{student_key}' not found in sheet - skipping score import")
 
-                    if students_not_found:
-                        logger.info(f"Students not found in sheet for column {import_column}: {students_not_found}")
+                    # 🔥 NEW: Aggregate action statistics
+                    results['studentsUpdated'] += action_stats['studentsProcessed']
+                    results['cellsUpdated'] += action_stats['cellsUpdated']
+                    results['cellsSkipped'] += action_stats['cellsSkipped']
+                    results['conflictsResolved'] += action_stats['conflictsResolved']
+                    results['actionSummary'][import_column] = action_stats
 
-                    results['studentsUpdated'] += students_in_column
-                    logger.info(f"Successfully imported {students_in_column} scores for column {import_column}")
+                    logger.info(
+                        f"✅ Column '{import_column}' ({action}): {action_stats['cellsUpdated']} updated, {action_stats['cellsSkipped']} skipped, {action_stats['conflictsResolved']} conflicts resolved")
+
+                    if action_stats['studentsNotFound']:
+                        logger.info(f"Students not found for '{import_column}': {action_stats['studentsNotFound']}")
 
                 except ValueError:
                     results['errors'].append(f"Target column {target_column} not found in sheet")
                 except Exception as e:
                     results['errors'].append(f"Error importing {import_column}: {str(e)}")
+                    logger.error(f"Import error for {import_column}: {str(e)}")
+
+            # 🔥 ENHANCED: Detailed summary
+            total_actions = len([m for m in column_mappings if m.get('action') != 'skip'])
+            summary_parts = []
+
+            if results['columnsRenamed'] > 0:
+                summary_parts.append(f"renamed {results['columnsRenamed']} columns")
+            if results['cellsUpdated'] > 0:
+                summary_parts.append(f"updated {results['cellsUpdated']} cells")
+            if results['cellsSkipped'] > 0:
+                summary_parts.append(f"skipped {results['cellsSkipped']} existing values")
+            if results['conflictsResolved'] > 0:
+                summary_parts.append(f"resolved {results['conflictsResolved']} conflicts")
+
+            summary = ", ".join(summary_parts) if summary_parts else "no changes made"
 
             return {
                 'success': True,
                 'results': results,
-                'summary': f"Renamed {results['columnsRenamed']} columns, updated {results['cellsUpdated']} cells for {results['studentsUpdated']} student entries"
+                'summary': f"Import completed: {summary} across {total_actions} columns"
             }
 
         except Exception as e:

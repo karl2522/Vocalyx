@@ -17,6 +17,7 @@ import OverrideConfirmationModal from './modals/OverrideConfirmationModal';
 import VoiceGuideModal from './modals/VoiceGuideModal';
 import DuplicateStudentModal from './modals/DuplicateStudentModal.jsx';
 import ImportStudentsInfoModal from './modals/ImportStudentsInfoModal.jsx';
+import ImportScoresInfoModal from './modals/ImportScoresInfoModal.jsx';
 
 
 const ClassRecordExcel = () => {
@@ -35,6 +36,7 @@ const ClassRecordExcel = () => {
   const [maxScores, setMaxScores] = useState({});
   const [newStudentsData, setNewStudentsData] = useState([]);
   const [showImportInfoModal, setShowImportInfoModal] = useState(false);
+  const [showImportScoresInfoModal, setShowImportScoresInfoModal] = useState(false);
 
   const [showColumnImportModal, setShowColumnImportModal] = useState(false);
   const [columnAnalysis, setColumnAnalysis] = useState(null);
@@ -2552,16 +2554,16 @@ const handleExportToPDF = async () => {
                     <span>Import Students</span>
                   </button>
 
-                  <button
-                    onClick={() => {
-                      handleImportScores();
-                      closeAllDropdowns();
-                    }}
-                    className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
-                  >
-                    <BarChart3 className="w-4 h-4 text-purple-600" />
-                    <span>Import Scores</span>
-                  </button>
+                 <button
+                  onClick={() => {
+                    setShowImportScoresInfoModal(true); 
+                    closeAllDropdowns();
+                  }}
+                  className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                >
+                  <BarChart3 className="w-4 h-4 text-purple-600" />
+                  <span>Import Scores</span>
+                </button>
                   
                   {/* Batch Mode & Auto-number options */}
                   <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
@@ -2894,6 +2896,12 @@ const handleExportToPDF = async () => {
             setShowImportInfoModal(false);
             handleImportStudents();
           }}
+        />
+
+        <ImportScoresInfoModal 
+          showModal={showImportScoresInfoModal}
+          setShowModal={setShowImportScoresInfoModal}
+          onProceed={handleImportScores}
         />
 
 
