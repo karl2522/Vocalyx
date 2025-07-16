@@ -15,7 +15,14 @@ const BatchGradingModal = ({
   isProcessingBatch,
   cancelBatchMode,
   executeBatchEntries,
-  processBatchEntry
+  processBatchEntry,
+  currentSheet,
+  classRecord,
+  classRecordService,
+  batchSheetData,
+  setBatchSheetData,
+  processingEntries,
+  setProcessingEntries
 }) => {
   if (!showBatchModal) return null;
 
@@ -51,26 +58,61 @@ const BatchGradingModal = ({
     }, 100);
   };
 
-  const handleColumnSelect = (header) => {
-    console.log('🔥 COLUMN SELECT: 🎯 Column selected:', header);
-    setCurrentBatchColumn(header);
-    window.batchModeActive = true;
-    window.batchModeFinishing = false;
-    console.log('🔥 COLUMN SELECT: 🚀 Set window.batchModeActive = true');
-    console.log('🔥 COLUMN SELECT: 🚀 Set window.batchModeFinishing = false');
-    toast.success(`Column set to: ${header}. Start speaking!`);
+  const handleColumnSelect = async (header) => {
+  console.log('🔥 COLUMN SELECT: 🎯 Column selected:', header);
+  setCurrentBatchColumn(header);
+  window.batchModeActive = true;
+  window.batchModeFinishing = false;
+  
+  // 🔥 SPEED OPTIMIZATION: Cache sheet data for entire batch session
+  console.log('🔥 CACHING: Loading sheet data for batch session...');
+  toast('Loading student data for batch session...');
+  
+  try {
+    let sheetsResponse;
+    if (currentSheet) {
+      sheetsResponse = await classRecordService.getSpecificSheetData(
+        classRecord.google_sheet_id, 
+        currentSheet.sheet_name
+      );
+    } else {
+      sheetsResponse = await classRecordService.getGoogleSheetsDataServiceAccount(
+        classRecord.google_sheet_id
+      );
+    }
+    
+    if (!sheetsResponse.data?.success) {
+      throw new Error('Could not load student data');
+    }
+
+    const convertedTableData = sheetsResponse.data.tableData.map(row => {
+      const rowObject = {};
+      sheetsResponse.data.headers.forEach((header, index) => {
+        rowObject[header] = row[index] || '';
+      });
+      return rowObject;
+    });
+    
+    setBatchSheetData(convertedTableData);
+    console.log('🔥 CACHING: ✅ Sheet data cached for batch session');
+    console.log('🔥 CACHING: 📊 Cached', convertedTableData.length, 'student records');
+    
+    toast.success(`Column set to: ${header}. Data cached! Start speaking! ⚡`);
     
     setTimeout(() => {
       console.log('🔥 COLUMN SELECT: 🎤 Checking if should start listening...');
-      console.log('🔥 COLUMN SELECT: isListening:', isListening);
       if (!isListening) {
         console.log('🔥 COLUMN SELECT: 🎤 Starting voice recognition...');
         startListening(true);
-      } else {
-        console.log('🔥 COLUMN SELECT: 🎤 Already listening');
       }
     }, 800);
-  };
+    
+  } catch (error) {
+    console.error('🔥 CACHING: ❌ Error loading data:', error);
+    toast.error('Failed to load student data for batch session');
+    setBatchSheetData(null);
+  }
+};
 
   const handleRestartVoice = () => {
     console.log('🔥 DEBUG: Manual restart clicked');
@@ -85,7 +127,7 @@ const BatchGradingModal = ({
     const validEntries = batchEntries.filter(e => e.status === 'found');
     if (validEntries.length > 0) {
       const avgScore = Math.round(validEntries.reduce((sum, e) => sum + parseFloat(e.score), 0) / validEntries.length);
-      toast.info(`Average score: ${avgScore}%`);
+      toast(`Average score: ${avgScore}%`);
     }
   };
 
@@ -97,7 +139,7 @@ const BatchGradingModal = ({
 
   const handleClearAll = () => {
     setBatchEntries([]);
-    toast.info('Cleared all entries');
+    toast('Cleared all entries');
   };
 
   return (

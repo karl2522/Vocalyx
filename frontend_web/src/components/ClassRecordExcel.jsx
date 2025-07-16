@@ -37,6 +37,8 @@ const ClassRecordExcel = () => {
   const [newStudentsData, setNewStudentsData] = useState([]);
   const [showImportInfoModal, setShowImportInfoModal] = useState(false);
   const [showImportScoresInfoModal, setShowImportScoresInfoModal] = useState(false);
+  const [batchSheetData, setBatchSheetData] = useState(null);
+  const [processingEntries, setProcessingEntries] = useState(new Set());
   
 
   const [showColumnImportModal, setShowColumnImportModal] = useState(false);
@@ -1879,123 +1881,126 @@ const handleBatchVoiceCommand = async (transcript) => {
 };
 
 const processBatchEntry = async (studentName, score) => {
-    console.log('🔥 PROCESS BATCH: 🚀 Starting processBatchEntry');
-    console.log('🔥 PROCESS BATCH: studentName:', studentName);
-    console.log('🔥 PROCESS BATCH: score:', score);
-    console.log('🔥 PROCESS BATCH: currentBatchColumn:', currentBatchColumn);
-    console.log('🔥 PROCESS BATCH: currentSheet:', currentSheet?.sheet_name);
+  console.log('🔥 PROCESS BATCH: 🚀 Starting processBatchEntry');
+  console.log('🔥 PROCESS BATCH: studentName:', studentName);
+  console.log('🔥 PROCESS BATCH: score:', score);
+  
+  if (!currentBatchColumn) {
+    console.log('🔥 PROCESS BATCH: ❌ No column selected');
+    toast.error('Please select a column first');
+    return;
+  }
+
+  // 🔥 DUPLICATE PREVENTION: Create unique entry key
+  const entryKey = `${studentName.toLowerCase()}_${score}`;
+  
+  // 🔥 DUPLICATE PREVENTION: Check if already processing this exact entry
+  if (processingEntries.has(entryKey)) {
+    console.log('🔥 DUPLICATE PREVENTION: Already processing:', entryKey);
+    return;
+  }
+  
+  // 🔥 DUPLICATE PREVENTION: Check if entry already exists in batch
+  const existingEntry = batchEntries.find(entry => 
+    entry.originalInput.toLowerCase() === studentName.toLowerCase() &&
+    entry.score === score
+  );
+  
+  if (existingEntry) {
+    console.log('🔥 DUPLICATE PREVENTION: Entry already exists:', entryKey);
+    return;
+  }
+
+  try {
+    // 🔥 DUPLICATE PREVENTION: Mark as processing
+    setProcessingEntries(prev => new Set([...prev, entryKey]));
+    setIsProcessingBatch(true);
     
-    if (!currentBatchColumn) {
-      console.log('🔥 PROCESS BATCH: ❌ No column selected');
-      toast.error('Please select a column first');
-      return;
+    // 🔥 SPEED OPTIMIZATION: Use cached data instead of fetching!
+    if (!batchSheetData) {
+      throw new Error('Batch session data not loaded. Please restart batch mode.');
+    }
+    
+    console.log('🔥 PROCESS BATCH: ⚡ Using cached sheet data (SUPER FAST!)');
+    const convertedTableData = batchSheetData;
+
+    console.log('🔥 PROCESS BATCH: 🔍 Searching for student...');
+    const result = findStudentRowSmart(convertedTableData, studentName, recentStudents, currentBatchColumn);
+    console.log('🔥 PROCESS BATCH: 🔍 Search result:', result);
+    
+    const entryId = `${studentName}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    let newEntry;
+
+    if (result.bestMatch !== -1) {
+      console.log('🔥 PROCESS BATCH: ✅ Student found!');
+      const student = convertedTableData[result.bestMatch];
+      const fullStudentName = `${student['FIRST NAME']} ${student['LASTNAME']}`.trim();
+      
+      const hasExistingScore = student[currentBatchColumn] && 
+                              String(student[currentBatchColumn]).trim() !== '' && 
+                              String(student[currentBatchColumn]).trim() !== '0';
+
+      newEntry = {
+        id: entryId,
+        originalInput: studentName,
+        studentName: fullStudentName,
+        score: score,
+        status: 'found',
+        rowIndex: result.bestMatch,
+        hasExistingScore,
+        existingValue: hasExistingScore ? student[currentBatchColumn] : null,
+        confidence: result.confidence,
+        sheetName: currentSheet?.sheet_name
+      };
+
+      addRecentStudent(fullStudentName);
+      console.log('🔥 PROCESS BATCH: ✅ Student found, adding to UI');
+      
+    } else {
+      console.log('🔥 PROCESS BATCH: ❌ Student not found');
+      newEntry = {
+        id: entryId,
+        originalInput: studentName,
+        studentName: studentName,
+        score: score,
+        status: 'not_found',
+        rowIndex: -1,
+        hasExistingScore: false,
+        existingValue: null,
+        confidence: 'none',
+        sheetName: currentSheet?.sheet_name
+      };
     }
 
-    try {
-      console.log('🔥 PROCESS BATCH: 🔄 Setting isProcessingBatch to true');
-      setIsProcessingBatch(true);
+    console.log('🔥 PROCESS BATCH: 📝 Adding entry to batch list:', newEntry);
+    
+    setBatchEntries(prev => {
+      // 🔥 ENHANCED: Better duplicate filtering
+      const filtered = prev.filter(entry => 
+        !(entry.originalInput.toLowerCase() === studentName.toLowerCase() && 
+          entry.score === score)
+      );
       
-      console.log('🔥 PROCESS BATCH: 📊 Fetching sheet data...');
+      const newEntries = [...filtered, newEntry];
+      console.log('🔥 SET BATCH ENTRIES: New total entries:', newEntries.length);
       
-      // 🔥 NEW: Use specific sheet data if available
-      let sheetsResponse;
-      if (currentSheet) {
-        sheetsResponse = await classRecordService.getSpecificSheetData(
-          classRecord.google_sheet_id, 
-          currentSheet.sheet_name
-        );
-      } else {
-        sheetsResponse = await classRecordService.getGoogleSheetsDataServiceAccount(
-          classRecord.google_sheet_id
-        );
-      }
-      
-      if (!sheetsResponse.data?.success) {
-        throw new Error('Could not load student data');
-      }
+      return newEntries;
+    });
 
-      console.log('🔥 PROCESS BATCH: ✅ Sheet data loaded');
-      const convertedTableData = sheetsResponse.data.tableData.map(row => {
-        const rowObject = {};
-        sheetsResponse.data.headers.forEach((header, index) => {
-          rowObject[header] = row[index] || '';
-        });
-        return rowObject;
-      });
-
-      console.log('🔥 PROCESS BATCH: 🔍 Searching for student...');
-      const result = findStudentRowSmart(convertedTableData, studentName, recentStudents, currentBatchColumn);
-      console.log('🔥 PROCESS BATCH: 🔍 Search result:', result);
-      
-      const entryId = `${studentName}_${Date.now()}`;
-      let newEntry;
-
-      if (result.bestMatch !== -1) {
-        console.log('🔥 PROCESS BATCH: ✅ Student found!');
-        const student = convertedTableData[result.bestMatch];
-        const fullStudentName = `${student['FIRST NAME']} ${student['LASTNAME']}`.trim();
-        
-        const hasExistingScore = student[currentBatchColumn] && 
-                                String(student[currentBatchColumn]).trim() !== '' && 
-                                String(student[currentBatchColumn]).trim() !== '0';
-
-        newEntry = {
-          id: entryId,
-          originalInput: studentName,
-          studentName: fullStudentName,
-          score: score,
-          status: 'found',
-          rowIndex: result.bestMatch,
-          hasExistingScore,
-          existingValue: hasExistingScore ? student[currentBatchColumn] : null,
-          confidence: result.confidence,
-          sheetName: currentSheet?.sheet_name // 🔥 NEW: Store sheet name
-        };
-
-        addRecentStudent(fullStudentName);
-        console.log('🔥 PROCESS BATCH: ✅ Student found, adding to UI');
-        
-      } else {
-        console.log('🔥 PROCESS BATCH: ❌ Student not found');
-        newEntry = {
-          id: entryId,
-          originalInput: studentName,
-          studentName: studentName,
-          score: score,
-          status: 'not_found',
-          rowIndex: -1,
-          hasExistingScore: false,
-          existingValue: null,
-          confidence: 'none',
-          sheetName: currentSheet?.sheet_name // 🔥 NEW: Store sheet name
-        };
-        console.log('🔥 PROCESS BATCH: ❌ Student not found, adding to UI');
-      }
-
-      console.log('🔥 PROCESS BATCH: 📝 Adding entry to batch list:', newEntry);
-      
-      setBatchEntries(prev => {
-        console.log('🔥 SET BATCH ENTRIES: Current entries:', prev.length);
-        console.log('🔥 SET BATCH ENTRIES: Adding entry:', newEntry.studentName);
-        
-        const filtered = prev.filter(entry => 
-          entry.originalInput.toLowerCase() !== studentName.toLowerCase()
-        );
-        
-        const newEntries = [...filtered, newEntry];
-        console.log('🔥 SET BATCH ENTRIES: New total entries:', newEntries.length);
-        
-        return newEntries;
-      });
-
-    } catch (error) {
-      console.error('🔥 PROCESS BATCH: ❌ Error:', error);
-      toast.error(`Error processing ${studentName}: ${error.message}`);
-    } finally {
-      console.log('🔥 PROCESS BATCH: 🏁 Setting isProcessingBatch to false');
-      setIsProcessingBatch(false);
-    }
-  };
+  } catch (error) {
+    console.error('🔥 PROCESS BATCH: ❌ Error:', error);
+    toast.error(`Error processing ${studentName}: ${error.message}`);
+  } finally {
+    // 🔥 DUPLICATE PREVENTION: Remove from processing set
+    setProcessingEntries(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(entryKey);
+      return newSet;
+    });
+    setIsProcessingBatch(false);
+    console.log('🔥 PROCESS BATCH: 🏁 Finished processing');
+  }
+};
 
 const executeBatchEntries = async () => {
     const validEntries = batchEntries.filter(entry => entry.status === 'found');
@@ -2084,6 +2089,9 @@ const cancelBatchMode = () => {
   setShowBatchModal(false);
   setBatchEntries([]);
   setCurrentBatchColumn('');
+
+  setBatchSheetData(null);
+  setProcessingEntries(new Set());
   
   if (isListening) {
     stopListening();
@@ -2940,6 +2948,13 @@ const handleExportToPDF = async () => {
           cancelBatchMode={cancelBatchMode}
           executeBatchEntries={executeBatchEntries}
           processBatchEntry={processBatchEntry}
+          currentSheet={currentSheet}
+          classRecord={classRecord}
+          classRecordService={classRecordService}
+          batchSheetData={batchSheetData}
+          setBatchSheetData={setBatchSheetData}
+          processingEntries={processingEntries}
+          setProcessingEntries={setProcessingEntries}
         />
       </div>
     );
