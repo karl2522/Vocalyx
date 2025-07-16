@@ -631,7 +631,7 @@ const calculateWordSimilarity = (word1, word2) => {
 };
 
 // 🚀 ENHANCED: Standard phonetic corrections with logging
-const applyPhoneticCorrections = (transcript) => {
+export const applyPhoneticCorrections = (transcript) => {
   console.log('🔧 BEFORE phonetic correction:', transcript);
   
   let corrected = transcript;
@@ -658,7 +658,7 @@ const applyPhoneticCorrections = (transcript) => {
 };
 
 // 🚀 ENHANCED: Better name cleaning with more edge cases
-const cleanName = (name) => {
+export const cleanName = (name) => {
   return name
     .toLowerCase()
     .replace(/[''""`]/g, '') // Remove apostrophes and quotes
@@ -943,7 +943,7 @@ const extractScoreFromEnd = (transcript) => {
 export const parseVoiceCommand = (transcript, headers, tableData, context = {}) => {
   const { recentStudents = [], commandHistory = [], alternatives = [] } = context;
   
-  // 🔥 ENHANCED: Multi-stage transcript processing
+  // 🔥 ENHANCED: Multi-stage transcript processing 
   let normalizedTranscript = transcript.toLowerCase().trim();
   
   // Stage 1: Apply basic phonetic corrections

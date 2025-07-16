@@ -8,7 +8,7 @@ import * as XLSX from 'xlsx';
 import { classRecordService } from '../services/api';
 import { speakText, stopSpeaking } from '../utils/speechSynthesis';
 import useVoiceRecognition from '../utils/useVoiceRecognition';
-import { findStudentRowSmart, parseVoiceCommand } from '../utils/voicecommandParser';
+import { findStudentRowSmart, parseVoiceCommand, applyPhoneticCorrections, cleanName} from '../utils/voicecommandParser';
 import BatchGradingModal from './modals/BatchGradingModal';
 import ColumnMappingModal from './modals/ColumnMappingModal';
 import ImportProgressIndicator from './modals/ImportProgressIndicator';
@@ -37,6 +37,7 @@ const ClassRecordExcel = () => {
   const [newStudentsData, setNewStudentsData] = useState([]);
   const [showImportInfoModal, setShowImportInfoModal] = useState(false);
   const [showImportScoresInfoModal, setShowImportScoresInfoModal] = useState(false);
+  
 
   const [showColumnImportModal, setShowColumnImportModal] = useState(false);
   const [columnAnalysis, setColumnAnalysis] = useState(null);
@@ -175,24 +176,32 @@ const ClassRecordExcel = () => {
   }, [batchMode, showBatchModal, currentBatchColumn]);
 
     useEffect(() => {
-      if (interimBatchCommand && batchMode && currentBatchColumn) {
-        console.log('🔥 REAL-TIME: Processing interim command:', interimBatchCommand);
+    if (interimBatchCommand && batchMode && currentBatchColumn) {
+      console.log('🔥 REAL-TIME: Processing interim command:', interimBatchCommand);
+      
+      const studentScorePattern = /^(.+?)\s+(\d+(?:\.\d+)?)$/;
+      const match = interimBatchCommand.trim().match(studentScorePattern);
+      
+      if (match) {
+        const [, rawStudentName, score] = match;
         
-        const studentScorePattern = /^(.+?)\s+(\d+(?:\.\d+)?)$/;
-        const match = interimBatchCommand.trim().match(studentScorePattern);
+        // 🔥 FIXED: Apply phonetic corrections here too!
+        const correctedName = applyPhoneticCorrections(rawStudentName.toLowerCase().trim());
+        const cleanedName = cleanName(correctedName);
         
-        if (match) {
-          const [, studentName, score] = match;
-          console.log('🔥 REAL-TIME: Calling processBatchEntry for:', studentName, score);
-          
-          // 🔥 SIMPLIFIED: Just process it once
-          processBatchEntry(studentName.trim(), score.trim());
-          
-          // 🔥 Clear immediately
-          setInterimBatchCommand('');
-        }
+        console.log('🔥 REAL-TIME: Raw name:', rawStudentName);
+        console.log('🔥 REAL-TIME: Corrected name:', correctedName);
+        console.log('🔥 REAL-TIME: Final cleaned name:', cleanedName);
+        console.log('🔥 REAL-TIME: Calling processBatchEntry for:', cleanedName, score);
+        
+        // 🔥 Use the corrected name
+        processBatchEntry(cleanedName, score.trim());
+        
+        // 🔥 Clear immediately
+        setInterimBatchCommand('');
       }
-    }, [interimBatchCommand, batchMode, currentBatchColumn]);
+    }
+  }, [interimBatchCommand, batchMode, currentBatchColumn]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -1849,9 +1858,21 @@ const handleBatchVoiceCommand = async (transcript) => {
   const match = transcript.trim().match(studentScorePattern);
   
   if (match) {
-    const [, studentName, score] = match;
-    console.log('🔥 BATCH VOICE: Processing batch entry:', studentName, score);
-    await processBatchEntry(studentName.trim(), score.trim());
+    const [, rawStudentName, score] = match;
+    
+    // 🔥 FIXED: Apply the same phonetic corrections as single entry!
+    console.log('🔥 BATCH VOICE: Raw student name:', rawStudentName);
+    
+    // Step 1: Apply phonetic corrections (same as parseVoiceCommand)
+    const correctedName = applyPhoneticCorrections(rawStudentName.toLowerCase().trim());
+    console.log('🔥 BATCH VOICE: After phonetic corrections:', correctedName);
+    
+    // Step 2: Clean the name (same as parseVoiceCommand)
+    const cleanedName = cleanName(correctedName);
+    console.log('🔥 BATCH VOICE: Final cleaned name:', cleanedName);
+    
+    console.log('🔥 BATCH VOICE: Processing batch entry:', cleanedName, score);
+    await processBatchEntry(cleanedName, score.trim());
   } else {
     console.log('🔥 BATCH VOICE: Pattern not matched:', transcript);
   }
