@@ -434,6 +434,26 @@ export const classRecordService = {
     getImportHistory: (sheetId) => {
         return api.get(`/sheets/${sheetId}/import-history/`);
     },
+
+    updateMaxScore: (sheetId, columnName, maxScore, sheetName = null) => {
+        const payload = { 
+            column_name: columnName,
+            max_score: maxScore
+        };
+        if (sheetName) payload.sheet_name = sheetName;
+        
+        return api.post(`/sheets/${sheetId}/update-max-score/`, payload);
+    },
+
+    updateBatchMaxScores: (sheetId, columnNames, maxScore, sheetName = null) => {
+        const payload = { 
+            column_names: columnNames,
+            max_score: maxScore
+        };
+        if (sheetName) payload.sheet_name = sheetName;
+        
+        return api.post(`/sheets/${sheetId}/update-batch-max-scores/`, payload);
+    },
 };
 
 export const enhancedClassRecordService = {

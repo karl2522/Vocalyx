@@ -1394,3 +1394,71 @@ def get_import_history(request, sheet_id):
     except Exception as e:
         logger.error(f"Get import history error: {str(e)}")
         return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def sheets_update_max_score_service_account(request, sheet_id):
+    """Update max score for a single column using voice command"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+
+        column_name = request.data.get('column_name')  # e.g., 'QUIZ 1'
+        max_score = request.data.get('max_score')      # e.g., '30'
+        sheet_name = request.data.get('sheet_name')    # Optional specific sheet
+
+        if not column_name or max_score is None:
+            return Response({'error': 'column_name and max_score are required'}, status=400)
+
+        # Validate max score is a positive number
+        try:
+            max_score_float = float(max_score)
+            if max_score_float < 0:
+                return Response({'error': 'Max score must be a positive number'}, status=400)
+        except ValueError:
+            return Response({'error': 'Max score must be a valid number'}, status=400)
+
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+
+        # Update the max score
+        result = service.update_max_score_in_sheet(sheet_id, column_name, str(max_score), sheet_name)
+
+        return Response(result)
+
+    except Exception as e:
+        logger.error(f"Update max score error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def sheets_update_batch_max_scores_service_account(request, sheet_id):
+    """Update max scores for multiple columns using voice command (batch operation)"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+
+        column_names = request.data.get('column_names', [])  # e.g., ['QUIZ 1', 'QUIZ 2']
+        max_score = request.data.get('max_score')            # e.g., '20'
+        sheet_name = request.data.get('sheet_name')          # Optional specific sheet
+
+        if not column_names or max_score is None:
+            return Response({'error': 'column_names (array) and max_score are required'}, status=400)
+
+        # Validate max score is a positive number
+        try:
+            max_score_float = float(max_score)
+            if max_score_float < 0:
+                return Response({'error': 'Max score must be a positive number'}, status=400)
+        except ValueError:
+            return Response({'error': 'Max score must be a valid number'}, status=400)
+
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+
+        # Update the batch max scores
+        result = service.update_batch_max_scores_in_sheet(sheet_id, column_names, str(max_score), sheet_name)
+
+        return Response(result)
+
+    except Exception as e:
+        logger.error(f"Update batch max scores error: {str(e)}")
+        return Response({'error': str(e)}, status=500)

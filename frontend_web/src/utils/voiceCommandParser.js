@@ -1047,6 +1047,82 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
     }
   }
 
+  const maxScorePatterns = [
+    // Primary patterns
+    /(.+?)\s+max\s+score\s+(\d+(?:\.\d+)?)\s*$/i,           // "Quiz 1 max score 30"
+    /(.+?)\s+maximum\s+(\d+(?:\.\d+)?)\s*$/i,               // "Quiz 1 maximum 30"
+    /(.+?)\s+total\s+points?\s+(\d+(?:\.\d+)?)\s*$/i,       // "Quiz 1 total points 30"
+    /(.+?)\s+max\s+points?\s+(\d+(?:\.\d+)?)\s*$/i,         // "Quiz 1 max points 30"
+    /set\s+(.+?)\s+max\s+score\s+(\d+(?:\.\d+)?)\s*$/i,    // "Set Quiz 1 max score 30"
+    /change\s+(.+?)\s+max\s+(?:score|points?)\s+to\s+(\d+(?:\.\d+)?)\s*$/i, // "Change Quiz 1 max score to 30"
+    /(.+?)\s+out\s+of\s+(\d+(?:\.\d+)?)\s*$/i,              // "Quiz 1 out of 30"
+  ];
+
+  for (const pattern of maxScorePatterns) {
+    const maxScoreMatch = processedTranscript.match(pattern);
+    if (maxScoreMatch) {
+      const columnText = maxScoreMatch[1].trim();
+      const maxScore = parseFloat(maxScoreMatch[2]);
+      
+      // Find the best matching column
+      const matchedColumn = findBestColumnMatch(columnText, headers);
+      
+      if (matchedColumn && maxScore >= 0) {
+        console.log('✅ MAX_SCORE command detected:', { 
+          columnText,
+          matchedColumn, 
+          maxScore 
+        });
+        
+        return {
+          type: 'UPDATE_MAX_SCORE',
+          data: {
+            column: matchedColumn,
+            maxScore: maxScore,
+            originalText: transcript,
+            confidence: 'high'
+          }
+        };
+      }
+    }
+  }
+
+  const batchMaxScorePatterns = [
+    /set\s+all\s+(.+?)\s+max\s+score\s+(\d+(?:\.\d+)?)\s*$/i,     // "Set all quizzes max score 20"
+    /all\s+(.+?)\s+maximum\s+(\d+(?:\.\d+)?)\s*$/i,               // "All labs maximum 15"
+    /(.+?)\s+all\s+max\s+(\d+(?:\.\d+)?)\s*$/i,                   // "Quizzes all max 20"
+  ];
+
+  for (const pattern of batchMaxScorePatterns) {
+    const batchMatch = processedTranscript.match(pattern);
+    if (batchMatch) {
+      const categoryText = batchMatch[1].trim();
+      const maxScore = parseFloat(batchMatch[2]);
+      
+      // Find columns that match the category
+      const matchingColumns = findColumnsByCategory(categoryText, headers);
+      
+      if (matchingColumns.length > 0 && maxScore >= 0) {
+        console.log('✅ BATCH_MAX_SCORE command detected:', { 
+          categoryText,
+          matchingColumns, 
+          maxScore 
+        });
+        
+        return {
+          type: 'UPDATE_BATCH_MAX_SCORE',
+          data: {
+            category: categoryText,
+            columns: matchingColumns,
+            maxScore: maxScore,
+            originalText: transcript,
+            confidence: 'high'
+          }
+        };
+      }
+    }
+  }
+
   console.log('🎙️ Processing voice command:', processedTranscript);
   console.log('📋 Available headers:', headers);
   console.log('👥 Recent students:', recentStudents);
@@ -1627,6 +1703,35 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
     hasDuplicates: false,
     needsConfirmation: true
   };
+};
+
+const findColumnsByCategory = (categoryText, headers) => {
+  const categoryLower = categoryText.toLowerCase();
+  const gradeableColumns = getGradeableColumns(headers);
+  
+  const categoryPatterns = {
+    'quiz': /quiz/i,
+    'lab': /lab/i,
+    'exam': /exam|midterm|final/i,
+    'assignment': /assignment|homework/i,
+    'activity': /activity/i
+  };
+  
+  // Find which category matches
+  let matchingPattern = null;
+  for (const [category, pattern] of Object.entries(categoryPatterns)) {
+    if (pattern.test(categoryLower)) {
+      matchingPattern = pattern;
+      break;
+    }
+  }
+  
+  if (!matchingPattern) return [];
+  
+  // Find all columns that match this category
+  return gradeableColumns.filter(header => 
+    matchingPattern.test(header.toLowerCase())
+  );
 };
 
 // Keep compatibility functions

@@ -2199,3 +2199,142 @@ class GoogleServiceAccountSheets:
                 'success': False,
                 'error': f'Failed to save import history: {str(e)}'
             }
+
+    def update_max_score_in_sheet(self, sheet_id: str, column_name: str, max_score: str,
+                                  sheet_name: str = None) -> dict:
+        """
+        Update the max score for a specific column in Row 3 of the Google Sheet.
+
+        Args:
+            sheet_id: ID of the spreadsheet
+            column_name: Name of the column (e.g., 'QUIZ 1')
+            max_score: New max score value (e.g., '30')
+            sheet_name: Name of the specific sheet (if None, uses first sheet)
+
+        Returns:
+            Dict containing success status and update info
+        """
+        try:
+            # Get sheet data to find column index and sheet name
+            if sheet_name:
+                sheet_data = self.get_specific_sheet_data(sheet_id, sheet_name)
+            else:
+                sheet_data = self.get_sheet_data(sheet_id)
+
+            if not sheet_data['success']:
+                return sheet_data
+
+            headers = sheet_data['headers']  # This is Row 2 (column names)
+            target_sheet_name = sheet_data['sheet_name']
+
+            # Find column index by matching column name
+            try:
+                column_index = headers.index(column_name)
+            except ValueError:
+                logger.error(f"Column '{column_name}' not found in headers: {headers}")
+                return {
+                    'success': False,
+                    'error': f'Column "{column_name}" not found. Available columns: {headers}'
+                }
+
+            # Convert column index to letter (A, B, C, etc.)
+            column_letter = chr(65 + column_index)
+
+            # 🔥 CRITICAL: Row 3 is the max scores row (1-based indexing)
+            max_score_row = 3
+            cell_range = f"'{target_sheet_name}'!{column_letter}{max_score_row}"
+
+            logger.info(f"Updating max score cell {cell_range} with value '{max_score}'")
+
+            # Update the max score cell
+            body = {
+                'values': [[str(max_score)]]
+            }
+
+            result = self.sheets_service.spreadsheets().values().update(
+                spreadsheetId=sheet_id,
+                range=cell_range,
+                valueInputOption='RAW',
+                body=body
+            ).execute()
+
+            logger.info(f"Successfully updated max score {cell_range} with value '{max_score}'")
+
+            return {
+                'success': True,
+                'updated_cells': result.get('updatedCells', 0),
+                'cell_range': cell_range,
+                'max_score': max_score,
+                'column_name': column_name,
+                'sheet_name': target_sheet_name
+            }
+
+        except Exception as e:
+            logger.error(f"Unexpected error updating max score in sheet: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Failed to update max score: {str(e)}'
+            }
+
+    def update_batch_max_scores_in_sheet(self, sheet_id: str, column_names: list, max_score: str,
+                                         sheet_name: str = None) -> dict:
+        """
+        Update max scores for multiple columns (batch operation).
+
+        Args:
+            sheet_id: ID of the spreadsheet
+            column_names: List of column names (e.g., ['QUIZ 1', 'QUIZ 2'])
+            max_score: New max score value for all columns
+            sheet_name: Name of the specific sheet
+
+        Returns:
+            Dict containing batch update results
+        """
+        try:
+            results = {
+                'success': True,
+                'updated_columns': 0,
+                'failed_columns': 0,
+                'errors': [],
+                'updated_cells': 0
+            }
+
+            # Update each column individually
+            for column_name in column_names:
+                try:
+                    result = self.update_max_score_in_sheet(sheet_id, column_name, max_score, sheet_name)
+
+                    if result['success']:
+                        results['updated_columns'] += 1
+                        results['updated_cells'] += result.get('updated_cells', 0)
+                        logger.info(f"✅ Updated {column_name} max score to {max_score}")
+                    else:
+                        results['failed_columns'] += 1
+                        results['errors'].append(f"{column_name}: {result.get('error', 'Unknown error')}")
+                        logger.error(f"❌ Failed to update {column_name}: {result.get('error')}")
+
+                except Exception as e:
+                    results['failed_columns'] += 1
+                    results['errors'].append(f"{column_name}: {str(e)}")
+                    logger.error(f"❌ Exception updating {column_name}: {str(e)}")
+
+            # Determine overall success
+            if results['failed_columns'] > 0:
+                results['success'] = results['updated_columns'] > 0  # Partial success if some worked
+
+            summary = f"Updated {results['updated_columns']} columns"
+            if results['failed_columns'] > 0:
+                summary += f", {results['failed_columns']} failed"
+
+            return {
+                'success': results['success'],
+                'results': results,
+                'summary': summary
+            }
+
+        except Exception as e:
+            logger.error(f"Batch max score update error: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Failed to update batch max scores: {str(e)}'
+            }

@@ -15,7 +15,8 @@ from .views import (
     sheets_get_specific_sheet_data_service_account, sheets_update_cell_specific_sheet_service_account,
     sheets_import_students_preview, sheets_import_students_execute, sheets_preview_column_import,
     sheets_analyze_columns_mapping, sheets_execute_column_import, sheets_rename_column_header,
-    sheets_analyze_columns_mapping_enhanced, sheets_execute_column_import_enhanced, get_import_history
+    sheets_analyze_columns_mapping_enhanced, sheets_execute_column_import_enhanced, get_import_history,
+    sheets_update_max_score_service_account, sheets_update_batch_max_scores_service_account
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -87,4 +88,7 @@ urlpatterns = [
     path('sheets/<str:sheet_id>/analyze-columns-mapping-enhanced/', sheets_analyze_columns_mapping_enhanced, name='sheets_analyze_columns_mapping_enhanced'),
     path('sheets/<str:sheet_id>/execute-column-import-enhanced/', sheets_execute_column_import_enhanced, name='sheets_execute_column_import_enhanced'),
     path('sheets/<str:sheet_id>/import-history/', get_import_history, name='get_import_history'),
+
+    path('sheets/<str:sheet_id>/update-max-score/', sheets_update_max_score_service_account, name='sheets_update_max_score'),
+    path('sheets/<str:sheet_id>/update-batch-max-scores/', sheets_update_batch_max_scores_service_account, name='sheets_update_batch_max_scores'),
 ]

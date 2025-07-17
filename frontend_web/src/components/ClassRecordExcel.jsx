@@ -696,6 +696,12 @@ const ClassRecordExcel = () => {
       case 'ADD_STUDENT':
         handleAddStudentVoice(command.data);
         break;
+      case 'UPDATE_MAX_SCORE':
+        handleUpdateMaxScore(command.data);
+        break;
+      case 'UPDATE_BATCH_MAX_SCORE':
+        handleBatchUpdateMaxScore(command.data);
+        break;
       case 'EXPORT_EXCEL':
         handleExportToExcel();
         break;
@@ -724,6 +730,125 @@ const ClassRecordExcel = () => {
         toast.error(`🎙️ Command not recognized: "${command.data?.originalText || 'Unknown command'}"`);
         if (voiceEnabled) {
           speakText('Sorry, I didn\'t understand that command. Please try again.');
+        }
+    }
+};
+
+const handleUpdateMaxScore = async (data) => {
+    console.log('🎯 Updating max score:', data);
+    
+    if (!classRecord?.google_sheet_id) {
+        toast.error('No Google Sheet connected');
+        return;
+    }
+
+    try {
+        // Get the active sheet name
+        const activeSheetName = 
+            window.currentActiveSheet || 
+            localStorage.getItem('activeSheetName') ||
+            (window.voiceCommandContext && window.voiceCommandContext.activeSheet) ||
+            (currentSheet && currentSheet.sheet_name);
+            
+        console.log('🎯 Using active sheet for max score update:', activeSheetName);
+        
+        // Update the max score using the new API
+        const response = await classRecordService.updateMaxScore(
+            classRecord.google_sheet_id,
+            data.column,
+            data.maxScore.toString(),
+            activeSheetName
+        );
+
+        console.log('🔧 Max score update response:', response);
+
+        if (response.data?.success) {
+            const sheetUsed = response.data.sheet_name || activeSheetName || 'spreadsheet';
+            
+            toast.success(`✅ ${data.column} max score updated to ${data.maxScore} in ${sheetUsed}`);
+            if (voiceEnabled) {
+                speakText(`Successfully updated ${data.column} maximum score to ${data.maxScore}`);
+            }
+            
+            // 🔥 Optional: Trigger a refresh of the sheet data if you have that functionality
+            // refreshSheetData();
+            
+        } else {
+            throw new Error(response.data?.error || 'Failed to update max score');
+        }
+    } catch (error) {
+        console.error('❌ Update max score error:', error);
+        
+        const errorMessage = error.response?.data?.error || error.message || 'Unknown error';
+        toast.error(`Failed to update max score: ${errorMessage}`);
+        if (voiceEnabled) {
+            speakText('Failed to update the maximum score. Please try again.');
+        }
+    }
+};
+
+const handleBatchUpdateMaxScore = async (data) => {
+    console.log('🎯 Batch updating max scores:', data);
+    
+    if (!classRecord?.google_sheet_id) {
+        toast.error('No Google Sheet connected');
+        return;
+    }
+
+    try {
+        // Get the active sheet name
+        const activeSheetName = 
+            window.currentActiveSheet || 
+            localStorage.getItem('activeSheetName') ||
+            (window.voiceCommandContext && window.voiceCommandContext.activeSheet) ||
+            (currentSheet && currentSheet.sheet_name);
+            
+        console.log('🎯 Using active sheet for batch max score update:', activeSheetName);
+        console.log('🎯 Updating columns:', data.columns);
+        console.log('🎯 New max score:', data.maxScore);
+        
+        // Update the batch max scores using the new API
+        const response = await classRecordService.updateBatchMaxScores(
+            classRecord.google_sheet_id,
+            data.columns,
+            data.maxScore.toString(),
+            activeSheetName
+        );
+
+        console.log('🔧 Batch max score update response:', response);
+
+        if (response.data?.success) {
+            const results = response.data.results;
+            const sheetUsed = activeSheetName || 'spreadsheet';
+            
+            if (results.updated_columns > 0) {
+                const columnList = data.columns.slice(0, 3).join(', ') + 
+                                 (data.columns.length > 3 ? `... (${data.columns.length} total)` : '');
+                
+                toast.success(`✅ Updated ${results.updated_columns} columns to max score ${data.maxScore}: ${columnList}`);
+                if (voiceEnabled) {
+                    speakText(`Successfully updated ${results.updated_columns} ${data.category} columns to maximum score ${data.maxScore}`);
+                }
+            }
+            
+            if (results.failed_columns > 0) {
+                console.warn('⚠️ Some columns failed to update:', results.errors);
+                toast.warn(`⚠️ ${results.failed_columns} columns failed to update`);
+            }
+            
+            // 🔥 Optional: Trigger a refresh of the sheet data if you have that functionality
+            // refreshSheetData();
+            
+        } else {
+            throw new Error(response.data?.error || 'Failed to update batch max scores');
+        }
+    } catch (error) {
+        console.error('❌ Batch update max scores error:', error);
+        
+        const errorMessage = error.response?.data?.error || error.message || 'Unknown error';
+        toast.error(`Failed to update max scores: ${errorMessage}`);
+        if (voiceEnabled) {
+            speakText('Failed to update the maximum scores. Please try again.');
         }
     }
 };
