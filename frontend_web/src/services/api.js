@@ -454,6 +454,16 @@ export const classRecordService = {
         
         return api.post(`/sheets/${sheetId}/update-batch-max-scores/`, payload);
     },
+
+    updateSheetRange: (sheetId, updateData, sheetName = null) => {
+        const payload = { 
+            range: updateData.range,
+            values: updateData.values
+        };
+        if (sheetName) payload.sheet_name = sheetName;
+        
+        return api.post(`/sheets/service-account/${sheetId}/update-range/`, payload);
+    },
 };
 
 export const enhancedClassRecordService = {

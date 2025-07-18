@@ -167,6 +167,17 @@ const phoneticCorrections = {
   'english': 'english', 'literature': 'english', 'writing': 'english',
   'science': 'science', 'physics': 'science', 'chemistry': 'science', 'biology': 'science',
   'history': 'history', 'social studies': 'history', 'geography': 'history',
+
+  'short': 'sort',
+  'shore': 'sort',
+  'shirt': 'sort',
+  'shurt': 'sort',
+  'shart': 'sort',
+
+  'assending': 'ascending',
+  'desending': 'descending',
+  'alfabetical': 'alphabetical',
+  'alfabetic': 'alphabetical',
 };
 
 // 🚀 ENHANCED: More comprehensive word-to-number mapping (FIXED - removed ordinals)
@@ -1047,6 +1058,7 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
     }
   }
 
+  // Stage 6.1: Export commands
   const exportPatterns = [
     // PDF Export Patterns
     /(?:export|save|download|generate)\s+(?:to\s+)?pdf/i,           // "export PDF"
@@ -1096,6 +1108,7 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
     }
   }
 
+  // Stage 6.2: Max score patterns
   const maxScorePatterns = [
     // Primary patterns
     /(.+?)\s+max\s+score\s+(\d+(?:\.\d+)?)\s*$/i,           // "Quiz 1 max score 30"
@@ -1136,6 +1149,7 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
     }
   }
 
+  // Stage 6.3: Batch max score patterns
   const batchMaxScorePatterns = [
     /set\s+all\s+(.+?)\s+max\s+score\s+(\d+(?:\.\d+)?)\s*$/i,     // "Set all quizzes max score 20"
     /all\s+(.+?)\s+maximum\s+(\d+(?:\.\d+)?)\s*$/i,               // "All labs maximum 15"
@@ -1254,6 +1268,126 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
     }
   }
 
+  // Stage 7.5: Student ID grade entry patterns
+  const studentIdGradePatterns = [
+    /(.+?)\s+student\s+id\s+([\d\-]+)\s+(?:score|grade)\s+(\d+(?:\.\d+)?)\s*$/i,  // "Quiz 1 student id 22-2711-726 score 20"
+    /(.+?)\s+id\s+([\d\-]+)\s+(?:score|grade)\s+(\d+(?:\.\d+)?)\s*$/i,            // "Quiz 1 id 22-2711-726 score 20"
+    /(.+?)\s+student\s+id\s+([\d\-]+)\s+(\d+(?:\.\d+)?)\s*$/i,                    // "Quiz 1 student id 22-2711-726 20"
+    /(.+?)\s+id\s+([\d\-]+)\s+(\d+(?:\.\d+)?)\s*$/i,                              // "Quiz 1 id 22-2711-726 20"
+  ];
+
+  console.log('🔍 TESTING Student ID Grade Entry patterns...');
+  console.log('🔍 Input transcript:', processedTranscript);
+
+  for (let i = 0; i < studentIdGradePatterns.length; i++) {
+    const pattern = studentIdGradePatterns[i];
+    const idGradeMatch = processedTranscript.match(pattern);
+    
+    console.log(`🔍 Pattern ${i + 1}: ${pattern}`);
+    console.log(`🔍 Match result:`, idGradeMatch);
+    
+    if (idGradeMatch) {
+      const columnText = idGradeMatch[1].trim();
+      let studentId = idGradeMatch[2].trim();
+      const score = parseFloat(idGradeMatch[3]);
+      
+      console.log('🆔 STUDENT_ID_GRADE_ENTRY MATCHED:', { 
+        columnText,
+        studentId,
+        score,
+        pattern: i + 1
+      });
+      
+      // 🔥 NORMALIZE the student ID format
+      if (studentId.match(/^\d{2}-\d{4}-\d{3}$/)) {
+        // Already in correct format
+      } else if (studentId.match(/^\d{9}$/)) {
+        // Format: 222711726 -> 22-2711-726
+        studentId = studentId.replace(/(\d{2})(\d{4})(\d{3})/, '$1-$2-$3');
+      } else if (studentId.match(/^\d{2}\d{4}\d{3}$/)) {
+        // Format: 222711726 -> 22-2711-726
+        studentId = studentId.replace(/(\d{2})(\d{4})(\d{3})/, '$1-$2-$3');
+      }
+      
+      // Find the best matching column
+      const matchedColumn = findBestColumnMatch(columnText, headers);
+      
+      if (matchedColumn && score >= 0) {
+        console.log('🆔 STUDENT_ID_GRADE_ENTRY detected:', { 
+          columnText,
+          matchedColumn,
+          studentId,
+          score
+        });
+        
+        return {
+          type: 'STUDENT_ID_GRADE_ENTRY',
+          data: {
+            studentId: studentId,
+            column: matchedColumn,
+            value: score,
+            confidence: 'high',
+            originalText: transcript
+          }
+        };
+      }
+    }
+  }
+
+  console.log('🔍 No Student ID Grade Entry patterns matched!');
+
+  // 🔥 CRITICAL: Stage 7.6 - Student ID Update Patterns (MOVED HERE - BEFORE ADD_STUDENT!)
+  const studentIdPatterns = [
+    // 🔥 SPECIFIC: Only match when it's NOT "add student" command
+    /^(?!add\s+student)(.+?)\s+add\s+student\s+id\s+(.+)$/i,        // "Omen add student id 22-2711-726"
+    /^(?!add\s+student)(.+?)\s+set\s+student\s+id\s+(.+)$/i,        // "Omen set student id 22-2711-726"
+    /^(?!add\s+student)(.+?)\s+student\s+id\s+(.+)$/i,              // "Omen student id 22-2711-726"
+    /^(?!add\s+student)(.+?)\s+with\s+student\s+id\s+(.+)$/i,       // "Omen with student id 22-2711-726"
+    /^set\s+student\s+id\s+(.+?)\s+for\s+(.+)$/i,                   // "Set student id 22-2711-726 for Omen"
+    /^add\s+student\s+id\s+(.+?)\s+for\s+(.+)$/i,                   // "Add student id 22-2711-726 for Omen"
+  ];
+
+  for (const pattern of studentIdPatterns) {
+    const studentIdMatch = processedTranscript.match(pattern);
+    if (studentIdMatch) {
+      let studentName = '';
+      let studentIdValue = '';
+      
+      // Different patterns have different group arrangements
+      if (pattern.toString().includes('for')) {
+        // Pattern: "set student id 22-2711-726 for Omen"
+        studentIdValue = parseStudentId(studentIdMatch[1].trim());
+        studentName = studentIdMatch[2].trim();
+      } else {
+        // Pattern: "Omen add student id 22-2711-726"
+        studentName = studentIdMatch[1].trim();
+        studentIdValue = parseStudentId(studentIdMatch[2].trim());
+      }
+      
+      console.log('🆔 STUDENT_ID_UPDATE detected:', { studentName, studentIdValue });
+      
+      // Apply context-aware corrections to student name
+      const contextWords = [
+        ...headers.map(h => h.toLowerCase()),
+        ...recentStudents.map(s => s.toLowerCase())
+      ];
+      const enhancedName = applyContextPhoneticCorrections(studentName, contextWords);
+      const cleanedName = cleanName(enhancedName);
+      
+      return {
+        type: 'UPDATE_STUDENT_ID',
+        data: {
+          searchName: cleanedName,
+          studentId: studentIdValue,
+          column: 'STUDENT ID',
+          value: studentIdValue,
+          confidence: 'high',
+          extractedName: enhancedName
+        }
+      };
+    }
+  }
+
   // Stage 8: Check for confirmation/rejection patterns
   const confirmPattern = /(?:yes|yeah|yep|correct|right|that's\s*right|confirm|okay|ok|good|perfect)/i;
   if (confirmPattern.test(processedTranscript)) {
@@ -1273,7 +1407,7 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
     };
   }
 
-  // 🔥 FIXED: Stage 9 - Enhanced student addition patterns (MOVED UP - HIGHEST PRIORITY!)
+  // Stage 9: Enhanced student addition patterns
   const addStudentPatterns = [
     // 🔥 NEW: Patterns with Student ID
     /(?:add|new|create)\s+student\s+(.+?)\s+(?:with\s+)?(?:student\s+)?id\s+(.+)$/i,
@@ -1389,55 +1523,6 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
           'FIRST NAME': firstName,   // ✅ Always use these exact field names
           'STUDENT ID': studentId,   // ✅ Always use these exact field names
           confidence: 'high'
-        }
-      };
-    }
-  }
-
-  // 🔥 FIXED: Stage 10 - Student ID addition patterns (MOVED DOWN - LOWER PRIORITY!)
-  const studentIdPatterns = [
-    /^(?!.*add\s+student)(.+?)\s+(?:add|set)\s+(?:student\s+)?id\s+(.+)$/i,  // 🔥 Exclude "add student"
-    /^(?!.*add\s+student)(.+?)\s+(?:student\s+)?id\s+(.+)$/i,                // 🔥 Exclude "add student"  
-    /^(?!.*add\s+student)(.+?)\s+(?:with\s+)?(?:student\s+)?id\s+(.+)$/i,    // 🔥 Exclude "add student"
-    /^(?:set|add)\s+(?:student\s+)?id\s+(.+?)\s+(?:for|to)\s+(.+)$/i
-  ];
-
-  for (const pattern of studentIdPatterns) {
-    const studentIdMatch = processedTranscript.match(pattern);
-    if (studentIdMatch) {
-      let studentName = '';
-      let studentIdValue = '';
-      
-      // Different patterns have different group arrangements
-      if (pattern.toString().includes('(?:for|to)')) {
-        // Pattern: "set student id 22-2711-726 for Owen"
-        studentIdValue = parseStudentId(studentIdMatch[1].trim());
-        studentName = studentIdMatch[2].trim();
-      } else {
-        // Pattern: "Owen add student id 22-2711-726"
-        studentName = studentIdMatch[1].trim();
-        studentIdValue = parseStudentId(studentIdMatch[2].trim());
-      }
-      
-      console.log('🆔 STUDENT_ID_UPDATE detected:', { studentName, studentIdValue });
-      
-      // Apply context-aware corrections to student name
-      const contextWords = [
-        ...headers.map(h => h.toLowerCase()),
-        ...recentStudents.map(s => s.toLowerCase())
-      ];
-      const enhancedName = applyContextPhoneticCorrections(studentName, contextWords);
-      const cleanedName = cleanName(enhancedName);
-      
-      return {
-        type: 'UPDATE_STUDENT_ID',
-        data: {
-          searchName: cleanedName,
-          studentId: studentIdValue,
-          column: 'STUDENT ID',
-          value: studentIdValue,
-          confidence: 'high',
-          extractedName: enhancedName
         }
       };
     }

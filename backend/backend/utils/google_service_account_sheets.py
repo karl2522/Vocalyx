@@ -2338,3 +2338,36 @@ class GoogleServiceAccountSheets:
                 'success': False,
                 'error': f'Failed to update batch max scores: {str(e)}'
             }
+
+    def update_range(self, sheet_id, range_name, values, sheet_name=None):
+        """Update a range of cells in the sheet"""
+        try:
+            # If sheet_name is provided, prepend it to the range
+            if sheet_name:
+                range_name = f"'{sheet_name}'!{range_name}"
+
+            body = {
+                'values': values
+            }
+
+            # 🔥 FIXED: Use self.sheets_service instead of self.service
+            result = self.sheets_service.spreadsheets().values().update(
+                spreadsheetId=sheet_id,
+                range=range_name,
+                valueInputOption='RAW',
+                body=body
+            ).execute()
+
+            return {
+                'success': True,
+                'updated_cells': result.get('updatedCells', 0),
+                'updated_rows': result.get('updatedRows', 0),
+                'updated_columns': result.get('updatedColumns', 0)
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to update range: {str(e)}")
+            return {
+                'success': False,
+                'error': str(e)
+            }

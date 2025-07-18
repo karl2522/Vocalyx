@@ -1462,3 +1462,29 @@ def sheets_update_batch_max_scores_service_account(request, sheet_id):
     except Exception as e:
         logger.error(f"Update batch max scores error: {str(e)}")
         return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def sheets_update_range_service_account(request, sheet_id):
+    """Update a range of cells in Google Sheet using service account"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+
+        range_name = request.data.get('range')  # e.g., 'A2:Z100'
+        values = request.data.get('values')  # 2D array of values
+        sheet_name = request.data.get('sheet_name')  # Optional specific sheet
+
+        if not range_name or not values:
+            return Response({'error': 'range and values are required'}, status=400)
+
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+
+        # Update the range of cells
+        result = service.update_range(sheet_id, range_name, values, sheet_name)
+
+        return Response(result)
+
+    except Exception as e:
+        logger.error(f"Update range error: {str(e)}")
+        return Response({'error': str(e)}, status=500)

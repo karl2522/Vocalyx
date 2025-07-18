@@ -689,52 +689,304 @@ const ClassRecordExcel = () => {
   };
 
  const executeCommand = (command) => {
-    switch (command.type) {
-      case 'SMART_NAME_GRADE_ENTRY':
-        handleSmartNameGradeEntryVoice(command.data);
-        break;
-      case 'ADD_STUDENT':
-        handleAddStudentVoice(command.data);
-        break;
-      case 'UPDATE_MAX_SCORE':
-        handleUpdateMaxScore(command.data);
-        break;
-      case 'UPDATE_BATCH_MAX_SCORE':
-        handleBatchUpdateMaxScore(command.data);
-        break;
-      case 'EXPORT_EXCEL':
-        handleExportToExcel();
-        break;
-      case 'EXPORT_PDF':
-        handleExportToPDF();
-        break;
-      case 'EXPORT_CSV':   
-        handleExportToCSV();
-        break;
-      case 'UNDO_COMMAND':
-        toast('🔄 Undo functionality not available in Google Sheets mode');
-        break;
-      case 'REDO_COMMAND':
-        toast('🔄 Redo functionality not available in Google Sheets mode');
-        break;
-      case 'BATCH_EVERYONE':
-        handleBatchEveryoneCommand(command.data);
-        break;
-      case 'UPDATE_STUDENT_ID':
-        handleUpdateStudentId(command.data);
-        break;
-      case 'BATCH_STUDENT_LIST':
-        handleBatchStudentListCommand(command.data);
-        break;
-      case 'BATCH_ROW_RANGE':
-        handleBatchRowRangeCommand(command.data);
-        break;
-      default:
-        toast.error(`🎙️ Command not recognized: "${command.data?.originalText || 'Unknown command'}"`);
-        if (voiceEnabled) {
-          speakText('Sorry, I didn\'t understand that command. Please try again.');
-        }
+  switch (command.type) {
+    case 'SMART_NAME_GRADE_ENTRY':
+      handleSmartNameGradeEntryVoice(command.data);
+      break;
+    case 'ADD_STUDENT':
+      handleAddStudentVoice(command.data);
+      break;
+    case 'UPDATE_MAX_SCORE':
+      handleUpdateMaxScore(command.data);
+      break;
+    case 'UPDATE_BATCH_MAX_SCORE':
+      handleBatchUpdateMaxScore(command.data);
+      break;
+    case 'STUDENT_ID_GRADE_ENTRY':
+      console.log('🆔 Executing STUDENT_ID_GRADE_ENTRY handler');
+      handleStudentIdGradeEntry(command.data);
+      break;
+    case 'SORT_STUDENTS':  // 🔥 NEW: Add this case
+      console.log('🔄 Executing SORT_STUDENTS handler');
+      handleSortStudents(command.data);
+      break;
+    case 'EXPORT_EXCEL':
+      handleExportToExcel();
+      break;
+    case 'EXPORT_PDF':
+      handleExportToPDF();
+      break;
+    case 'EXPORT_CSV':   
+      handleExportToCSV();
+      break;
+    case 'UNDO_COMMAND':
+      toast('🔄 Undo functionality not available in Google Sheets mode');
+      break;
+    case 'REDO_COMMAND':
+      toast('🔄 Redo functionality not available in Google Sheets mode');
+      break;
+    case 'BATCH_EVERYONE':
+      handleBatchEveryoneCommand(command.data);
+      break;
+    case 'UPDATE_STUDENT_ID':
+      handleUpdateStudentId(command.data);
+      break;
+    case 'BATCH_STUDENT_LIST':
+      handleBatchStudentListCommand(command.data);
+      break;
+    case 'BATCH_ROW_RANGE':
+      handleBatchRowRangeCommand(command.data);
+      break;
+    default:
+      toast.error(`🎙️ Command not recognized: "${command.data?.originalText || 'Unknown command'}"`);
+      if (voiceEnabled) {
+        speakText('Sorry, I didn\'t understand that command. Please try again.');
+      }
+  }
+};
+const handleSortStudents = async (data) => {
+  try {
+    const { sortType, direction } = data;
+    
+    toast(`🔄 Sorting students by ${sortType} (${direction}ending)...`);
+    
+    if (voiceEnabled) {
+      speakText(`Sorting students by ${sortType === 'firstName' ? 'first name' : sortType === 'lastName' ? 'last name' : 'alphabetical order'}`);
     }
+    
+    // Use your existing data instead of fetching fresh data
+    if (!headers || !tableData || tableData.length === 0) {
+      toast.error('No student data available to sort');
+      return;
+    }
+
+    console.log('🔍 DEBUG: headers:', headers);
+    console.log('🔍 DEBUG: tableData sample:', tableData.slice(0, 3));
+    console.log('🔍 DEBUG: tableData structure:', typeof tableData[0]);
+    
+    // Find the column indices for sorting
+    const firstNameIndex = headers.findIndex(h => h.toLowerCase().includes('first'));
+    const lastNameIndex = headers.findIndex(h => h.toLowerCase().includes('lastname'));
+    const noIndex = headers.findIndex(h => h.toLowerCase().includes('no') || h.toLowerCase() === 'no.');
+
+    console.log('🔍 DEBUG: firstNameIndex:', firstNameIndex);
+    console.log('🔍 DEBUG: lastNameIndex:', lastNameIndex);
+    console.log('🔍 DEBUG: noIndex:', noIndex);
+    
+    if (firstNameIndex === -1 || lastNameIndex === -1) {
+      toast.error('Could not find name columns for sorting');
+      return;
+    }
+
+     if (tableData.length > 0) {
+      const sampleRow = tableData[0];
+      console.log('🔍 DEBUG: Sample row:', sampleRow);
+      console.log('🔍 DEBUG: Sample row type:', typeof sampleRow);
+      console.log('🔍 DEBUG: Sample row keys:', Object.keys(sampleRow));
+      
+      if (firstNameIndex !== -1) {
+        console.log('🔍 DEBUG: First name header:', headers[firstNameIndex]);
+        console.log('🔍 DEBUG: First name value:', sampleRow[headers[firstNameIndex]]);
+      }
+      
+      if (lastNameIndex !== -1) {
+        console.log('🔍 DEBUG: Last name header:', headers[lastNameIndex]);
+        console.log('🔍 DEBUG: Last name value:', sampleRow[headers[lastNameIndex]]);
+      }
+    }
+    
+    // 🔥 FIXED: Better empty row filtering - check for student names specifically
+    const nonEmptyRows = tableData.filter(row => {
+      const lastName = row[headers[lastNameIndex]] || '';
+      const firstName = row[headers[firstNameIndex]] || '';
+      
+      console.log('🔍 DEBUG: Checking row - lastName:', lastName, 'firstName:', firstName);
+      
+      // Row is valid if it has either last name or first name
+      return (lastName.trim() !== '' && lastName.trim() !== '0') || 
+             (firstName.trim() !== '' && firstName.trim() !== '0');
+    });
+    
+    console.log('🔍 Original rows:', tableData.length);
+    console.log('🔍 Non-empty rows:', nonEmptyRows.length);
+    console.log('🔍 Sample non-empty row:', nonEmptyRows[0]);
+    
+    if (nonEmptyRows.length === 0) {
+      toast.error('No students found to sort');
+      return;
+    }
+    
+    // Sort the data
+    const sortedData = [...nonEmptyRows].sort((a, b) => {
+      let valueA, valueB;
+      
+      switch (sortType) {
+        case 'firstName':
+          valueA = (a[headers[firstNameIndex]] || '').toLowerCase();
+          valueB = (b[headers[firstNameIndex]] || '').toLowerCase();
+          break;
+        case 'lastName':
+          valueA = (a[headers[lastNameIndex]] || '').toLowerCase();
+          valueB = (b[headers[lastNameIndex]] || '').toLowerCase();
+          break;
+        case 'alphabetical':
+        default:
+          // Sort by last name first, then first name
+          const lastNameA = (a[headers[lastNameIndex]] || '').toLowerCase();
+          const lastNameB = (b[headers[lastNameIndex]] || '').toLowerCase();
+          const firstNameA = (a[headers[firstNameIndex]] || '').toLowerCase();
+          const firstNameB = (b[headers[firstNameIndex]] || '').toLowerCase();
+          
+          if (lastNameA !== lastNameB) {
+            valueA = lastNameA;
+            valueB = lastNameB;
+          } else {
+            valueA = firstNameA;
+            valueB = firstNameB;
+          }
+          break;
+      }
+      
+      // Apply direction
+      if (direction === 'desc') {
+        return valueB.localeCompare(valueA);
+      } else {
+        return valueA.localeCompare(valueB);
+      }
+    });
+    
+    // Re-number the students after sorting
+    const sortedRows = sortedData.map((row, index) => {
+      const newRow = headers.map(header => row[header] || '');
+      
+      // Update the NO. column with sequential numbers
+      if (noIndex !== -1) {
+        newRow[noIndex] = (index + 1).toString();
+      }
+      
+      return newRow;
+    });
+    
+    // 🔥 FIXED: Fill remaining rows with empty arrays (don't lose original size)
+    const originalSize = tableData.length;
+    while (sortedRows.length < originalSize) {
+      sortedRows.push(new Array(headers.length).fill(''));
+    }
+    
+    console.log('🔄 Sorted rows to update:', sortedRows.length);
+    console.log('🔄 First sorted row:', sortedRows[0]);
+    
+    // Use A4 instead of A2 to start after the 3 header rows
+    const updateData = {
+      range: `A4:${String.fromCharCode(65 + headers.length - 1)}${originalSize + 3}`,
+      values: sortedRows
+    };
+    
+    console.log('🔄 Updating sheet with sorted data:', updateData);
+    
+    // Use the updateSheetRange function
+    const response = await classRecordService.updateSheetRange(
+      classRecord.google_sheet_id, 
+      updateData,
+      currentSheet?.sheet_name || null
+    );
+    
+    if (response.data?.success) {
+      toast.success(`✅ Students sorted by ${sortType} and re-numbered successfully!`);
+      
+      if (voiceEnabled) {
+        speakText(`Students have been sorted by ${sortType === 'firstName' ? 'first name' : sortType === 'lastName' ? 'last name' : 'alphabetical order'} and re-numbered`);
+      }
+      
+      // Refresh your data using your existing method
+      if (currentSheet) {
+        await loadSheetData(classRecord.google_sheet_id, currentSheet.sheet_name);
+      } else {
+        await loadSingleSheetData(classRecord.google_sheet_id);
+      }
+      
+    } else {
+      throw new Error(response.data?.error || 'Update failed');
+    }
+    
+  } catch (error) {
+    console.error('Sort error:', error);
+    toast.error('Failed to sort students');
+    
+    if (voiceEnabled) {
+      speakText('Sorry, there was an error sorting the students. Please try again.');
+    }
+  }
+};
+
+const handleStudentIdGradeEntry = async (data) => {
+  try {
+    toast('🆔 Finding student by ID...');
+    
+    // Get fresh sheet data
+    const sheetsResponse = await getSheetDataCached();
+    
+    if (!sheetsResponse.data?.success) {
+      toast.error('Could not load sheet data');
+      return;
+    }
+    
+    const { headers, tableData } = sheetsResponse.data;
+    
+    // Find student by ID
+    const studentIdColumnIndex = headers.findIndex(h => 
+      h.toLowerCase().includes('student') && h.toLowerCase().includes('id')
+    );
+    
+    if (studentIdColumnIndex === -1) {
+      toast.error('Student ID column not found');
+      return;
+    }
+    
+    // Find the student row
+    const studentRowIndex = tableData.findIndex(row => 
+      row[studentIdColumnIndex] === data.studentId
+    );
+    
+    if (studentRowIndex === -1) {
+      toast.error(`Student ID ${data.studentId} not found`);
+      if (voiceEnabled) {
+        speakText(`Student ID ${data.studentId} not found in the class record`);
+      }
+      return;
+    }
+    
+    // Get student name for display
+    const studentRow = tableData[studentRowIndex];
+    const lastNameIndex = headers.findIndex(h => h.toLowerCase().includes('lastname'));
+    const firstNameIndex = headers.findIndex(h => h.toLowerCase().includes('first'));
+    
+    const studentName = [
+      studentRow[firstNameIndex] || '',
+      studentRow[lastNameIndex] || ''
+    ].filter(Boolean).join(' ');
+    
+    // Find target column
+    const targetColumnIndex = headers.findIndex(h => h === data.column);
+    
+    if (targetColumnIndex === -1) {
+      toast.error(`Column "${data.column}" not found`);
+      return;
+    }
+    
+    // Update the grade
+    await updateStudentGradeByPosition(studentRowIndex, targetColumnIndex, data.value);
+    
+    toast.success(`✅ Updated ${studentName} (ID: ${data.studentId}) - ${data.column}: ${data.value}`);
+    
+    if (voiceEnabled) {
+      speakText(`Successfully updated ${studentName} ${data.column} score to ${data.value}`);
+    }
+    
+  } catch (error) {
+    console.error('Student ID grade entry error:', error);
+    toast.error('Failed to update grade by student ID');
+  }
 };
 
 const handleUpdateMaxScore = async (data) => {
@@ -2636,11 +2888,6 @@ const handleExportToPDF = async () => {
                           )}
                         </button>
                       ))}
-                      
-                      {/* Voice command hint */}
-                      <div className="mt-2 px-4 py-2 text-xs text-slate-500 border-t border-slate-200">
-                        💡 Say "switch to [sheet name]" to change sheets with voice
-                      </div>
                     </div>
                   )}
                 </div>
