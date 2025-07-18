@@ -273,7 +273,7 @@ class GoogleServiceAccountSheets:
             result = self.sheets_service.spreadsheets().values().update(
                 spreadsheetId=sheet_id,
                 range=cell_range,
-                valueInputOption='RAW',
+                valueInputOption='USER_ENTERED',
                 body=body
             ).execute()
 
@@ -337,7 +337,7 @@ class GoogleServiceAccountSheets:
             result = self.sheets_service.spreadsheets().values().update(
                 spreadsheetId=sheet_id,
                 range=range_name,
-                valueInputOption='RAW',
+                valueInputOption='USER_ENTERED',
                 body=body
             ).execute()
 
@@ -369,7 +369,7 @@ class GoogleServiceAccountSheets:
     def add_student_with_auto_number(self, sheet_id: str, student_data: dict, sheet_name: str = None) -> dict:
         """
         Add a new student row to the Google Sheet with auto-numbering.
-        Updated for 3-row header structure and smart student counting.
+        Updated for 3-row header structure and smart student counting with formula protection.
         """
         try:
             # Get sheet data - use specific sheet if provided
@@ -427,45 +427,69 @@ class GoogleServiceAccountSheets:
             print(f"🔍 ADD STUDENT: Using row index {first_empty_row_index} (sheet row {next_row})")
             print(f"🔍 ADD STUDENT: Assigning student number {student_number}")
 
-            # Create new row with student data
-            new_row = [''] * len(headers)
+            # 🔥 NEW: Update only specific columns to avoid formula columns
+            updates = []
 
-            # Auto-assign the number to the first column (NO.)
+            # Update NO. column (A)
             if len(headers) > 0:
-                new_row[0] = str(student_number)
+                updates.append({
+                    'range': f"'{active_sheet_name}'!A{next_row}",
+                    'values': [[str(student_number)]]
+                })
+                print(f"🔍 ADD STUDENT: Adding NO. column update: A{next_row} = {student_number}")
 
-            # Fill in the student data
+            # Update student data columns
             for key, value in student_data.items():
                 if key in headers:
                     index = headers.index(key)
-                    new_row[index] = str(value)
+                    column_letter = chr(65 + index)
 
-            # CRITICAL FIX: Always use the active_sheet_name variable with quotes for safety
-            range_name = f"'{active_sheet_name}'!A{next_row}:{chr(65 + len(headers) - 1)}{next_row}"
-            print(f"🔍 ADD STUDENT: Range for update: {range_name}")
+                    # 🔥 SKIP formula columns
+                    header_name = headers[index].upper()
+                    formula_keywords = ['TOTAL', 'SUM', 'AVERAGE', 'AVG', 'FORMULA']
+                    is_formula_column = any(keyword in header_name for keyword in formula_keywords)
 
-            body = {
-                'values': [new_row]
-            }
+                    if not is_formula_column:
+                        updates.append({
+                            'range': f"'{active_sheet_name}'!{column_letter}{next_row}",
+                            'values': [[str(value)]]
+                        })
+                        print(f"🔍 ADD STUDENT: Adding data column update: {column_letter}{next_row} = {value}")
+                    else:
+                        print(f"🔍 ADD STUDENT: SKIPPING formula column: {header_name}")
 
-            result = self.sheets_service.spreadsheets().values().update(
-                spreadsheetId=sheet_id,
-                range=range_name,
-                valueInputOption='RAW',
-                body=body
-            ).execute()
+            print(f"🔍 ADD STUDENT: Total updates to make: {len(updates)}")
+
+            # 🔥 Batch update only the data columns
+            if updates:
+                body = {
+                    'valueInputOption': 'USER_ENTERED',
+                    'data': updates
+                }
+
+                result = self.sheets_service.spreadsheets().values().batchUpdate(
+                    spreadsheetId=sheet_id,
+                    body=body
+                ).execute()
+
+                print(f"🔍 ADD STUDENT: Batch update successful, updated {result.get('totalUpdatedCells', 0)} cells")
+            else:
+                print("🔍 ADD STUDENT: No updates to make")
+                result = {'totalUpdatedCells': 0}
 
             print(
                 f"🔍 ADD STUDENT: Successfully added student #{student_number} to sheet '{active_sheet_name}' row {next_row}")
 
             return {
                 'success': True,
-                'updated_cells': result.get('updatedCells', 0),
+                'updated_cells': result.get('totalUpdatedCells', 0),
                 'row_added': next_row,
                 'rowNumber': student_number,
                 'student_data': student_data,
-                'range': range_name,
-                'sheet_name': active_sheet_name  # CRITICAL FIX: Return the active sheet name
+                'sheet_name': active_sheet_name,
+                'first_empty_row_index': first_empty_row_index,
+                'actual_student_count': actual_student_count,
+                'updates_made': len(updates)
             }
 
         except Exception as e:
@@ -542,7 +566,7 @@ class GoogleServiceAccountSheets:
 
             # 🔥 Batch update all numbers at once
             body = {
-                'valueInputOption': 'RAW',
+                'valueInputOption': 'USER_ENTERED',
                 'data': updates
             }
 
@@ -852,6 +876,9 @@ class GoogleServiceAccountSheets:
             cell_range = f"'{target_sheet_name}'!{column_letter}{sheet_row}"
 
             logger.info(f"Updating cell {cell_range} with value '{value}'")
+            logger.info(f"🔍 DEBUG: Using valueInputOption: USER_ENTERED")
+            logger.info(f"🔍 DEBUG: Target column: {column_name}")
+            logger.info(f"🔍 DEBUG: Row index: {row_index}")
 
             # Update the cell
             body = {
@@ -861,9 +888,11 @@ class GoogleServiceAccountSheets:
             result = self.sheets_service.spreadsheets().values().update(
                 spreadsheetId=sheet_id,
                 range=cell_range,
-                valueInputOption='RAW',
+                valueInputOption='USER_ENTERED',
                 body=body
             ).execute()
+
+            logger.info(f"🔍 DEBUG: Update result: {result}")
 
             logger.info(f"Successfully updated cell {cell_range} with value '{value}'")
 
@@ -1149,7 +1178,7 @@ class GoogleServiceAccountSheets:
     def add_student_with_auto_number_to_sheet(self, sheet_id: str, student_data: dict, sheet_name: str) -> dict:
         """
         Add a new student row to a specific sheet with auto-numbering.
-        Updated for 3-row header structure.
+        Updated for 3-row header structure and formula protection.
         """
         try:
             # Get sheet data
@@ -1211,49 +1240,74 @@ class GoogleServiceAccountSheets:
             print(f"   Target sheet row: {next_row}")
             print(f"   New student number: {student_number}")
 
-            # Create new row with student data
-            new_row = [''] * len(headers)
+            # 🔥 NEW: Update only specific columns to avoid formula columns
+            updates = []
 
-            # Auto-assign the number to the first column (NO.)
+            # Update NO. column (A)
             if len(headers) > 0:
-                new_row[0] = str(student_number)
+                updates.append({
+                    'range': f"'{sheet_name}'!A{next_row}",
+                    'values': [[str(student_number)]]
+                })
+                print(f"🔍 ADD STUDENT: Adding NO. column update: A{next_row} = {student_number}")
 
-            # Fill in the student data
+            # Update student data columns
             for key, value in student_data.items():
                 if key in headers:
                     index = headers.index(key)
-                    new_row[index] = str(value)
+                    column_letter = chr(65 + index)
 
-            # Append the new row to specific sheet
-            range_name = f"'{sheet_name}'!A{next_row}:{chr(65 + len(headers) - 1)}{next_row}"
+                    # 🔥 SKIP formula columns
+                    header_name = headers[index].upper()
+                    formula_keywords = ['TOTAL', 'SUM', 'AVERAGE', 'AVG', 'FORMULA']
+                    is_formula_column = any(keyword in header_name for keyword in formula_keywords)
 
-            body = {
-                'values': [new_row]
-            }
+                    if not is_formula_column:
+                        updates.append({
+                            'range': f"'{sheet_name}'!{column_letter}{next_row}",
+                            'values': [[str(value)]]
+                        })
+                        print(f"🔍 ADD STUDENT: Adding data column update: {column_letter}{next_row} = {value}")
+                    else:
+                        print(f"🔍 ADD STUDENT: SKIPPING formula column: {header_name}")
 
-            result = self.sheets_service.spreadsheets().values().update(
-                spreadsheetId=sheet_id,
-                range=range_name,
-                valueInputOption='RAW',
-                body=body
-            ).execute()
+            print(f"🔍 ADD STUDENT: Total updates to make: {len(updates)}")
+
+            # 🔥 Batch update only the data columns
+            if updates:
+                body = {
+                    'valueInputOption': 'USER_ENTERED',
+                    'data': updates
+                }
+
+                result = self.sheets_service.spreadsheets().values().batchUpdate(
+                    spreadsheetId=sheet_id,
+                    body=body
+                ).execute()
+
+                print(f"🔍 ADD STUDENT: Batch update successful, updated {result.get('totalUpdatedCells', 0)} cells")
+            else:
+                print("🔍 ADD STUDENT: No updates to make")
+                result = {'totalUpdatedCells': 0}
 
             logger.info(f"Successfully added student #{student_number} to {sheet_name} row {next_row}")
 
             return {
                 'success': True,
-                'updated_cells': result.get('updatedCells', 0),
+                'updated_cells': result.get('totalUpdatedCells', 0),
                 'row_added': next_row,
                 'rowNumber': student_number,
                 'student_data': student_data,
-                'range': range_name,
                 'sheet_name': sheet_name,
                 'first_empty_row_index': first_empty_row,
-                'actual_student_count': actual_student_count
+                'actual_student_count': actual_student_count,
+                'updates_made': len(updates)
             }
 
         except Exception as e:
             logger.error(f"Unexpected error adding student to sheet: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return {
                 'success': False,
                 'error': f'Failed to add student to sheet: {str(e)}'
@@ -1775,7 +1829,7 @@ class GoogleServiceAccountSheets:
             result = self.sheets_service.spreadsheets().values().update(
                 spreadsheetId=sheet_id,
                 range=cell_range,
-                valueInputOption='RAW',
+                valueInputOption='USER_ENTERED',
                 body=body
             ).execute()
 
@@ -2254,7 +2308,7 @@ class GoogleServiceAccountSheets:
             result = self.sheets_service.spreadsheets().values().update(
                 spreadsheetId=sheet_id,
                 range=cell_range,
-                valueInputOption='RAW',
+                valueInputOption='USER_ENTERED',
                 body=body
             ).execute()
 
@@ -2354,7 +2408,7 @@ class GoogleServiceAccountSheets:
             result = self.sheets_service.spreadsheets().values().update(
                 spreadsheetId=sheet_id,
                 range=range_name,
-                valueInputOption='RAW',
+                valueInputOption='USER_ENTERED',
                 body=body
             ).execute()
 
