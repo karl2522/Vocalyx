@@ -708,6 +708,9 @@ const ClassRecordExcel = () => {
       case 'EXPORT_PDF':
         handleExportToPDF();
         break;
+      case 'EXPORT_CSV':   
+        handleExportToCSV();
+        break;
       case 'UNDO_COMMAND':
         toast('🔄 Undo functionality not available in Google Sheets mode');
         break;

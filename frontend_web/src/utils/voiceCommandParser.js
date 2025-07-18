@@ -1047,6 +1047,55 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
     }
   }
 
+  const exportPatterns = [
+    // PDF Export Patterns
+    /(?:export|save|download|generate)\s+(?:to\s+)?pdf/i,           // "export PDF"
+    /(?:create|make)\s+pdf/i,                                       // "create PDF"
+    /pdf\s+(?:export|download|save)/i,                              // "PDF export"
+    
+    // Excel Export Patterns  
+    /(?:export|save|download|generate)\s+(?:to\s+)?excel/i,         // "export Excel"
+    /(?:export|save|download|generate)\s+(?:to\s+)?xlsx?/i,         // "export XLSX"
+    /(?:create|make)\s+excel/i,                                     // "create Excel"
+    /excel\s+(?:export|download|save)/i,                            // "Excel export"
+    
+    // CSV Export Patterns
+    /(?:export|save|download|generate)\s+(?:to\s+)?csv/i,           // "export CSV"
+    /(?:create|make)\s+csv/i,                                       // "create CSV"
+    /csv\s+(?:export|download|save)/i,                              // "CSV export"
+  ];
+
+  for (const pattern of exportPatterns) {
+    const exportMatch = processedTranscript.match(pattern);
+    if (exportMatch) {
+      const fullMatch = exportMatch[0].toLowerCase();
+      
+      let exportType = 'EXPORT_EXCEL'; // Default
+      
+      if (fullMatch.includes('pdf')) {
+        exportType = 'EXPORT_PDF';
+      } else if (fullMatch.includes('csv')) {
+        exportType = 'EXPORT_CSV';
+      } else if (fullMatch.includes('excel') || fullMatch.includes('xlsx')) {
+        exportType = 'EXPORT_EXCEL';
+      }
+      
+      console.log('✅ EXPORT command detected:', { 
+        originalText: transcript,
+        exportType,
+        confidence: 'high'
+      });
+      
+      return {
+        type: exportType,
+        data: {
+          originalText: transcript,
+          confidence: 'high'
+        }
+      };
+    }
+  }
+
   const maxScorePatterns = [
     // Primary patterns
     /(.+?)\s+max\s+score\s+(\d+(?:\.\d+)?)\s*$/i,           // "Quiz 1 max score 30"
