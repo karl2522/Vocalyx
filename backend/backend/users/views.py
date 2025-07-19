@@ -1488,3 +1488,38 @@ def sheets_update_range_service_account(request, sheet_id):
     except Exception as e:
         logger.error(f"Update range error: {str(e)}")
         return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])  # 🔥 FIXED: Added permission_classes like your other endpoints
+def delete_student_from_sheet(request, sheet_id):
+    """Delete a student from a specific Google Sheet"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets  # 🔥 FIXED: Correct import
+
+        student_identifier = request.data.get('student_identifier')
+        search_type = request.data.get('search_type', 'name')  # 'name' or 'id'
+        sheet_name = request.data.get('sheet_name')
+
+        if not student_identifier:
+            return Response({
+                'success': False,
+                'error': 'Student identifier is required'
+            }, status=400)
+
+        print(f"🗑️ API: Delete student request - {search_type}: '{student_identifier}' from sheet: {sheet_name}")
+
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+        result = service.delete_student_from_sheet(sheet_id, student_identifier, search_type, sheet_name)
+
+        if result['success']:
+            return Response(result, status=200)
+        else:
+            return Response(result, status=400)
+
+    except Exception as e:
+        logger.error(f"Delete student API error: {str(e)}")
+        return Response({
+            'success': False,
+            'error': f'Server error: {str(e)}'
+        }, status=500)

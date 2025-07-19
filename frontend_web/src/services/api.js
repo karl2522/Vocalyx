@@ -464,6 +464,11 @@ export const classRecordService = {
         
         return api.post(`/sheets/service-account/${sheetId}/update-range/`, payload);
     },
+
+    deleteStudentFromSheet: async (sheetId, data) => {
+        const response = await api.post(`/sheets/${sheetId}/delete-student/`, data);
+        return response;
+    },
 };
 
 export const enhancedClassRecordService = {

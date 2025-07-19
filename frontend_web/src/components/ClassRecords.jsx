@@ -18,6 +18,22 @@ import { TopNavbar } from './layouts/TopNavbar.jsx';
 import CreateClassRecordModal from './modals/CreateClassRecordModal';
 
 const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, recordName, isDeleting }) => {
+  const [confirmationText, setConfirmationText] = useState('');
+  const [isConfirmationValid, setIsConfirmationValid] = useState(false);
+
+  // Reset state when modal opens/closes
+  useEffect(() => {
+    if (isOpen) {
+      setConfirmationText('');
+      setIsConfirmationValid(false);
+    }
+  }, [isOpen]);
+
+  // Check if confirmation text matches record name
+  useEffect(() => {
+    setIsConfirmationValid(confirmationText.trim() === recordName.trim());
+  }, [confirmationText, recordName]);
+
   if (!isOpen) return null;
 
   // Handle backdrop click
@@ -27,67 +43,172 @@ const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, recordName, isDel
     }
   };
 
+  const handleConfirm = () => {
+    if (isConfirmationValid) {
+      onConfirm();
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" onMouseDown={handleBackdropClick}>
       {/* Backdrop */}
       <div className="fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300" style={{zIndex: 100}} aria-hidden="true"></div>
       
       {/* Modal Content */}
-      <div className="relative z-[101] w-full max-w-md mx-auto">
+      <div className="relative z-[101] w-full max-w-lg mx-auto">
         <div 
           className="bg-white rounded-xl shadow-2xl border border-gray-100 w-full"
           onClick={(e) => e.stopPropagation()}
         >
-        {/* Header */}
-        <div className="flex items-start gap-4 p-6 pb-4">
-          <div className="w-12 h-12 bg-red-50 border border-red-200 rounded-xl flex items-center justify-center flex-shrink-0">
-            <FiTrash2 className="h-6 w-6 text-red-500" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="text-lg font-semibold text-gray-900 mb-1">Delete Class Record</h3>
-            <p className="text-sm text-gray-500">This action cannot be undone</p>
-          </div>
-        </div>
-        
-        {/* Content */}
-        <div className="px-6 pb-6">
-          <div className="mb-6">
-            <p className="text-gray-600 leading-relaxed">
-              Are you sure you want to delete{' '}
-              <span className="font-semibold text-gray-900">"{recordName}"</span>?{' '}
-              All associated data including students, grades, and spreadsheet data will be permanently removed.
-            </p>
+          {/* Header */}
+          <div className="flex items-start gap-4 p-6 pb-4 border-b border-red-100">
+            <div className="w-12 h-12 bg-red-50 border border-red-200 rounded-xl flex items-center justify-center flex-shrink-0">
+              <FiTrash2 className="h-6 w-6 text-red-500" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-lg font-semibold text-gray-900 mb-1">Delete Class Record</h3>
+              <p className="text-sm text-red-600 font-medium">⚠️ This action cannot be undone</p>
+            </div>
           </div>
           
-          {/* Action Buttons */}
-          <div className="flex gap-3">
-            <button
-              onClick={onClose}
-              disabled={isDeleting}
-              className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={onConfirm}
-              disabled={isDeleting}
-              className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 active:bg-red-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-medium shadow-sm"
-            >
-              {isDeleting ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>Deleting...</span>
-                </>
-              ) : (
-                <>
-                  <FiTrash2 className="w-4 h-4" />
-                  <span>Delete Record</span>
-                </>
-              )}
-            </button>
+          {/* Content */}
+          <div className="p-6">
+            {/* Warning Message */}
+            <div className="mb-6">
+              <p className="text-gray-700 leading-relaxed mb-4">
+                You are about to permanently delete the class record{' '}
+                <span className="font-semibold text-gray-900 bg-gray-100 px-2 py-1 rounded">
+                  "{recordName}"
+                </span>
+              </p>
+              
+              {/* What will be deleted */}
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                <h4 className="font-semibold text-red-800 mb-2 flex items-center gap-2">
+                  <FiFileText className="h-4 w-4" />
+                  The following data will be permanently deleted:
+                </h4>
+                <ul className="text-sm text-red-700 space-y-1">
+                  <li className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span>
+                    All student records and grades
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span>
+                    Associated Google Sheets data (real-time sync)
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span>
+                    Voice command history and settings
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span>
+                    All class record configurations
+                  </li>
+                </ul>
+              </div>
+
+              {/* Google Sheets Warning */}
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
+                <div className="flex items-start gap-2">
+                  <div className="w-5 h-5 bg-yellow-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="text-yellow-600 text-xs font-bold">!</span>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-yellow-800">Google Sheets Integration</p>
+                    <p className="text-xs text-yellow-700 mt-1">
+                      This app syncs with Google Sheets in real-time. The associated spreadsheet data will also be affected.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Confirmation Input */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                To confirm deletion, type the class record name:
+              </label>
+              <div className="space-y-2">
+                <code className="block text-sm bg-gray-100 text-gray-800 px-3 py-2 rounded border font-mono">
+                  {recordName}
+                </code>
+                <input
+                  type="text"
+                  value={confirmationText}
+                  onChange={(e) => setConfirmationText(e.target.value)}
+                  placeholder="Type the class record name to confirm"
+                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+                    confirmationText === '' 
+                      ? 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
+                      : isConfirmationValid
+                      ? 'border-green-300 focus:ring-green-500 focus:border-green-500 bg-green-50'
+                      : 'border-red-300 focus:ring-red-500 focus:border-red-500 bg-red-50'
+                  }`}
+                  disabled={isDeleting}
+                />
+                {confirmationText !== '' && (
+                  <div className="flex items-center gap-2">
+                    {isConfirmationValid ? (
+                      <>
+                        <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
+                          <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                        <span className="text-sm text-green-600 font-medium">Confirmation text matches</span>
+                      </>
+                    ) : (
+                      <>
+                        <div className="w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+                          <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                        <span className="text-sm text-red-600 font-medium">Text does not match</span>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            {/* Action Buttons */}
+            <div className="flex gap-3">
+              <button
+                onClick={onClose}
+                disabled={isDeleting}
+                className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirm}
+                disabled={isDeleting || !isConfirmationValid}
+                className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 active:bg-red-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-medium shadow-sm"
+              >
+                {isDeleting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <FiTrash2 className="w-4 h-4" />
+                    <span>Delete Class Record</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Additional Safety Note */}
+            <div className="mt-4 text-center">
+              <p className="text-xs text-gray-500">
+                💡 Make sure you have backups of important data before proceeding
+              </p>
+            </div>
           </div>
         </div>
-      </div>
       </div>
     </div>
   );

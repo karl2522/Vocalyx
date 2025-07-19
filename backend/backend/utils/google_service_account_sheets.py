@@ -2425,3 +2425,220 @@ class GoogleServiceAccountSheets:
                 'success': False,
                 'error': str(e)
             }
+
+    def delete_student_from_sheet(self, sheet_id: str, student_identifier: str, search_type: str = 'name',
+                                  sheet_name: str = None) -> dict:
+        """
+        Delete a student from the Google Sheet by name or ID.
+        Updated with formula protection - only clears data columns, not formula columns.
+
+        Args:
+            sheet_id: ID of the spreadsheet
+            student_identifier: Student name or ID to search for
+            search_type: 'name' or 'id'
+            sheet_name: Name of the specific sheet (if None, uses first sheet)
+
+        Returns:
+            Dict containing success status and deletion info
+        """
+        try:
+            # Get sheet data
+            if sheet_name:
+                sheet_data = self.get_specific_sheet_data(sheet_id, sheet_name)
+            else:
+                sheet_data = self.get_sheet_data(sheet_id)
+
+            if not sheet_data['success']:
+                return sheet_data
+
+            headers = sheet_data['headers']
+            target_sheet_name = sheet_data['sheet_name']
+            current_data = sheet_data['tableData']
+
+            print(f"🗑️ DELETE STUDENT: Searching for {search_type}: '{student_identifier}'")
+            print(f"🗑️ DELETE STUDENT: Total rows to search: {len(current_data)}")
+
+            # Find student row
+            student_row_index = None
+            student_info = {}
+
+            for row_index, row in enumerate(current_data):
+                if search_type == 'name':
+                    # Search by name (first name + last name)
+                    if len(row) >= 3:
+                        first_name = str(row[2]).strip() if len(row) > 2 and row[2] else ''
+                        last_name = str(row[1]).strip() if len(row) > 1 and row[1] else ''
+                        full_name = f"{first_name} {last_name}".strip()
+
+                        # Flexible name matching
+                        if (student_identifier.lower() in full_name.lower() or
+                                full_name.lower() in student_identifier.lower() or
+                                student_identifier.lower() == first_name.lower() or
+                                student_identifier.lower() == last_name.lower()):
+                            student_row_index = row_index
+                            student_info = {
+                                'first_name': first_name,
+                                'last_name': last_name,
+                                'full_name': full_name,
+                                'student_id': str(row[3]).strip() if len(row) > 3 and row[3] else 'N/A'
+                            }
+                            break
+
+                elif search_type == 'id':
+                    # Search by student ID
+                    if len(row) > 3 and row[3]:
+                        row_student_id = str(row[3]).strip()
+                        if row_student_id == student_identifier:
+                            student_row_index = row_index
+                            student_info = {
+                                'first_name': str(row[2]).strip() if len(row) > 2 and row[2] else '',
+                                'last_name': str(row[1]).strip() if len(row) > 1 and row[1] else '',
+                                'student_id': row_student_id
+                            }
+                            student_info[
+                                'full_name'] = f"{student_info['first_name']} {student_info['last_name']}".strip()
+                            break
+
+            if student_row_index is None:
+                return {
+                    'success': False,
+                    'error': f'Student not found: {student_identifier}',
+                    'search_type': search_type
+                }
+
+            # Calculate actual sheet row (add 4 for header rows and 1-based indexing)
+            sheet_row = student_row_index + 4
+
+            print(f"🗑️ DELETE STUDENT: Found student at row index {student_row_index} (sheet row {sheet_row})")
+            print(f"🗑️ DELETE STUDENT: Student info: {student_info}")
+
+            # 🔥 FORMULA PROTECTION: Update only specific columns to avoid formula columns
+            updates = []
+
+            for col_index, header in enumerate(headers):
+                column_letter = chr(65 + col_index)
+
+                # 🔥 SKIP formula columns - same logic as add_student
+                header_name = header.upper()
+                formula_keywords = ['TOTAL', 'SUM', 'AVERAGE', 'AVG', 'FORMULA']
+                is_formula_column = any(keyword in header_name for keyword in formula_keywords)
+
+                if not is_formula_column:
+                    updates.append({
+                        'range': f"'{target_sheet_name}'!{column_letter}{sheet_row}",
+                        'values': [['']]  # Clear with empty string
+                    })
+                    print(f"🗑️ DELETE STUDENT: Clearing data column: {column_letter}{sheet_row} ({header})")
+                else:
+                    print(f"🗑️ DELETE STUDENT: SKIPPING formula column: {header}")
+
+            print(f"🗑️ DELETE STUDENT: Total columns to clear: {len(updates)}")
+
+            # 🔥 Batch update only the data columns (same pattern as add_student)
+            if updates:
+                body = {
+                    'valueInputOption': 'USER_ENTERED',
+                    'data': updates
+                }
+
+                result = self.sheets_service.spreadsheets().values().batchUpdate(
+                    spreadsheetId=sheet_id,
+                    body=body
+                ).execute()
+
+                print(f"🗑️ DELETE STUDENT: Batch update successful, cleared {result.get('totalUpdatedCells', 0)} cells")
+            else:
+                print("🗑️ DELETE STUDENT: No columns to clear")
+                result = {'totalUpdatedCells': 0}
+
+            # 🔥 RE-NUMBER ALL STUDENTS to maintain sequence
+            renumber_result = self.renumber_all_students(sheet_id, target_sheet_name)
+            if not renumber_result['success']:
+                print(f"⚠️ Warning: Failed to renumber students: {renumber_result.get('error')}")
+
+            logger.info(f"Successfully deleted student {student_info['full_name']} from {target_sheet_name}")
+
+            return {
+                'success': True,
+                'deleted_student': student_info,
+                'row_cleared': sheet_row,
+                'sheet_name': target_sheet_name,
+                'renumbered': renumber_result.get('success', False),
+                'cleared_columns': len(updates)
+            }
+
+        except Exception as e:
+            logger.error(f"Unexpected error deleting student: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return {
+                'success': False,
+                'error': f'Failed to delete student: {str(e)}'
+            }
+
+    def renumber_all_students(self, sheet_id: str, sheet_name: str) -> dict:
+        """
+        Renumber all students after deletion to maintain sequence.
+        """
+        try:
+            # Get fresh sheet data
+            sheet_data = self.get_specific_sheet_data(sheet_id, sheet_name)
+            if not sheet_data['success']:
+                return sheet_data
+
+            headers = sheet_data['headers']
+            current_data = sheet_data['tableData']
+
+            updates = []
+            student_number = 1
+
+            for row_index, row in enumerate(current_data):
+                # Check if row has student data
+                has_student_data = False
+                if len(row) >= 3:
+                    first_name = str(row[2]).strip() if len(row) > 2 and row[2] else ''
+                    last_name = str(row[1]).strip() if len(row) > 1 and row[1] else ''
+
+                    if first_name or last_name:
+                        has_student_data = True
+
+                if has_student_data:
+                    # Calculate sheet row
+                    sheet_row = row_index + 4  # +3 for headers, +1 for 1-based indexing
+
+                    updates.append({
+                        'range': f"'{sheet_name}'!A{sheet_row}",
+                        'values': [[str(student_number)]]
+                    })
+
+                    student_number += 1
+
+            # Batch update all numbers
+            if updates:
+                body = {
+                    'valueInputOption': 'USER_ENTERED',
+                    'data': updates
+                }
+
+                result = self.sheets_service.spreadsheets().values().batchUpdate(
+                    spreadsheetId=sheet_id,
+                    body=body
+                ).execute()
+
+                print(f"🔢 RENUMBER: Updated {len(updates)} student numbers")
+                return {
+                    'success': True,
+                    'updated_count': len(updates)
+                }
+            else:
+                return {
+                    'success': True,
+                    'updated_count': 0
+                }
+
+        except Exception as e:
+            logger.error(f"Error renumbering students: {str(e)}")
+            return {
+                'success': False,
+                'error': str(e)
+            }

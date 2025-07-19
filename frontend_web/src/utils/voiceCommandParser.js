@@ -228,7 +228,7 @@ const undoRedoPatterns = {
     'undo', 'undo that', 'cancel', 'cancel that', 'go back', 'reverse', 'take back',
     'wrong', 'mistake', 'error', 'oops', 'delete that', 'remove that', 'clear that',
     'not that', 'incorrect', 'fix that', 'change that back', 'revert', 'rollback',
-    'that was wrong', 'my mistake', 'wrong student', 'wrong score', 'delete', 'remove'
+    'that was wrong', 'my mistake', 'wrong student', 'wrong score'
   ],
   redo: [
     'redo', 'redo that', 'do again', 'repeat that', 'restore', 'bring back',
@@ -966,6 +966,65 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
   if (batchCommand) {
     console.log('🔥 Batch command detected:', batchCommand);
     return batchCommand;
+  }
+
+  const deleteStudentPatterns = [
+    // Basic deletion patterns
+    /(?:delete|remove)\s+student\s+(.+)$/i,                          // "Delete student Omen"
+    /(?:remove|delete)\s+(.+?)\s+from\s+(?:class|sheet|record)$/i,   // "Remove Omen from class"
+    /(?:kick\s+out|expel|drop)\s+(?:student\s+)?(.+)$/i,             // "Kick out student Omen"
+    
+    // ID-based deletion
+    /(?:delete|remove)\s+student\s+(?:with\s+)?id\s+(.+)$/i,         // "Delete student with ID 22-2711-726"
+    /(?:remove|delete)\s+id\s+(.+)$/i,                               // "Remove ID 22-2711-726"
+    
+    // Name-specific patterns
+    /(?:delete|remove)\s+(.+?)\s+(?:student|pupil)$/i,               // "Delete Omen student"
+  ];
+
+  for (const pattern of deleteStudentPatterns) {
+    const deleteMatch = normalizedTranscript.match(pattern);
+    if (deleteMatch) {
+      const studentIdentifier = deleteMatch[1].trim();
+      
+      console.log('🗑️ DELETE_STUDENT command detected:', { studentIdentifier });
+      
+      // Check if it's an ID or name
+      const isStudentId = /^\d{2}-\d{4}-\d{3}$/.test(studentIdentifier) || 
+                        /^\d{9}$/.test(studentIdentifier);
+      
+      if (isStudentId) {
+        const normalizedId = parseStudentId(studentIdentifier);
+        return {
+          type: 'DELETE_STUDENT_BY_ID',
+          data: {
+            studentId: normalizedId,
+            searchType: 'id',
+            originalText: transcript,
+            confidence: 'high'
+          }
+        };
+      } else {
+        // Apply context-aware corrections to student name
+        const contextWords = [
+          ...headers.map(h => h.toLowerCase()),
+          ...recentStudents.map(s => s.toLowerCase())
+        ];
+        const enhancedName = applyContextPhoneticCorrections(studentIdentifier, contextWords);
+        const cleanedName = cleanName(enhancedName);
+        
+        return {
+          type: 'DELETE_STUDENT_BY_NAME',
+          data: {
+            searchName: cleanedName,
+            searchType: 'name',
+            originalText: transcript,
+            extractedName: enhancedName,
+            confidence: 'high'
+          }
+        };
+      }
+    }
   }
 
   // Stage 3: Check for undo/redo commands

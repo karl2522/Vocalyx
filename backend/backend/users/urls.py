@@ -17,7 +17,7 @@ from .views import (
     sheets_analyze_columns_mapping, sheets_execute_column_import, sheets_rename_column_header,
     sheets_analyze_columns_mapping_enhanced, sheets_execute_column_import_enhanced, get_import_history,
     sheets_update_max_score_service_account, sheets_update_batch_max_scores_service_account,
-    sheets_update_range_service_account
+    sheets_update_range_service_account, delete_student_from_sheet
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -96,4 +96,6 @@ urlpatterns = [
     path('sheets/service-account/<str:sheet_id>/update-range/',
          sheets_update_range_service_account,
          name='sheets_update_range_service_account'),
+
+    path('sheets/<str:sheet_id>/delete-student/', delete_student_from_sheet, name='delete_student_from_sheet'),
 ]

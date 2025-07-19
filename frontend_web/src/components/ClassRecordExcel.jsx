@@ -19,6 +19,7 @@ import DuplicateStudentModal from './modals/DuplicateStudentModal.jsx';
 import ImportStudentsInfoModal from './modals/ImportStudentsInfoModal.jsx';
 import ImportScoresInfoModal from './modals/ImportScoresInfoModal.jsx';
 import StudentConfirmationModal from './modals/StudentConfirmationModal.jsx';
+import DeleteStudentModal from './modals/DeleteStudentModal.jsx';
 
 
 const ClassRecordExcel = () => {
@@ -51,6 +52,14 @@ const ClassRecordExcel = () => {
   const [columnAnalysis, setColumnAnalysis] = useState(null);
   const [pendingImportData, setPendingImportData] = useState(null);
 
+  const [deleteStudentModal, setDeleteStudentModal] = useState({
+    isOpen: false,
+    studentName: '',
+    studentData: null,
+    searchType: 'name',
+    identifier: ''
+  });
+  const [isDeleting, setIsDeleting] = useState(false);
   const [importProgress, setImportProgress] = useState(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importConflicts, setImportConflicts] = useState([]);
@@ -702,6 +711,12 @@ const ClassRecordExcel = () => {
     case 'ADD_STUDENT':
       handleAddStudentVoice(command.data);
       break;
+    case 'DELETE_STUDENT_BY_NAME': 
+      handleDeleteStudentByName(command.data);
+      break;
+    case 'DELETE_STUDENT_BY_ID':   
+      handleDeleteStudentById(command.data);
+      break;
     case 'UPDATE_MAX_SCORE':
       handleUpdateMaxScore(command.data);
       break;
@@ -712,7 +727,7 @@ const ClassRecordExcel = () => {
       console.log('🆔 Executing STUDENT_ID_GRADE_ENTRY handler');
       handleStudentIdGradeEntry(command.data);
       break;
-    case 'SORT_STUDENTS':  // 🔥 NEW: Add this case
+    case 'SORT_STUDENTS': 
       console.log('🔄 Executing SORT_STUDENTS handler');
       handleSortStudents(command.data);
       break;
@@ -750,6 +765,157 @@ const ClassRecordExcel = () => {
       }
   }
 };
+
+const handleDeleteStudentByName = async (data) => {
+  console.log('🗑️ Delete student by name:', data);
+  
+  if (!classRecord?.google_sheet_id) {
+    toast.error('No Google Sheet connected');
+    return;
+  }
+
+  try {
+    // Get fresh data for student search
+    let sheetsResponse;
+    if (currentSheet) {
+      sheetsResponse = await classRecordService.getSpecificSheetData(
+        classRecord.google_sheet_id, 
+        currentSheet.sheet_name
+      );
+    } else {
+      sheetsResponse = await classRecordService.getGoogleSheetsDataServiceAccount(classRecord.google_sheet_id);
+    }
+    
+    if (!sheetsResponse.data?.success || !sheetsResponse.data.tableData?.length) {
+      toast.error('Could not load student data');
+      return;
+    }
+
+    // Convert data and find student
+    const convertedTableData = [];
+    sheetsResponse.data.tableData.forEach((row, originalIndex) => {
+      const rowObject = {};
+      sheetsResponse.data.headers.forEach((header, index) => {
+        rowObject[header] = row[index] || '';
+      });
+      rowObject._originalTableIndex = originalIndex;
+      convertedTableData.push(rowObject);
+    });
+
+    const result = findStudentRowSmart(convertedTableData, data.searchName, recentStudents);
+    
+    if (result.needsConfirmation && result.possibleMatches.length > 1) {
+      // Show duplicate modal for deletion
+      setDuplicateModalData({
+        matches: result.possibleMatches,
+        command: { ...data, type: 'DELETE_STUDENT_BY_NAME' },
+        searchName: data.searchName,
+        convertedTableData,
+        isDeleteAction: true
+      });
+      setShowDuplicateModal(true);
+      
+      toast(
+        `🤔 Multiple students found named "${data.searchName}". Please select which one to delete.`,
+        { duration: 5000, icon: '🤔' }
+      );
+      
+      if (voiceEnabled) {
+        speakText(`Found multiple students named ${data.searchName}. Please select which student to delete.`);
+      }
+      return;
+    }
+
+    if (result.bestMatch !== -1) {
+      const student = convertedTableData[result.bestMatch];
+      const studentName = `${student['FIRST NAME']} ${student['LASTNAME']}`;
+      
+      // Show delete confirmation modal
+      setDeleteStudentModal({
+        isOpen: true,
+        studentName: studentName,
+        studentData: student,
+        searchType: 'name',
+        identifier: data.searchName
+      });
+    } else {
+      toast.error(`Student "${data.searchName}" not found`);
+      if (voiceEnabled) {
+        speakText(`Student ${data.searchName} not found`);
+      }
+    }
+  } catch (error) {
+    console.error('Delete student error:', error);
+    toast.error('Failed to find student for deletion');
+    if (voiceEnabled) {
+      speakText('Failed to find student. Please try again.');
+    }
+  }
+};
+
+const handleDeleteStudentById = async (data) => {
+  console.log('🗑️ Delete student by ID:', data);
+  
+  if (!classRecord?.google_sheet_id) {
+    toast.error('No Google Sheet connected');
+    return;
+  }
+
+  // Show delete confirmation modal directly
+  setDeleteStudentModal({
+    isOpen: true,
+    studentName: `Student ID: ${data.studentId}`,
+    studentData: { 'STUDENT ID': data.studentId },
+    searchType: 'id',
+    identifier: data.studentId
+  });
+};
+
+const confirmDeleteStudent = async () => {
+  if (!deleteStudentModal.identifier) return;
+  
+  try {
+    setIsDeleting(true);
+    
+    const response = await classRecordService.deleteStudentFromSheet(
+      classRecord.google_sheet_id,
+      {
+        student_identifier: deleteStudentModal.identifier,
+        search_type: deleteStudentModal.searchType,
+        sheet_name: currentSheet?.sheet_name
+      }
+    );
+
+    if (response.data.success) {
+      const deletedStudent = response.data.deleted_student;
+      toast.success(`🗑️ Student "${deletedStudent.full_name}" deleted successfully!`);
+      
+      if (voiceEnabled) {
+        speakText(`Student ${deletedStudent.full_name} has been deleted successfully.`);
+      }
+
+      // Refresh the data
+      await loadSheetData(classRecord.google_sheet_id, currentSheet?.sheet_name);
+      
+      setDeleteStudentModal({ isOpen: false, studentName: '', studentData: null });
+    } else {
+      toast.error(`Failed to delete student: ${response.data.error}`);
+      if (voiceEnabled) {
+        speakText('Failed to delete student. Please try again.');
+      }
+    }
+  } catch (error) {
+    console.error('Delete student error:', error);
+    toast.error('Failed to delete student');
+    if (voiceEnabled) {
+      speakText('Failed to delete student. Please try again.');
+    }
+  } finally {
+    setIsDeleting(false);
+  }
+};
+
+
 const handleSortStudents = async (data) => {
   try {
     const { sortType, direction } = data;
@@ -3340,6 +3506,14 @@ const handleExportToPDF = async () => {
           command={duplicateModalData?.command}
           onSelectStudent={handleDuplicateStudentSelect}
       />
+
+        <DeleteStudentModal
+          isOpen={deleteStudentModal.isOpen}
+          onClose={() => setDeleteStudentModal({ isOpen: false, studentName: '', studentData: null })}
+          onConfirm={confirmDeleteStudent}
+          studentName={deleteStudentModal.studentName}
+          isDeleting={isDeleting}
+        />
 
         <ImportStudentsModal 
           showImportModal={showImportModal}
