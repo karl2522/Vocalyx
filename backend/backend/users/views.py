@@ -1523,3 +1523,39 @@ def delete_student_from_sheet(request, sheet_id):
             'success': False,
             'error': f'Server error: {str(e)}'
         }, status=500)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def update_multiple_cells_service_account(request, sheet_id):
+    """Update multiple individual cells while preserving formulas"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+
+        updates = request.data.get('updates', [])  # Array of {range, values}
+        sheet_name = request.data.get('sheet_name')
+
+        if not updates:
+            return Response({'error': 'updates array is required'}, status=400)
+
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+
+        # Execute batch update
+        body = {
+            'valueInputOption': 'USER_ENTERED',
+            'data': updates
+        }
+
+        result = service.sheets_service.spreadsheets().values().batchUpdate(
+            spreadsheetId=sheet_id,
+            body=body
+        ).execute()
+
+        return Response({
+            'success': True,
+            'updated_cells': result.get('totalUpdatedCells', 0),
+            'updated_ranges': len(updates)
+        })
+
+    except Exception as e:
+        logger.error(f"Update multiple cells error: {str(e)}")
+        return Response({'error': str(e)}, status=500)

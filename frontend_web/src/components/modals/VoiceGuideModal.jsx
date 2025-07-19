@@ -1,5 +1,5 @@
 import React from 'react';
-import { Mic, X, User, Users, Hash, Plus, Settings, Download } from 'lucide-react';
+import { Mic, X, User, Users, Hash, Plus, Settings, Download, Trash2 } from 'lucide-react';
 
 const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
   if (!showVoiceGuide) return null;
@@ -41,12 +41,26 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
               <span>Quick Start</span>
             </h3>
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                 <div>
-                  <div className="font-medium text-blue-900 mb-2">🎯 Basic Pattern</div>
+                  <div className="font-medium text-blue-900 mb-2">🎯 Grade Entry</div>
                   <div className="text-blue-700 space-y-1">
                     <div>"[Student Name] [Column] [Score]"</div>
                     <div className="text-xs text-blue-600">Example: "Maria Quiz 1 eighty-five"</div>
+                  </div>
+                </div>
+                <div>
+                  <div className="font-medium text-blue-900 mb-2">👥 Add Student</div>
+                  <div className="text-blue-700 space-y-1">
+                    <div>"Add student lastname [Last] firstname [First]"</div>
+                    <div className="text-xs text-blue-600">Example: "Add student lastname Smith firstname John"</div>
+                  </div>
+                </div>
+                <div>
+                  <div className="font-medium text-blue-900 mb-2">🗑️ Delete Student</div>
+                  <div className="text-blue-700 space-y-1">
+                    <div>"Delete student [Student Name]"</div>
+                    <div className="text-xs text-blue-600">Example: "Delete student Maria"</div>
                   </div>
                 </div>
               </div>
@@ -93,11 +107,56 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                   </div>
                 </div>
                 <div>
+                  <div className="font-medium text-slate-700 mb-2">Delete Student:</div>
+                  <div className="bg-red-50 rounded p-3 space-y-1 text-red-700 border border-red-200">
+                    <div>"Delete student Maria"</div>
+                    <div>"Remove student John"</div>
+                    <div>"Delete student with id 22-2711-726"</div>
+                    <div className="text-xs text-red-600 mt-2 italic">⚠️ This will permanently remove the student and compact remaining rows</div>
+                  </div>
+                </div>
+                <div>
                   <div className="font-medium text-slate-700 mb-2">Update Student ID:</div>
                   <div className="bg-slate-50 rounded p-3 space-y-1 text-slate-600">
                     <div>"Maria add student id 22-2711-726"</div>
                     <div>"Set student id 22-2711-726 for John"</div>
                   </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Student Deletion Commands - NEW DEDICATED SECTION */}
+            <div className="bg-white border border-red-200 rounded-lg p-5 hover:shadow-md transition-shadow">
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
+                  <Trash2 className="w-4 h-4 text-red-600" />
+                </div>
+                <h4 className="font-semibold text-slate-900">Student Deletion</h4>
+              </div>
+              <div className="space-y-3 text-sm">
+                <div>
+                  <div className="font-medium text-slate-700 mb-2">Delete by Name:</div>
+                  <div className="bg-red-50 rounded p-3 space-y-1 text-red-700 border border-red-200">
+                    <div>"Delete student Maria"</div>
+                    <div>"Remove student John Doe"</div>
+                    <div>"Drop student Sarah"</div>
+                  </div>
+                </div>
+                <div>
+                  <div className="font-medium text-slate-700 mb-2">Delete by Student ID:</div>
+                  <div className="bg-red-50 rounded p-3 space-y-1 text-red-700 border border-red-200">
+                    <div>"Delete student with id 22-2711-726"</div>
+                    <div>"Remove id 22-2711-726"</div>
+                  </div>
+                </div>
+                <div className="bg-amber-50 border border-amber-200 rounded p-3">
+                  <div className="font-medium text-amber-800 mb-1">⚡ Smart Features:</div>
+                  <ul className="text-xs text-amber-700 space-y-1">
+                    <li>• Automatically compacts remaining students</li>
+                    <li>• Preserves formula columns (like Totals)</li>
+                    <li>• Renumbers students sequentially</li>
+                    <li>• Works with partial name matches</li>
+                  </ul>
                 </div>
               </div>
             </div>
@@ -133,7 +192,7 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                   </div>
                 </div>
                 
-                {/* 🔥 NEW: Row Range Commands */}
+                {/* Row Range Commands */}
                 <div>
                   <div className="font-medium text-slate-700 mb-2">Row Range Commands:</div>
                   <div className="bg-emerald-50 rounded p-3 space-y-2 border border-emerald-200">
@@ -200,13 +259,6 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                     <div>"Quiz 1 max score 30"</div>
                     <div>"Lab 2 total points 50"</div>
                     <div>"Assignment 3 out of 100"</div>
-                  </div>
-                </div>
-                <div>
-                  <div className="font-medium text-slate-700 mb-2">Batch Max Scores:</div>
-                  <div className="bg-slate-50 rounded p-3 space-y-1 text-slate-600">
-                    <div>"Set all quizzes max score 30"</div>
-                    <div>"All labs maximum 50"</div>
                   </div>
                 </div>
               </div>

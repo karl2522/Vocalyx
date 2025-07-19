@@ -469,6 +469,11 @@ export const classRecordService = {
         const response = await api.post(`/sheets/${sheetId}/delete-student/`, data);
         return response;
     },
+
+    updateMultipleCells: async (sheetId, data) => {
+        const response = await api.post(`/sheets/${sheetId}/update-multiple-cells/`, data);
+        return response;
+    },
 };
 
 export const enhancedClassRecordService = {

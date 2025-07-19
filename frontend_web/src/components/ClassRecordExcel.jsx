@@ -32,6 +32,7 @@ const ClassRecordExcel = () => {
 
   const [batchMode, setBatchMode] = useState(false);
   const [showBatchModal, setShowBatchModal] = useState(false);
+  const [isSorting, setIsSorting] = useState(false);
   const [currentBatchColumn, setCurrentBatchColumn] = useState('');
   const [batchEntries, setBatchEntries] = useState([]);
   const [isProcessingBatch, setIsProcessingBatch] = useState(false);
@@ -894,8 +895,20 @@ const confirmDeleteStudent = async () => {
         speakText(`Student ${deletedStudent.full_name} has been deleted successfully.`);
       }
 
-      // Refresh the data
-      await loadSheetData(classRecord.google_sheet_id, currentSheet?.sheet_name);
+      // 🔥 CRITICAL: Add delay before refreshing data
+      setTimeout(async () => {
+        // Refresh the data with fresh fetch
+        await loadSheetData(classRecord.google_sheet_id, currentSheet?.sheet_name);
+        
+        // 🔥 FORCE UPDATE: Clear any cached data
+        setTableData([]);
+        setHeaders([]);
+        
+        // Load fresh data again
+        setTimeout(async () => {
+          await loadSheetData(classRecord.google_sheet_id, currentSheet?.sheet_name);
+        }, 500);
+      }, 1000);
       
       setDeleteStudentModal({ isOpen: false, studentName: '', studentData: null });
     } else {
@@ -920,6 +933,9 @@ const handleSortStudents = async (data) => {
   try {
     const { sortType, direction } = data;
     
+    // 🔥 START LOADING STATE
+    setIsSorting(true); // You'll need to add this state variable
+    
     toast(`🔄 Sorting students by ${sortType} (${direction}ending)...`);
     
     if (voiceEnabled) {
@@ -934,7 +950,9 @@ const handleSortStudents = async (data) => {
 
     console.log('🔍 DEBUG: headers:', headers);
     console.log('🔍 DEBUG: tableData sample:', tableData.slice(0, 3));
-    console.log('🔍 DEBUG: tableData structure:', typeof tableData[0]);
+    
+    // 🔥 SHOW PROGRESS: Analyzing data
+    toast.loading('📊 Analyzing student data...', { id: 'sort-progress' });
     
     // Find the column indices for sorting
     const firstNameIndex = headers.findIndex(h => h.toLowerCase().includes('first'));
@@ -949,30 +967,27 @@ const handleSortStudents = async (data) => {
       toast.error('Could not find name columns for sorting');
       return;
     }
-
-     if (tableData.length > 0) {
-      const sampleRow = tableData[0];
-      console.log('🔍 DEBUG: Sample row:', sampleRow);
-      console.log('🔍 DEBUG: Sample row type:', typeof sampleRow);
-      console.log('🔍 DEBUG: Sample row keys:', Object.keys(sampleRow));
+    
+    // 🔥 IDENTIFY FORMULA COLUMNS (same logic as delete/add functions)
+    const formulaColumnIndices = [];
+    headers.forEach((header, index) => {
+      const headerName = header.toUpperCase();
+      const formula_keywords = ['TOTAL', 'SUM', 'AVERAGE', 'AVG', 'FORMULA'];
+      const is_formula_column = formula_keywords.some(keyword => headerName.includes(keyword));
       
-      if (firstNameIndex !== -1) {
-        console.log('🔍 DEBUG: First name header:', headers[firstNameIndex]);
-        console.log('🔍 DEBUG: First name value:', sampleRow[headers[firstNameIndex]]);
+      if (is_formula_column) {
+        formulaColumnIndices.push(index);
+        console.log(`🔥 IDENTIFIED FORMULA COLUMN: ${header} at index ${index}`);
       }
-      
-      if (lastNameIndex !== -1) {
-        console.log('🔍 DEBUG: Last name header:', headers[lastNameIndex]);
-        console.log('🔍 DEBUG: Last name value:', sampleRow[headers[lastNameIndex]]);
-      }
-    }
+    });
+    
+    // 🔥 SHOW PROGRESS: Filtering students
+    toast.loading('🔍 Filtering student records...', { id: 'sort-progress' });
     
     // 🔥 FIXED: Better empty row filtering - check for student names specifically
     const nonEmptyRows = tableData.filter(row => {
       const lastName = row[headers[lastNameIndex]] || '';
       const firstName = row[headers[firstNameIndex]] || '';
-      
-      console.log('🔍 DEBUG: Checking row - lastName:', lastName, 'firstName:', firstName);
       
       // Row is valid if it has either last name or first name
       return (lastName.trim() !== '' && lastName.trim() !== '0') || 
@@ -981,12 +996,14 @@ const handleSortStudents = async (data) => {
     
     console.log('🔍 Original rows:', tableData.length);
     console.log('🔍 Non-empty rows:', nonEmptyRows.length);
-    console.log('🔍 Sample non-empty row:', nonEmptyRows[0]);
     
     if (nonEmptyRows.length === 0) {
       toast.error('No students found to sort');
       return;
     }
+    
+    // 🔥 SHOW PROGRESS: Sorting
+    toast.loading(`📋 Sorting ${nonEmptyRows.length} students...`, { id: 'sort-progress' });
     
     // Sort the data
     const sortedData = [...nonEmptyRows].sort((a, b) => {
@@ -1027,67 +1044,122 @@ const handleSortStudents = async (data) => {
       }
     });
     
-    // Re-number the students after sorting
-    const sortedRows = sortedData.map((row, index) => {
-      const newRow = headers.map(header => row[header] || '');
-      
-      // Update the NO. column with sequential numbers
-      if (noIndex !== -1) {
-        newRow[noIndex] = (index + 1).toString();
-      }
-      
-      return newRow;
-    });
+    // 🔥 SHOW PROGRESS: Preparing updates
+    toast.loading('🔧 Preparing sheet updates...', { id: 'sort-progress' });
     
-    // 🔥 FIXED: Fill remaining rows with empty arrays (don't lose original size)
+    // 🔥 CRITICAL: Instead of updating entire range, update ONLY data columns
+    const updates = [];
+    
+    // 🔥 Step 1: Clear existing data columns (preserve formulas)
     const originalSize = tableData.length;
-    while (sortedRows.length < originalSize) {
-      sortedRows.push(new Array(headers.length).fill(''));
+    for (let rowIndex = 0; rowIndex < originalSize; rowIndex++) {
+      const sheetRow = rowIndex + 4; // +3 for headers, +1 for 1-based indexing
+      
+      for (let colIndex = 0; colIndex < headers.length; colIndex++) {
+        // 🔥 SKIP formula columns
+        if (!formulaColumnIndices.includes(colIndex)) {
+          const columnLetter = String.fromCharCode(65 + colIndex);
+          updates.push({
+            range: `${currentSheet?.sheet_name ? `'${currentSheet.sheet_name}'!` : ''}${columnLetter}${sheetRow}`,
+            values: [['']]
+          });
+        }
+      }
     }
     
-    console.log('🔄 Sorted rows to update:', sortedRows.length);
-    console.log('🔄 First sorted row:', sortedRows[0]);
-    
-    // Use A4 instead of A2 to start after the 3 header rows
-    const updateData = {
-      range: `A4:${String.fromCharCode(65 + headers.length - 1)}${originalSize + 3}`,
-      values: sortedRows
-    };
-    
-    console.log('🔄 Updating sheet with sorted data:', updateData);
-    
-    // Use the updateSheetRange function
-    const response = await classRecordService.updateSheetRange(
-      classRecord.google_sheet_id, 
-      updateData,
-      currentSheet?.sheet_name || null
-    );
-    
-    if (response.data?.success) {
-      toast.success(`✅ Students sorted by ${sortType} and re-numbered successfully!`);
+    // 🔥 Step 2: Place sorted students in new positions (only data columns)
+    sortedData.forEach((student, newIndex) => {
+      const studentNumber = newIndex + 1;
+      const newSheetRow = newIndex + 4; // Start from row 4
       
-      if (voiceEnabled) {
-        speakText(`Students have been sorted by ${sortType === 'firstName' ? 'first name' : sortType === 'lastName' ? 'last name' : 'alphabetical order'} and re-numbered`);
+      headers.forEach((header, colIndex) => {
+        // 🔥 SKIP formula columns
+        if (!formulaColumnIndices.includes(colIndex)) {
+          const columnLetter = String.fromCharCode(65 + colIndex);
+          let value = '';
+          
+          if (colIndex === noIndex) {
+            // NO. column
+            value = studentNumber.toString();
+          } else {
+            // Other data columns
+            value = student[header] || '';
+          }
+          
+          updates.push({
+            range: `${currentSheet?.sheet_name ? `'${currentSheet.sheet_name}'!` : ''}${columnLetter}${newSheetRow}`,
+            values: [[value]]
+          });
+        }
+      });
+    });
+    
+    console.log(`🔄 FORMULA-SAFE SORT: Prepared ${updates.length} updates (avoiding ${formulaColumnIndices.length} formula columns)`);
+    
+    // 🔥 Execute updates in batches to avoid Google Sheets limits
+    const batchSize = 100;
+    let totalUpdated = 0;
+    const totalBatches = Math.ceil(updates.length / batchSize);
+    
+    for (let i = 0; i < updates.length; i += batchSize) {
+      const batchNumber = Math.floor(i / batchSize) + 1;
+      
+      // 🔥 SHOW PROGRESS: Batch updates
+      toast.loading(`📤 Updating Google Sheets (${batchNumber}/${totalBatches})...`, { id: 'sort-progress' });
+      
+      const batchUpdates = updates.slice(i, i + batchSize);
+      
+      const response = await classRecordService.updateMultipleCells(
+        classRecord.google_sheet_id,
+        {
+          updates: batchUpdates,
+          sheet_name: currentSheet?.sheet_name
+        }
+      );
+      
+      if (response.data?.success) {
+        totalUpdated += batchUpdates.length;
+        console.log(`🔄 SORT: Batch ${batchNumber} completed - ${batchUpdates.length} updates`);
+      } else {
+        throw new Error(response.data?.error || 'Batch update failed');
       }
-      
-      // Refresh your data using your existing method
+    }
+    
+    // 🔥 SHOW PROGRESS: Refreshing data
+    toast.loading('🔄 Refreshing data...', { id: 'sort-progress' });
+    
+    // 🔥 DISMISS LOADING TOAST
+    toast.dismiss('sort-progress');
+    
+    toast.success(`✅ Students sorted by ${sortType} successfully! (${totalUpdated} cells updated, formulas preserved)`);
+    
+    if (voiceEnabled) {
+      speakText(`Students have been sorted by ${sortType === 'firstName' ? 'first name' : sortType === 'lastName' ? 'last name' : 'alphabetical order'} with formulas preserved`);
+    }
+    
+    // Refresh your data
+    setTimeout(async () => {
       if (currentSheet) {
         await loadSheetData(classRecord.google_sheet_id, currentSheet.sheet_name);
       } else {
         await loadSingleSheetData(classRecord.google_sheet_id);
       }
-      
-    } else {
-      throw new Error(response.data?.error || 'Update failed');
-    }
+    }, 1000);
     
   } catch (error) {
     console.error('Sort error:', error);
+    
+    // 🔥 DISMISS LOADING TOAST ON ERROR
+    toast.dismiss('sort-progress');
+    
     toast.error('Failed to sort students');
     
     if (voiceEnabled) {
       speakText('Sorry, there was an error sorting the students. Please try again.');
     }
+  } finally {
+    // 🔥 END LOADING STATE
+    setIsSorting(false);
   }
 };
 
@@ -3314,6 +3386,16 @@ const handleExportToPDF = async () => {
             )}
           </div>
         </div>
+
+        {isSorting && (
+          <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 rounded-lg">
+            <div className="bg-white p-6 rounded-lg shadow-lg flex flex-col items-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mb-3"></div>
+              <p className="text-gray-700 font-medium">Sorting students...</p>
+              <p className="text-gray-500 text-sm">Please wait while we rearrange the data</p>
+            </div>
+          </div>
+        )}
 
         {/* 🎤 FLOATING VOICE RECORDING BUTTON - Embedded View */}
         {isSupported && (

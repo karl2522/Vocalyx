@@ -2430,19 +2430,15 @@ class GoogleServiceAccountSheets:
                                   sheet_name: str = None) -> dict:
         """
         Delete a student from the Google Sheet by name or ID.
-        Updated with formula protection - only clears data columns, not formula columns.
-
-        Args:
-            sheet_id: ID of the spreadsheet
-            student_identifier: Student name or ID to search for
-            search_type: 'name' or 'id'
-            sheet_name: Name of the specific sheet (if None, uses first sheet)
-
-        Returns:
-            Dict containing success status and deletion info
+        Updated with formula protection and fresh data handling.
         """
         try:
-            # Get sheet data
+            import time
+
+            # 🔥 CRITICAL: Add small delay to ensure Google Sheets propagation
+            time.sleep(0.5)
+
+            # Get FRESH sheet data (force refresh)
             if sheet_name:
                 sheet_data = self.get_specific_sheet_data(sheet_id, sheet_name)
             else:
@@ -2458,7 +2454,16 @@ class GoogleServiceAccountSheets:
             print(f"🗑️ DELETE STUDENT: Searching for {search_type}: '{student_identifier}'")
             print(f"🗑️ DELETE STUDENT: Total rows to search: {len(current_data)}")
 
-            # Find student row
+            # 🔥 DEBUG: Print all current students for debugging
+            print("🗑️ DEBUG: Current students in sheet:")
+            for idx, row in enumerate(current_data):
+                if len(row) >= 3:
+                    first_name = str(row[2]).strip() if len(row) > 2 and row[2] else ''
+                    last_name = str(row[1]).strip() if len(row) > 1 and row[1] else ''
+                    if first_name or last_name:
+                        print(f"   Row {idx + 4}: {first_name} {last_name}")
+
+            # Find student row with EXACT matching
             student_row_index = None
             student_info = {}
 
@@ -2470,11 +2475,20 @@ class GoogleServiceAccountSheets:
                         last_name = str(row[1]).strip() if len(row) > 1 and row[1] else ''
                         full_name = f"{first_name} {last_name}".strip()
 
-                        # Flexible name matching
-                        if (student_identifier.lower() in full_name.lower() or
-                                full_name.lower() in student_identifier.lower() or
-                                student_identifier.lower() == first_name.lower() or
-                                student_identifier.lower() == last_name.lower()):
+                        # 🔥 ENHANCED: More precise matching
+                        name_matches = [
+                            student_identifier.lower() in full_name.lower(),
+                            full_name.lower() in student_identifier.lower(),
+                            student_identifier.lower() == first_name.lower(),
+                            student_identifier.lower() == last_name.lower(),
+                            # 🔥 NEW: Try individual word matching
+                            any(word.lower() == student_identifier.lower() for word in full_name.split()),
+                            # 🔥 NEW: Try partial last name match
+                            student_identifier.lower() in last_name.lower(),
+                            student_identifier.lower() in first_name.lower()
+                        ]
+
+                        if any(name_matches):
                             student_row_index = row_index
                             student_info = {
                                 'first_name': first_name,
@@ -2482,6 +2496,7 @@ class GoogleServiceAccountSheets:
                                 'full_name': full_name,
                                 'student_id': str(row[3]).strip() if len(row) > 3 and row[3] else 'N/A'
                             }
+                            print(f"🗑️ FOUND MATCH: '{student_identifier}' -> '{full_name}' at row {row_index}")
                             break
 
                 elif search_type == 'id':
@@ -2503,7 +2518,11 @@ class GoogleServiceAccountSheets:
                 return {
                     'success': False,
                     'error': f'Student not found: {student_identifier}',
-                    'search_type': search_type
+                    'search_type': search_type,
+                    'available_students': [
+                        f"{str(row[2]).strip() if len(row) > 2 and row[2] else ''} {str(row[1]).strip() if len(row) > 1 and row[1] else ''}".strip()
+                        for row in current_data if len(row) >= 3 and (str(row[2]).strip() or str(row[1]).strip())
+                    ]
                 }
 
             # Calculate actual sheet row (add 4 for header rows and 1-based indexing)
@@ -2551,10 +2570,16 @@ class GoogleServiceAccountSheets:
                 print("🗑️ DELETE STUDENT: No columns to clear")
                 result = {'totalUpdatedCells': 0}
 
-            # 🔥 RE-NUMBER ALL STUDENTS to maintain sequence
-            renumber_result = self.renumber_all_students(sheet_id, target_sheet_name)
-            if not renumber_result['success']:
-                print(f"⚠️ Warning: Failed to renumber students: {renumber_result.get('error')}")
+            # 🔥 CRITICAL: Add delay before compacting
+            time.sleep(1.0)
+
+            # 🔥 COMPACT STUDENT DATA
+            compact_result = self.compact_student_data(sheet_id, target_sheet_name)
+            if not compact_result['success']:
+                print(f"⚠️ Warning: Failed to compact students: {compact_result.get('error')}")
+
+            # 🔥 CRITICAL: Add final delay for data propagation
+            time.sleep(0.5)
 
             logger.info(f"Successfully deleted student {student_info['full_name']} from {target_sheet_name}")
 
@@ -2563,7 +2588,8 @@ class GoogleServiceAccountSheets:
                 'deleted_student': student_info,
                 'row_cleared': sheet_row,
                 'sheet_name': target_sheet_name,
-                'renumbered': renumber_result.get('success', False),
+                'compacted': compact_result.get('success', False),
+                'compacted_count': compact_result.get('compacted_count', 0),
                 'cleared_columns': len(updates)
             }
 
@@ -2641,4 +2667,143 @@ class GoogleServiceAccountSheets:
             return {
                 'success': False,
                 'error': str(e)
+            }
+
+    def compact_student_data(self, sheet_id: str, sheet_name: str) -> dict:
+        """
+        Compact student data by removing gaps and moving students up to fill empty rows.
+        Preserves formulas in Total columns.
+        """
+        try:
+            print(f"🔄 COMPACT: Starting compaction for sheet '{sheet_name}'")
+
+            # Get current sheet data
+            sheet_data = self.get_specific_sheet_data(sheet_id, sheet_name)
+            if not sheet_data['success']:
+                return sheet_data
+
+            headers = sheet_data['headers']
+            current_data = sheet_data['tableData']
+
+            # 🔍 Find all students with actual data
+            students_with_data = []
+
+            for row_index, row in enumerate(current_data):
+                # Check if row has student data
+                has_student_data = False
+                if len(row) >= 3:
+                    first_name = str(row[2]).strip() if len(row) > 2 and row[2] else ''
+                    last_name = str(row[1]).strip() if len(row) > 1 and row[1] else ''
+
+                    if first_name or last_name:
+                        has_student_data = True
+                        # Store the complete row data
+                        complete_row = row[:] + [''] * (len(headers) - len(row))  # Pad to match header length
+                        students_with_data.append({
+                            'original_index': row_index,
+                            'data': complete_row[:len(headers)]  # Ensure it matches header length
+                        })
+
+            print(f"🔄 COMPACT: Found {len(students_with_data)} students with data")
+
+            if len(students_with_data) == 0:
+                return {
+                    'success': True,
+                    'message': 'No students to compact',
+                    'compacted_count': 0
+                }
+
+            # 🔄 Create batch updates to compact the data
+            updates = []
+
+            # 🔥 Step 1: Clear all existing student rows (but keep formulas)
+            total_rows_to_clear = len(current_data)
+            for row_index in range(total_rows_to_clear):
+                sheet_row = row_index + 4  # +3 for headers, +1 for 1-based indexing
+
+                # Clear only data columns (not formula columns)
+                for col_index, header in enumerate(headers):
+                    column_letter = chr(65 + col_index)
+
+                    # 🔥 SKIP formula columns
+                    header_name = header.upper()
+                    formula_keywords = ['TOTAL', 'SUM', 'AVERAGE', 'AVG', 'FORMULA']
+                    is_formula_column = any(keyword in header_name for keyword in formula_keywords)
+
+                    if not is_formula_column:
+                        updates.append({
+                            'range': f"'{sheet_name}'!{column_letter}{sheet_row}",
+                            'values': [['']]
+                        })
+
+            # 🔥 Step 2: Place students in consecutive rows starting from row 4
+            for new_index, student in enumerate(students_with_data):
+                student_number = new_index + 1
+                new_sheet_row = new_index + 4  # Start from row 4 (after 3 header rows)
+
+                # Update each column for this student
+                for col_index, header in enumerate(headers):
+                    column_letter = chr(65 + col_index)
+
+                    # 🔥 SKIP formula columns
+                    header_name = header.upper()
+                    formula_keywords = ['TOTAL', 'SUM', 'AVERAGE', 'AVG', 'FORMULA']
+                    is_formula_column = any(keyword in header_name for keyword in formula_keywords)
+
+                    if not is_formula_column:
+                        if col_index == 0:  # NO. column
+                            value = str(student_number)
+                        else:
+                            # Get the original data, handling missing columns
+                            original_data = student['data']
+                            if col_index < len(original_data):
+                                value = str(original_data[col_index]) if original_data[col_index] else ''
+                            else:
+                                value = ''
+
+                        updates.append({
+                            'range': f"'{sheet_name}'!{column_letter}{new_sheet_row}",
+                            'values': [[value]]
+                        })
+
+            print(f"🔄 COMPACT: Prepared {len(updates)} updates")
+
+            # 🔥 Execute all updates in batches (Google Sheets has limits)
+            batch_size = 100  # Process in smaller batches
+            total_updated = 0
+
+            for i in range(0, len(updates), batch_size):
+                batch_updates = updates[i:i + batch_size]
+
+                body = {
+                    'valueInputOption': 'USER_ENTERED',
+                    'data': batch_updates
+                }
+
+                result = self.sheets_service.spreadsheets().values().batchUpdate(
+                    spreadsheetId=sheet_id,
+                    body=body
+                ).execute()
+
+                batch_updated = result.get('totalUpdatedCells', 0)
+                total_updated += batch_updated
+                print(f"🔄 COMPACT: Batch {i // batch_size + 1} - Updated {batch_updated} cells")
+
+            print(f"🔄 COMPACT: Successfully compacted {len(students_with_data)} students")
+            print(f"🔄 COMPACT: Total cells updated: {total_updated}")
+
+            return {
+                'success': True,
+                'compacted_count': len(students_with_data),
+                'total_updated_cells': total_updated,
+                'message': f'Successfully compacted {len(students_with_data)} students'
+            }
+
+        except Exception as e:
+            logger.error(f"Error compacting student data: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return {
+                'success': False,
+                'error': f'Failed to compact student data: {str(e)}'
             }
