@@ -2809,46 +2809,235 @@ const handleExportToExcel = async () => {
 
     toast('📊 Preparing Excel export...');
 
-    // Get fresh data from Google Sheets
-    const sheetsResponse = await classRecordService.getGoogleSheetsDataServiceAccount(classRecord.google_sheet_id);
+    // 🔥 IMPROVED: Choose the right data source based on current context
+    let sheetsResponse;
+    
+    if (currentSheet?.sheet_name) {
+      // Use specific sheet data (already updated with AM range)
+      console.log('🔥 EXPORT: Using specific sheet data for:', currentSheet.sheet_name);
+      sheetsResponse = await classRecordService.getSpecificSheetData(
+        classRecord.google_sheet_id, 
+        currentSheet.sheet_name
+      );
+    } else {
+      // Use general sheet data (now updated with AM range)
+      console.log('🔥 EXPORT: Using general sheet data');
+      sheetsResponse = await classRecordService.getGoogleSheetsDataServiceAccount(
+        classRecord.google_sheet_id
+      );
+    }
     
     if (!sheetsResponse.data?.success || !sheetsResponse.data.tableData?.length) {
       toast.error('Could not load data for export');
       return;
     }
 
-    // Prepare data for Excel
+    // 🔥 DEBUG: Log the data we're getting
+    console.log('🔥 EXPORT DEBUG: Headers received:', sheetsResponse.data.headers);
+    console.log('🔥 EXPORT DEBUG: Main headers (Categories):', sheetsResponse.data.main_headers);
+    console.log('🔥 EXPORT DEBUG: Sub headers (Column names):', sheetsResponse.data.sub_headers);
+    console.log('🔥 EXPORT DEBUG: Max scores:', sheetsResponse.data.max_scores);
+    
+    // Prepare data for Excel with multi-row headers
     const worksheetData = [];
     
-    // Add headers
-    worksheetData.push(sheetsResponse.data.headers);
+    // 🔥 NEW: Add the 3-row header structure just like Google Sheets
     
-    // Add student data
+    // Row 1: Category headers (main_headers)
+    if (sheetsResponse.data.main_headers && sheetsResponse.data.main_headers.length > 0) {
+      const categoryRow = [...sheetsResponse.data.main_headers];
+      // Ensure it matches the expected column count
+      while (categoryRow.length < sheetsResponse.data.headers.length) {
+        categoryRow.push('');
+      }
+      worksheetData.push(categoryRow);
+    }
+    
+    // Row 2: Column names (sub_headers)
+    if (sheetsResponse.data.sub_headers && sheetsResponse.data.sub_headers.length > 0) {
+      const subHeaderRow = [...sheetsResponse.data.sub_headers];
+      // Ensure it matches the expected column count
+      while (subHeaderRow.length < sheetsResponse.data.headers.length) {
+        subHeaderRow.push('');
+      }
+      worksheetData.push(subHeaderRow);
+    }
+    
+    // Row 3: Max scores/totals
+    if (sheetsResponse.data.max_scores && sheetsResponse.data.max_scores.length > 0) {
+      const maxScoreRow = [...sheetsResponse.data.max_scores];
+      // Ensure it matches the expected column count
+      while (maxScoreRow.length < sheetsResponse.data.headers.length) {
+        maxScoreRow.push('');
+      }
+      worksheetData.push(maxScoreRow);
+    }
+    
+    // 🔥 IMPROVED: Add student data with proper padding
     sheetsResponse.data.tableData.forEach(row => {
-      worksheetData.push(row);
+      // Ensure row has same length as headers
+      const paddedRow = [...row];
+      while (paddedRow.length < sheetsResponse.data.headers.length) {
+        paddedRow.push(''); // Fill missing columns
+      }
+      worksheetData.push(paddedRow);
     });
+
+    console.log('🔥 EXPORT DEBUG: Total worksheet rows:', worksheetData.length);
+    console.log('🔥 EXPORT DEBUG: Header structure rows:', worksheetData.slice(0, 3));
 
     // Create workbook and worksheet
     const workbook = XLSX.utils.book_new();
     const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
 
-    // Style the headers
-    const headerStyle = {
+    // 🔥 ENHANCED STYLING: Style the different header rows
+    
+    // Style Row 1 (Categories) - Blue background
+    const categoryStyle = {
       font: { bold: true, color: { rgb: "FFFFFF" } },
-      fill: { fgColor: { rgb: "4F46E5" } },
-      alignment: { horizontal: "center" }
+      fill: { fgColor: { rgb: "1E40AF" } }, // Darker blue
+      alignment: { horizontal: "center", vertical: "center" }, // 🔥 CENTER alignment
+      border: {
+        top: { style: "thin", color: { rgb: "000000" } },
+        bottom: { style: "thin", color: { rgb: "000000" } },
+        left: { style: "thin", color: { rgb: "000000" } },
+        right: { style: "thin", color: { rgb: "000000" } }
+      }
     };
 
-    // Apply header styling
+    // Style Row 2 (Column Names) - Medium blue background
+    const subHeaderStyle = {
+      font: { bold: true, color: { rgb: "FFFFFF" } },
+      fill: { fgColor: { rgb: "3B82F6" } }, // Medium blue
+      alignment: { horizontal: "center", vertical: "center" },
+      border: {
+        top: { style: "thin", color: { rgb: "000000" } },
+        bottom: { style: "thin", color: { rgb: "000000" } },
+        left: { style: "thin", color: { rgb: "000000" } },
+        right: { style: "thin", color: { rgb: "000000" } }
+      }
+    };
+
+    // Style Row 3 (Max Scores) - Light blue background
+    const maxScoreStyle = {
+      font: { bold: true, color: { rgb: "1F2937" } },
+      fill: { fgColor: { rgb: "DBEAFE" } }, // Light blue
+      alignment: { horizontal: "center", vertical: "center" },
+      border: {
+        top: { style: "thin", color: { rgb: "000000" } },
+        bottom: { style: "thin", color: { rgb: "000000" } },
+        left: { style: "thin", color: { rgb: "000000" } },
+        right: { style: "thin", color: { rgb: "000000" } }
+      }
+    };
+
+    // Apply styling to header rows
     for (let col = 0; col < sheetsResponse.data.headers.length; col++) {
-      const cellRef = XLSX.utils.encode_cell({ r: 0, c: col });
-      if (!worksheet[cellRef]) worksheet[cellRef] = {};
-      worksheet[cellRef].s = headerStyle;
+      // Row 1 (Categories)
+      const categoryCell = XLSX.utils.encode_cell({ r: 0, c: col });
+      if (!worksheet[categoryCell]) worksheet[categoryCell] = { v: '', t: 's' };
+      worksheet[categoryCell].s = categoryStyle;
+
+      // Row 2 (Column Names)
+      const subHeaderCell = XLSX.utils.encode_cell({ r: 1, c: col });
+      if (!worksheet[subHeaderCell]) worksheet[subHeaderCell] = { v: '', t: 's' };
+      worksheet[subHeaderCell].s = subHeaderStyle;
+
+      // Row 3 (Max Scores)
+      const maxScoreCell = XLSX.utils.encode_cell({ r: 2, c: col });
+      if (!worksheet[maxScoreCell]) worksheet[maxScoreCell] = { v: '', t: 's' };
+      worksheet[maxScoreCell].s = maxScoreStyle;
     }
+
+    // 🔥 NEW: Create merged cells for category headers
+    const merges = [];
+    
+    // 🔥 SMART MERGE: Analyze the main_headers to find merge ranges
+    if (sheetsResponse.data.main_headers && sheetsResponse.data.main_headers.length > 0) {
+      let currentCategory = '';
+      let startCol = 0;
+      let endCol = 0;
+      
+      for (let col = 0; col < sheetsResponse.data.main_headers.length; col++) {
+        const categoryName = sheetsResponse.data.main_headers[col] || '';
+        
+        if (categoryName && categoryName.trim() !== '') {
+          // New category found
+          if (currentCategory && currentCategory !== categoryName) {
+            // Merge the previous category if it spans multiple columns
+            if (endCol > startCol) {
+              merges.push({
+                s: { r: 0, c: startCol }, // Start row 0, start column
+                e: { r: 0, c: endCol }    // End row 0, end column
+              });
+              console.log(`🔥 MERGE: "${currentCategory}" from col ${startCol} to ${endCol}`);
+            }
+            startCol = col;
+          } else if (!currentCategory) {
+            startCol = col;
+          }
+          
+          currentCategory = categoryName;
+          endCol = col;
+        } else if (currentCategory) {
+          // Empty cell, but continue the current category
+          endCol = col;
+        }
+      }
+      
+      // Handle the last category
+      if (currentCategory && endCol > startCol) {
+        merges.push({
+          s: { r: 0, c: startCol },
+          e: { r: 0, c: endCol }
+        });
+        console.log(`🔥 MERGE: "${currentCategory}" from col ${startCol} to ${endCol}`);
+      }
+    }
+
+    // 🔥 ALTERNATIVE: If smart merge doesn't work, use manual merge patterns
+    if (merges.length === 0) {
+      // Manual merge patterns based on common gradebook structures
+      const manualMerges = [
+        // STUDENT INFO (columns A-D: NO, LASTNAME, FIRSTNAME, STUDENT ID)
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } },
+        
+        // QUIZZES (assume columns E-I: Quiz 1-5 + Total)
+        { s: { r: 0, c: 4 }, e: { r: 0, c: 9 } },
+        
+        // ASSIGNMENTS (assume columns J-O: Assign 1-5 + Total)
+        { s: { r: 0, c: 10 }, e: { r: 0, c: 15 } },
+        
+        // Add more patterns as needed based on your sheet structure
+      ];
+      
+      // Only add merges that are within our column range
+      manualMerges.forEach(merge => {
+        if (merge.e.c < sheetsResponse.data.headers.length) {
+          merges.push(merge);
+        }
+      });
+    }
+
+    // Apply merges to worksheet
+    if (merges.length > 0) {
+      worksheet['!merges'] = merges;
+      console.log('🔥 APPLIED MERGES:', merges);
+    }
+
+    // 🔥 NEW: Set row heights for header rows
+    worksheet['!rows'] = [
+      { hpt: 25 }, // Row 1 height
+      { hpt: 25 }, // Row 2 height  
+      { hpt: 20 }, // Row 3 height
+    ];
 
     // Set column widths
     const columnWidths = sheetsResponse.data.headers.map(() => ({ width: 15 }));
     worksheet['!cols'] = columnWidths;
+
+    // 🔥 NEW: Freeze the header rows (first 3 rows)
+    worksheet['!freeze'] = { xSplit: 0, ySplit: 3 };
 
     // Add worksheet to workbook
     XLSX.utils.book_append_sheet(workbook, worksheet, classRecord.name || 'Class Record');
@@ -2860,9 +3049,12 @@ const handleExportToExcel = async () => {
     // Save file
     XLSX.writeFile(workbook, filename);
     
-    toast.success(`✅ Excel file exported: ${filename}`);
+    // 🔥 IMPROVED: Better success message
+    const message = `✅ Excel exported: ${filename} (${sheetsResponse.data.headers.length} columns with merged category headers)`;
+    toast.success(message);
+    
     if (voiceEnabled) {
-      speakText('Excel file has been exported successfully');
+      speakText(`Excel file exported successfully with ${sheetsResponse.data.headers.length} columns including properly centered category headers`);
     }
 
   } catch (error) {
@@ -2957,41 +3149,81 @@ const handleExportToPDF = async () => {
 
     toast('📄 Preparing PDF export...');
 
-    // Get fresh data from Google Sheets
-    const sheetsResponse = await classRecordService.getGoogleSheetsDataServiceAccount(classRecord.google_sheet_id);
+    // Get data
+    let sheetsResponse;
+    
+    if (currentSheet?.sheet_name) {
+      console.log('🔥 PDF EXPORT: Using specific sheet data for:', currentSheet.sheet_name);
+      sheetsResponse = await classRecordService.getSpecificSheetData(
+        classRecord.google_sheet_id, 
+        currentSheet.sheet_name
+      );
+    } else {
+      console.log('🔥 PDF EXPORT: Using general sheet data');
+      sheetsResponse = await classRecordService.getGoogleSheetsDataServiceAccount(
+        classRecord.google_sheet_id
+      );
+    }
     
     if (!sheetsResponse.data?.success || !sheetsResponse.data.tableData?.length) {
       toast.error('Could not load data for export');
       return;
     }
 
+    // 🔥 FIX: Combine headers to get ALL columns including Total Score and Term Grade
+    const allHeaders = [...sheetsResponse.data.headers];
+    
+    // Add missing headers from main_headers if they exist
+    if (sheetsResponse.data.main_headers && sheetsResponse.data.main_headers.length > sheetsResponse.data.headers.length) {
+      for (let i = sheetsResponse.data.headers.length; i < sheetsResponse.data.main_headers.length; i++) {
+        if (sheetsResponse.data.main_headers[i]) {
+          allHeaders.push(sheetsResponse.data.main_headers[i]);
+          console.log(`🔥 ADDED MISSING HEADER: "${sheetsResponse.data.main_headers[i]}" at index ${i}`);
+        }
+      }
+    }
+
+    console.log('🔥 PDF DEBUG: Original headers:', sheetsResponse.data.headers.length);
+    console.log('🔥 PDF DEBUG: All headers (with missing ones):', allHeaders.length);
+    console.log('🔥 PDF DEBUG: Complete headers:', allHeaders);
+
     // Create PDF document
     const doc = new jsPDF('landscape');
 
-    // Add title
-    doc.setFontSize(18);
+    // 🔥 PAGE 1: Use complete headers for the table
+    // Simple title
+    doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.text(classRecord.name || 'Class Record', 15, 20);
 
-    // Add metadata
+    // Simple metadata
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Semester: ${classRecord.semester || 'N/A'}`, 15, 30);
-    doc.text(`Teacher: ${classRecord.teacher_name || 'N/A'}`, 15, 35);
-    doc.text(`Generated: ${new Date().toLocaleDateString()}`, 15, 40);
+    doc.text(`Teacher: ${classRecord.teacher_name || 'N/A'} | Semester: ${classRecord.semester || 'N/A'} | Date: ${new Date().toLocaleDateString()}`, 15, 30);
 
-    // Prepare table data
-    const tableHeaders = sheetsResponse.data.headers;
-    const tableData = sheetsResponse.data.tableData;
+    // 🔥 PAGE 1: Use ALL headers including the missing ones
+    const tableHeaders = [allHeaders];
+    
+    const tableData = sheetsResponse.data.tableData.map(row => {
+      const paddedRow = [...row];
+      // Ensure row matches the complete header count
+      while (paddedRow.length < allHeaders.length) {
+        paddedRow.push('');
+      }
+      return paddedRow;
+    });
 
-    // 🔥 Use autoTable function directly (not doc.autoTable)
+    console.log('🔥 PDF DEBUG: Table headers length:', tableHeaders[0].length);
+    console.log('🔥 PDF DEBUG: First data row length:', tableData[0]?.length);
+
+    // Page 1 table with ALL columns
     autoTable(doc, {
-      head: [tableHeaders],
+      head: tableHeaders,
       body: tableData,
-      startY: 50,
+      startY: 40,
       styles: {
-        fontSize: 8,
-        cellPadding: 2,
+        fontSize: 5,
+        cellPadding: 0.5,
         overflow: 'linebreak',
         halign: 'center'
       },
@@ -2999,20 +3231,104 @@ const handleExportToPDF = async () => {
         fillColor: [79, 70, 229],
         textColor: 255,
         fontStyle: 'bold',
-        fontSize: 9
-      },
-      alternateRowStyles: {
-        fillColor: [248, 250, 252]
+        fontSize: 5
       },
       columnStyles: {
-        1: { cellWidth: 25 }, // LASTNAME
-        2: { cellWidth: 25 }, // FIRST NAME
+        0: { cellWidth: 6 },  // NO. column
+        1: { cellWidth: 15 }, // LASTNAME
+        2: { cellWidth: 15 }, // FIRST NAME
+        3: { cellWidth: 12 }, // STUDENT ID
       },
-      margin: { top: 50, right: 10, bottom: 20, left: 10 },
-      theme: 'striped'
+      margin: { top: 40, right: 5, bottom: 20, left: 5 },
+      theme: 'striped',
+      tableWidth: 'auto'
     });
 
-    // Add footer
+    // 🔥 PAGE 2: Now look for Total Score and Term Grade in the COMPLETE headers
+    doc.addPage();
+
+    // Page 2 title
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${classRecord.name || 'Class Record'} - Final Grades`, 15, 20);
+
+    // Page 2 metadata
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Total Score and Term Grade | Generated: ${new Date().toLocaleDateString()}`, 15, 30);
+
+    // 🔥 SEARCH: Look for Total Score and Term Grade in COMPLETE headers
+    const page2Headers = [];
+    const page2HeaderIndices = [];
+
+    // Student identification columns
+    allHeaders.forEach((header, index) => {
+      const headerLower = header.toLowerCase();
+      if (headerLower.includes('no.') || headerLower === 'no' || 
+          headerLower.includes('lastname') || 
+          headerLower.includes('first name') || headerLower.includes('firstname')) {
+        page2Headers.push(header);
+        page2HeaderIndices.push(index);
+      }
+    });
+
+    // Look for Total Score and Term Grade in complete headers
+    allHeaders.forEach((header, index) => {
+      if (header === 'Total Score' || header === 'Term Grade') {
+        page2Headers.push(header);
+        page2HeaderIndices.push(index);
+        console.log(`🔥 FOUND FINAL GRADE: "${header}" at index ${index}`);
+      }
+    });
+
+    console.log('🔥 PAGE 2 DEBUG: Headers:', page2Headers);
+    console.log('🔥 PAGE 2 DEBUG: Header indices:', page2HeaderIndices);
+
+    // Page 2 data using the complete data rows
+    const page2Data = sheetsResponse.data.tableData.map(row => {
+      return page2HeaderIndices.map(index => row[index] || '');
+    });
+
+    // Create Page 2 table with final grades
+    if (page2Headers.length > 3) { // More than just student info
+      autoTable(doc, {
+        head: [page2Headers],
+        body: page2Data,
+        startY: 40,
+        styles: {
+          fontSize: 12,
+          cellPadding: 4,
+          overflow: 'linebreak',
+          halign: 'center'
+        },
+        headStyles: {
+          fillColor: [34, 197, 94], // Green for final grades
+          textColor: 255,
+          fontStyle: 'bold',
+          fontSize: 12
+        },
+        columnStyles: {
+          0: { cellWidth: 20 }, // NO.
+          1: { cellWidth: 50 }, // LASTNAME
+          2: { cellWidth: 50 }, // FIRST NAME
+          3: { cellWidth: 40 }, // Total Score
+          4: { cellWidth: 40 }, // Term Grade
+        },
+        margin: { top: 40, right: 50, bottom: 20, left: 50 },
+        theme: 'striped',
+        tableWidth: 'auto'
+      });
+
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'italic');
+      doc.text('Final computed grades for all students', 15, doc.lastAutoTable.finalY + 15);
+    } else {
+      doc.setFontSize(12);
+      doc.text('Total Score and Term Grade columns still not found.', 15, 50);
+      doc.text(`Found ${page2Headers.length} headers for Page 2`, 15, 65);
+    }
+
+    // Simple footer
     const pageCount = doc.internal.getNumberOfPages();
     for (let i = 1; i <= pageCount; i++) {
       doc.setPage(i);
@@ -3025,16 +3341,17 @@ const handleExportToPDF = async () => {
       );
     }
 
-    // Generate filename with timestamp
+    // Generate filename
     const timestamp = new Date().toISOString().slice(0, 10);
     const filename = `${classRecord.name || 'ClassRecord'}_${timestamp}.pdf`;
 
     // Save PDF
     doc.save(filename);
     
-    toast.success(`✅ PDF file exported: ${filename}`);
+    toast.success(`✅ PDF exported: ${filename} (${pageCount} pages, ${allHeaders.length} columns with Total Score & Term Grade)`);
+    
     if (voiceEnabled) {
-      speakText('PDF file has been exported successfully');
+      speakText(`PDF file exported successfully with final grades on page 2`);
     }
 
   } catch (error) {

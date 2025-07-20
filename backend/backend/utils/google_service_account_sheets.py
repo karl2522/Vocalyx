@@ -158,13 +158,7 @@ class GoogleServiceAccountSheets:
     def get_sheet_data(self, sheet_id: str) -> dict:
         """
         Get data from a Google Sheet using service account.
-        Updated to handle 3-row header structure.
-
-        Args:
-            sheet_id: ID of the spreadsheet
-
-        Returns:
-            Dict containing sheet data or error
+        Updated to handle 3-row header structure and extended column range.
         """
         try:
             # Get sheet metadata first
@@ -173,8 +167,10 @@ class GoogleServiceAccountSheets:
             # Get the first sheet name
             first_sheet = spreadsheet['sheets'][0]['properties']['title']
 
-            # 🔥 Get MORE data to capture all header rows
-            range_name = f"{first_sheet}!A1:Z100"  # Increased range
+            # 🔥 FIXED: Extended range to cover columns beyond Z
+            range_name = f"{first_sheet}!A1:AM100"  # Changed from A1:Z100 to A1:AM100
+            print(f"🔍 GET SHEET DATA: Requesting range: {range_name}")
+
             result = self.sheets_service.spreadsheets().values().get(
                 spreadsheetId=sheet_id,
                 range=range_name
@@ -212,6 +208,7 @@ class GoogleServiceAccountSheets:
             print(f"   Row 3 (Max Scores): {max_scores}")
             print(f"   Combined Headers: {combined_headers}")
             print(f"   Student Data Rows: {len(tableData)}")
+            print(f"   Total Headers Count: {len(combined_headers)}")  # 🔥 NEW: Debug header count
 
             return {
                 'success': True,
@@ -725,7 +722,7 @@ class GoogleServiceAccountSheets:
             print(f"🔍 GET SPECIFIC SHEET: sheet_id={sheet_id}, sheet_name={sheet_name}")
 
             # Get data from the specific sheet
-            range_name = f"'{sheet_name}'!A1:Z100"  # Use specific sheet name in quotes
+            range_name = f"'{sheet_name}'!A1:AM100"  # Use specific sheet name in quotes
             print(f"🔍 GET SPECIFIC SHEET: Requesting range: {range_name}")
 
             result = self.sheets_service.spreadsheets().values().get(
