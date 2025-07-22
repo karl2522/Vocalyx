@@ -12,6 +12,7 @@ import Login from './components/Login'
 import Profile from './components/Profile'
 import ProtectedRoute from './components/ProtectedRoute'
 import PublicRoute from './components/PublicRoute'
+import Settings from './components/Settings.jsx'
 import Signup from './components/Signup'
 import './index.css'
 import { enableHardwareAcceleration, preloadHeaderAssets } from './utils/preload.js'
@@ -109,6 +110,12 @@ function App() {
                 <Route path="/class-records/:id/excel" element={
                   <ProtectedRoute>
                     <ClassRecordExcel />
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/settings" element={
+                  <ProtectedRoute>
+                    <Settings />
                   </ProtectedRoute>
                 } />
 

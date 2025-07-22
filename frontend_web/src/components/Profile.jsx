@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'react-hot-toast';
-import { FiCamera, FiEdit, FiInfo, FiSave, FiUser, FiX } from 'react-icons/fi';
+import { FiArrowLeft, FiCamera, FiEdit, FiInfo, FiSave, FiUser, FiX } from 'react-icons/fi';
 import { MdOutlineAlternateEmail, MdOutlineEmail, MdOutlineSchool } from 'react-icons/md';
 import { RiGraduationCapLine, RiUserSettingsLine } from 'react-icons/ri';
+import { useNavigate } from 'react-router-dom'; // Add this import
 import { useAuth } from '../auth/AuthContext';
-import DashboardLayout from './layouts/DashboardLayout';
 import { userService } from '../services/api';
 import { showToast } from '../utils/toast';
 
@@ -51,6 +51,7 @@ const profileStyles = `
 
 const Profile = () => {
   const { user, setUser } = useAuth();
+  const navigate = useNavigate(); // Add this hook
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
     first_name: '',
@@ -206,25 +207,39 @@ const Profile = () => {
     reader.readAsDataURL(file);
   };
 
+  // 🔥 NEW: Handle back to records navigation
+  const handleBackToRecords = () => {
+    navigate('/class-records');
+  };
+
   if (isLoading) {
     return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="text-center">
-            <div className="w-8 h-8 border-4 border-[#333D79] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading profile...</p>
-          </div>
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-[#333D79] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading profile...</p>
         </div>
-      </DashboardLayout>
+      </div>
     );
   }
 
   return (
-    <DashboardLayout>
+    <div className="min-h-screen bg-gray-50 p-6">
       {/* Add custom styles */}
       <style>{profileStyles}</style>
       
       <div className="pb-6">
+        {/* 🔥 NEW: Back to Records Button */}
+        <div className="mb-6">
+          <button
+            onClick={handleBackToRecords}
+            className="flex items-center gap-2 px-4 py-2 text-[#333D79] hover:bg-[#EEF0F8] rounded-lg transition-colors group"
+          >
+            <FiArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
+            <span className="font-medium">Back to Records</span>
+          </button>
+        </div>
+
         {/* Profile Header */}
         <div className="profile-header-gradient rounded-xl text-white overflow-hidden mb-8 fade-in-up">
           <div className="relative p-8">
@@ -317,7 +332,6 @@ const Profile = () => {
           </div>
         </div>
         
-        {/* Tabs and Content */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           {/* Sidebar */}
           <div className="md:col-span-1">
@@ -611,7 +625,7 @@ const Profile = () => {
           </div>
         </div>
       </div>
-    </DashboardLayout>
+    </div>
   );
 };
 
