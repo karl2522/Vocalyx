@@ -5,7 +5,8 @@
         <domain includeSubdomains="true">10.0.6.216</domain>
         <!-- Add localhost if you also test with emulator -->
         <domain includeSubdomains="true">localhost</domain>
-        <domain includeSubdomains="true">10.0.191.212</domain>
+        <domain includeSubdomains="true">10.0.165.206</domain>
         <domain includeSubdomains="true">vocalyx-c61a072bf25a.herokuapp.com</domain>
+        <domain includeSubdomains="true">192.168.254.101</domain>
     </domain-config>
 </network-security-config>

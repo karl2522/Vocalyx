@@ -2,7 +2,7 @@ from django.contrib.auth.password_validation import validate_password
 from drf_spectacular.utils import OpenApiExample, extend_schema_serializer
 from rest_framework import serializers
 
-from users.models import CustomUser
+from users.models import CustomUser, UserActivity
 
 
 @extend_schema_serializer(
@@ -71,3 +71,39 @@ class UserLoginSerializer(serializers.Serializer):
             raise serializers.ValidationError('Both email and password are required.')
 
         return attrs
+
+
+class UserActivitySerializer(serializers.ModelSerializer):
+    icon = serializers.ReadOnlyField()
+    color_class = serializers.ReadOnlyField()
+    time_ago = serializers.SerializerMethodField()
+
+    class Meta:
+        model = UserActivity
+        fields = [
+            'id', 'activity_type', 'title', 'description', 'metadata',
+            'class_record_id', 'created_at', 'icon', 'color_class', 'time_ago'
+        ]
+        read_only_fields = ['id', 'created_at', 'icon', 'color_class', 'time_ago']
+
+    def get_time_ago(self, obj):
+        """Get human-readable time ago"""
+        from django.utils import timezone
+        from datetime import timedelta
+
+        now = timezone.now()
+        diff = now - obj.created_at
+
+        if diff < timedelta(minutes=1):
+            return "Just now"
+        elif diff < timedelta(hours=1):
+            minutes = int(diff.total_seconds() / 60)
+            return f"{minutes} minute{'s' if minutes != 1 else ''} ago"
+        elif diff < timedelta(days=1):
+            hours = int(diff.total_seconds() / 3600)
+            return f"{hours} hour{'s' if hours != 1 else ''} ago"
+        elif diff < timedelta(days=7):
+            days = diff.days
+            return f"{days} day{'s' if days != 1 else ''} ago"
+        else:
+            return obj.created_at.strftime("%b %d, %Y")

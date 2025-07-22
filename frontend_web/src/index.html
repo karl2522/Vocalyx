@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vocalyx</title>
+    <style>
+      /* Hide the CSV file info that appears at the bottom */
+      .file-info-footer, 
+      [class*="csv-info"],
+      [class*="file-tab"],
+      [data-testid="file-info"],
+      [data-file-name*="FR1.csv"] {
+        display: none !important;
+      }
+
+      /* Improved Excel table container styling */
+      .excel-data-container {
+        position: relative;
+        max-width: 100%;
+        overflow: hidden;
+      }
+
+      /* Excel wrapper container */
+      .excel-wrapper {
+        position: relative;
+        border-radius: 0.5rem;
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* Excel scroll container styles */
+      .excel-scroll-container {
+        scrollbar-width: none; /* Hide native scrollbar for Firefox */
+        -ms-overflow-style: none; /* Hide native scrollbar for IE/Edge */
+      }
+
+      /* Hide the default scrollbar for WebKit browsers */
+      .excel-scroll-container::-webkit-scrollbar {
+        display: none;
+      }
+
+      /* Always show horizontal scrollbar */
+      .excel-scroll-x {
+        height: 12px;
+        overflow-x: scroll;
+        overflow-y: hidden;
+        position: sticky;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        background-color: #f5f5f5;
+        border-top: 1px solid #e0e0e0;
+        border-radius: 0 0 0.5rem 0.5rem;
+        z-index: 50;
+        box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.05);
+      }
+
+      /* Custom scrollbar track */
+      .excel-scroll-x::-webkit-scrollbar {
+        height: 12px;
+        background-color: #f5f5f5;
+      }
+
+      /* Custom scrollbar thumb */
+      .excel-scroll-x::-webkit-scrollbar-thumb {
+        background-color: #c5c7d0;
+        border-radius: 6px;
+        border: 2px solid #f5f5f5;
+      }
+
+      .excel-scroll-x::-webkit-scrollbar-thumb:hover {
+        background-color: #a5a7b0;
+      }
+
+      /* Scrollbar track for Firefox */
+      .excel-scroll-x {
+        scrollbar-width: thin;
+        scrollbar-color: #c5c7d0 #f5f5f5;
+      }
+
+      /* Scroll dummy content */
+      .excel-scroll-content {
+        height: 1px;
+      }
+
+      /* Apply fixed layout to table */
+      .excel-table-container {
+        table-layout: fixed;
+        max-width: 100%;
+      }
+
+      .htCustom {
+        overflow: hidden !important;
+      }
+
+      .htCustom .wtHolder {
+        max-width: 100%;
+      }
+
+      .htCustom .wtHider {
+        max-width: 100%;
+      }
+
+      /* Attach horizontal scrollbar to bottom of container */
+      .htCustom .wtHolder .wtHider {
+        padding-bottom: 8px;
+      }
+
+      /* Add sticky horizontal scrollbar for the fullscreen view */
+      .excel-fullscreen-container .htCustom .wtHolder {
+        position: sticky;
+        bottom: 0;
+        z-index: 10;
+        background: white;
+      }
+
+      /* Make header cells stand out more */
+      .htCustom .ht_master .wtHolder .wtHider .wtSpreader .htCore thead th {
+        background-color: #f8f9fc !important;
+        font-weight: 600 !important;
+        color: #333D79 !important;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+      }
+
+      /* Fixed columns styling */
+      .htCustom .ht_clone_left .wtHolder .wtHider .wtSpreader .htCore tbody th {
+        background-color: #f8f9fc !important;
+        font-weight: 500 !important;
+        position: sticky;
+        left: 0;
+        z-index: 9;
+      }
+
+      /* Prevent cell overflow */
+      .htCustom .htCore td {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      /* Fix for the column headers to match with data cells */
+      .htCustom .ht_master .wtHolder .wtHider .wtSpreader .htCore thead th:first-child {
+        border-right: 1px solid #e8e8e8 !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+    <script>
+      // Add a script to sync scroll positions between Excel content and bottom scrollbar
+      document.addEventListener('DOMContentLoaded', function() {
+        // We'll handle this with JavaScript after the React app mounts
+        setTimeout(function() {
+          function setupExcelScrollSyncing() {
+            const excelContainers = document.querySelectorAll('.excel-wrapper');
+            
+            excelContainers.forEach(wrapper => {
+              const dataContainer = wrapper.querySelector('.excel-scroll-container');
+              if (!dataContainer) return;
+              
+              // Create bottom scrollbar if it doesn't exist
+              let bottomScrollbar = wrapper.querySelector('.excel-scroll-x');
+              if (!bottomScrollbar) {
+                bottomScrollbar = document.createElement('div');
+                bottomScrollbar.className = 'excel-scroll-x';
+                
+                const scrollContent = document.createElement('div');
+                scrollContent.className = 'excel-scroll-content';
+                bottomScrollbar.appendChild(scrollContent);
+                
+                wrapper.appendChild(bottomScrollbar);
+              }
+              
+              // Sync scroll positions
+              const syncScroll = function() {
+                // Find the actual scrollable element inside Handsontable
+                const htHolder = wrapper.querySelector('.htCustom .wtHolder');
+                if (htHolder) {
+                  // Get the scrollWidth from the handsontable holder
+                  const scrollWidth = htHolder.scrollWidth;
+                  bottomScrollbar.querySelector('.excel-scroll-content').style.width = scrollWidth + 'px';
+                  
+                  // Sync scroll positions
+                  bottomScrollbar.addEventListener('scroll', function() {
+                    htHolder.scrollLeft = bottomScrollbar.scrollLeft;
+                  });
+                  
+                  htHolder.addEventListener('scroll', function() {
+                    bottomScrollbar.scrollLeft = htHolder.scrollLeft;
+                  });
+                }
+              };
+              
+              // Wait for Handsontable to fully render
+              setTimeout(syncScroll, 500);
+            });
+          }
+          
+          // Initial setup
+          setupExcelScrollSyncing();
+          
+          // Re-setup when the Excel content might change (full screen toggle, etc.)
+          document.addEventListener('click', function(e) {
+            if (e.target.closest('button') && (e.target.textContent.includes('Full Screen') || e.target.textContent.includes('Exit Full Screen'))) {
+              setTimeout(setupExcelScrollSyncing, 500);
+            }
+          });
+        }, 1000);
+      });
+    </script>
+  </body>
+</html> 

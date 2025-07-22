@@ -1,16 +1,16 @@
 import PropTypes from 'prop-types';
-import { FiLogOut } from 'react-icons/fi';
+import { FiLogOut, FiX } from 'react-icons/fi';
 import { MdWarning } from 'react-icons/md';
 
 const LogoutModal = ({ isOpen, onClose, onConfirm }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-[999] overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
       <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-        {/* Background overlay */}
+        {/* Background overlay with matching z-index */}
         <div 
-          className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" 
+          className="fixed inset-0 bg-black bg-opacity-70 transition-opacity backdrop-blur-sm z-[999]" 
           aria-hidden="true"
           onClick={onClose}
         ></div>
@@ -18,7 +18,17 @@ const LogoutModal = ({ isOpen, onClose, onConfirm }) => {
         <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
 
         {/* Modal panel */}
-        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full relative z-[1000] animate-fadeIn">
+          <div className="absolute right-2 top-2">
+            <button 
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 transition-colors rounded-full p-1 hover:bg-gray-100"
+              aria-label="Close"
+            >
+              <FiX size={20} />
+            </button>
+          </div>
+          
           <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
             <div className="sm:flex sm:items-start">
               <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
@@ -36,6 +46,7 @@ const LogoutModal = ({ isOpen, onClose, onConfirm }) => {
               </div>
             </div>
           </div>
+          
           <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
             <button
               type="button"
@@ -65,4 +76,4 @@ LogoutModal.propTypes = {
   onConfirm: PropTypes.func.isRequired
 };
 
-export default LogoutModal; 
+export default LogoutModal;

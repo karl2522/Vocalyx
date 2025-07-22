@@ -20,23 +20,23 @@ from celery.schedules import crontab
 from dotenv import load_dotenv
 from firebase_admin import credentials
 
-load_dotenv()
-
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+load_dotenv(os.path.join(BASE_DIR, '.env'))
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY')
+SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-fallback-secret-key-for-development-only')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*', '10.0.191.212', '192.168.1.10', '.herokuapp.com']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*', '10.0.165.206', '192.168.1.10', '.herokuapp.com', "192.168.254.101"]
 
 FIREBASE_SERVICE_ACCOUNT_PATH = os.path.join(BASE_DIR.parent, 'firebase-service-account.json')
 
@@ -60,22 +60,23 @@ INSTALLED_APPS = [
     'corsheaders',
     'users.apps.UsersConfig',
     'drf_spectacular',
-    'excel',
-    'classes',
+    'notifications',
+    'classrecord',
+    'speech_services',
     'token_management.apps.TokenManagementConfig',
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',  # CORS must be at the top
+    'backend.cors_middleware.CustomCorsMiddleware',  # Custom CORS middleware for error responses
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-
 ]
 
 AUTHENTICATION_BACKENDS = [
@@ -140,16 +141,22 @@ SIMPLE_JWT = {
 }
 
 
-#CORs settings
+# CORS settings - DEVELOPMENT MODE
+CORS_ALLOW_ALL_ORIGINS = True  # Allow all origins for development
+CORS_ALLOW_CREDENTIALS = True
+
+# Explicitly allow common development origins
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-    "http://10.0.191.212:8080",
-    "http://10.0.191.212",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://10.0.165.206:8080",
+    "http://10.0.165.206",
     "https://vocalyx-frontend.vercel.app",
+    "http://192.168.254.101:8000",
+    "http://192.168.254.101"
 ]
-
-CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOW_METHODS = [
     'DELETE',
@@ -170,14 +177,48 @@ CORS_ALLOW_HEADERS = [
     'user-agent',
     'x-csrftoken',
     'x-requested-with',
+    'x-google-access-token',
 ]
 
-GOOGLE_OAUTH2_CLIENT_ID = '841187713627-6u60gs5iq5h6qalooub6q27nrulifoug.apps.googleusercontent.com'
+# Additional CORS settings
+CORS_ALLOW_PRIVATE_NETWORK = True
+CORS_PREFLIGHT_MAX_AGE = 86400
+CORS_EXPOSE_HEADERS = []
 
-MICROSOFT_AUTH_CLIENT_ID = '5a7221d3-d167-4f9d-b62e-79c987bb5d5f'
+# Force CORS headers on all responses, including error responses
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+    'x-google-access-token',
+]
+
+# Additional settings to ensure CORS on error responses
+CORS_URLS_REGEX = r'^/api/.*$'
+
+# Ensure CORS headers are sent on error responses too
+CORS_ORIGIN_ALLOW_ALL = True  # Deprecated setting but sometimes needed
+CORS_ALLOW_ALL_ORIGINS = True  # Ensure this is enabled
+
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://.*\.firebaseapp\.com$",
+    r"^https://.*\.googleapis\.com$",
+]
+
+GOOGLE_OAUTH2_CLIENT_ID = os.getenv('GOOGLE_OAUTH2_CLIENT_ID')
+
+MICROSOFT_AUTH_CLIENT_ID = os.getenv('MICROSOFT_AUTH_CLIENT_ID')
 MICROSOFT_AUTH_TENANT_ID = 'common'
 
-MICROSOFT_AUTH_CLIENT_SECRET = '36831e3e-4390-41b4-a7d2-6248bf7e3a4b'
+MICROSOFT_AUTH_CLIENT_SECRET = os.getenv('MICROSOFT_AUTH_CLIENT_SECRET')
+
+GOOGLE_APPLICATION_CREDENTIALS = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
 
 #Email Settings
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
@@ -210,19 +251,32 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 
 
 DATABASES = {
-    'default': dj_database_url.config(
-        default=os.getenv('DATABASE_URL',
-            'postgres://neondb_owner:npg_BC0EMfk4VXAL@ep-twilight-hat-a1o7vy4b-pooler.ap-southeast-1.aws.neon.tech/neondb'
-        ),
-        conn_max_age=600,
-        ssl_require=True
-    )
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.getenv('DB_NAME'),
+        'USER': os.getenv('DB_USER'),
+        'PASSWORD': os.getenv('DB_PASSWORD'),
+        'HOST': os.getenv('DB_HOST'),
+        'PORT': os.getenv('DB_PORT'),
+    }
 }
 
-SECURE_SSL_REDIRECT = not DEBUG
+
+SECURE_SSL_REDIRECT = False if DEBUG else True
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
+SESSION_COOKIE_SECURE = False if DEBUG else True
+CSRF_COOKIE_SECURE = False if DEBUG else True
+
+# CSRF settings for development
+if DEBUG:
+    CSRF_TRUSTED_ORIGINS = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
+    CSRF_COOKIE_SAMESITE = 'Lax'
+    CSRF_COOKIE_HTTPONLY = False
 
 CELERY_BEAT_SCHEDULE = {
     'cleanup-expired-tokens': {
@@ -298,3 +352,33 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'users.CustomUser'
+
+# Google Sheets Template Configuration
+import json
+
+# Google Sheets Template Configuration
+GOOGLE_SHEETS_TEMPLATE_ID = os.getenv('GOOGLE_SHEETS_TEMPLATE_ID', '1h-dR0ergnvgqxXsS6nLFb7lAthuoJ5MVKya4NbYHT2c')
+
+# Google API Key for public sheet access (fallback when user auth fails)
+GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
+
+# Load Google Service Account Credentials from JSON file
+GOOGLE_SERVICE_ACCOUNT_CREDENTIALS = {}
+SERVICE_ACCOUNT_FILE = os.path.join(BASE_DIR.parent, 'vocalyx2-service-account.json')
+if os.path.exists(SERVICE_ACCOUNT_FILE):
+    with open(SERVICE_ACCOUNT_FILE, 'r') as f:
+        GOOGLE_SERVICE_ACCOUNT_CREDENTIALS = json.load(f)
+    print(f"✅ Google Service Account credentials loaded from {SERVICE_ACCOUNT_FILE}")
+else:
+    print(f"❌ Warning: Service account file not found at {SERVICE_ACCOUNT_FILE}")
+    print(f"📁 Checking current directory: {BASE_DIR}")
+    print(f"📁 Checking parent directory: {BASE_DIR.parent}")
+    # Also check in current directory
+    current_service_file = os.path.join(BASE_DIR, 'vocalyx2-service-account.json')
+    if os.path.exists(current_service_file):
+        with open(current_service_file, 'r') as f:
+            GOOGLE_SERVICE_ACCOUNT_CREDENTIALS = json.load(f)
+        print(f"✅ Google Service Account credentials loaded from {current_service_file}")
+    else:
+        print(f"❌ Service account file also not found at {current_service_file}")
+        print("🔧 Google Sheets integration will be disabled")

@@ -16,6 +16,12 @@ object ClassRepository {
         _classes.add(importedClass)
     }
 
+    fun updateClass(index: Int, updatedClass: ImportedClass) {
+        if (index >= 0 && index < _classes.size) {
+            _classes[index] = updatedClass
+        }
+    }
+
     fun clear() {
         _classes.clear()
     }

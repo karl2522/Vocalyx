@@ -8,9 +8,11 @@ import com.example.vocalyxapk.LoginActivity
 
 object NavigationUtils {
     fun navigateToHome(context: Context) {
+        android.util.Log.d("NavigationUtils", "Navigating to HomeActivity")
         val intent = Intent(context, HomeActivity::class.java)
         intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         context.startActivity(intent)
+        android.util.Log.d("NavigationUtils", "Navigation to HomeActivity completed")
     }
 
     fun navigateToSignUp(context: Context) {

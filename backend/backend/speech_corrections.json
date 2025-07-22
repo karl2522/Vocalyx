@@ -1,0 +1,338 @@
+[
+  {
+    "timestamp": "2025-07-04T04:38:11.255708+00:00",
+    "original": "This one Omen 50.",
+    "corrected": "this one omen 50.",
+    "student_name": null,
+    "confidence": 0.26500552892684937,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-04T04:38:43.406607+00:00",
+    "original": "Chris Brown Omen 60.",
+    "corrected": "chris brown omen 60.",
+    "student_name": null,
+    "confidence": 0.33499181270599365,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-04T04:49:23.305980+00:00",
+    "original": "Grease 4, Omen 50.",
+    "corrected": "grease 4, omen 50.",
+    "student_name": null,
+    "confidence": 0.5748615264892578,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-04T04:54:39.390029+00:00",
+    "original": "Greensboro Omen 50.",
+    "corrected": "greensboro omen 50.",
+    "student_name": null,
+    "confidence": 0.48707032203674316,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-04T04:54:56.321723+00:00",
+    "original": "Greensburg capuras 50.",
+    "corrected": "greensburg capuras 50.",
+    "student_name": null,
+    "confidence": 0.5559065937995911,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T10:45:09.169103+00:00",
+    "original": "Chris 1, Omen 30.",
+    "corrected": "chris 1, owen 30.",
+    "student_name": null,
+    "confidence": 0.5071477293968201,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T11:26:39.807884+00:00",
+    "original": "Grease, 2, Omen score, 30.",
+    "corrected": "grease, 2, owen score, 30.",
+    "student_name": null,
+    "confidence": 0.700630784034729,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T11:33:31.764862+00:00",
+    "original": "Grease, 2, Omen score, 30.",
+    "corrected": "grease, 2, owen score, 30.",
+    "student_name": null,
+    "confidence": 0.6585140824317932,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T11:34:08.642599+00:00",
+    "original": "Grease, 2, Omen score, 30.",
+    "corrected": "grease, 2, owen score, 30.",
+    "student_name": null,
+    "confidence": 0.658514142036438,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T11:45:47.715139+00:00",
+    "original": "Accident last name. Chavez first name, Jess with student ID. 22 - 2711 - 726.",
+    "corrected": "accident last name. chavez first name, jess with student id. 22 - 2711 - 726.",
+    "student_name": null,
+    "confidence": 0.6911984086036682,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T15:34:48.987878+00:00",
+    "original": "Grease 5 Rowen through 5 all gets 45.",
+    "corrected": "grease 5 owen through 5 all gets 45.",
+    "student_name": null,
+    "confidence": 0.6644656658172607,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T15:36:34.629377+00:00",
+    "original": "Grease 5 Rowen through 5. All get 50.",
+    "corrected": "grease 5 owen through 5. all get 50.",
+    "student_name": null,
+    "confidence": 0.672318696975708,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T15:39:57.775183+00:00",
+    "original": "Grease 5 Rowen through 5 gets 20.",
+    "corrected": "grease 5 owen through 5 gets 20.",
+    "student_name": null,
+    "confidence": 0.6164482831954956,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T15:40:09.251870+00:00",
+    "original": "Grease 5 Rowen through 5 all gets 45.",
+    "corrected": "grease 5 owen through 5 all gets 45.",
+    "student_name": null,
+    "confidence": 0.5589368939399719,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T15:40:14.129901+00:00",
+    "original": "Grease 5 Rowen through 5 gets 20.",
+    "corrected": "grease 5 owen through 5 gets 20.",
+    "student_name": null,
+    "confidence": 0.7864829301834106,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T15:43:50.550282+00:00",
+    "original": "Grease 5 Rowen through 5 all gets 20.",
+    "corrected": "grease 5 owen through 5 all gets 20.",
+    "student_name": null,
+    "confidence": 0.6979689002037048,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T15:44:07.278340+00:00",
+    "original": "Grease 5 Rowen through 5 all gets 20.",
+    "corrected": "grease 5 owen through 5 all gets 20.",
+    "student_name": null,
+    "confidence": 0.6979689002037048,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T15:44:23.001969+00:00",
+    "original": "He's 5 Rowen to 5 all gets 20.",
+    "corrected": "he's 5 owen to 5 all gets 20.",
+    "student_name": null,
+    "confidence": 0.5711758732795715,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T15:50:41.274734+00:00",
+    "original": "Grease 5 Rowen through 5 all gets 20.",
+    "corrected": "grease 5 owen through 5 all gets 20.",
+    "student_name": null,
+    "confidence": 0.7069949507713318,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T15:54:58.766930+00:00",
+    "original": "Grease 5 Rowen through 5 all gets 20.",
+    "corrected": "grease 5 owen through 5 all gets 20.",
+    "student_name": null,
+    "confidence": 0.7576214075088501,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T15:59:44.220314+00:00",
+    "original": "Grease 5, Omen score, 20.",
+    "corrected": "grease 5, owen score, 20.",
+    "student_name": null,
+    "confidence": 0.6839100122451782,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T15:59:48.029874+00:00",
+    "original": "Grease 5. Omen score. 30.",
+    "corrected": "grease 5. owen score. 30.",
+    "student_name": null,
+    "confidence": 0.5640032887458801,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T16:00:05.863891+00:00",
+    "original": "Grease 5, Omen score, 20.",
+    "corrected": "grease 5, owen score, 20.",
+    "student_name": null,
+    "confidence": 0.6680266261100769,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T16:00:34.018784+00:00",
+    "original": "Grease 5, Omen score, 20.",
+    "corrected": "grease 5, owen score, 20.",
+    "student_name": null,
+    "confidence": 0.6680266261100769,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-09T16:26:22.235636+00:00",
+    "original": "Capuras Grease, 3.",
+    "corrected": "capuras grease, 3.",
+    "student_name": null,
+    "confidence": 0.442147821187973,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-10T06:47:16.654293+00:00",
+    "original": "Grease, 2 capuras score, 20.",
+    "corrected": "grease, 2 capuras score, 20.",
+    "student_name": null,
+    "confidence": 0.5733031034469604,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-10T06:54:55.341877+00:00",
+    "original": "Accident last name. Omen first name, Jared?",
+    "corrected": "accident last name. owen first name, jared?",
+    "student_name": null,
+    "confidence": 0.8290615081787109,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-10T07:38:18.974466+00:00",
+    "original": "Accident last name. Amen. First name, Jared.",
+    "corrected": "accident last name. amen. first name, jared",
+    "student_name": null,
+    "confidence": 0.8232299089431763,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-11T14:13:22.648587+00:00",
+    "original": "Grease 5. Omen score. 30.",
+    "corrected": "grease 5. owen score. 30.",
+    "student_name": null,
+    "confidence": 0.6840610504150391,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-11T14:13:25.721797+00:00",
+    "original": "Grease 4, Omen score 30.",
+    "corrected": "grease 4, owen score 30.",
+    "student_name": null,
+    "confidence": 0.6200343370437622,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-11T14:22:43.480864+00:00",
+    "original": "Chris Street, Omen score 40.",
+    "corrected": "chris street, owen score 40.",
+    "student_name": null,
+    "confidence": 0.6468127965927124,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-11T14:22:48.550693+00:00",
+    "original": "Chris Street, Omen score 40.",
+    "corrected": "chris street, owen score 40.",
+    "student_name": null,
+    "confidence": 0.6299447417259216,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-11T14:25:36.052420+00:00",
+    "original": "Chris Street, Omen score 30.",
+    "corrected": "chris street, owen score 30.",
+    "student_name": null,
+    "confidence": 0.5499167442321777,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-11T14:25:41.690710+00:00",
+    "original": "Chris Street, Omen score 20.",
+    "corrected": "chris street, owen score 20.",
+    "student_name": null,
+    "confidence": 0.5570287108421326,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-11T14:25:51.503029+00:00",
+    "original": "Chris Street, Omen score 30.",
+    "corrected": "chris street, owen score 30.",
+    "student_name": null,
+    "confidence": 0.5499168038368225,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-11T14:25:56.516645+00:00",
+    "original": "Chris Street, Omen score 20.",
+    "corrected": "chris street, owen score 20.",
+    "student_name": null,
+    "confidence": 0.546164333820343,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-11T14:26:26.207179+00:00",
+    "original": "Chris Street, Omen score 30.",
+    "corrected": "chris street, owen score 30.",
+    "student_name": null,
+    "confidence": 0.5499168038368225,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-12T08:56:36.502728+00:00",
+    "original": "Grease 1, Omen score 20.",
+    "corrected": "grease 1, owen score 20.",
+    "student_name": null,
+    "confidence": 0.657554030418396,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-12T08:56:39.433661+00:00",
+    "original": "Grease 1, Omen score 20.",
+    "corrected": "grease 1, owen score 20.",
+    "student_name": null,
+    "confidence": 0.6575542688369751,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-12T08:56:52.719616+00:00",
+    "original": "Grease 1, Omen score 20.",
+    "corrected": "grease 1, owen score 20.",
+    "student_name": null,
+    "confidence": 0.657554030418396,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-18T10:13:41.038277+00:00",
+    "original": "Omen add student ID. 22 - 2711 - 726.",
+    "corrected": "omen add student id. 22 - 2711 - 726.",
+    "student_name": null,
+    "confidence": 0.5470945835113525,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-07-18T10:48:01.710308+00:00",
+    "original": "Assign one. Jane score, 30.",
+    "corrected": "assign one. jane score, 30.",
+    "student_name": null,
+    "confidence": 0.6360348463058472,
+    "correction_type": "automatic"
+  }
+]
