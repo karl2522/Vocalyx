@@ -1746,12 +1746,14 @@ const processImportFile = async (file) => {
     // 🔥 ENHANCED: Smart column detection including Student ID
     const lastNameIndex = findColumnIndex(headers, ['last name', 'lastname', 'surname', 'family name']);
     const firstNameIndex = findColumnIndex(headers, ['first name', 'firstname', 'given name']);
+    const middleNameIndex = findColumnIndex(headers, ['middle name', 'middlename', 'middle', 'mi']);  // 🔥 NEW
     const studentIdIndex = findColumnIndex(headers, ['student id', 'studentid', 'id', 'student_id', 'student number']);  // 🔥 NEW
     
-    console.log('🔍 DEBUG: Column detection:');
-    console.log(`   Last Name: index ${lastNameIndex} (${headers[lastNameIndex]})`);
-    console.log(`   First Name: index ${firstNameIndex} (${headers[firstNameIndex]})`);
-    console.log(`   Student ID: index ${studentIdIndex} (${studentIdIndex >= 0 ? headers[studentIdIndex] : 'Not found'})`);
+     console.log('🔍 DEBUG: Column detection:');
+      console.log(`   First Name: index ${firstNameIndex} (${headers[firstNameIndex]})`);
+      console.log(`   Middle Name: index ${middleNameIndex} (${middleNameIndex >= 0 ? headers[middleNameIndex] : 'Not found'})`);  // 🔥 NEW
+      console.log(`   Last Name: index ${lastNameIndex} (${headers[lastNameIndex]})`);
+      console.log(`   Student ID: index ${studentIdIndex} (${studentIdIndex >= 0 ? headers[studentIdIndex] : 'Not found'})`);
     
     if (lastNameIndex === -1 || firstNameIndex === -1) {
       throw new Error('Could not find "Last Name" and "First Name" columns in the Excel file');
@@ -1760,18 +1762,25 @@ const processImportFile = async (file) => {
     // Extract student data (skip header row)
     for (let i = 1; i < jsonData.length; i++) {
       const row = jsonData[i];
-      const lastName = String(row[lastNameIndex] || '').trim();
       const firstName = String(row[firstNameIndex] || '').trim();
-      const studentId = studentIdIndex >= 0 ? String(row[studentIdIndex] || '').trim() : '';  // 🔥 NEW
+      const middleName = middleNameIndex >= 0 ? String(row[middleNameIndex] || '').trim() : '';  // 🔥 NEW
+      const lastName = String(row[lastNameIndex] || '').trim();
+      const studentId = studentIdIndex >= 0 ? String(row[studentIdIndex] || '').trim() : '';
       
       if (lastName && firstName) {
         const student = {
-          LASTNAME: lastName,
           'FIRST NAME': firstName,
+          LASTNAME: lastName,
           originalRow: i + 1
         };
         
-        // 🔥 NEW: Include Student ID if it exists
+        // 🔥 NEW: Include Middle Name if it exists
+        if (middleName) {
+          student['MIDDLE NAME'] = middleName;
+          console.log(`🔤 DEBUG: Added Middle Name "${middleName}" for ${firstName} ${lastName}`);
+        }
+        
+        // Include Student ID if it exists
         if (studentId) {
           student['STUDENT ID'] = studentId;
           console.log(`🆔 DEBUG: Added Student ID "${studentId}" for ${firstName} ${lastName}`);
@@ -1786,7 +1795,13 @@ const processImportFile = async (file) => {
     }
     
     console.log('🔍 DEBUG: Parsed students:', students);
-    
+
+    if (students.length > 10) {
+      toast.success(`📊 Ready to import ${students.length} students using optimized bulk import!`, {
+        duration: 3000
+      });
+    }
+
     setImportProgress({ status: 'checking', message: 'Checking for duplicates...' });
     
     // Check for conflicts with existing students
@@ -1801,10 +1816,19 @@ const processImportFile = async (file) => {
 
 const findColumnIndex = (headers, possibleNames) => {
   for (const name of possibleNames) {
-    const index = headers.findIndex(h => 
-      h.toLowerCase().includes(name.toLowerCase()) || 
-      name.toLowerCase().includes(h.toLowerCase())
-    );
+    const index = headers.findIndex(h => {
+      const headerLower = h.toLowerCase().trim();
+      const nameLower = name.toLowerCase().trim();
+      
+      if (headerLower === nameLower) return true;
+      
+      const headerWords = headerLower.split(/\s+/);
+      const nameWords = nameLower.split(/\s+/);
+      
+      return nameWords.every(nameWord => 
+        headerWords.some(headerWord => headerWord === nameWord)
+      );
+    });
     if (index !== -1) return index;
   }
   return -1;
@@ -1849,7 +1873,26 @@ const checkImportConflicts = async (studentsToImport) => {
 
 const executeImport = async (newStudents, resolvedConflicts) => {
   try {
-    setImportProgress({ status: 'importing', message: 'Adding students to Google Sheets...' });
+    // 🔥 NEW: More detailed progress tracking for bulk import
+    setImportProgress({ 
+      status: 'importing', 
+      message: `Preparing to import ${newStudents.length} students in bulk...`,
+      current: 0,
+      total: newStudents.length
+    });
+    
+    // 🔥 ENHANCED: Add a small delay to show progress update
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    setImportProgress({ 
+      status: 'importing', 
+      message: 'Executing bulk import to Google Sheets...',
+      current: 0,
+      total: newStudents.length
+    });
+    
+    // Record start time for performance measurement
+    const startTime = Date.now();
     
     const response = await classRecordService.importStudentsExecute(
       classRecord.google_sheet_id,
@@ -1858,6 +1901,9 @@ const executeImport = async (newStudents, resolvedConflicts) => {
       currentSheet?.sheet_name
     );
     
+    const endTime = Date.now();
+    const duration = ((endTime - startTime) / 1000).toFixed(1);
+    
     if (!response.data?.success) {
       throw new Error(response.data?.error || 'Import failed');
     }
@@ -1865,15 +1911,26 @@ const executeImport = async (newStudents, resolvedConflicts) => {
     const { results, summary } = response.data;
     const sheetInfo = currentSheet ? ` in ${currentSheet.sheet_name}` : '';
     
-    toast.success(`✅ ${summary}${sheetInfo}`);
+    // 🔥 ENHANCED: Show completion with performance info
+    setImportProgress({ 
+      status: 'completed', 
+      message: `✅ Bulk import completed in ${duration}s`,
+      current: newStudents.length,
+      total: newStudents.length
+    });
+    
+    // Show success message
+    toast.success(`✅ ${sheetInfo} (${duration}s)`);
     if (voiceEnabled) {
-      speakText(`Import completed. ${summary}${sheetInfo}`);
+      speakText(`Import completed in ${duration} seconds. ${sheetInfo}`);
     }
     
-    // Clean up
-    setImportProgress(null);
-    setShowImportModal(false);
-    setImportConflicts([]);
+    // Clean up after showing completion for 2 seconds
+    setTimeout(() => {
+      setImportProgress(null);
+      setShowImportModal(false);
+      setImportConflicts([]);
+    }, 2000);
     
   } catch (error) {
     console.error('Import execution error:', error);

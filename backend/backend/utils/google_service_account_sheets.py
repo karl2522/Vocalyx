@@ -1040,54 +1040,62 @@ class GoogleServiceAccountSheets:
     def import_students_batch(self, sheet_id: str, new_students: list, resolved_conflicts: list,
                               sheet_name: str = None) -> dict:
         """
-        Execute batch import of students with conflict resolutions.
-        FIXED: Now properly implements override functionality.
+        IMPROVED: Now does TRUE batch import instead of one-by-one
         """
         try:
-            results = {
+            # Collect ALL students to add (new + overrides)
+            all_students_to_add = new_students.copy()
+
+            # Process conflicts - collect override students
+            students_to_override = []
+            for conflict in resolved_conflicts:
+                if conflict.get('action') == 'override':
+                    students_to_override.append(conflict['importStudent'])
+
+            # ADD ALL NEW STUDENTS AT ONCE - SINGLE API CALL
+            if all_students_to_add:
+                bulk_result = self.import_all_students_at_once(sheet_id, all_students_to_add, sheet_name)
+                if not bulk_result['success']:
+                    return bulk_result
+
+            # Handle overrides separately (they need individual updates)
+            override_results = self._handle_overrides(sheet_id, students_to_override, resolved_conflicts, sheet_name)
+
+            return {
                 'success': True,
-                'newStudentsAdded': 0,
-                'conflictsSkipped': 0,
-                'conflictsOverridden': 0,
+                'newStudentsAdded': len(all_students_to_add),
+                'conflictsOverridden': override_results['overridden'],
+                'conflictsSkipped': len([c for c in resolved_conflicts if c.get('action') == 'skip']),
+                'totalProcessed': len(all_students_to_add) + len(resolved_conflicts)
+            }
+
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def _handle_overrides(self, sheet_id: str, students_to_override: list, resolved_conflicts: list,
+                          sheet_name: str = None) -> dict:
+        """
+        Handle override conflicts by updating existing student data.
+        🔥 ENHANCED: Now supports Middle Name updates
+        """
+        try:
+            override_results = {
+                'overridden': 0,
                 'errors': []
             }
 
-            # Process new students (no conflicts)
-            for student in new_students:
-                try:
-                    if sheet_name:
-                        result = self.add_student_with_auto_number_to_sheet(sheet_id, student, sheet_name)
-                    else:
-                        result = self.add_student_with_auto_number(sheet_id, student)
-
-                    if result['success']:
-                        results['newStudentsAdded'] += 1
-                        print(f"✅ Added new student: {student.get('FIRST NAME', '')} {student.get('LASTNAME', '')}")
-                    else:
-                        results['errors'].append(
-                            f"Failed to add {student.get('FIRST NAME', '')} {student.get('LASTNAME', '')}: {result.get('error', 'Unknown error')}")
-
-                except Exception as e:
-                    results['errors'].append(
-                        f"Error adding {student.get('FIRST NAME', '')} {student.get('LASTNAME', '')}: {str(e)}")
-
-            # 🔥 FIXED: Process conflict resolutions with ACTUAL override implementation
+            # Process each conflict that has 'override' action
             for conflict in resolved_conflicts:
                 action = conflict.get('action', 'skip')
-                existing_student = conflict.get('existingStudent', {})
-                import_student = conflict.get('importStudent', {})
 
-                print(
-                    f"🔍 Processing conflict: {import_student.get('FIRST NAME', '')} {import_student.get('LASTNAME', '')} - Action: {action}")
+                if action == 'override':
+                    existing_student = conflict.get('existingStudent', {})
+                    import_student = conflict.get('importStudent', {})
 
-                if action == 'skip':
-                    results['conflictsSkipped'] += 1
                     print(
-                        f"⏭️ Skipped duplicate: {import_student.get('FIRST NAME', '')} {import_student.get('LASTNAME', '')}")
+                        f"🔍 Processing override: {import_student.get('FIRST NAME', '')} {import_student.get('MIDDLE NAME', '')} {import_student.get('LASTNAME', '')} - Action: {action}")
 
-                elif action == 'override':
                     try:
-                        # 🔥 FIXED: Actually update the existing student row with new data
                         existing_row_index = existing_student.get('rowIndex')
 
                         if existing_row_index is not None:
@@ -1105,8 +1113,22 @@ class GoogleServiceAccountSheets:
                                     print(
                                         f"✅ Updated First Name: {existing_student.get('FIRST NAME', '')} → {import_student['FIRST NAME']}")
                                 else:
-                                    results['errors'].append(
+                                    override_results['errors'].append(
                                         f"Failed to update first name: {update_result.get('error')}")
+
+                            # 🔥 NEW: Update Middle Name if provided
+                            if import_student.get('MIDDLE NAME'):
+                                update_result = self.update_cell_in_sheet(
+                                    sheet_id, existing_row_index, 'MIDDLE NAME',
+                                    import_student['MIDDLE NAME'], sheet_name
+                                )
+                                if update_result['success']:
+                                    updates_made += 1
+                                    print(
+                                        f"✅ Updated Middle Name: {existing_student.get('MIDDLE NAME', 'None')} → {import_student['MIDDLE NAME']}")
+                                else:
+                                    override_results['errors'].append(
+                                        f"Failed to update middle name: {update_result.get('error')}")
 
                             # Update Last Name if different
                             if import_student.get('LASTNAME'):
@@ -1119,7 +1141,7 @@ class GoogleServiceAccountSheets:
                                     print(
                                         f"✅ Updated Last Name: {existing_student.get('LASTNAME', '')} → {import_student['LASTNAME']}")
                                 else:
-                                    results['errors'].append(
+                                    override_results['errors'].append(
                                         f"Failed to update last name: {update_result.get('error')}")
 
                             # Update Student ID if provided and different
@@ -1133,43 +1155,32 @@ class GoogleServiceAccountSheets:
                                     print(
                                         f"✅ Updated Student ID: {existing_student.get('STUDENT ID', 'None')} → {import_student['STUDENT ID']}")
                                 else:
-                                    results['errors'].append(
+                                    override_results['errors'].append(
                                         f"Failed to update student ID: {update_result.get('error')}")
 
                             if updates_made > 0:
-                                results['conflictsOverridden'] += 1
+                                override_results['overridden'] += 1
                                 print(
-                                    f"✅ Override completed: {import_student.get('FIRST NAME', '')} {import_student.get('LASTNAME', '')} ({updates_made} fields updated)")
+                                    f"✅ Override completed: {import_student.get('FIRST NAME', '')} {import_student.get('MIDDLE NAME', '')} {import_student.get('LASTNAME', '')} ({updates_made} fields updated)")
                             else:
-                                results['errors'].append(
+                                override_results['errors'].append(
                                     f"No updates made for {import_student.get('FIRST NAME', '')} {import_student.get('LASTNAME', '')}")
                         else:
-                            results['errors'].append(
+                            override_results['errors'].append(
                                 f"Could not find row index for existing student: {existing_student}")
 
                     except Exception as e:
-                        results['errors'].append(
+                        override_results['errors'].append(
                             f"Error overriding student {import_student.get('FIRST NAME', '')} {import_student.get('LASTNAME', '')}: {str(e)}")
                         logger.error(f"Override error: {str(e)}")
 
-            # Calculate totals
-            total_processed = results['newStudentsAdded'] + results['conflictsSkipped'] + results['conflictsOverridden']
-
-            logger.info(
-                f"Import completed: {results['newStudentsAdded']} new, {results['conflictsSkipped']} skipped, {results['conflictsOverridden']} overridden")
-
-            return {
-                'success': True,
-                'results': results,
-                'totalProcessed': total_processed,
-                'summary': f"Added {results['newStudentsAdded']} new students, skipped {results['conflictsSkipped']} duplicates, overrode {results['conflictsOverridden']} existing"
-            }
+            return override_results
 
         except Exception as e:
-            logger.error(f"Batch import error: {str(e)}")
+            logger.error(f"Handle overrides error: {str(e)}")
             return {
-                'success': False,
-                'error': f'Failed to import students: {str(e)}'
+                'overridden': 0,
+                'errors': [f'Failed to handle overrides: {str(e)}']
             }
 
     def add_student_with_auto_number_to_sheet(self, sheet_id: str, student_data: dict, sheet_name: str) -> dict:
@@ -1186,58 +1197,39 @@ class GoogleServiceAccountSheets:
             headers = sheet_data['headers']
             current_data = sheet_data['tableData']
 
-            # 🔥 FIXED: Don't skip any rows in tableData - it already excludes headers
+            # 🔥 FIXED: Find actual first empty row and count students properly
             first_empty_row = None
             actual_student_count = 0
 
-            # 🔥 NEW: tableData already starts from row 4 (student data), so check all rows
-            for row_index in range(len(current_data)):  # Check ALL rows in tableData
+            # Check each row in tableData to find first empty spot
+            for row_index in range(len(current_data)):
                 row = current_data[row_index]
-                has_student_data = False
 
-                # Find name column indices
-                first_name_idx = None
-                last_name_idx = None
+                if self._has_student_data(row, headers):
+                    actual_student_count += 1
+                else:
+                    # This row is empty, use it
+                    if first_empty_row is None:
+                        first_empty_row = row_index
+                        break
 
-                for idx, header in enumerate(headers):
-                    if 'FIRST NAME' in header.upper() or 'FIRSTNAME' in header.upper():
-                        first_name_idx = idx
-                    elif 'LAST NAME' in header.upper() or 'LASTNAME' in header.upper():
-                        last_name_idx = idx
-
-                # Check if this row has name data
-                if first_name_idx is not None and last_name_idx is not None:
-                    first_name = row[first_name_idx].strip() if first_name_idx < len(row) and row[
-                        first_name_idx] else ''
-                    last_name = row[last_name_idx].strip() if last_name_idx < len(row) and row[last_name_idx] else ''
-
-                    if first_name or last_name:  # Row has student data
-                        has_student_data = True
-                        actual_student_count += 1
-
-                # If this row doesn't have student data, it's our target for new student
-                if not has_student_data and first_empty_row is None:
-                    first_empty_row = row_index
-                    break
-
-            # If no empty row found, add at the end
+            # If no empty row found in existing data, add at the end
             if first_empty_row is None:
                 first_empty_row = len(current_data)
 
             # 🔥 FIXED: Calculate actual sheet row correctly
-            # tableData[0] corresponds to sheet row 4 (after 3 header rows)
             next_row = first_empty_row + 4  # +3 for headers, +1 for 1-based indexing
-
-            # 🔥 FIXED: Student number is based on actual student count + 1
             student_number = actual_student_count + 1
 
             print(f"🔍 DEBUG add_student_with_auto_number_to_sheet:")
+            print(f"   Student data to add: {student_data}")
+            print(f"   Current tableData length: {len(current_data)}")
             print(f"   Found {actual_student_count} existing students")
             print(f"   First empty row index in tableData: {first_empty_row}")
             print(f"   Target sheet row: {next_row}")
             print(f"   New student number: {student_number}")
 
-            # 🔥 NEW: Update only specific columns to avoid formula columns
+            # Rest of your existing update logic stays the same...
             updates = []
 
             # Update NO. column (A)
@@ -1246,7 +1238,6 @@ class GoogleServiceAccountSheets:
                     'range': f"'{sheet_name}'!A{next_row}",
                     'values': [[str(student_number)]]
                 })
-                print(f"🔍 ADD STUDENT: Adding NO. column update: A{next_row} = {student_number}")
 
             # Update student data columns
             for key, value in student_data.items():
@@ -1254,7 +1245,7 @@ class GoogleServiceAccountSheets:
                     index = headers.index(key)
                     column_letter = chr(65 + index)
 
-                    # 🔥 SKIP formula columns
+                    # Skip formula columns
                     header_name = headers[index].upper()
                     formula_keywords = ['TOTAL', 'SUM', 'AVERAGE', 'AVG', 'FORMULA']
                     is_formula_column = any(keyword in header_name for keyword in formula_keywords)
@@ -1264,13 +1255,11 @@ class GoogleServiceAccountSheets:
                             'range': f"'{sheet_name}'!{column_letter}{next_row}",
                             'values': [[str(value)]]
                         })
-                        print(f"🔍 ADD STUDENT: Adding data column update: {column_letter}{next_row} = {value}")
+                        print(f"🔍 ADD STUDENT: Adding {key} to {column_letter}{next_row} = {value}")  # 🔥 NEW
                     else:
                         print(f"🔍 ADD STUDENT: SKIPPING formula column: {header_name}")
 
-            print(f"🔍 ADD STUDENT: Total updates to make: {len(updates)}")
-
-            # 🔥 Batch update only the data columns
+            # Batch update
             if updates:
                 body = {
                     'valueInputOption': 'USER_ENTERED',
@@ -1281,13 +1270,8 @@ class GoogleServiceAccountSheets:
                     spreadsheetId=sheet_id,
                     body=body
                 ).execute()
-
-                print(f"🔍 ADD STUDENT: Batch update successful, updated {result.get('totalUpdatedCells', 0)} cells")
             else:
-                print("🔍 ADD STUDENT: No updates to make")
                 result = {'totalUpdatedCells': 0}
-
-            logger.info(f"Successfully added student #{student_number} to {sheet_name} row {next_row}")
 
             return {
                 'success': True,
@@ -1313,7 +1297,7 @@ class GoogleServiceAccountSheets:
     def validate_import_data(self, import_data: list) -> dict:
         """
         Validate imported student data format.
-        Updated to include Student ID validation.
+        🔥 ENHANCED: Now includes Middle Name and Student ID validation.
         """
         try:
             valid_students = []
@@ -1324,8 +1308,9 @@ class GoogleServiceAccountSheets:
 
                 # Check required fields
                 first_name = student.get('FIRST NAME', '').strip()
+                middle_name = student.get('MIDDLE NAME', '').strip()  # 🔥 NEW
                 last_name = student.get('LASTNAME', '').strip()
-                student_id = student.get('STUDENT ID', '').strip()  # 🔥 NEW
+                student_id = student.get('STUDENT ID', '').strip()
 
                 if not first_name and not last_name:
                     invalid_students.append({
@@ -1346,12 +1331,18 @@ class GoogleServiceAccountSheets:
                         'error': 'Missing last name'
                     })
                 else:
-                    # 🔥 ENHANCED: Include Student ID in valid student data
+                    # 🔥 ENHANCED: Include Middle Name and Student ID in valid student data
                     valid_student = {
                         'FIRST NAME': first_name,
                         'LASTNAME': last_name
                     }
-                    if student_id:  # Only add if Student ID exists
+
+                    # 🔥 NEW: Add Middle Name if it exists
+                    if middle_name:
+                        valid_student['MIDDLE NAME'] = middle_name
+
+                    # Add Student ID if it exists
+                    if student_id:
                         valid_student['STUDENT ID'] = student_id
 
                     valid_students.append(valid_student)
@@ -1371,6 +1362,171 @@ class GoogleServiceAccountSheets:
                 'success': False,
                 'error': f'Failed to validate import data: {str(e)}'
             }
+
+    def import_all_students_at_once(self, sheet_id: str, all_students: list, sheet_name: str = None) -> dict:
+        """
+        Import ALL students in a single batch operation - MUCH FASTER!
+        🔥 ENHANCED: Full Student ID support with debug logging
+        """
+        try:
+            # Get current sheet data
+            sheet_data = self.get_specific_sheet_data(sheet_id, sheet_name)
+            if not sheet_data['success']:
+                return sheet_data
+
+            headers = sheet_data['headers']
+            current_data = sheet_data['tableData']
+
+            # 🔥 NEW: Log what columns we found
+            print(f"🔍 DEBUG: Available columns in sheet:")
+            for idx, header in enumerate(headers):
+                print(f"   Column {chr(65 + idx)}: {header}")
+
+            # Find the actual first empty row, not just append to end
+            first_empty_row = None
+            actual_student_count = 0
+
+            # Check each row in tableData to find first empty spot
+            for row_index in range(len(current_data)):
+                row = current_data[row_index]
+
+                if self._has_student_data(row, headers):
+                    actual_student_count += 1
+                else:
+                    # This row is empty, use it
+                    if first_empty_row is None:
+                        first_empty_row = row_index
+                        break
+
+            # If no empty row found in existing data, add at the end
+            if first_empty_row is None:
+                first_empty_row = len(current_data)
+
+            print(f"🔍 DEBUG import_all_students_at_once:")
+            print(f"   Current tableData length: {len(current_data)}")
+            print(f"   Actual student count: {actual_student_count}")
+            print(f"   First empty row in tableData: {first_empty_row}")
+
+            # Prepare ALL student data at once
+            all_updates = []
+
+            for i, student in enumerate(all_students):
+                # Use the correct row calculation
+                tableData_row_index = first_empty_row + i
+                sheet_row_number = tableData_row_index + 4  # +3 for headers, +1 for 1-based
+                student_number = actual_student_count + i + 1
+
+                print(
+                    f"   Student {i + 1}: {student.get('FIRST NAME', '')} {student.get('LASTNAME', '')} (ID: {student.get('STUDENT ID', 'None')})")
+                print(f"      → tableData[{tableData_row_index}] → sheet row {sheet_row_number}")
+
+                # Add student number
+                all_updates.append({
+                    'range': f"'{sheet_name}'!A{sheet_row_number}",
+                    'values': [[str(student_number)]]
+                })
+
+                # Add all student data including Student ID
+                for key, value in student.items():
+                    if key in headers:
+                        column_index = headers.index(key)
+                        column_letter = chr(65 + column_index)
+
+                        # Skip formula columns
+                        header_name = headers[column_index].upper()
+                        formula_keywords = ['TOTAL', 'SUM', 'AVERAGE', 'AVG', 'FORMULA']
+                        is_formula_column = any(keyword in header_name for keyword in formula_keywords)
+
+                        if not is_formula_column:
+                            all_updates.append({
+                                'range': f"'{sheet_name}'!{column_letter}{sheet_row_number}",
+                                'values': [[str(value)]]
+                            })
+                            print(
+                                f"      → {key}: {column_letter}{sheet_row_number} = {value}")  # 🔥 NEW: Debug each field
+
+            print(f"   Total updates to make: {len(all_updates)}")
+
+            # SINGLE API CALL for ALL students
+            body = {
+                'valueInputOption': 'USER_ENTERED',
+                'data': all_updates
+            }
+
+            result = self.sheets_service.spreadsheets().values().batchUpdate(
+                spreadsheetId=sheet_id,
+                body=body
+            ).execute()
+
+            return {
+                'success': True,
+                'students_added': len(all_students),
+                'total_updates': len(all_updates),
+                'updated_cells': result.get('totalUpdatedCells', 0),
+                'first_empty_row': first_empty_row,
+                'starting_sheet_row': first_empty_row + 4
+            }
+
+        except Exception as e:
+            import traceback
+            print(f"❌ import_all_students_at_once error: {str(e)}")
+            print(f"   Traceback: {traceback.format_exc()}")
+            return {'success': False, 'error': str(e)}
+
+    def _has_student_data(self, row: list, headers: list) -> bool:
+        """
+        Check if a row contains actual student data (has name information OR student ID).
+        🔥 ENHANCED: Now includes Middle Name and Student ID detection
+        """
+        try:
+            # Find name and ID column indices
+            first_name_idx = None
+            middle_name_idx = None  # 🔥 NEW
+            last_name_idx = None
+            student_id_idx = None
+
+            for idx, header in enumerate(headers):
+                header_upper = header.upper()
+                if 'FIRST NAME' in header_upper or 'FIRSTNAME' in header_upper:
+                    first_name_idx = idx
+                elif 'MIDDLE NAME' in header_upper or 'MIDDLENAME' in header_upper:  # 🔥 NEW
+                    middle_name_idx = idx
+                elif 'LAST NAME' in header_upper or 'LASTNAME' in header_upper:
+                    last_name_idx = idx
+                elif 'STUDENT ID' in header_upper or 'STUDENTID' in header_upper or 'ID' in header_upper:
+                    student_id_idx = idx
+
+            # Check if this row has name data OR student ID
+            has_name_data = False
+            has_student_id = False
+
+            # Check name data (any name field counts)
+            if first_name_idx is not None:
+                first_name = row[first_name_idx].strip() if first_name_idx < len(row) and row[first_name_idx] else ''
+                if first_name:
+                    has_name_data = True
+
+            if middle_name_idx is not None:  # 🔥 NEW
+                middle_name = row[middle_name_idx].strip() if middle_name_idx < len(row) and row[
+                    middle_name_idx] else ''
+                if middle_name:
+                    has_name_data = True
+
+            if last_name_idx is not None:
+                last_name = row[last_name_idx].strip() if last_name_idx < len(row) and row[last_name_idx] else ''
+                if last_name:
+                    has_name_data = True
+
+            # Check student ID data
+            if student_id_idx is not None:
+                student_id = row[student_id_idx].strip() if student_id_idx < len(row) and row[student_id_idx] else ''
+                has_student_id = bool(student_id)
+
+            # Return True if row has either name data OR student ID
+            return has_name_data or has_student_id
+
+        except Exception:
+            return False
 
     def analyze_columns_for_mapping(self, sheet_id: str, import_columns: list, sheet_name: str = None,
                                     user_id: int = None, force_reimport: list = None) -> dict:
@@ -2249,6 +2405,244 @@ class GoogleServiceAccountSheets:
             return {
                 'success': False,
                 'error': f'Failed to save import history: {str(e)}'
+            }
+
+    def import_column_data_bulk(self, sheet_id: str, column_mappings: list, import_data: dict,
+                                sheet_name: str = None) -> dict:
+        """
+        🔥 NEW: BULK import column data with custom mappings - MUCH FASTER!
+        Instead of updating each cell individually, batch all updates into single API call.
+        """
+        try:
+            results = {
+                'success': True,
+                'columnsRenamed': 0,
+                'studentsUpdated': 0,
+                'cellsUpdated': 0,
+                'cellsSkipped': 0,
+                'cellsMerged': 0,
+                'conflictsResolved': 0,
+                'errors': [],
+                'actionSummary': {}
+            }
+
+            # Get sheet data
+            if sheet_name:
+                sheet_data = self.get_specific_sheet_data(sheet_id, sheet_name)
+            else:
+                sheet_data = self.get_sheet_data(sheet_id)
+
+            if not sheet_data['success']:
+                return sheet_data
+
+            headers = sheet_data['headers']
+            table_data = sheet_data['tableData']
+            target_sheet_name = sheet_data['sheet_name']
+
+            # 🔥 NEW: Collect ALL updates for batch processing
+            all_header_updates = []
+            all_data_updates = []
+
+            # Process each column mapping
+            for mapping in column_mappings:
+                import_column = mapping['importColumn']
+                target_column = mapping['targetColumn']
+                action = mapping.get('action', 'replace')
+
+                if action == 'skip':
+                    continue
+
+                try:
+                    # Find target column index
+                    target_index = headers.index(target_column)
+                    column_letter = chr(65 + target_index)
+
+                    # Step 1: Prepare header rename (batch this too)
+                    if import_column != target_column:
+                        all_header_updates.append({
+                            'range': f"'{target_sheet_name}'!{column_letter}2",
+                            'values': [[import_column]]
+                        })
+                        results['columnsRenamed'] += 1
+                        # Update local headers for subsequent operations
+                        headers[target_index] = import_column
+                        print(f"🔥 BATCH: Will rename column '{target_column}' → '{import_column}'")
+
+                    # Step 2: Prepare data updates for this column
+                    column_data = import_data.get('columnData', {}).get(import_column, {})
+
+                    if not column_data:
+                        results['errors'].append(f"No data found for column {import_column}")
+                        continue
+
+                    action_stats = {
+                        'studentsProcessed': 0,
+                        'cellsUpdated': 0,
+                        'cellsSkipped': 0,
+                        'conflictsResolved': 0,
+                        'studentsNotFound': []
+                    }
+
+                    print(f"🔥 BATCH: Processing {len(column_data)} students for column {import_column}")
+
+                    for student_key, import_score in column_data.items():
+                        # Find student row by matching names
+                        student_row_index = self.find_student_row_by_name(student_key, table_data, headers)
+
+                        if student_row_index is None:
+                            action_stats['studentsNotFound'].append(student_key)
+                            continue
+
+                        action_stats['studentsProcessed'] += 1
+
+                        # Get existing value for merge strategies
+                        existing_value = None
+                        if student_row_index < len(table_data) and target_index < len(table_data[student_row_index]):
+                            existing_cell = table_data[student_row_index][target_index]
+                            existing_value = str(existing_cell).strip() if existing_cell else None
+
+                        # Apply merge strategy (same logic as before)
+                        should_update = False
+                        final_score = import_score
+                        conflict_resolved = False
+
+                        if action == 'replace':
+                            should_update = True
+                            final_score = import_score
+                            if existing_value:
+                                conflict_resolved = True
+
+                        elif action == 'merge_skip':
+                            if existing_value:
+                                action_stats['cellsSkipped'] += 1
+                                should_update = False
+                            else:
+                                should_update = True
+                                final_score = import_score
+
+                        elif action == 'merge_update':
+                            if existing_value:
+                                action_stats['cellsSkipped'] += 1
+                                should_update = False
+                            else:
+                                should_update = True
+                                final_score = import_score
+
+                        elif action == 'merge_add':
+                            if existing_value and existing_value.replace('.', '').replace('-', '').isdigit():
+                                try:
+                                    existing_num = float(existing_value)
+                                    import_num = float(str(import_score))
+                                    final_score = existing_num + import_num
+                                    should_update = True
+                                    conflict_resolved = True
+                                except ValueError:
+                                    should_update = False
+                            else:
+                                should_update = True
+                                final_score = import_score
+
+                        elif action == 'merge':
+                            if existing_value:
+                                action_stats['cellsSkipped'] += 1
+                                should_update = False
+                            else:
+                                should_update = True
+                                final_score = import_score
+
+                        # 🔥 NEW: Instead of individual update, add to batch
+                        if should_update:
+                            sheet_row = student_row_index + 4  # +3 for headers, +1 for 1-based
+                            all_data_updates.append({
+                                'range': f"'{target_sheet_name}'!{column_letter}{sheet_row}",
+                                'values': [[str(final_score)]]
+                            })
+                            action_stats['cellsUpdated'] += 1
+                            if conflict_resolved:
+                                action_stats['conflictsResolved'] += 1
+
+                    # Update results
+                    results['studentsUpdated'] += action_stats['studentsProcessed']
+                    results['cellsUpdated'] += action_stats['cellsUpdated']
+                    results['cellsSkipped'] += action_stats['cellsSkipped']
+                    results['conflictsResolved'] += action_stats['conflictsResolved']
+                    results['actionSummary'][import_column] = action_stats
+
+                    print(
+                        f"🔥 BATCH: Column '{import_column}' prepared: {action_stats['cellsUpdated']} updates, {action_stats['cellsSkipped']} skipped")
+
+                except ValueError:
+                    results['errors'].append(f"Target column {target_column} not found in sheet")
+                except Exception as e:
+                    results['errors'].append(f"Error preparing {import_column}: {str(e)}")
+
+            # 🔥 EXECUTE ALL UPDATES IN 2 BATCH CALLS (headers + data)
+            total_updates = 0
+
+            # Batch 1: Update all headers at once
+            if all_header_updates:
+                print(f"🔥 BATCH: Executing {len(all_header_updates)} header updates...")
+                header_body = {
+                    'valueInputOption': 'USER_ENTERED',
+                    'data': all_header_updates
+                }
+                header_result = self.sheets_service.spreadsheets().values().batchUpdate(
+                    spreadsheetId=sheet_id,
+                    body=header_body
+                ).execute()
+                total_updates += header_result.get('totalUpdatedCells', 0)
+                print(f"✅ BATCH: Headers updated: {header_result.get('totalUpdatedCells', 0)} cells")
+
+            # Batch 2: Update all data at once
+            if all_data_updates:
+                print(f"🔥 BATCH: Executing {len(all_data_updates)} data updates...")
+                data_body = {
+                    'valueInputOption': 'USER_ENTERED',
+                    'data': all_data_updates
+                }
+                data_result = self.sheets_service.spreadsheets().values().batchUpdate(
+                    spreadsheetId=sheet_id,
+                    body=data_body
+                ).execute()
+                total_updates += data_result.get('totalUpdatedCells', 0)
+                print(f"✅ BATCH: Data updated: {data_result.get('totalUpdatedCells', 0)} cells")
+
+            print(
+                f"🔥 BATCH COMPLETE: Total {total_updates} cells updated in 2 API calls instead of {len(all_data_updates) + len(all_header_updates)} individual calls!")
+
+            # Generate summary
+            total_actions = len([m for m in column_mappings if m.get('action') != 'skip'])
+            summary_parts = []
+
+            if results['columnsRenamed'] > 0:
+                summary_parts.append(f"renamed {results['columnsRenamed']} columns")
+            if results['cellsUpdated'] > 0:
+                summary_parts.append(f"updated {results['cellsUpdated']} cells")
+            if results['cellsSkipped'] > 0:
+                summary_parts.append(f"skipped {results['cellsSkipped']} existing values")
+            if results['conflictsResolved'] > 0:
+                summary_parts.append(f"resolved {results['conflictsResolved']} conflicts")
+
+            summary = ", ".join(summary_parts) if summary_parts else "no changes made"
+
+            return {
+                'success': True,
+                'results': results,
+                'summary': f"Bulk import completed: {summary} across {total_actions} columns",
+                'performance': {
+                    'total_updates': total_updates,
+                    'api_calls_used': (1 if all_header_updates else 0) + (1 if all_data_updates else 0),
+                    'api_calls_saved': len(all_data_updates) + len(all_header_updates) - 2
+                }
+            }
+
+        except Exception as e:
+            logger.error(f"Bulk import column data error: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return {
+                'success': False,
+                'error': f'Failed to bulk import column data: {str(e)}'
             }
 
     def update_max_score_in_sheet(self, sheet_id: str, column_name: str, max_score: str,

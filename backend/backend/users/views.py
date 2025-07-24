@@ -1218,7 +1218,7 @@ def sheets_analyze_columns_mapping(request, sheet_id):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def sheets_execute_column_import(request, sheet_id):
-    """Execute column import with mappings"""
+    """Execute column import with mappings - BULK VERSION"""
     try:
         from utils.google_service_account_sheets import GoogleServiceAccountSheets
 
@@ -1234,8 +1234,8 @@ def sheets_execute_column_import(request, sheet_id):
 
         service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
 
-        # Execute the column import
-        import_result = service.import_column_data_with_mapping(
+        # 🔥 CHANGED: Use the new bulk method for faster performance
+        import_result = service.import_column_data_bulk(
             sheet_id,
             column_mappings,
             import_data,
@@ -1325,7 +1325,7 @@ def sheets_analyze_columns_mapping_enhanced(request, sheet_id):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def sheets_execute_column_import_enhanced(request, sheet_id):
-    """Enhanced column import with history tracking"""
+    """Enhanced column import with history tracking - BULK VERSION"""
     try:
         from utils.google_service_account_sheets import GoogleServiceAccountSheets
         from classrecord.models import ClassRecord
@@ -1350,8 +1350,8 @@ def sheets_execute_column_import_enhanced(request, sheet_id):
 
         service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
 
-        # Execute the column import
-        import_result = service.import_column_data_with_mapping(
+        # 🔥 CHANGED: Use the new bulk method for faster performance
+        import_result = service.import_column_data_bulk(
             sheet_id,
             column_mappings,
             import_data,
@@ -1371,6 +1371,11 @@ def sheets_execute_column_import_enhanced(request, sheet_id):
 
             if history_result['success']:
                 import_result['import_history'] = history_result
+
+            # 🔥 NEW: Add performance info to response
+            if 'performance' in import_result:
+                import_result[
+                    'performance_note'] = f"Used bulk import: {import_result['performance']['api_calls_saved']} API calls saved!"
 
         return Response(import_result)
 
