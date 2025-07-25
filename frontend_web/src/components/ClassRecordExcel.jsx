@@ -1948,22 +1948,28 @@ const handleAddStudentVoice = async (data) => {
   }
 
   try {
-    // 🔧 ENHANCED: Handle multiple field name formats
+    // 🔧 ENHANCED: Handle multiple field name formats including Middle Name
     const studentData = {};
     
-    // Last Name mapping (handle all possible variations)
+    // Last Name mapping
     const lastName = data['Last Name'] || data['LASTNAME'] || data.lastName || data['lastname'];
     if (lastName) {
       studentData['LASTNAME'] = lastName;
     }
     
-    // First Name mapping (handle all possible variations)
+    // First Name mapping
     const firstName = data['First Name'] || data['FIRST NAME'] || data.firstName || data['firstname'];
     if (firstName) {
       studentData['FIRST NAME'] = firstName;
     }
     
-    // Student ID mapping (handle all possible variations)
+    // 🔥 NEW: Middle Name mapping
+    const middleName = data['Middle Name'] || data['MIDDLE NAME'] || data.middleName || data['middlename'];
+    if (middleName) {
+      studentData['MIDDLE NAME'] = middleName;
+    }
+    
+    // Student ID mapping
     const studentId = data['Student ID'] || data['STUDENT ID'] || data.studentId || data['studentid'];
     if (studentId) {
       studentData['STUDENT ID'] = studentId;
@@ -1977,28 +1983,28 @@ const handleAddStudentVoice = async (data) => {
       throw new Error('Missing required student name data');
     }
     
-    // 🔥 NEW: Instead of adding immediately, show confirmation modal
+    // 🔥 NEW: Show confirmation modal with Middle Name
     setStudentToConfirm({
       lastName: studentData['LASTNAME'] || '',
       firstName: studentData['FIRST NAME'] || '',
+      middleName: studentData['MIDDLE NAME'] || '',  // 🔥 NEW
       studentId: studentData['STUDENT ID'] || '',
       isVisible: true
     });
     
-    // 🎯 Speak confirmation request
+    // 🎯 Speak confirmation request with Middle Name
     if (voiceEnabled) {
-      const nameToSpeak = `${studentData['FIRST NAME'] || ''} ${studentData['LASTNAME'] || ''}`.trim();
+      const nameParts = [
+        studentData['FIRST NAME'],
+        studentData['MIDDLE NAME'],  // 🔥 NEW
+        studentData['LASTNAME']
+      ].filter(Boolean);
+      const nameToSpeak = nameParts.join(' ');
       speakText(`I heard ${nameToSpeak}. Please confirm if this is correct.`);
     }
     
   } catch (error) {
-    console.error('❌ Add student error details:', {
-      message: error.message,
-      status: error.response?.status,
-      data: error.response?.data,
-      originalData: data
-    });
-    
+    console.error('❌ Add student error details:', error);
     toast.error(`Failed to parse student data: ${error.message}`);
     if (voiceEnabled) {
       speakText('Failed to understand the student information. Please try again.');
@@ -2016,6 +2022,12 @@ const handleConfirmStudent = async (finalData) => {
       'FIRST NAME': finalData.firstName,
       'STUDENT ID': finalData.studentId
     };
+
+    if (finalData.middleName) {
+      studentData['MIDDLE NAME'] = finalData.middleName;
+    }
+
+    console.log('🔧 Final student data being sent:', studentData);
     
     // Get the active sheet name
     const activeSheetName = 
@@ -2034,7 +2046,9 @@ const handleConfirmStudent = async (finalData) => {
     console.log('🔧 API Response:', response);
 
     if (response.data?.success) {
-      const studentName = `${finalData.firstName} ${finalData.lastName}`.trim();
+      // 🔥 ENHANCED: Include Middle Name in success message
+      const nameParts = [finalData.firstName, finalData.middleName, finalData.lastName].filter(Boolean);
+      const studentName = nameParts.join(' ');
       const sheetUsed = response.data.sheet_name || 'unknown';
       
       toast.success(`✅ Student added to ${sheetUsed} sheet: ${studentName} (Row ${response.data.rowNumber})`);
@@ -2042,16 +2056,14 @@ const handleConfirmStudent = async (finalData) => {
         speakText(`Successfully added student ${studentName} as number ${response.data.rowNumber} to ${sheetUsed} sheet`);
       }
       
-      // Close the modal
+      // 🔥 ENHANCED: Reset modal with Middle Name field
       setStudentToConfirm({
         lastName: '',
         firstName: '',
+        middleName: '',  // 🔥 NEW
         studentId: '',
         isVisible: false
       });
-      
-    } else {
-      throw new Error(response.data?.error || 'Failed to add student');
     }
     
   } catch (error) {
@@ -2067,6 +2079,7 @@ const handleCancelStudent = () => {
   setStudentToConfirm({
     lastName: '',
     firstName: '',
+    middleName: '',  // 🔥 NEW
     studentId: '',
     isVisible: false
   });
@@ -2081,6 +2094,7 @@ const handleEditStudent = (editedData) => {
     ...studentToConfirm,
     lastName: editedData.lastName,
     firstName: editedData.firstName,
+    middleName: editedData.middleName,  // 🔥 NEW
     studentId: editedData.studentId
   });
   

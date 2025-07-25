@@ -84,11 +84,14 @@ const phoneticCorrections = {
   'examination': 'exam', 'examinations': 'exam', 'eggs': 'exam',
   'exam one': 'exam 1', 'exam to': 'exam 2', 'exam tree': 'exam 3',
   
-  // 🔥 Midterm variations (enhanced)
-  'midterm': 'midterm', 'mid': 'midterm', 'middle': 'midterm', 'medium': 'midterm',
-  'mid term': 'midterm', 'middle term': 'midterm', 'meet term': 'midterm',
-  'midnight': 'midterm', 'midday': 'midterm',
-
+  // 🔥 NEW: Middle Name phonetic corrections (comprehensive!)
+  'mendel': 'middle', 'mendal': 'middle', 'mental': 'middle', 'medal': 'middle', 'medel': 'middle',
+  'meddle': 'middle', 'meddel': 'middle', 'midel': 'middle', 'middel': 'middle',
+  'midle': 'middle', 'midal': 'middle', 'medial': 'middle', 'meadle': 'middle',
+  'meadow': 'middle', 'metal': 'middle', 'mettle': 'middle', 'mitle': 'middle',
+  'mittle': 'middle', 'muddle': 'middle', 'model': 'middle', 'modal': 'middle',
+  'medlar': 'middle', 'middle': 'middle', // Keep the correct spelling too
+  
   // 🔥 ENHANCED: Student ID dash corrections
   'dash': '-', 'dashed': '-', 'hyphen': '-', 'minus': '-', 'dash dash': '--',
   'with dash': '-', 'and dash': '-', 'then dash': '-', 'plus dash': '-',
@@ -1468,124 +1471,129 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
 
   // Stage 9: Enhanced student addition patterns
   const addStudentPatterns = [
-    // 🔥 NEW: Patterns with Student ID
-    /(?:add|new|create)\s+student\s+(.+?)\s+(?:with\s+)?(?:student\s+)?id\s+(.+)$/i,
-    /(?:add|new|create)\s+student\s+(.+)$/i,
-    /(?:register|enroll)\s+(.+?)(?:\s+as\s+(?:new\s+)?student)?$/i,
-    /(?:student|pupil)\s+(.+?)(?:\s+(?:add|new|create))?$/i
-  ];
+  // 🔥 NEW: Patterns with Middle Name and Student ID
+  /(?:add|new|create)\s+student\s+(.+?)\s+(?:with\s+)?(?:student\s+)?id\s+(.+)$/i,
+  /(?:add|new|create)\s+student\s+(.+)$/i,
+  /(?:register|enroll)\s+(.+?)(?:\s+as\s+(?:new\s+)?student)?$/i,
+  /(?:student|pupil)\s+(.+?)(?:\s+(?:add|new|create))?$/i
+];
 
-  for (const pattern of addStudentPatterns) {
-    const addStudentMatch = processedTranscript.match(pattern);
-    if (addStudentMatch) {
-      const fullCommand = addStudentMatch[1].trim();
-      const studentIdPart = addStudentMatch[2] ? addStudentMatch[2].trim() : '';
-      
-      console.log('🔥 Full student command to parse:', fullCommand);
-      console.log('🔥 Student ID part:', studentIdPart);
-      
-      // 🔧 ENHANCED: Better field extraction logic
-      let lastName = '';
-      let firstName = '';
-      let studentId = '';
-      
-      // 🔥 NEW: Parse Student ID if provided in the pattern
-      if (studentIdPart) {
-        studentId = parseStudentId(studentIdPart);
-        console.log('🆔 Parsed Student ID from pattern:', studentId);
-      }
-      
-      // 🔧 METHOD 1: Handle "lastname X firstname Y" pattern
-      const lastFirstPattern = /(?:last\s*name|lastname)\s+([^\s]+)(?:\s+(?:first\s*name|firstname)\s+([^\s]+))?/i;
-      const lastFirstMatch = fullCommand.match(lastFirstPattern);
-      
-      if (lastFirstMatch) {
-        lastName = lastFirstMatch[1];
-        if (lastFirstMatch[2]) {
-          firstName = lastFirstMatch[2];
-        }
-        console.log('🎯 Method 1 - Last First pattern:', { lastName, firstName });
-      }
-      
-      // 🔧 METHOD 2: Handle "firstname X lastname Y" pattern  
-      const firstLastPattern = /(?:first\s*name|firstname)\s+([^\s]+)(?:\s+(?:last\s*name|lastname)\s+([^\s]+))?/i;
-      const firstLastMatch = fullCommand.match(firstLastPattern);
-      
-      if (firstLastMatch && !lastName && !firstName) {
-        firstName = firstLastMatch[1];
-        if (firstLastMatch[2]) {
-          lastName = firstLastMatch[2];
-        }
-        console.log('🎯 Method 2 - First Last pattern:', { firstName, lastName });
-      }
-      
-      // 🔧 METHOD 3: Handle mixed patterns - extract both separately
-      if (!lastName || !firstName) {
-        // Extract last name separately
-        const lastNameOnlyPattern = /(?:last\s*name|lastname)\s+([^\s]+)/i;
-        const lastNameMatch = fullCommand.match(lastNameOnlyPattern);
-        if (lastNameMatch) {
-          lastName = lastNameMatch[1];
-        }
-        
-        // Extract first name separately  
-        const firstNameOnlyPattern = /(?:first\s*name|firstname)\s+([^\s]+)/i;
-        const firstNameMatch = fullCommand.match(firstNameOnlyPattern);
-        if (firstNameMatch) {
-          firstName = firstNameMatch[1];
-        }
-        
-        console.log('🎯 Method 3 - Separate extraction:', { lastName, firstName });
-      }
-      
-      // 🔧 METHOD 4: Simple "name X Y" format fallback
-      if (!lastName && !firstName) {
-        const simpleNamePattern = /(?:name)\s+([^\s]+)\s+([^\s]+)/i;
-        const simpleMatch = fullCommand.match(simpleNamePattern);
-        if (simpleMatch) {
-          firstName = simpleMatch[1];
-          lastName = simpleMatch[2];
-          console.log('🎯 Method 4 - Simple name pattern:', { firstName, lastName });
-        }
-      }
-      
-      // 🔥 NEW: Extract Student ID if not already found
-      if (!studentId) {
-        // Look for ID patterns in the full command
-        const idPatterns = [
-          /(?:with\s+)?(?:student\s+)?id\s+(.+?)(?:\s|$)/i,
-          /(?:student\s+)?(?:id|number)\s+(.+?)(?:\s|$)/i,
-          /id\s*[:=]\s*(.+?)(?:\s|$)/i
-        ];
-        
-        for (const idPattern of idPatterns) {
-          const idMatch = fullCommand.match(idPattern);
-          if (idMatch) {
-            studentId = parseStudentId(idMatch[1]);
-            console.log('🆔 Extracted Student ID:', studentId);
-            break;
-          }
-        }
-      }
-      
-      console.log('✅ ADD_STUDENT final result:', { 
-        fullCommand, 
-        lastName, 
-        firstName, 
-        studentId 
-      });
-      
-      return {
-        type: 'ADD_STUDENT',
-        data: {
-          'LASTNAME': lastName,      // ✅ Always use these exact field names
-          'FIRST NAME': firstName,   // ✅ Always use these exact field names
-          'STUDENT ID': studentId,   // ✅ Always use these exact field names
-          confidence: 'high'
-        }
-      };
+for (const pattern of addStudentPatterns) {
+  const addStudentMatch = processedTranscript.match(pattern);
+  if (addStudentMatch) {
+    const fullCommand = addStudentMatch[1].trim();
+    const studentIdPart = addStudentMatch[2] ? addStudentMatch[2].trim() : '';
+    
+    console.log('🔥 Full student command to parse:', fullCommand);
+    console.log('🔥 Student ID part:', studentIdPart);
+    
+    // 🔧 ENHANCED: Better field extraction logic with Middle Name
+    let lastName = '';
+    let firstName = '';
+    let middleName = '';  // 🔥 NEW
+    let studentId = '';
+    
+    // 🔥 NEW: Parse Student ID if provided in the pattern
+    if (studentIdPart) {
+      studentId = parseStudentId(studentIdPart);
+      console.log('🆔 Parsed Student ID from pattern:', studentId);
     }
+    
+    // 🔧 METHOD 1: Handle "lastname X firstname Y middle name Z" pattern
+    const lastFirstMiddlePattern = /(?:last\s*name|lastname)\s+([^\s]+)(?:\s+(?:first\s*name|firstname)\s+([^\s]+))?(?:\s+(?:middle\s*name|middlename)\s+([^\s]+))?/i;
+    const lastFirstMiddleMatch = fullCommand.match(lastFirstMiddlePattern);
+    
+    if (lastFirstMiddleMatch) {
+      lastName = lastFirstMiddleMatch[1];
+      if (lastFirstMiddleMatch[2]) {
+        firstName = lastFirstMiddleMatch[2];
+      }
+      if (lastFirstMiddleMatch[3]) {  // 🔥 NEW
+        middleName = lastFirstMiddleMatch[3];
+      }
+      console.log('🎯 Method 1 - Last First Middle pattern:', { lastName, firstName, middleName });
+    }
+    
+    // 🔧 METHOD 2: Handle "firstname X lastname Y middle name Z" pattern  
+    const firstLastMiddlePattern = /(?:first\s*name|firstname)\s+([^\s]+)(?:\s+(?:last\s*name|lastname)\s+([^\s]+))?(?:\s+(?:middle\s*name|middlename)\s+([^\s]+))?/i;
+    const firstLastMiddleMatch = fullCommand.match(firstLastMiddlePattern);
+    
+    if (firstLastMiddleMatch && !lastName && !firstName) {
+      firstName = firstLastMiddleMatch[1];
+      if (firstLastMiddleMatch[2]) {
+        lastName = firstLastMiddleMatch[2];
+      }
+      if (firstLastMiddleMatch[3]) {  // 🔥 NEW
+        middleName = firstLastMiddleMatch[3];
+      }
+      console.log('🎯 Method 2 - First Last Middle pattern:', { firstName, lastName, middleName });
+    }
+    
+    // 🔧 METHOD 3: Handle mixed patterns - extract all separately
+    if (!lastName || !firstName) {
+      // Extract last name separately
+      const lastNameOnlyPattern = /(?:last\s*name|lastname)\s+([^\s]+)/i;
+      const lastNameMatch = fullCommand.match(lastNameOnlyPattern);
+      if (lastNameMatch) {
+        lastName = lastNameMatch[1];
+      }
+      
+      // Extract first name separately  
+      const firstNameOnlyPattern = /(?:first\s*name|firstname)\s+([^\s]+)/i;
+      const firstNameMatch = fullCommand.match(firstNameOnlyPattern);
+      if (firstNameMatch) {
+        firstName = firstNameMatch[1];
+      }
+      
+      // 🔥 NEW: Extract middle name separately
+      const middleNameOnlyPattern = /(?:middle\s*name|middlename)\s+([^\s]+)/i;
+      const middleNameMatch = fullCommand.match(middleNameOnlyPattern);
+      if (middleNameMatch) {
+        middleName = middleNameMatch[1];
+      }
+      
+      console.log('🎯 Method 3 - Separate extraction:', { lastName, firstName, middleName });
+    }
+    
+    // 🔥 NEW: Extract Student ID if not already found
+    if (!studentId) {
+      // Look for ID patterns in the full command
+      const idPatterns = [
+        /(?:with\s+)?(?:student\s+)?id\s+(.+?)(?:\s|$)/i,
+        /(?:student\s+)?(?:id|number)\s+(.+?)(?:\s|$)/i,
+        /id\s*[:=]\s*(.+?)(?:\s|$)/i
+      ];
+      
+      for (const idPattern of idPatterns) {
+        const idMatch = fullCommand.match(idPattern);
+        if (idMatch) {
+          studentId = parseStudentId(idMatch[1]);
+          console.log('🆔 Extracted Student ID:', studentId);
+          break;
+        }
+      }
+    }
+    
+    console.log('✅ ADD_STUDENT final result:', { 
+      fullCommand, 
+      lastName, 
+      firstName, 
+      middleName,  // 🔥 NEW
+      studentId 
+    });
+    
+    return {
+      type: 'ADD_STUDENT',
+      data: {
+        'LASTNAME': lastName,
+        'FIRST NAME': firstName,
+        'MIDDLE NAME': middleName,  // 🔥 NEW
+        'STUDENT ID': studentId,
+        confidence: 'high'
+      }
+    };
   }
+}
 
   // 🔥 If no patterns matched, this is likely a fallback case
   console.log('❌ No specific pattern matched, falling back to basic processing');

@@ -13,6 +13,7 @@ const StudentConfirmationModal = ({
   const [editedData, setEditedData] = useState({
     lastName: studentData?.lastName || '',
     firstName: studentData?.firstName || '',
+    middleName: studentData?.middleName || '',  // 🔥 NEW
     studentId: studentData?.studentId || ''
   });
 
@@ -23,6 +24,7 @@ const StudentConfirmationModal = ({
     setEditedData({
       lastName: studentData?.lastName || '',
       firstName: studentData?.firstName || '',
+      middleName: studentData?.middleName || '',  // 🔥 NEW
       studentId: studentData?.studentId || ''
     });
   };
@@ -36,6 +38,7 @@ const StudentConfirmationModal = ({
     const finalData = editMode ? editedData : {
       lastName: studentData?.lastName || '',
       firstName: studentData?.firstName || '',
+      middleName: studentData?.middleName || '',  // 🔥 NEW
       studentId: studentData?.studentId || ''
     };
     onConfirm(finalData);
@@ -130,6 +133,28 @@ const StudentConfirmationModal = ({
               )}
             </div>
 
+            {/* 🔥 NEW: Middle Name */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Middle Name
+              </label>
+              {editMode ? (
+                <input
+                  type="text"
+                  value={editedData.middleName}
+                  onChange={(e) => setEditedData({...editedData, middleName: e.target.value})}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Enter middle name (optional)"
+                />
+              ) : (
+                <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg">
+                  <span className="text-slate-900 font-medium">
+                    {currentData?.middleName || 'Not provided'}
+                  </span>
+                </div>
+              )}
+            </div>
+
             {/* Student ID */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -153,11 +178,13 @@ const StudentConfirmationModal = ({
             </div>
           </div>
 
-          {/* Full Name Preview */}
+          {/* 🔥 ENHANCED: Full Name Preview with Middle Name */}
           <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
             <p className="text-sm text-blue-800">
               <span className="font-medium">Full Name: </span>
-              {`${currentData?.firstName || ''} ${currentData?.lastName || ''}`.trim() || 'Incomplete'}
+              {[currentData?.firstName, currentData?.middleName, currentData?.lastName]
+                .filter(Boolean)
+                .join(' ') || 'Incomplete'}
             </p>
           </div>
         </div>
