@@ -1626,18 +1626,25 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
     
     const firstName = cleanName(row['FIRST NAME'] || '');
     const lastName = cleanName(row['LASTNAME'] || '');
+    const middleName = cleanName(row['MIDDLE NAME'] || '');  // 🔥 NEW: Add middle name
     const fullName = `${firstName} ${lastName}`.trim();
+    const fullNameWithMiddle = `${firstName} ${middleName} ${lastName}`.trim(); // 🔥 NEW: Full name with middle
+
     
     // Enhanced candidate generation
     const candidates = [
       firstName, 
       lastName, 
+      middleName,  // 🔥 NEW: Add middle name as a candidate
       fullName,
+      fullNameWithMiddle,  // 🔥 NEW: Full name with middle name
       `${lastName} ${firstName}`, // Reversed order
+      `${lastName} ${firstName} ${middleName}`, // 🔥 NEW: Reversed with middle
       firstName.split(' ')[0], // First word of first name
-      lastName.split(' ')[0]   // First word of last name
+      lastName.split(' ')[0],   // First word of last name
+      middleName.split(' ')[0]  // 🔥 NEW: First word of middle name
     ].filter(c => c && c.length > 1);
-    
+      
     candidates.forEach(candidate => {
       let score = Infinity;
       let matchType = '';
