@@ -1564,3 +1564,135 @@ def update_multiple_cells_service_account(request, sheet_id):
     except Exception as e:
         logger.error(f"Update multiple cells error: {str(e)}")
         return Response({'error': str(e)}, status=500)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def sheets_add_category_service_account(request, sheet_id):
+    """Add a new category with multiple columns to Google Sheet using service account"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+
+        category_name = request.data.get('category_name')  # e.g., 'Lab Exercises'
+        sub_categories = request.data.get('sub_categories', [])  # e.g., ['Lab 1', 'Lab 2', 'Lab 3']
+        sub_category_count = request.data.get('sub_category_count', len(sub_categories))
+        sheet_name = request.data.get('sheet_name')  # Optional specific sheet
+        percentage = request.data.get('percentage', '10.00%')  # 🔥 NEW: Get percentage from request
+
+        if not category_name:
+            return Response({'error': 'category_name is required'}, status=400)
+
+        if not sub_categories:
+            return Response({'error': 'sub_categories array is required'}, status=400)
+
+        if sub_category_count < 1 or sub_category_count > 20:
+            return Response({'error': 'sub_category_count must be between 1 and 20'}, status=400)
+
+        print(f"🔥 API: Adding category '{category_name}' with {sub_category_count} subcategories and {percentage} to sheet: {sheet_name}")
+
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+        result = service.add_category_to_sheet(sheet_id, category_name, sub_categories, sheet_name, percentage)  # 🔥 Pass percentage
+
+        if result['success']:
+            return Response(result, status=200)
+        else:
+            return Response(result, status=400)
+
+    except Exception as e:
+        logger.error(f"Add category API error: {str(e)}")
+        return Response({
+            'success': False,
+            'error': f'Server error: {str(e)}'
+        }, status=500)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def sheets_delete_category_service_account(request, sheet_id):
+    """Delete a category and all its columns from Google Sheet using service account"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+
+        category_name = request.data.get('category_name')  # e.g., 'Projects'
+        sheet_name = request.data.get('sheet_name')  # Optional specific sheet
+
+        if not category_name:
+            return Response({'error': 'category_name is required'}, status=400)
+
+        print(f"🗑️ API: Deleting category '{category_name}' from sheet: {sheet_name}")
+
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+        result = service.delete_category_from_sheet(sheet_id, category_name, sheet_name)
+
+        if result['success']:
+            return Response(result, status=200)
+        else:
+            return Response(result, status=400)
+
+    except Exception as e:
+        logger.error(f"Delete category API error: {str(e)}")
+        return Response({
+            'success': False,
+            'error': f'Server error: {str(e)}'
+        }, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def sheets_edit_category_service_account(request, sheet_id):
+    """Edit a category name and percentage in Google Sheet using service account"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+
+        old_category_name = request.data.get('old_category_name')  # e.g., 'Projects'
+        new_category_name = request.data.get('new_category_name')  # e.g., 'Lab Activities'
+        new_percentage = request.data.get('new_percentage')        # e.g., '15.00%'
+        sheet_name = request.data.get('sheet_name')               # Optional specific sheet
+
+        if not old_category_name or not new_category_name:
+            return Response({'error': 'old_category_name and new_category_name are required'}, status=400)
+
+        if not new_percentage:
+            new_percentage = "10.00%"  # Default percentage if not provided
+
+        print(f"✏️ API: Editing category '{old_category_name}' to '{new_category_name}' with {new_percentage} in sheet: {sheet_name}")
+
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+        result = service.edit_category_in_sheet(sheet_id, old_category_name, new_category_name, new_percentage, sheet_name)
+
+        if result['success']:
+            return Response(result, status=200)
+        else:
+            return Response(result, status=400)
+
+    except Exception as e:
+        logger.error(f"Edit category API error: {str(e)}")
+        return Response({
+            'success': False,
+            'error': f'Server error: {str(e)}'
+        }, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def sheets_get_categories_service_account(request, sheet_id):
+    """Get all categories from a Google Sheet using service account"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+
+        sheet_name = request.GET.get('sheet_name')  # Optional specific sheet
+
+        print(f"📋 API: Getting categories from sheet: {sheet_name}")
+
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+        result = service.get_categories_from_sheet(sheet_id, sheet_name)
+
+        if result['success']:
+            return Response(result, status=200)
+        else:
+            return Response(result, status=400)
+
+    except Exception as e:
+        logger.error(f"Get categories API error: {str(e)}")
+        return Response({
+            'success': False,
+            'error': f'Server error: {str(e)}'
+        }, status=500)

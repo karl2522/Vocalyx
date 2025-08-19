@@ -474,6 +474,51 @@ export const classRecordService = {
         const response = await api.post(`/sheets/${sheetId}/update-multiple-cells/`, data);
         return response;
     },
+
+    addCategoryToSheet: (sheetId, categoryData, sheetName = null) => {
+        const payload = { 
+            category_name: categoryData.categoryName,
+            sub_categories: categoryData.subCategories,
+            sub_category_count: categoryData.subCategoryCount,
+            percentage: categoryData.percentage  // 🔥 FIX: Make sure to include percentage
+        };
+        if (sheetName) payload.sheet_name = sheetName;
+        
+        console.log('🔥 API SERVICE: Sending payload:', payload);  // Debug log
+        
+        return api.post(`/sheets/${sheetId}/add-category/`, payload);
+    },
+
+    deleteCategoryFromSheet: (sheetId, categoryName, sheetName = null) => {
+        const payload = { 
+            category_name: categoryName
+        };
+        if (sheetName) payload.sheet_name = sheetName;
+        
+        console.log('🗑️ API SERVICE: Deleting category:', payload);
+        
+        return api.post(`/sheets/${sheetId}/delete-category/`, payload);
+    },
+
+    editCategoryInSheet: (sheetId, editData, sheetName = null) => {
+        const payload = { 
+            old_category_name: editData.oldCategoryName,
+            new_category_name: editData.newCategoryName,
+            new_percentage: editData.newPercentage
+        };
+        if (sheetName) payload.sheet_name = sheetName;
+        
+        console.log('✏️ API SERVICE: Editing category:', payload);
+        
+        return api.post(`/sheets/${sheetId}/edit-category/`, payload);
+    },
+
+    getCategoriesFromSheet: (sheetId, sheetName = null) => {
+        const params = {};
+        if (sheetName) params.sheet_name = sheetName;
+        
+        return api.get(`/sheets/${sheetId}/get-categories/`, { params });
+    },
 };
 
 export const enhancedClassRecordService = {

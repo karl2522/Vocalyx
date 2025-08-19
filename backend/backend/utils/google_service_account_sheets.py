@@ -3198,3 +3198,1042 @@ class GoogleServiceAccountSheets:
                 'success': False,
                 'error': f'Failed to compact student data: {str(e)}'
             }
+
+    def add_category_to_sheet(self, sheet_id: str, category_name: str, sub_categories: list,
+                              sheet_name: str = None, percentage: str = "10.00%") -> dict:
+        """
+        Add a new category with multiple columns to Google Sheet.
+        Creates subcategory columns + Total column with percentage.
+        """
+        try:
+            import time
+
+            print(
+                f"🔥 ADD_CATEGORY: Starting to add '{category_name}' with {len(sub_categories)} subcategories + Total + Percentage")
+
+            # Get current sheet data
+            if sheet_name:
+                sheet_data = self.get_specific_sheet_data(sheet_id, sheet_name)
+            else:
+                sheet_data = self.get_sheet_data(sheet_id)
+
+            if not sheet_data['success']:
+                return sheet_data
+
+            headers = sheet_data['headers']
+            target_sheet_name = sheet_data['sheet_name']
+
+            print(f"🔥 ADD_CATEGORY: Current headers: {len(headers)} columns")
+            print(f"🔥 ADD_CATEGORY: Target sheet: {target_sheet_name}")
+
+            # Find where to insert after STUDENT INFO section
+            insert_start_index = 5  # After NO., LASTNAME, FIRST NAME, MIDDLE NAME, STUDENT ID
+
+            if 'STUDENT ID' in headers:
+                student_id_index = headers.index('STUDENT ID')
+                insert_start_index = student_id_index + 1
+                print(
+                    f"🔥 ADD_CATEGORY: Found STUDENT ID at index {student_id_index}, will insert at {insert_start_index}")
+
+            # 🔥 FIXED: Calculate total columns needed (subcategories + Total only)
+            num_subcategories = len(sub_categories)
+            num_total_columns = num_subcategories + 1  # +1 for Total (percentage goes in same column)
+
+            print(
+                f"🔥 ADD_CATEGORY: Will insert {num_total_columns} columns ({num_subcategories} subcategories + Total)")
+
+            # Step 1: Insert new columns
+            insert_result = self._insert_columns(sheet_id, target_sheet_name, insert_start_index, num_total_columns)
+            if not insert_result['success']:
+                return insert_result
+
+            print(f"✅ ADD_CATEGORY: Successfully inserted {num_total_columns} columns")
+            time.sleep(1)
+
+            # Calculate column letters
+            start_col_letter = chr(65 + insert_start_index)
+            category_end_col_index = insert_start_index + num_subcategories - 1  # Last subcategory column
+            category_end_col = chr(65 + category_end_col_index)
+            total_col_letter = chr(65 + insert_start_index + num_subcategories)
+
+            print(
+                f"🔥 ADD_CATEGORY: Category spans {start_col_letter} to {category_end_col}, Total/Percentage in {total_col_letter}")
+
+            # 🔥 FIXED Step 2: Add category header (Row 1) - spans only across subcategories (NOT Total)
+            category_header_range = f"{start_col_letter}1:{category_end_col}1"
+            category_header_result = self._update_cell_range(
+                sheet_id,
+                target_sheet_name,
+                category_header_range,
+                [[category_name]]
+            )
+
+            if not category_header_result['success']:
+                return category_header_result
+
+            print(f"✅ ADD_CATEGORY: Added category header '{category_name}' at {category_header_range}")
+
+            # 🔥 FIXED Step 3: Add percentage to Total column (Row 1)
+            percentage_result = self._update_cell_range(
+                sheet_id,
+                target_sheet_name,
+                f"{total_col_letter}1",
+                [[f"'{percentage}'"]]
+            )
+
+            if not percentage_result['success']:
+                return percentage_result
+
+            print(f"✅ ADD_CATEGORY: Added percentage '{percentage}' at {total_col_letter}1")
+
+            # 🔥 FIXED Step 4: Merge the category header cells (excluding Total column)
+            merge_result = self._merge_cells(
+                sheet_id,
+                target_sheet_name,
+                start_row=0,
+                end_row=0,
+                start_col=insert_start_index,  # Start: F (5)
+                end_col=category_end_col_index  # End: H (7) - Last subcategory column
+            )
+
+            if not merge_result['success']:
+                print(f"⚠️ ADD_CATEGORY: Failed to merge header cells: {merge_result.get('error')}")
+            else:
+                print(f"✅ ADD_CATEGORY: Merged category header cells")
+
+            # 🔥 FIXED Step 5: Add individual column headers (Row 2) - subcategories + "Total"
+            subcategory_headers = sub_categories + ["Total"]
+            subcategory_range = f"{start_col_letter}2:{total_col_letter}2"
+
+            headers_result = self._update_cell_range(
+                sheet_id,
+                target_sheet_name,
+                subcategory_range,
+                [subcategory_headers]
+            )
+
+            if not headers_result['success']:
+                return headers_result
+
+            print(f"✅ ADD_CATEGORY: Added column headers at {subcategory_range}")
+
+            # Step 6: Add max scores (Row 3) - individual scores + total score
+            individual_max_scores = ['100'] * num_subcategories
+            total_max_score = str(100 * num_subcategories)
+
+            # Add max scores for subcategories + Total
+            all_max_scores = individual_max_scores + [total_max_score]
+            max_scores_range = f"{start_col_letter}3:{total_col_letter}3"
+
+            max_scores_result = self._update_cell_range(
+                sheet_id,
+                target_sheet_name,
+                max_scores_range,
+                [all_max_scores]
+            )
+
+            if not max_scores_result['success']:
+                return max_scores_result
+
+            print(f"✅ ADD_CATEGORY: Added max scores at {max_scores_range}")
+
+            # Step 7: Add SUM formulas to Total column for all student rows
+            formula_result = self._add_total_formulas(
+                sheet_id,
+                target_sheet_name,
+                insert_start_index,
+                num_subcategories
+            )
+
+            if formula_result['success']:
+                print(f"✅ ADD_CATEGORY: Added SUM formulas to Total column")
+
+            # Step 8: Format the new columns
+            format_result = self._format_new_category_columns_with_total(
+                sheet_id,
+                target_sheet_name,
+                insert_start_index,
+                num_subcategories,
+                num_total_columns
+            )
+
+            if format_result['success']:
+                print(f"✅ ADD_CATEGORY: Applied formatting to new columns")
+
+            print(
+                f"🎉 ADD_CATEGORY: Successfully added category '{category_name}' with {num_subcategories} subcategories + Total + Percentage ({percentage})!")
+
+            return {
+                'success': True,
+                'category_name': category_name,
+                'sub_categories': sub_categories,
+                'columns_added': num_total_columns,
+                'subcategories_count': num_subcategories,
+                'has_total': True,
+                'has_percentage': True,
+                'percentage': percentage,
+                'insert_start_index': insert_start_index,
+                'sheet_name': target_sheet_name,
+                'message': f"Successfully added '{category_name}' with {num_subcategories} columns + Total + Percentage ({percentage})"
+            }
+
+        except Exception as e:
+            logger.error(f"Add category to sheet error: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return {
+                'success': False,
+                'error': f'Failed to add category: {str(e)}'
+            }
+
+    def _add_total_formulas(self, sheet_id: str, sheet_name: str, start_col: int, num_subcategories: int) -> dict:
+        """Add SUM formulas to the Total column for all student rows"""
+        try:
+            # Total column is at start_col + num_subcategories
+            total_col_index = start_col + num_subcategories
+            total_col_letter = chr(65 + total_col_index)
+
+            # Create formula range letters for subcategories
+            first_subcol_letter = chr(65 + start_col)
+            last_subcol_letter = chr(65 + start_col + num_subcategories - 1)
+
+            print(
+                f"🧮 FORMULAS: Adding SUM formulas to column {total_col_letter} (range {first_subcol_letter}:{last_subcol_letter})")
+
+            # Add formulas for rows 4-50 (student data rows)
+            formula_updates = []
+            for row in range(4, 51):  # Rows 4-50 (1-based indexing)
+                formula = f"=SUM({first_subcol_letter}{row}:{last_subcol_letter}{row})"
+                formula_updates.append({
+                    'range': f"'{sheet_name}'!{total_col_letter}{row}",
+                    'values': [[formula]]
+                })
+
+            # Batch update all formulas
+            if formula_updates:
+                body = {
+                    'valueInputOption': 'USER_ENTERED',  # This processes formulas
+                    'data': formula_updates
+                }
+
+                result = self.sheets_service.spreadsheets().values().batchUpdate(
+                    spreadsheetId=sheet_id,
+                    body=body
+                ).execute()
+
+                print(f"✅ FORMULAS: Added {len(formula_updates)} SUM formulas")
+                return {'success': True, 'formulas_added': len(formula_updates)}
+            else:
+                return {'success': True, 'formulas_added': 0}
+
+        except Exception as e:
+            logger.error(f"Add total formulas error: {str(e)}")
+            return {'success': False, 'error': str(e)}
+
+    def _format_new_category_columns_with_total(self, sheet_id: str, sheet_name: str, start_col: int,
+                                                num_subcategories: int, total_columns: int) -> dict:
+        """Apply formatting to new category columns including Total column"""
+        try:
+            # Get sheet properties
+            spreadsheet = self.sheets_service.spreadsheets().get(spreadsheetId=sheet_id).execute()
+            target_sheet_id = None
+
+            for sheet in spreadsheet['sheets']:
+                if sheet['properties']['title'] == sheet_name:
+                    target_sheet_id = sheet['properties']['sheetId']
+                    break
+
+            if target_sheet_id is None:
+                return {'success': False, 'error': f'Sheet "{sheet_name}" not found'}
+
+            requests = []
+
+            # Calculate column positions
+            total_col_index = start_col + num_subcategories
+
+            # Format category header (Row 1) - only for the category columns (not Total)
+            requests.append({
+                'repeatCell': {
+                    'range': {
+                        'sheetId': target_sheet_id,
+                        'startRowIndex': 0,
+                        'endRowIndex': 1,
+                        'startColumnIndex': start_col,
+                        'endColumnIndex': start_col + num_subcategories  # Only subcategories, not Total
+                    },
+                    'cell': {
+                        'userEnteredFormat': {
+                            'textFormat': {'bold': True, 'fontSize': 10},
+                            'horizontalAlignment': 'CENTER',
+                            'verticalAlignment': 'MIDDLE',
+                            'backgroundColor': {'red': 0.8, 'green': 0.8, 'blue': 1.0},  # Light purple like Projects
+                            'borders': {
+                                'top': {'style': 'SOLID', 'width': 1},
+                                'bottom': {'style': 'SOLID', 'width': 1},
+                                'left': {'style': 'SOLID', 'width': 1},
+                                'right': {'style': 'SOLID', 'width': 1}
+                            }
+                        }
+                    },
+                    'fields': 'userEnteredFormat'
+                }
+            })
+
+            # Format Total column header (Row 1) - Yellow like existing percentage columns
+            requests.append({
+                'repeatCell': {
+                    'range': {
+                        'sheetId': target_sheet_id,
+                        'startRowIndex': 0,
+                        'endRowIndex': 1,
+                        'startColumnIndex': total_col_index,
+                        'endColumnIndex': total_col_index + 1
+                    },
+                    'cell': {
+                        'userEnteredFormat': {
+                            'textFormat': {'bold': True, 'fontSize': 10},
+                            'horizontalAlignment': 'CENTER',
+                            'verticalAlignment': 'MIDDLE',
+                            'backgroundColor': {'red': 1.0, 'green': 0.9, 'blue': 0.6},
+                            # Yellow like existing percentage
+                            'borders': {
+                                'top': {'style': 'SOLID', 'width': 1},
+                                'bottom': {'style': 'SOLID', 'width': 1},
+                                'left': {'style': 'SOLID', 'width': 1},
+                                'right': {'style': 'SOLID', 'width': 1}
+                            }
+                        }
+                    },
+                    'fields': 'userEnteredFormat'
+                }
+            })
+
+            # Format subcategory headers (Row 2) - blue
+            requests.append({
+                'repeatCell': {
+                    'range': {
+                        'sheetId': target_sheet_id,
+                        'startRowIndex': 1,
+                        'endRowIndex': 2,
+                        'startColumnIndex': start_col,
+                        'endColumnIndex': start_col + num_subcategories
+                    },
+                    'cell': {
+                        'userEnteredFormat': {
+                            'textFormat': {'bold': True, 'fontSize': 10},
+                            'horizontalAlignment': 'CENTER',
+                            'verticalAlignment': 'MIDDLE',
+                            'backgroundColor': {'red': 0.7, 'green': 0.85, 'blue': 1.0},  # Light blue like Quiz columns
+                            'borders': {
+                                'top': {'style': 'SOLID', 'width': 1},
+                                'bottom': {'style': 'SOLID', 'width': 1},
+                                'left': {'style': 'SOLID', 'width': 1},
+                                'right': {'style': 'SOLID', 'width': 1}
+                            }
+                        }
+                    },
+                    'fields': 'userEnteredFormat'
+                }
+            })
+
+            # Format Total column header (Row 2) - GREEN like existing Total columns
+            requests.append({
+                'repeatCell': {
+                    'range': {
+                        'sheetId': target_sheet_id,
+                        'startRowIndex': 1,
+                        'endRowIndex': 2,
+                        'startColumnIndex': total_col_index,
+                        'endColumnIndex': total_col_index + 1
+                    },
+                    'cell': {
+                        'userEnteredFormat': {
+                            'textFormat': {'bold': True, 'fontSize': 10},
+                            'horizontalAlignment': 'CENTER',
+                            'verticalAlignment': 'MIDDLE',
+                            'backgroundColor': {'red': 0.6, 'green': 0.9, 'blue': 0.6},  # Green like existing Total
+                            'borders': {
+                                'top': {'style': 'SOLID', 'width': 1},
+                                'bottom': {'style': 'SOLID', 'width': 1},
+                                'left': {'style': 'SOLID', 'width': 1},
+                                'right': {'style': 'SOLID', 'width': 1}
+                            }
+                        }
+                    },
+                    'fields': 'userEnteredFormat'
+                }
+            })
+
+            # Format max scores row (Row 3) for subcategories
+            requests.append({
+                'repeatCell': {
+                    'range': {
+                        'sheetId': target_sheet_id,
+                        'startRowIndex': 2,
+                        'endRowIndex': 3,
+                        'startColumnIndex': start_col,
+                        'endColumnIndex': start_col + num_subcategories
+                    },
+                    'cell': {
+                        'userEnteredFormat': {
+                            'horizontalAlignment': 'CENTER',
+                            'verticalAlignment': 'MIDDLE',
+                            'backgroundColor': {'red': 0.9, 'green': 0.95, 'blue': 1.0},  # Very light blue
+                            'borders': {
+                                'top': {'style': 'SOLID', 'width': 1},
+                                'bottom': {'style': 'SOLID', 'width': 1},
+                                'left': {'style': 'SOLID', 'width': 1},
+                                'right': {'style': 'SOLID', 'width': 1}
+                            }
+                        }
+                    },
+                    'fields': 'userEnteredFormat'
+                }
+            })
+
+            # Format Total column max score (Row 3) - Light green
+            requests.append({
+                'repeatCell': {
+                    'range': {
+                        'sheetId': target_sheet_id,
+                        'startRowIndex': 2,
+                        'endRowIndex': 3,
+                        'startColumnIndex': total_col_index,
+                        'endColumnIndex': total_col_index + 1
+                    },
+                    'cell': {
+                        'userEnteredFormat': {
+                            'horizontalAlignment': 'CENTER',
+                            'verticalAlignment': 'MIDDLE',
+                            'backgroundColor': {'red': 0.8, 'green': 0.95, 'blue': 0.8},  # Light green
+                            'borders': {
+                                'top': {'style': 'SOLID', 'width': 1},
+                                'bottom': {'style': 'SOLID', 'width': 1},
+                                'left': {'style': 'SOLID', 'width': 1},
+                                'right': {'style': 'SOLID', 'width': 1}
+                            }
+                        }
+                    },
+                    'fields': 'userEnteredFormat'
+                }
+            })
+
+            # Format data cells for Total column (Row 4 onwards) - light green
+            requests.append({
+                'repeatCell': {
+                    'range': {
+                        'sheetId': target_sheet_id,
+                        'startRowIndex': 3,
+                        'endRowIndex': 50,
+                        'startColumnIndex': total_col_index,
+                        'endColumnIndex': total_col_index + 1
+                    },
+                    'cell': {
+                        'userEnteredFormat': {
+                            'horizontalAlignment': 'CENTER',
+                            'verticalAlignment': 'MIDDLE',
+                            'backgroundColor': {'red': 0.9, 'green': 1.0, 'blue': 0.9},  # Very light green
+                            'borders': {
+                                'top': {'style': 'SOLID', 'width': 1},
+                                'bottom': {'style': 'SOLID', 'width': 1},
+                                'left': {'style': 'SOLID', 'width': 1},
+                                'right': {'style': 'SOLID', 'width': 1}
+                            }
+                        }
+                    },
+                    'fields': 'userEnteredFormat'
+                }
+            })
+
+            if requests:
+                result = self.sheets_service.spreadsheets().batchUpdate(
+                    spreadsheetId=sheet_id,
+                    body={'requests': requests}
+                ).execute()
+                return {'success': True, 'result': result}
+            else:
+                return {'success': True, 'message': 'No formatting applied'}
+
+        except Exception as e:
+            logger.error(f"Format category columns with total error: {str(e)}")
+            return {'success': False, 'error': str(e)}
+
+    def _insert_columns(self, sheet_id: str, sheet_name: str, start_index: int, count: int) -> dict:
+        """Insert new columns into the sheet"""
+        try:
+            # Get sheet properties to get the sheet ID (different from spreadsheet ID)
+            spreadsheet = self.sheets_service.spreadsheets().get(spreadsheetId=sheet_id).execute()
+            target_sheet_id = None
+
+            for sheet in spreadsheet['sheets']:
+                if sheet['properties']['title'] == sheet_name:
+                    target_sheet_id = sheet['properties']['sheetId']
+                    break
+
+            if target_sheet_id is None:
+                return {'success': False, 'error': f'Sheet "{sheet_name}" not found'}
+
+            # Insert columns request
+            request = {
+                'insertDimension': {
+                    'range': {
+                        'sheetId': target_sheet_id,
+                        'dimension': 'COLUMNS',
+                        'startIndex': start_index,
+                        'endIndex': start_index + count
+                    },
+                    'inheritFromBefore': False
+                }
+            }
+
+            result = self.sheets_service.spreadsheets().batchUpdate(
+                spreadsheetId=sheet_id,
+                body={'requests': [request]}
+            ).execute()
+
+            return {'success': True, 'result': result}
+
+        except Exception as e:
+            logger.error(f"Insert columns error: {str(e)}")
+            return {'success': False, 'error': str(e)}
+
+    def _merge_cells(self, sheet_id: str, sheet_name: str, start_row: int, end_row: int, start_col: int,
+                     end_col: int) -> dict:
+        """Merge cells in the specified range"""
+        try:
+            # Get sheet properties to get the sheet ID
+            spreadsheet = self.sheets_service.spreadsheets().get(spreadsheetId=sheet_id).execute()
+            target_sheet_id = None
+
+            for sheet in spreadsheet['sheets']:
+                if sheet['properties']['title'] == sheet_name:
+                    target_sheet_id = sheet['properties']['sheetId']
+                    break
+
+            if target_sheet_id is None:
+                return {'success': False, 'error': f'Sheet "{sheet_name}" not found'}
+
+            # Merge cells request
+            request = {
+                'mergeCells': {
+                    'range': {
+                        'sheetId': target_sheet_id,
+                        'startRowIndex': start_row,
+                        'endRowIndex': end_row + 1,  # endRowIndex is exclusive
+                        'startColumnIndex': start_col,
+                        'endColumnIndex': end_col + 1  # endColumnIndex is exclusive
+                    },
+                    'mergeType': 'MERGE_ALL'
+                }
+            }
+
+            result = self.sheets_service.spreadsheets().batchUpdate(
+                spreadsheetId=sheet_id,
+                body={'requests': [request]}
+            ).execute()
+
+            return {'success': True, 'result': result}
+
+        except Exception as e:
+            logger.error(f"Merge cells error: {str(e)}")
+            return {'success': False, 'error': str(e)}
+
+    def _update_cell_range(self, sheet_id: str, sheet_name: str, range_name: str, values: list) -> dict:
+        """Update a range of cells with values"""
+        try:
+            full_range = f"'{sheet_name}'!{range_name}"
+
+            body = {
+                'values': values
+            }
+
+            result = self.sheets_service.spreadsheets().values().update(
+                spreadsheetId=sheet_id,
+                range=full_range,
+                valueInputOption='USER_ENTERED',
+                body=body
+            ).execute()
+
+            return {'success': True, 'result': result}
+
+        except Exception as e:
+            logger.error(f"Update cell range error: {str(e)}")
+            return {'success': False, 'error': str(e)}
+
+    def _format_new_category_columns(self, sheet_id: str, sheet_name: str, start_col: int, count: int) -> dict:
+        """Apply formatting to new category columns"""
+        try:
+            # Get sheet properties
+            spreadsheet = self.sheets_service.spreadsheets().get(spreadsheetId=sheet_id).execute()
+            target_sheet_id = None
+
+            for sheet in spreadsheet['sheets']:
+                if sheet['properties']['title'] == sheet_name:
+                    target_sheet_id = sheet['properties']['sheetId']
+                    break
+
+            if target_sheet_id is None:
+                return {'success': False, 'error': f'Sheet "{sheet_name}" not found'}
+
+            requests = []
+
+            # Format category header (Row 1) - bold and centered
+            requests.append({
+                'repeatCell': {
+                    'range': {
+                        'sheetId': target_sheet_id,
+                        'startRowIndex': 0,
+                        'endRowIndex': 1,
+                        'startColumnIndex': start_col,
+                        'endColumnIndex': start_col + count
+                    },
+                    'cell': {
+                        'userEnteredFormat': {
+                            'textFormat': {'bold': True},
+                            'horizontalAlignment': 'CENTER',
+                            'backgroundColor': {'red': 0.9, 'green': 0.9, 'blue': 1.0}  # Light blue
+                        }
+                    },
+                    'fields': 'userEnteredFormat(textFormat,horizontalAlignment,backgroundColor)'
+                }
+            })
+
+            # Format column headers (Row 2) - bold and centered
+            requests.append({
+                'repeatCell': {
+                    'range': {
+                        'sheetId': target_sheet_id,
+                        'startRowIndex': 1,
+                        'endRowIndex': 2,
+                        'startColumnIndex': start_col,
+                        'endColumnIndex': start_col + count
+                    },
+                    'cell': {
+                        'userEnteredFormat': {
+                            'textFormat': {'bold': True},
+                            'horizontalAlignment': 'CENTER',
+                            'backgroundColor': {'red': 0.95, 'green': 0.95, 'blue': 1.0}  # Lighter blue
+                        }
+                    },
+                    'fields': 'userEnteredFormat(textFormat,horizontalAlignment,backgroundColor)'
+                }
+            })
+
+            # Format max scores (Row 3) - centered
+            requests.append({
+                'repeatCell': {
+                    'range': {
+                        'sheetId': target_sheet_id,
+                        'startRowIndex': 2,
+                        'endRowIndex': 3,
+                        'startColumnIndex': start_col,
+                        'endColumnIndex': start_col + count
+                    },
+                    'cell': {
+                        'userEnteredFormat': {
+                            'horizontalAlignment': 'CENTER',
+                            'backgroundColor': {'red': 1.0, 'green': 1.0, 'blue': 0.9}  # Light yellow
+                        }
+                    },
+                    'fields': 'userEnteredFormat(horizontalAlignment,backgroundColor)'
+                }
+            })
+
+            if requests:
+                result = self.sheets_service.spreadsheets().batchUpdate(
+                    spreadsheetId=sheet_id,
+                    body={'requests': requests}
+                ).execute()
+
+                return {'success': True, 'result': result}
+            else:
+                return {'success': True, 'message': 'No formatting applied'}
+
+        except Exception as e:
+            logger.error(f"Format category columns error: {str(e)}")
+            return {'success': False, 'error': str(e)}
+
+    def delete_category_from_sheet(self, sheet_id: str, category_name: str, sheet_name: str = None) -> dict:
+        """Delete a category and all its columns from Google Sheet"""
+        try:
+            print(f"🗑️ DELETE_CATEGORY: Starting to delete '{category_name}' from sheet: {sheet_name}")
+
+            # 🔥 FIX: Get RAW sheet data directly, just like in get_categories
+            if sheet_name:
+                # Call the Google Sheets API directly to get raw data
+                range_name = f"'{sheet_name}'!A1:AM10"  # Get first 10 rows to have enough data
+                print(f"🗑️ DELETE_CATEGORY: Requesting raw range: {range_name}")
+
+                result = self.sheets_service.spreadsheets().values().get(
+                    spreadsheetId=sheet_id,
+                    range=range_name,
+                    valueRenderOption='UNFORMATTED_VALUE'
+                ).execute()
+
+                raw_data = result.get('values', [])
+
+                if not raw_data or len(raw_data) < 1:
+                    return {'success': False, 'error': 'Sheet has no data to analyze'}
+
+                all_data = raw_data
+                target_sheet_name = sheet_name
+
+                # Create headers from the second row (column names)
+                headers = all_data[1] if len(all_data) > 1 else []
+
+            else:
+                # Use the original method for default sheet
+                sheet_data = self.get_sheet_data(sheet_id)
+                if not sheet_data['success']:
+                    return sheet_data
+
+                if 'data' not in sheet_data or not sheet_data['data']:
+                    return {'success': False, 'error': 'Sheet has no data to analyze'}
+
+                all_data = sheet_data['data']
+                headers = sheet_data['headers']
+                target_sheet_name = sheet_data['sheet_name']
+
+            print(f"🗑️ DELETE_CATEGORY: Target sheet: {target_sheet_name}")
+            print(f"🗑️ DELETE_CATEGORY: Headers: {headers}")
+
+            # Find the category in Row 1 (categories row)
+            if not all_data or len(all_data) < 1:
+                return {'success': False, 'error': 'Sheet has no data to analyze'}
+
+            categories_row = all_data[0]  # Row 1 contains category names
+            print(f"🗑️ DELETE_CATEGORY: Categories row: {categories_row}")
+
+            # Find category start and end indices
+            category_start = None
+            category_end = None
+
+            for i, cell in enumerate(categories_row):
+                if cell and str(cell).strip().upper() == category_name.upper():
+                    category_start = i
+                    print(f"🗑️ DELETE_CATEGORY: Found category '{category_name}' at column {i}")
+
+                    # Find the end of this category (look for next non-empty cell or percentage)
+                    for j in range(i + 1, len(categories_row)):
+                        if j >= len(categories_row):
+                            break
+
+                        next_cell = categories_row[j] if j < len(categories_row) else ""
+
+                        # If we find another category or percentage, that's where this category ends
+                        if next_cell and str(next_cell).strip():
+                            next_cell_str = str(next_cell).strip()
+
+                            # Check if it's a percentage (ends with % or contains %)
+                            if '%' in next_cell_str:
+                                category_end = j
+                                break
+
+                            # Check if it's another category name
+                            category_keywords = ['PROJECTS', 'QUIZZES', 'ASSIGNMENT', 'SEATWORK',
+                                                 'LABORATORY', 'ACTIVITIES', 'TEST', 'EXAM', 'HOMEWORK']
+                            if any(keyword in next_cell_str.upper() for keyword in category_keywords):
+                                category_end = j - 1
+                                break
+
+                    # If no clear end found, use a reasonable default
+                    if category_end is None:
+                        # Look ahead for percentage or assume standard 5-6 column pattern
+                        category_end = min(i + 6, len(categories_row) - 1)
+
+                    break
+
+            if category_start is None:
+                return {'success': False, 'error': f'Category "{category_name}" not found in the sheet'}
+
+            print(f"🗑️ DELETE_CATEGORY: Category spans from column {category_start} to {category_end}")
+
+            # Calculate how many columns to delete
+            columns_to_delete = (category_end - category_start + 1)
+            print(f"🗑️ DELETE_CATEGORY: Will delete {columns_to_delete} columns starting at {category_start}")
+
+            # Get sheet properties to get the sheet ID
+            spreadsheet = self.sheets_service.spreadsheets().get(spreadsheetId=sheet_id).execute()
+            target_sheet_id = None
+
+            for sheet in spreadsheet['sheets']:
+                if sheet['properties']['title'] == target_sheet_name:
+                    target_sheet_id = sheet['properties']['sheetId']
+                    break
+
+            if target_sheet_id is None:
+                return {'success': False, 'error': f'Sheet "{target_sheet_name}" not found'}
+
+            # Delete the columns
+            delete_request = {
+                'deleteDimension': {
+                    'range': {
+                        'sheetId': target_sheet_id,
+                        'dimension': 'COLUMNS',
+                        'startIndex': category_start,
+                        'endIndex': category_start + columns_to_delete
+                    }
+                }
+            }
+
+            result = self.sheets_service.spreadsheets().batchUpdate(
+                spreadsheetId=sheet_id,
+                body={'requests': [delete_request]}
+            ).execute()
+
+            print(f"✅ DELETE_CATEGORY: Successfully deleted {columns_to_delete} columns for category '{category_name}'")
+
+            return {
+                'success': True,
+                'category_name': category_name,
+                'columns_deleted': columns_to_delete,
+                'start_column': category_start,
+                'end_column': category_end,
+                'sheet_name': target_sheet_name,
+                'message': f"Successfully deleted category '{category_name}' and its {columns_to_delete} columns"
+            }
+
+        except Exception as e:
+            logger.error(f"Delete category error: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return {
+                'success': False,
+                'error': f'Failed to delete category: {str(e)}'
+            }
+
+    def edit_category_in_sheet(self, sheet_id: str, old_category_name: str, new_category_name: str, new_percentage: str,
+                               sheet_name: str = None) -> dict:
+        """Edit a category name and percentage in Google Sheet"""
+        try:
+            print(f"✏️ EDIT_CATEGORY: Editing '{old_category_name}' to '{new_category_name}' with {new_percentage}")
+
+            # 🔥 FIX: Get RAW sheet data directly, same pattern as delete and get_categories
+            if sheet_name:
+                # Call the Google Sheets API directly to get raw data
+                range_name = f"'{sheet_name}'!A1:AM10"  # Get first 10 rows to have enough data
+                print(f"✏️ EDIT_CATEGORY: Requesting raw range: {range_name}")
+
+                result = self.sheets_service.spreadsheets().values().get(
+                    spreadsheetId=sheet_id,
+                    range=range_name,
+                    valueRenderOption='UNFORMATTED_VALUE'
+                ).execute()
+
+                raw_data = result.get('values', [])
+
+                if not raw_data or len(raw_data) < 1:
+                    return {'success': False, 'error': 'Sheet has no data to analyze'}
+
+                all_data = raw_data
+                target_sheet_name = sheet_name
+
+                # Create headers from the second row (column names)
+                headers = all_data[1] if len(all_data) > 1 else []
+
+            else:
+                # Use the original method for default sheet
+                sheet_data = self.get_sheet_data(sheet_id)
+                if not sheet_data['success']:
+                    return sheet_data
+
+                if 'data' not in sheet_data or not sheet_data['data']:
+                    return {'success': False, 'error': 'Sheet has no data to analyze'}
+
+                all_data = sheet_data['data']
+                headers = sheet_data['headers']
+                target_sheet_name = sheet_data['sheet_name']
+
+            print(f"✏️ EDIT_CATEGORY: Target sheet: {target_sheet_name}")
+            print(f"✏️ EDIT_CATEGORY: Headers: {headers}")
+
+            # Find the category in Row 1 (categories row)
+            if not all_data or len(all_data) < 1:
+                return {'success': False, 'error': 'Sheet has no data to analyze'}
+
+            categories_row = all_data[0]  # Row 1 contains category names
+            print(f"✏️ EDIT_CATEGORY: Categories row: {categories_row}")
+
+            # Find category position and percentage position
+            category_col = None
+            percentage_col = None
+
+            for i, cell in enumerate(categories_row):
+                if cell and str(cell).strip().upper() == old_category_name.upper():
+                    category_col = i
+                    print(f"✏️ EDIT_CATEGORY: Found category '{old_category_name}' at column {i}")
+
+                    # Look for the percentage column (usually a few columns after the category)
+                    for j in range(i + 1, min(i + 10, len(categories_row))):
+                        if j < len(categories_row) and categories_row[j]:
+                            cell_value = str(categories_row[j]).strip()
+                            if '%' in cell_value:
+                                percentage_col = j
+                                print(f"✏️ EDIT_CATEGORY: Found percentage at column {j}: '{cell_value}'")
+                                break
+                    break
+
+            if category_col is None:
+                return {'success': False, 'error': f'Category "{old_category_name}" not found in the sheet'}
+
+            # Prepare update requests
+            updates = []
+
+            # 🔥 FIX: Handle column letters properly for columns beyond Z
+            def get_column_letter(col_index):
+                """Convert column index to Excel column letter(s)"""
+                if col_index < 26:
+                    return chr(65 + col_index)  # A-Z
+                else:
+                    # For columns AA, AB, etc.
+                    first_letter = chr(65 + (col_index // 26) - 1)
+                    second_letter = chr(65 + (col_index % 26))
+                    return first_letter + second_letter
+
+            # Update category name in Row 1
+            category_col_letter = get_column_letter(category_col)
+            updates.append({
+                'range': f"'{target_sheet_name}'!{category_col_letter}1",
+                'values': [[new_category_name]]
+            })
+            print(f"✏️ EDIT_CATEGORY: Will update category at {category_col_letter}1")
+
+            # Update percentage if found
+            if percentage_col is not None:
+                percentage_col_letter = get_column_letter(percentage_col)
+                # 🔥 FIX: Format percentage properly
+                formatted_percentage = f"{new_percentage}%" if not new_percentage.endswith('%') else new_percentage
+                updates.append({
+                    'range': f"'{target_sheet_name}'!{percentage_col_letter}1",
+                    'values': [[formatted_percentage]]
+                })
+                print(
+                    f"✏️ EDIT_CATEGORY: Will update percentage at {percentage_col_letter}1 to '{formatted_percentage}'")
+            else:
+                print(f"✏️ EDIT_CATEGORY: No percentage column found for category '{old_category_name}'")
+
+            # Execute batch update
+            if updates:
+                body = {
+                    'valueInputOption': 'USER_ENTERED',
+                    'data': updates
+                }
+
+                result = self.sheets_service.spreadsheets().values().batchUpdate(
+                    spreadsheetId=sheet_id,
+                    body=body
+                ).execute()
+
+                print(
+                    f"✅ EDIT_CATEGORY: Successfully updated category '{old_category_name}' to '{new_category_name}' with {new_percentage}")
+
+                return {
+                    'success': True,
+                    'old_category_name': old_category_name,
+                    'new_category_name': new_category_name,
+                    'new_percentage': new_percentage,
+                    'category_column': category_col,
+                    'percentage_column': percentage_col,
+                    'sheet_name': target_sheet_name,
+                    'updates_made': len(updates),
+                    'message': f"Successfully updated category to '{new_category_name}' with {new_percentage}"
+                }
+            else:
+                return {'success': False, 'error': 'No updates to make'}
+
+        except Exception as e:
+            logger.error(f"Edit category error: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return {
+                'success': False,
+                'error': f'Failed to edit category: {str(e)}'
+            }
+
+    def get_categories_from_sheet(self, sheet_id: str, sheet_name: str = None) -> dict:
+        """Get all categories from Google Sheet"""
+        try:
+            print(f"📋 GET_CATEGORIES: Getting categories from sheet: {sheet_name}")
+
+            # Call the Google Sheets API directly to get raw data
+            range_name = f"'{sheet_name}'!A1:AM3"  # Get first 3 rows
+            print(f"📋 GET_CATEGORIES: Requesting raw range: {range_name}")
+
+            result = self.sheets_service.spreadsheets().values().get(
+                spreadsheetId=sheet_id,
+                range=range_name,
+                valueRenderOption='UNFORMATTED_VALUE'
+            ).execute()
+
+            raw_data = result.get('values', [])
+
+            if not raw_data or len(raw_data) < 1:
+                return {'success': False, 'error': 'Sheet has no data to analyze'}
+
+            categories_row = raw_data[0]  # Row 1 contains category names
+            print(f"📋 GET_CATEGORIES: Raw categories row: {categories_row}")
+
+            # Extract unique categories
+            categories = []
+            seen_categories = set()
+
+            for i, cell in enumerate(categories_row):
+                if cell and str(cell).strip():
+                    cell_value = str(cell).strip()
+
+                    # 🔥 FIX: Remove quotes if present (both single and double)
+                    if (cell_value.startswith("'") and cell_value.endswith("'")) or \
+                            (cell_value.startswith('"') and cell_value.endswith('"')):
+                        cell_value = cell_value[1:-1]
+
+                    # 🔥 FIX: Skip percentage values (end with % OR contain %)
+                    if '%' in cell_value:
+                        print(f"📋 GET_CATEGORIES: Skipping percentage: '{cell_value}' at column {i}")
+                        continue
+
+                    # Skip numeric values
+                    try:
+                        float(cell_value)
+                        print(f"📋 GET_CATEGORIES: Skipping numeric value: '{cell_value}' at column {i}")
+                        continue
+                    except ValueError:
+                        pass
+
+                    # Skip empty strings after cleaning
+                    if not cell_value:
+                        continue
+
+                    # Skip system headers
+                    skip_headers = ['STUDENT INFO', 'NO.', 'LASTNAME', 'FIRST NAME', 'MIDDLE NAME',
+                                    'STUDENT ID', 'CLASS STANDING', 'PRELIM', 'MIDTERM', 'FINAL',
+                                    'TOTAL SCORE', 'TERM GRADE', 'Total', 'TOTAL']
+
+                    if cell_value.upper() in [h.upper() for h in skip_headers]:
+                        print(f"📋 GET_CATEGORIES: Skipping system header: '{cell_value}' at column {i}")
+                        continue
+
+                    # Add category if not already seen
+                    if cell_value.upper() not in seen_categories:
+                        categories.append(cell_value)
+                        seen_categories.add(cell_value.upper())
+                        print(f"📋 GET_CATEGORIES: ✅ Found category: '{cell_value}' at column {i}")
+
+            print(f"📋 GET_CATEGORIES: Final categories found: {categories}")
+
+            return {
+                'success': True,
+                'categories': categories,
+                'total_categories': len(categories),
+                'sheet_name': sheet_name,
+                'message': f"Found {len(categories)} categories in sheet"
+            }
+
+        except Exception as e:
+            logger.error(f"Get categories error: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return {
+                'success': False,
+                'error': f'Failed to get categories: {str(e)}'
+            }
+

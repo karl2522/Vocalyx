@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { ArrowLeft, BarChart3, ChevronDown, Download, FileSpreadsheet, FileText, HelpCircle, Mic, MicOff, MoreVertical, Upload, Users, X } from 'lucide-react';
+import { ArrowLeft, BarChart3, ChevronDown, Download, FileSpreadsheet, FileText, HelpCircle, Mic, MicOff, MoreVertical, Upload, Users, X, Plus, Edit, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -20,7 +20,9 @@ import ImportStudentsInfoModal from './modals/ImportStudentsInfoModal.jsx';
 import ImportScoresInfoModal from './modals/ImportScoresInfoModal.jsx';
 import StudentConfirmationModal from './modals/StudentConfirmationModal.jsx';
 import DeleteStudentModal from './modals/DeleteStudentModal.jsx';
-
+import AddCategoryModal from './modals/AddCategoryModal.jsx';
+import DeleteCategoryModal from './modals/DeleteCategoryModal.jsx';
+import EditCategoryModal from './modals/EditCategoryModal.jsx';
 
 const ClassRecordExcel = () => {
   const { id } = useParams();
@@ -29,6 +31,7 @@ const ClassRecordExcel = () => {
   const [loading, setLoading] = useState(true);
   const [headers, setHeaders] = useState([]);
   const [lastSaved, setLastSaved] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   const [batchMode, setBatchMode] = useState(false);
   const [showBatchModal, setShowBatchModal] = useState(false);
@@ -48,10 +51,15 @@ const ClassRecordExcel = () => {
     studentId: '',
     isVisible: false
   });
-
+  const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
+  const [categoryLoading, setCategoryLoading] = useState(false);
+  const [showDeleteCategoryModal, setShowDeleteCategoryModal] = useState(false);
+  const [showEditCategoryModal, setShowEditCategoryModal] = useState(false);
   const [showColumnImportModal, setShowColumnImportModal] = useState(false);
   const [columnAnalysis, setColumnAnalysis] = useState(null);
   const [pendingImportData, setPendingImportData] = useState(null);
+  const [currentSheetName, setCurrentSheetName] = useState(''); // Add this state
+  const [availableCategories, setAvailableCategories] = useState([]); // Add this state
 
   const [deleteStudentModal, setDeleteStudentModal] = useState({
     isOpen: false,
@@ -109,6 +117,66 @@ const ClassRecordExcel = () => {
       console.log('🔥 FIRST RENDER: Component mounted');
     }
   }, []);
+
+  const loadCategories = async () => {
+  try {
+    console.log('🔍 LOAD_CATEGORIES: Starting...');
+    console.log('🔍 LOAD_CATEGORIES: sheet_id:', classRecord?.google_sheet_id);
+    console.log('🔍 LOAD_CATEGORIES: currentSheet:', currentSheet);
+    console.log('🔍 LOAD_CATEGORIES: currentSheet.sheet_name:', currentSheet?.sheet_name);
+    
+    if (!classRecord?.google_sheet_id) {
+      console.log('❌ LOAD_CATEGORIES: No sheet ID');
+      return;
+    }
+    
+    if (!currentSheet?.sheet_name) {
+      console.log('❌ LOAD_CATEGORIES: No current sheet name');
+      return;
+    }
+    
+    const response = await classRecordService.getCategoriesFromSheet(
+      classRecord.google_sheet_id, 
+      currentSheet.sheet_name
+    );
+    
+    console.log('✅ LOAD_CATEGORIES: Response:', response.data);
+    
+    if (response.data.success && response.data.categories.length > 0) {
+      console.log('✅ LOAD_CATEGORIES: Categories found:', response.data.categories);
+      
+      // 🔥 FIX: Filter out any remaining percentages in frontend as backup
+      const cleanCategories = response.data.categories.filter(cat => 
+        !cat.includes('%') && 
+        cat.trim() !== '' &&
+        !['Total', 'TOTAL'].includes(cat.toUpperCase())
+      );
+      
+      console.log('✅ LOAD_CATEGORIES: Clean categories:', cleanCategories);
+      setAvailableCategories(cleanCategories);
+    } else {
+      console.log('❌ LOAD_CATEGORIES: No categories found, using fallback');
+      setAvailableCategories(['Projects', 'Quizzes', 'Assignment', 'Seatwork', 'Laboratory Activities']);
+    }
+  } catch (error) {
+    console.error('❌ LOAD_CATEGORIES Error:', error);
+    setAvailableCategories(['Projects', 'Quizzes', 'Assignment', 'Seatwork', 'Laboratory Activities']);
+  }
+};
+
+  useEffect(() => {
+    console.log('🔍 USEEFFECT: Checking conditions...');
+    console.log('🔍 USEEFFECT: classRecord?.google_sheet_id:', classRecord?.google_sheet_id);
+    console.log('🔍 USEEFFECT: currentSheet:', currentSheet);
+    console.log('🔍 USEEFFECT: currentSheet?.sheet_name:', currentSheet?.sheet_name);
+    
+    if (classRecord?.google_sheet_id && currentSheet?.sheet_name) {
+      console.log('✅ USEEFFECT: Loading categories...');
+      loadCategories();
+    }
+    // 🔥 Don't clear categories when currentSheet becomes null temporarily
+  }, [classRecord?.google_sheet_id, currentSheet?.sheet_name]);
+
 
     useEffect(() => {
       console.log('🔥 MAIN EFFECT: Checking conditions...');
@@ -2012,6 +2080,99 @@ const handleAddStudentVoice = async (data) => {
   }
 };
 
+const handleAddCategory = async (categoryData) => {
+  setCategoryLoading(true);
+  try {
+    console.log('Creating category:', categoryData);
+    
+    const response = await classRecordService.addCategoryToSheet(
+      classRecord.google_sheet_id, 
+      categoryData, 
+      currentSheet?.sheet_name
+    );
+    
+    if (response.data?.success) {
+      toast.success(`✅ Successfully created "${categoryData.categoryName}" with ${categoryData.subCategoryCount} columns!`);
+      
+      // 🔥 FIX: Pass the required parameters to loadSheetData
+      await loadSheetData(classRecord.google_sheet_id, currentSheet?.sheet_name);
+      
+      setShowAddCategoryModal(false);
+    } else {
+      throw new Error(response.data?.error || 'Failed to create category');
+    }
+  } catch (error) {
+    console.error('Error creating category:', error);
+    toast.error(`❌ Failed to create category: ${error.message}`);
+  } finally {
+    setCategoryLoading(false);
+  }
+};
+
+const handleDeleteCategory = async (deleteData) => {
+  try {
+    setIsLoading(true);
+    
+    console.log('🗑️ Deleting category:', deleteData);
+    
+    const response = await classRecordService.deleteCategoryFromSheet(
+      classRecord.google_sheet_id,
+      deleteData.categoryName,
+      currentSheet?.sheet_name // 🔥 FIX: Use currentSheet.sheet_name
+    );
+    
+    if (response.data.success) {
+      toast.success(`Category "${deleteData.categoryName}" deleted successfully!`);
+      setShowDeleteCategoryModal(false);
+      
+      // Reload the sheet data
+      if (currentSheet?.sheet_name) {
+        await loadSheetData(classRecord.google_sheet_id, currentSheet.sheet_name);
+      }
+      await loadCategories(); // Refresh categories list
+    } else {
+      toast.error(response.data.error || 'Failed to delete category');
+    }
+  } catch (error) {
+    console.error('Delete category error:', error);
+    toast.error('Failed to delete category');
+  } finally {
+    setIsLoading(false);
+  }
+};
+
+const handleEditCategory = async (editData) => {
+  try {
+    setIsLoading(true);
+    
+    console.log('✏️ Editing category:', editData);
+    
+    const response = await classRecordService.editCategoryInSheet(
+      classRecord.google_sheet_id,
+      editData,
+      currentSheet?.sheet_name // 🔥 FIX: Use currentSheet.sheet_name
+    );
+    
+    if (response.data.success) {
+      toast.success(`Category updated to "${editData.newCategoryName}" successfully!`);
+      setShowEditCategoryModal(false);
+      
+      // Reload the sheet data
+      if (currentSheet?.sheet_name) {
+        await loadSheetData(classRecord.google_sheet_id, currentSheet.sheet_name);
+      }
+      await loadCategories(); // Refresh categories list
+    } else {
+      toast.error(response.data.error || 'Failed to edit category');
+    }
+  } catch (error) {
+    console.error('Edit category error:', error);
+    toast.error('Failed to edit category');
+  } finally {
+    setIsLoading(false);
+  }
+};
+
 const handleConfirmStudent = async (finalData) => {
   console.log('✅ Confirmed student data:', finalData);
   
@@ -3599,7 +3760,7 @@ const handleExportToPDF = async () => {
                 </div>
               )}
 
-                {/* Tools Dropdown */}
+              {/* Tools Dropdown */}
               <div className="relative" onClick={(e) => e.stopPropagation()}>
                 <button
                   onClick={() => toggleDropdown('tools')}
@@ -3610,119 +3771,153 @@ const handleExportToPDF = async () => {
                   <ChevronDown className={`w-4 h-4 transition-transform ${dropdowns.tools ? 'rotate-180' : ''}`} />
                 </button>
                 
-              {dropdowns.tools && (
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-slate-200 py-2 z-50">
-                  {/* Export options */}
-                  <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
-                    Export Options
-                  </div>
-                  <button
-                    onClick={() => {
-                      handleExportToExcel();
-                      closeAllDropdowns();
-                    }}
-                    className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
-                  >
-                    <FileSpreadsheet className="w-4 h-4 text-green-600" />
-                    <span>Export to Excel (clean)</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      handleExportToPDF();
-                      closeAllDropdowns();
-                    }}
-                    className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
-                  >
-                    <Download className="w-4 h-4 text-red-600" />
-                    <span>Export to PDF (clean)</span>
-                  </button>
+                {dropdowns.tools && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-slate-200 py-2 z-50">
+                    {/* Export options */}
+                    <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                      Export Options
+                    </div>
+                    <button
+                      onClick={() => {
+                        handleExportToExcel();
+                        closeAllDropdowns();
+                      }}
+                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                    >
+                      <FileSpreadsheet className="w-4 h-4 text-green-600" />
+                      <span>Export to Excel (clean)</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        handleExportToPDF();
+                        closeAllDropdowns();
+                      }}
+                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                    >
+                      <Download className="w-4 h-4 text-red-600" />
+                      <span>Export to PDF (clean)</span>
+                    </button>
 
-                  <button
-                    onClick={() => {
-                      handleExportToCSV();
-                      closeAllDropdowns();
-                    }}
-                    className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
-                  >
-                    <FileText className="w-4 h-4 text-green-600" />
-                    <span>Export to CSV (clean)</span>
-                  </button>
-                  
-                  <hr className="my-2 border-slate-200" />
+                    <button
+                      onClick={() => {
+                        handleExportToCSV();
+                        closeAllDropdowns();
+                      }}
+                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                    >
+                      <FileText className="w-4 h-4 text-green-600" />
+                      <span>Export to CSV (clean)</span>
+                    </button>
+                    
+                    <hr className="my-2 border-slate-200" />
 
-                  <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
-                    Import Options
-                  </div>
-                  <button
-                    onClick={() => {
-                      setShowImportInfoModal(true); 
-                      closeAllDropdowns();
-                    }}
-                    className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
-                  >
-                    <Upload className="w-4 h-4 text-blue-600" />
-                    <span>Import Students</span>
-                  </button>
+                    <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                      Import Options
+                    </div>
+                    <button
+                      onClick={() => {
+                        setShowImportInfoModal(true); 
+                        closeAllDropdowns();
+                      }}
+                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                    >
+                      <Upload className="w-4 h-4 text-blue-600" />
+                      <span>Import Students</span>
+                    </button>
 
-                 <button
-                  onClick={() => {
-                    setShowImportScoresInfoModal(true); 
-                    closeAllDropdowns();
-                  }}
-                  className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
-                >
-                  <BarChart3 className="w-4 h-4 text-purple-600" />
-                  <span>Import Scores</span>
-                </button>
-                  
-                  {/* Batch Mode & Auto-number options */}
-                  <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
-                    Grading Tools
-                  </div>
-                  
-                  {/* 🔥 NEW: Batch Mode Button */}
-                  <button
-                    onClick={() => {
-                      startBatchMode();
-                      closeAllDropdowns();
-                    }}
-                    className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
-                  >
-                    <Users className="w-4 h-4 text-purple-600" />
-                    <span>Batch Grading</span>
-                  </button>
-                  
-                  <button
-                    onClick={() => {
-                      handleAutoNumberStudents();
-                      closeAllDropdowns();
-                    }}
-                    className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
-                  >
-                    <span className="w-4 h-4 text-blue-600 text-center font-bold">#</span>
-                    <span>Auto-Number Students</span>
-                  </button>
+                    <button
+                      onClick={() => {
+                        setShowImportScoresInfoModal(true); 
+                        closeAllDropdowns();
+                      }}
+                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                    >
+                      <BarChart3 className="w-4 h-4 text-purple-600" />
+                      <span>Import Scores</span>
+                    </button>
+                    
+                    {/* Batch Mode & Auto-number options */}
+                    <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                      Grading Tools
+                    </div>
+                    
+                    {/* 🔥 NEW: Batch Mode Button */}
+                    <button
+                      onClick={() => {
+                        startBatchMode();
+                        closeAllDropdowns();
+                      }}
+                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                    >
+                      <Users className="w-4 h-4 text-purple-600" />
+                      <span>Batch Grading</span>
+                    </button>
+                    
+                    <button
+                      onClick={() => {
+                        handleAutoNumberStudents();
+                        closeAllDropdowns();
+                      }}
+                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                    >
+                      <span className="w-4 h-4 text-blue-600 text-center font-bold">#</span>
+                      <span>Auto-Number Students</span>
+                    </button>
 
-                  {/* Troubleshooting section */}
-                  <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
-                    Troubleshooting
+                    {/* 🔥 FIXED: Make Categories a simple menu item, not a nested dropdown */}
+                    <button
+                      onClick={() => {
+                        setShowAddCategoryModal(true);
+                        closeAllDropdowns();
+                      }}
+                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                    >
+                      <Plus className="w-4 h-4 text-green-600" />
+                      <span>Add Category</span>
+                    </button>
+                    
+                    <button
+                      onClick={() => {
+                        setShowEditCategoryModal(true);
+                        closeAllDropdowns();
+                      }}
+                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                    >
+                      <Edit className="w-4 h-4 text-blue-600" />
+                      <span>Edit Category</span>
+                    </button>
+                    
+                    <button
+                      onClick={() => {
+                        setShowDeleteCategoryModal(true);
+                        closeAllDropdowns();
+                      }}
+                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-red-50 w-full text-left"
+                    >
+                      <Trash2 className="w-4 h-4 text-red-600" />
+                      <span>Delete Category</span>
+                    </button>
+
+                    {/* Troubleshooting section */}
+                    <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                      Troubleshooting
+                    </div>
+                    
+                    <button
+                      onClick={() => {
+                        fixSheetPermissions();
+                        closeAllDropdowns();
+                      }}
+                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                    >
+                      <span className="w-4 h-4 text-orange-600 text-center font-bold">🔧</span>
+                      <span>Fix "View Only" Issue</span>
+                    </button>
                   </div>
-                  
-                  <button
-                    onClick={() => {
-                      fixSheetPermissions();
-                      closeAllDropdowns();
-                    }}
-                    className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
-                  >
-                    <span className="w-4 h-4 text-orange-600 text-center font-bold">🔧</span>
-                    <span>Fix "View Only" Issue</span>
-                  </button>
-                </div>
-              )}
+                )}
               </div>
 
-                                {/* Open in Google Sheets Button */}
+              {/* Open in Google Sheets Button */}
                 <a
                   href={classRecord.google_sheet_url || `https://docs.google.com/spreadsheets/d/${classRecord.google_sheet_id}/edit`}
                   target="_blank"
@@ -4002,6 +4197,31 @@ const handleExportToPDF = async () => {
           onConfirm={handleConfirmStudent}
           onCancel={handleCancelStudent}
           onEdit={handleEditStudent}
+        />
+
+        {showAddCategoryModal && (
+          <AddCategoryModal
+            isOpen={showAddCategoryModal}
+            onClose={() => setShowAddCategoryModal(false)}
+            onSubmit={handleAddCategory}
+            isLoading={categoryLoading}
+          />
+        )}
+
+       <DeleteCategoryModal
+          isOpen={showDeleteCategoryModal}
+          onClose={() => setShowDeleteCategoryModal(false)}
+          onSubmit={handleDeleteCategory}
+          isLoading={isLoading}
+          categories={availableCategories} // Use dynamic categories
+        />
+
+        <EditCategoryModal
+          isOpen={showEditCategoryModal}
+          onClose={() => setShowEditCategoryModal(false)}
+          onSubmit={handleEditCategory}
+          isLoading={isLoading}
+          categories={availableCategories} // Use dynamic categories
         />
 
          <ImportProgressIndicator 

@@ -17,7 +17,9 @@ from .views import (
     sheets_analyze_columns_mapping, sheets_execute_column_import, sheets_rename_column_header,
     sheets_analyze_columns_mapping_enhanced, sheets_execute_column_import_enhanced, get_import_history,
     sheets_update_max_score_service_account, sheets_update_batch_max_scores_service_account,
-    sheets_update_range_service_account, delete_student_from_sheet, update_multiple_cells_service_account
+    sheets_update_range_service_account, delete_student_from_sheet, update_multiple_cells_service_account,
+    sheets_add_category_service_account, sheets_delete_category_service_account, sheets_edit_category_service_account,
+    sheets_get_categories_service_account
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -100,4 +102,10 @@ urlpatterns = [
     path('sheets/<str:sheet_id>/delete-student/', delete_student_from_sheet, name='delete_student_from_sheet'),
 
     path('sheets/<str:sheet_id>/update-multiple-cells/', update_multiple_cells_service_account, name='update_multiple_cells'),
+
+    path('sheets/<str:sheet_id>/add-category/', sheets_add_category_service_account, name='sheets_add_category'),
+
+    path('sheets/<str:sheet_id>/delete-category/', sheets_delete_category_service_account, name='delete_category'),
+    path('sheets/<str:sheet_id>/edit-category/', sheets_edit_category_service_account, name='edit_category'),
+    path('sheets/<str:sheet_id>/get-categories/', sheets_get_categories_service_account, name='get_categories'),
 ]
