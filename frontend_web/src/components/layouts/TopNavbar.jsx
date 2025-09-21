@@ -3,8 +3,10 @@ import { FiChevronDown, FiLogOut, FiSettings, FiUser } from 'react-icons/fi';
 import { HiOutlineUserCircle } from 'react-icons/hi';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { logoBlue } from "../../utils";
 import { getPendingActionsCount, hasPendingActions, needsEmailVerification, needsGoogleDrive } from '../../utils/notificationUtils';
 import LogoutModal from '../modals/LogoutModal';
+
 
 const TopNavbar = () => {
   const { user, logout } = useAuth();
@@ -88,7 +90,7 @@ const TopNavbar = () => {
           {/* Logo/Brand - Left side */}
           <div className="flex items-center gap-3">
             <img 
-              src="/assets/VocalyxLogo.png" 
+              src={logoBlue}
               alt="Vocalyx Logo" 
               className="h-8 w-8"
             />

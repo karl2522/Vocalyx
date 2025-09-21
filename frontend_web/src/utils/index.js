@@ -2,7 +2,8 @@ const display = "/assets/Display.png";
 const google = "/assets/google.png";
 const microsoft = "/assets/microsoft.png";
 const play = "/assets/play.png";
-const logo = "/assets/VocalyxLogo.png";
+const logoBlue = "/assets/vocalyxBlue.png";
+const logoWhite = "/assets/vocalyxWhite.png";
 const display1 = "/assets/display1.png";
 const display2 = "/assets/display2.png";
 const voice = "/assets/voice-icon.png";
@@ -20,5 +21,5 @@ const chavez = "/assets/chavez.png";
 const gadiane = "/assets/gadiane.png";
 const pejana = "/assets/pejana.png";
 
-export { about, capuras, chavez, display, display1, display2, export1, gadiane, github, google, instagram, linkedin, logo, microphone, microsoft, notes, omen, pejana, play, sync, voice };
+export { about, capuras, chavez, display, display1, display2, export1, gadiane, github, google, instagram, linkedin, microphone, microsoft, notes, omen, pejana, play, sync, voice, logoBlue, logoWhite };
 
