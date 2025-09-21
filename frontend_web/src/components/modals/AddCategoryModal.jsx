@@ -34,7 +34,8 @@ const AddCategoryModal = ({
 
   const handleSubmit = () => {
     if (!validateForm()) return;
-    
+
+
     const categoryData = {
         categoryName: categoryName.trim(),
         subCategoryCount: parseInt(subCategoryCount),
