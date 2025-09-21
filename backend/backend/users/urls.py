@@ -4,7 +4,7 @@ from .activity_views import UserActivityListView, create_activity, get_activity_
 from .views import (
     RegisterView, LoginView, VerifyEmailView,
     google_auth, LogoutView, microsoft_auth, firebase_auth_view,
-    update_profile, get_profile, validate_token,
+    update_profile, get_profile, validate_token, resend_verification_email,
     drive_test_connection, drive_list_files, drive_upload_file,
     drive_create_folder, drive_download_file,
     sheets_copy_template, sheets_get_info, sheets_list_user_sheets,
@@ -19,7 +19,10 @@ from .views import (
     sheets_update_max_score_service_account, sheets_update_batch_max_scores_service_account,
     sheets_update_range_service_account, delete_student_from_sheet, update_multiple_cells_service_account,
     sheets_add_category_service_account, sheets_delete_category_service_account, sheets_edit_category_service_account,
-    sheets_get_categories_service_account
+    sheets_get_categories_service_account,
+    # Google Drive connection management
+    check_google_drive_connection, connect_google_account, refresh_google_tokens,
+    disconnect_google_account, get_google_drive_token
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -28,6 +31,7 @@ urlpatterns = [
     path('login/', LoginView.as_view(), name='login'),
     path('logout/', LogoutView.as_view(), name='logout'),
     path('verify-email/<str:token>/', VerifyEmailView.as_view(), name='verify-email'),
+    path('resend-verification/', resend_verification_email, name='resend_verification'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('validate-token/', validate_token, name='validate_token'),
     path('auth/google/', google_auth, name='google_auth'),
@@ -108,4 +112,11 @@ urlpatterns = [
     path('sheets/<str:sheet_id>/delete-category/', sheets_delete_category_service_account, name='delete_category'),
     path('sheets/<str:sheet_id>/edit-category/', sheets_edit_category_service_account, name='edit_category'),
     path('sheets/<str:sheet_id>/get-categories/', sheets_get_categories_service_account, name='get_categories'),
+    
+    # Google Drive connection management endpoints
+    path('google-drive/check/', check_google_drive_connection, name='check_google_drive_connection'),
+    path('google-drive/connect/', connect_google_account, name='connect_google_account'),
+    path('google-drive/refresh-tokens/', refresh_google_tokens, name='refresh_google_tokens'),
+    path('google-drive/disconnect/', disconnect_google_account, name='disconnect_google_account'),
+    path('google-drive/token/', get_google_drive_token, name='get_google_drive_token'),
 ]

@@ -1,8 +1,10 @@
 import logging
 import uuid
+from datetime import timedelta
 from django.shortcuts import render
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
+from django.utils import timezone
 from drf_spectacular.utils import OpenApiExample, extend_schema, OpenApiParameter
 from google.oauth2 import id_token
 from rest_framework import status
@@ -20,6 +22,8 @@ from .utils import send_verification_email, get_current_utc_time, get_user_login
 from .google_drive_service import GoogleDriveService
 from firebase_admin import auth
 from .google_sheets_service import GoogleSheetsService
+from .google_token_service import google_token_service
+from .token_utils import token_encryption
 from django.core.cache import cache
 import hashlib
 
@@ -156,11 +160,6 @@ class LoginView(APIView):
                 )
 
             if user:
-                if not user.email_verified:
-                    return Response({
-                        "error": "Please verify your email before logging in."
-                    }, status=status.HTTP_401_UNAUTHORIZED)
-
                 refresh = RefreshToken.for_user(user)
                 return Response({
                     'tokens': {
@@ -231,6 +230,64 @@ class VerifyEmailView(APIView):
                 'success': False,
                 'error_message': 'Invalid verification token. Please try registering again.'
             })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def resend_verification_email(request):
+    """Resend email verification for the authenticated user"""
+    try:
+        user = request.user
+        
+        # Check if user is already verified
+        if user.email_verified:
+            return Response({
+                'error': 'Email is already verified'
+            }, status=400)
+        
+        # Generate new verification token
+        verification_token = str(uuid.uuid4())
+        user.email_verification_token = verification_token
+        user.save()
+        
+        # Create verification URL
+        verification_url = f"http://127.0.0.1:8000/api/verify-email/{verification_token}/"
+        
+        # Render email template
+        html_message = render_to_string('email/verification_email.html', {
+            'user': user,
+            'verification_url': verification_url
+        })
+        plain_message = strip_tags(html_message)
+        
+        # Send verification email
+        try:
+            email_sent = send_verification_email(
+                user.email,
+                'Vocalyx - Verify Your Email Address',
+                plain_message,
+                html_message
+            )
+            
+            if email_sent:
+                return Response({
+                    'success': True,
+                    'message': 'Verification email sent successfully. Please check your inbox.'
+                })
+            else:
+                return Response({
+                    'error': 'Failed to send verification email. Please try again later.'
+                }, status=500)
+                
+        except Exception as e:
+            logger.error(f"Email sending failed for user {user.email}: {str(e)}")
+            return Response({
+                'error': 'Failed to send verification email. Please try again later.'
+            }, status=500)
+            
+    except Exception as e:
+        logger.error(f"Resend verification email error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
 
 
 class LogoutView(APIView):
@@ -421,6 +478,9 @@ def firebase_auth_view(request):
         # Accept both parameter names for backward compatibility
         id_token = request.data.get('id_token') or request.data.get('firebase_token')
         access_token = request.data.get('access_token')
+        mode = request.data.get('mode', 'login')  # 'login' or 'signup'
+        
+        logger.info(f"Firebase auth request - Mode: {mode}, Email: {email if 'email' in locals() else 'Not extracted yet'}")
         
         if not id_token:
             return Response({'error': 'No ID token provided'}, status=400)
@@ -455,49 +515,127 @@ def firebase_auth_view(request):
 
         try:
             user = CustomUser.objects.get(email=email)
+            logger.info(f"User exists: {email}, Mode: {mode}")
             
-            # Update user information
-            if is_google:
-                user.google_id = uid
-            elif is_microsoft:
-                user.microsoft_id = uid
-            
-            # Update user profile information if available
-            if first_name:
-                user.first_name = first_name
-            if last_name:
-                user.last_name = last_name
-            if picture:
-                user.profile_picture = picture
+            # For login mode, user must exist AND have the correct auth method
+            if mode == 'login':
+                # Check if user has the correct authentication method
+                if is_google and not user.has_google:
+                    return Response({
+                        'error': 'This account was not created with Google. Please use the email/password login or create a new account with Google.'
+                    }, status=400)
+                elif is_microsoft and not user.has_microsoft:
+                    return Response({
+                        'error': 'This account was not created with Microsoft. Please use the email/password login or create a new account with Microsoft.'
+                    }, status=400)
                 
-            user.email_verified = True
-            user.save()
-            logger.info(f"Updated existing user via Firebase: {user.email}")
-            
+                # Update user information
+                if is_google:
+                    user.google_id = uid
+                elif is_microsoft:
+                    user.microsoft_id = uid
+                
+                # Update user profile information if available
+                if first_name:
+                    user.first_name = first_name
+                if last_name:
+                    user.last_name = last_name
+                if picture:
+                    user.profile_picture = picture
+                    
+                user.email_verified = True
+                user.save()
+                logger.info(f"User logged in via Firebase: {user.email}")
+                
+            # For signup mode, user should not exist, but if they do, log them in instead
+            elif mode == 'signup':
+                logger.info(f"User {email} already exists during signup, logging them in instead")
+                # Update user information as if it were a login
+                if is_google:
+                    user.google_id = uid
+                elif is_microsoft:
+                    user.microsoft_id = uid
+                
+                # Update user profile information if available
+                if first_name:
+                    user.first_name = first_name
+                if last_name:
+                    user.last_name = last_name
+                if picture:
+                    user.profile_picture = picture
+                    
+                user.email_verified = True
+                user.save()
+                logger.info(f"User logged in via Firebase (signup->login): {user.email}")
+                
         except CustomUser.DoesNotExist:
-            username = f"firebase_{uid}"
+            logger.info(f"User does not exist: {email}, Mode: {mode}")
+            # For login mode, user must exist
+            if mode == 'login':
+                return Response({
+                    'error': 'No account found with this Google account. Please create an account first.'
+                }, status=400)
+            
+            # For signup mode, create new user
+            elif mode == 'signup':
+                username = f"firebase_{uid}"
 
-            user = CustomUser.objects.create_user(
-                username=username,
-                email=email,
-                first_name=first_name,
-                last_name=last_name,
-                profile_picture=picture,
-                email_verified=True
-            )
+                user = CustomUser.objects.create_user(
+                    username=username,
+                    email=email,
+                    first_name=first_name,
+                    last_name=last_name,
+                    profile_picture=picture,
+                    email_verified=True
+                )
 
-            if is_google:
-                user.google_id = uid
-            elif is_microsoft:
-                user.microsoft_id = uid
+                if is_google:
+                    user.google_id = uid
+                elif is_microsoft:
+                    user.microsoft_id = uid
 
-            user.save()
-            logger.info(f"Created new user via Firebase: {user.email}")
+                user.save()
+                logger.info(f"Created new user via Firebase: {user.email}")
 
-        # Store Google access token in session/cache for Drive API access
-        if access_token and is_google:
-            # Store the access token in the response so frontend can store it
-            logger.info(f"Google access token received for user: {user.email}")
+        # Automatically establish Google Drive connection for Google users
+        if is_google:
+            try:
+                # Mark Google Drive as connected (even without tokens)
+                user.google_connected_at = timezone.now()
+                
+                # If we have access token, store it
+                if access_token:
+                    # Get refresh token from request (if available)
+                    refresh_token = request.data.get('refresh_token')
+                    expires_in = request.data.get('expires_in', 3600)  # Default 1 hour
+                    
+                    # For Firebase auth, we might not get a separate refresh token
+                    # Use the access token as refresh token for now (Firebase handles refresh)
+                    if not refresh_token:
+                        refresh_token = access_token
+                    
+                    # Encrypt and store Google Drive tokens
+                    encrypted_tokens = token_encryption.encrypt_tokens(access_token, refresh_token)
+                    
+                    # Calculate expiry time
+                    expires_at = timezone.now() + timedelta(seconds=expires_in)
+                    
+                    # Update user with Google Drive tokens
+                    user.google_access_token = encrypted_tokens['access_token']
+                    user.google_refresh_token = encrypted_tokens['refresh_token']
+                    user.google_token_expires_at = expires_at
+                    
+                    logger.info(f"Automatically connected Google Drive with tokens for user: {user.email}")
+                else:
+                    # No tokens available, but user is Google-authenticated
+                    logger.info(f"Google user connected but no tokens available for user: {user.email}")
+                
+                # Save the user with Google Drive connection status
+                user.save()
+                
+            except Exception as e:
+                logger.error(f"Failed to establish Google Drive connection for {user.email}: {str(e)}")
+                # Continue with login even if Drive connection fails
 
         refresh = RefreshToken.for_user(user)
 
@@ -515,7 +653,12 @@ def firebase_auth_view(request):
                 'position': user.position,
                 'bio': user.bio,
                 'has_google': user.has_google,
-                'has_microsoft': user.has_microsoft
+                'has_microsoft': user.has_microsoft,
+                # Google Drive connection fields
+                'has_google_drive': user.has_google_drive,
+                'google_drive_connected': user.google_drive_connected,
+                'google_connected_at': user.google_connected_at.isoformat() if user.google_connected_at else None,
+                'google_token_expires_at': user.google_token_expires_at.isoformat() if user.google_token_expires_at else None
             }
         }
         
@@ -554,7 +697,12 @@ def update_profile(request):
             'bio': user.bio,
             'has_google': user.has_google,
             'has_microsoft': user.has_microsoft,
-            'profile_picture': user.profile_picture
+            'profile_picture': user.profile_picture,
+            # Google Drive connection fields
+            'has_google_drive': user.has_google_drive,
+            'google_drive_connected': user.google_drive_connected,
+            'google_connected_at': user.google_connected_at.isoformat() if user.google_connected_at else None,
+            'google_token_expires_at': user.google_token_expires_at.isoformat() if user.google_token_expires_at else None
         }
     })
 
@@ -581,7 +729,12 @@ def get_profile(request):
             'created_at': user.created_at.isoformat(),
             'updated_at': user.updated_at.isoformat(),
             'google_id': user.google_id,
-            'microsoft_id': user.microsoft_id
+            'microsoft_id': user.microsoft_id,
+            # Google Drive connection fields
+            'has_google_drive': user.has_google_drive,
+            'google_drive_connected': user.google_drive_connected,
+            'google_connected_at': user.google_connected_at.isoformat() if user.google_connected_at else None,
+            'google_token_expires_at': user.google_token_expires_at.isoformat() if user.google_token_expires_at else None
         }
     })
 
@@ -614,11 +767,21 @@ def validate_token(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def drive_test_connection(request):
-    """Test Google Drive API connection with user's access token"""
+    """Test Google Drive API connection with user's stored access token"""
     try:
+        user = request.user
+        
+        # Try to get access token from request first (for backward compatibility)
         access_token = request.data.get('access_token')
+        
         if not access_token:
-            return Response({'error': 'Google access token required'}, status=400)
+            # Use stored token if no token provided
+            if not user.has_google_drive:
+                return Response({'error': 'Google Drive not connected. Please connect your Google account first.'}, status=400)
+            
+            access_token = google_token_service.get_valid_access_token(user)
+            if not access_token:
+                return Response({'error': 'Failed to get valid Google access token'}, status=400)
         
         drive_service = GoogleDriveService(access_token)
         result = drive_service.test_connection()
@@ -635,9 +798,19 @@ def drive_test_connection(request):
 def drive_list_files(request):
     """List files in user's Google Drive"""
     try:
+        user = request.user
+        
+        # Try to get access token from header first (for backward compatibility)
         access_token = request.headers.get('X-Google-Access-Token')
+        
         if not access_token:
-            return Response({'error': 'Google access token required in X-Google-Access-Token header'}, status=400)
+            # Use stored token if no token provided
+            if not user.has_google_drive:
+                return Response({'error': 'Google Drive not connected. Please connect your Google account first.'}, status=400)
+            
+            access_token = google_token_service.get_valid_access_token(user)
+            if not access_token:
+                return Response({'error': 'Failed to get valid Google access token'}, status=400)
         
         # Get query parameters
         query = request.GET.get('query')
@@ -1696,3 +1869,172 @@ def sheets_get_categories_service_account(request, sheet_id):
             'success': False,
             'error': f'Server error: {str(e)}'
         }, status=500)
+
+
+# Google Drive Connection Management Endpoints
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def check_google_drive_connection(request):
+    """Check if user has Google Drive connected and tokens are valid"""
+    try:
+        user = request.user
+        
+        return Response({
+            'connected': user.has_google_drive,
+            'has_google_id': user.has_google,
+            'connected_at': user.google_connected_at,
+            'expires_at': user.google_token_expires_at,
+            'needs_connection': not user.has_google_drive and not user.has_google
+        })
+        
+    except Exception as e:
+        logger.error(f"Check Google Drive connection error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def connect_google_account(request):
+    """Connect Google account to existing user for Drive access"""
+    try:
+        user = request.user
+        
+        # Get tokens from request
+        access_token = request.data.get('access_token')
+        refresh_token = request.data.get('refresh_token')
+        expires_in = request.data.get('expires_in', 3600)
+        
+        if not access_token or not refresh_token:
+            return Response({'error': 'Access token and refresh token required'}, status=400)
+        
+        # Validate the access token with Google
+        try:
+            response = http_requests.get(
+                "https://www.googleapis.com/oauth2/v1/userinfo",
+                headers={'Authorization': f'Bearer {access_token}'},
+                timeout=10
+            )
+            
+            if response.status_code != 200:
+                return Response({'error': 'Invalid access token'}, status=400)
+            
+            google_user_info = response.json()
+            google_email = google_user_info.get('email')
+            
+            # Verify the Google email matches the user's email
+            if google_email != user.email:
+                return Response({
+                    'error': 'Google account email does not match your account email'
+                }, status=400)
+            
+        except http_requests.exceptions.RequestException as e:
+            logger.error(f"Google token validation failed: {str(e)}")
+            return Response({'error': 'Failed to validate Google account'}, status=400)
+        
+        # Encrypt and store tokens
+        encrypted_tokens = token_encryption.encrypt_tokens(access_token, refresh_token)
+        
+        # Calculate expiry time
+        expires_at = timezone.now() + timedelta(seconds=expires_in)
+        
+        # Update user with Google connection info
+        user.google_id = google_user_info.get('id')
+        user.google_access_token = encrypted_tokens['access_token']
+        user.google_refresh_token = encrypted_tokens['refresh_token']
+        user.google_token_expires_at = expires_at
+        user.google_connected_at = timezone.now()
+        user.profile_picture = google_user_info.get('picture', user.profile_picture)
+        user.save()
+        
+        logger.info(f"Successfully connected Google account for user: {user.email}")
+        
+        return Response({
+            'success': True,
+            'message': 'Google account connected successfully',
+            'connected_at': user.google_connected_at
+        })
+        
+    except Exception as e:
+        logger.error(f"Connect Google account error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def refresh_google_tokens(request):
+    """Refresh expired Google access tokens"""
+    try:
+        user = request.user
+        
+        if not user.google_refresh_token:
+            return Response({'error': 'No Google account connected'}, status=400)
+        
+        # Get valid access token (will refresh if needed)
+        valid_token = google_token_service.get_valid_access_token(user)
+        
+        if not valid_token:
+            return Response({'error': 'Failed to refresh tokens'}, status=400)
+        
+        return Response({
+            'success': True,
+            'message': 'Tokens refreshed successfully',
+            'expires_at': user.google_token_expires_at
+        })
+        
+    except Exception as e:
+        logger.error(f"Refresh Google tokens error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def disconnect_google_account(request):
+    """Disconnect Google account and clear tokens"""
+    try:
+        user = request.user
+        
+        # Clear Google connection data
+        user.google_id = None
+        user.google_access_token = None
+        user.google_refresh_token = None
+        user.google_token_expires_at = None
+        user.google_connected_at = None
+        user.save()
+        
+        logger.info(f"Successfully disconnected Google account for user: {user.email}")
+        
+        return Response({
+            'success': True,
+            'message': 'Google account disconnected successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Disconnect Google account error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_google_drive_token(request):
+    """Get a valid Google Drive access token for the user"""
+    try:
+        user = request.user
+        
+        if not user.has_google_drive:
+            return Response({'error': 'Google Drive not connected'}, status=400)
+        
+        # Get valid access token
+        valid_token = google_token_service.get_valid_access_token(user)
+        
+        if not valid_token:
+            return Response({'error': 'Failed to get valid access token'}, status=400)
+        
+        return Response({
+            'access_token': valid_token,
+            'expires_at': user.google_token_expires_at
+        })
+        
+    except Exception as e:
+        logger.error(f"Get Google Drive token error: {str(e)}")
+        return Response({'error': str(e)}, status=500)

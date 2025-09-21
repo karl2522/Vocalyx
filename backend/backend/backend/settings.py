@@ -212,6 +212,10 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
 ]
 
 GOOGLE_OAUTH2_CLIENT_ID = os.getenv('GOOGLE_OAUTH2_CLIENT_ID')
+GOOGLE_OAUTH2_CLIENT_SECRET = os.getenv('GOOGLE_OAUTH2_CLIENT_SECRET')
+
+# Google token encryption key (generate a new one for production)
+GOOGLE_TOKEN_ENCRYPTION_KEY = os.getenv('GOOGLE_TOKEN_ENCRYPTION_KEY')
 
 MICROSOFT_AUTH_CLIENT_ID = os.getenv('MICROSOFT_AUTH_CLIENT_ID')
 MICROSOFT_AUTH_TENANT_ID = 'common'
@@ -346,6 +350,8 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field

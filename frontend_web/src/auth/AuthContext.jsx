@@ -171,18 +171,29 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const handleAuthResponse = async (idToken, accessToken = null) => {
+  const handleAuthResponse = async (idToken, accessToken = null, mode = 'login', refreshToken = null, expiresIn = null) => {
     try {
-      console.log('Sending auth request with tokens');
+      console.log(`Sending ${mode} request with tokens to backend`);
         
       const requestBody = {
         id_token: idToken,
+        mode: mode, // 'login' or 'signup'
       };
 
       // Include access token if available (for Drive API access)
       if (accessToken) {
         requestBody.access_token = accessToken;
       }
+
+      // Include refresh token and expiry info for Google Drive connection
+      if (refreshToken) {
+        requestBody.refresh_token = refreshToken;
+      }
+      if (expiresIn) {
+        requestBody.expires_in = expiresIn;
+      }
+
+      console.log('Request body:', requestBody);
 
       const response = await fetch(`${BACKEND_URL}/api/firebase-auth/`, {
         method: 'POST',
@@ -192,7 +203,7 @@ export const AuthProvider = ({ children }) => {
         body: JSON.stringify(requestBody),
         credentials: 'include',
       });
-  
+
       const data = await response.json();
       console.log('Auth response:', data);
       
@@ -213,15 +224,90 @@ export const AuthProvider = ({ children }) => {
         
         return data;
       } else {
-        throw new Error(data.error || 'Authentication failed');
+        // Preserve the backend error message
+        const errorMessage = data.error || data.detail || 'Authentication failed';
+        console.error(`Backend ${mode} error:`, errorMessage);
+        throw new Error(errorMessage);
       }
     } catch (error) {
       console.error('Authentication error:', error);
-      throw error;
+      // If it's already an Error object with a message, preserve it
+      if (error instanceof Error) {
+        throw error;
+      }
+      // Otherwise, create a new error with the message
+      throw new Error(error.message || 'Authentication failed');
     }
   };
 
   const googleLogin = async () => {
+    try {
+      // Sign in with Firebase using popup with additional scopes for Google Drive
+      const result = await signInWithPopup(auth, googleProvider);
+      
+      // Get the user's ID token
+      const idToken = await result.user.getIdToken();
+      
+      // Get the Google access token from the credential
+      const credential = result._tokenResponse || result.credential;
+      const accessToken = credential?.oauthAccessToken || credential?.accessToken;
+      
+      // Get additional token info for Google Drive access
+      let refreshToken = null;
+      let expiresIn = 3600; // Default 1 hour
+      
+      // Try to get refresh token using Google OAuth2
+      try {
+        // Get the Google credential from the result
+        const googleCredential = GoogleAuthProvider.credentialFromResult(result);
+        if (googleCredential?.accessToken) {
+          // Use Google's tokeninfo endpoint to get token details
+          const tokenInfoResponse = await fetch(`https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${googleCredential.accessToken}`);
+          if (tokenInfoResponse.ok) {
+            const tokenInfo = await tokenInfoResponse.json();
+            refreshToken = googleCredential.accessToken; // Use access token as refresh token for Firebase
+            expiresIn = tokenInfo.expires_in || 3600;
+          }
+        }
+      } catch (tokenError) {
+        console.warn('Could not get additional token info:', tokenError);
+        // Fallback: use access token as refresh token
+        if (accessToken) {
+          refreshToken = accessToken;
+        }
+      }
+      
+      console.log('Firebase auth successful:', {
+        user: result.user,
+        hasIdToken: !!idToken,
+        hasAccessToken: !!accessToken,
+        hasRefreshToken: !!refreshToken,
+        expiresIn
+      });
+
+      // Send tokens to backend for login (will automatically establish Google Drive connection)
+      return await handleAuthResponse(idToken, accessToken, 'login', refreshToken, expiresIn);
+    } catch (error) {
+      console.error('Firebase Google login error:', error);
+      
+      // Handle specific Firebase auth errors (these happen before backend call)
+      if (error.code === 'auth/popup-closed-by-user') {
+        throw new Error('Sign-in was cancelled. Please try again.');
+      } else if (error.code === 'auth/popup-blocked') {
+        throw new Error('Popup was blocked by browser. Please allow popups and try again.');
+      } else if (error.code === 'auth/cancelled-popup-request') {
+        throw new Error('Another sign-in popup is already open');
+      } else if (error.code && error.code.startsWith('auth/')) {
+        // Other Firebase auth errors
+        throw new Error(`Firebase authentication error: ${error.message}`);
+      }
+      
+      // If it's not a Firebase error, it's likely a backend error - preserve the message
+      throw error;
+    }
+  };
+
+  const googleSignup = async () => {
     try {
       // Sign in with Firebase using popup
       const result = await signInWithPopup(auth, googleProvider);
@@ -233,26 +319,57 @@ export const AuthProvider = ({ children }) => {
       const credential = result._tokenResponse || result.credential;
       const accessToken = credential?.oauthAccessToken || credential?.accessToken;
       
-      console.log('Firebase auth successful:', {
+      // Get additional token info for Google Drive access
+      let refreshToken = null;
+      let expiresIn = 3600; // Default 1 hour
+      
+      // Try to get refresh token and expiry info
+      try {
+        // Get the Google credential from the result
+        const googleCredential = GoogleAuthProvider.credentialFromResult(result);
+        if (googleCredential?.accessToken) {
+          // Use Google's tokeninfo endpoint to get token details
+          const tokenInfoResponse = await fetch(`https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${googleCredential.accessToken}`);
+          if (tokenInfoResponse.ok) {
+            const tokenInfo = await tokenInfoResponse.json();
+            refreshToken = googleCredential.accessToken; // Use access token as refresh token for Firebase
+            expiresIn = tokenInfo.expires_in || 3600;
+          }
+        }
+      } catch (tokenError) {
+        console.warn('Could not get additional token info:', tokenError);
+        // Fallback: use access token as refresh token
+        if (accessToken) {
+          refreshToken = accessToken;
+        }
+      }
+      
+      console.log('Firebase signup successful:', {
         user: result.user,
         hasIdToken: !!idToken,
-        hasAccessToken: !!accessToken
+        hasAccessToken: !!accessToken,
+        hasRefreshToken: !!refreshToken,
+        expiresIn
       });
 
-      // Send both tokens to backend
-      return await handleAuthResponse(idToken, accessToken);
+      // Send tokens to backend for signup (will create new user and establish Google Drive connection)
+      return await handleAuthResponse(idToken, accessToken, 'signup', refreshToken, expiresIn);
     } catch (error) {
-      console.error('Firebase Google login error:', error);
+      console.error('Firebase Google signup error:', error);
       
-      // Handle specific Firebase auth errors
+      // Handle specific Firebase auth errors (these happen before backend call)
       if (error.code === 'auth/popup-closed-by-user') {
-        throw new Error('Sign-in was cancelled');
+        throw new Error('Account creation was cancelled. Please try again to create your account.');
       } else if (error.code === 'auth/popup-blocked') {
         throw new Error('Popup was blocked by browser. Please allow popups and try again.');
       } else if (error.code === 'auth/cancelled-popup-request') {
-        throw new Error('Another sign-in popup is already open');
+        throw new Error('Another sign-up popup is already open');
+      } else if (error.code && error.code.startsWith('auth/')) {
+        // Other Firebase auth errors
+        throw new Error(`Firebase authentication error: ${error.message}`);
       }
       
+      // If it's not a Firebase error, it's likely a backend error - preserve the message
       throw error;
     }
   };
@@ -310,7 +427,8 @@ export const AuthProvider = ({ children }) => {
         value={{ 
           user, 
           loading, 
-          googleLogin, 
+          googleLogin,
+          googleSignup, 
           microsoftLogin, 
           logout,
           setUser,

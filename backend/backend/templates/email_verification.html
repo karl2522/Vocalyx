@@ -5,36 +5,183 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Email Verification - Vocalyx</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'inter': ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        'vocalyx': {
+                            'primary': '#333D79',
+                            'secondary': '#4A5BA3',
+                            'accent': '#10B981',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
 </head>
-<body class="bg-gray-50 min-h-screen flex items-center justify-center p-4">
-    <div class="max-w-md w-full bg-white rounded-2xl shadow-lg p-8 text-center">
+<body class="bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 min-h-screen flex items-center justify-center p-4 font-inter">
+    <div class="max-w-md w-full bg-white rounded-2xl shadow-lg overflow-hidden">
         {% if success %}
-        <div class="mb-6">
-            <div class="w-20 h-20 bg-green-100 rounded-full mx-auto flex items-center justify-center">
-                <svg class="w-10 h-10 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                </svg>
+        <!-- Success State -->
+        <div class="relative">
+            <!-- Header with gradient background -->
+            <div class="bg-gradient-to-r from-vocalyx-primary to-vocalyx-secondary px-6 py-8 text-center">
+                <div class="w-16 h-16 bg-white bg-opacity-20 rounded-xl mx-auto mb-4 flex items-center justify-center">
+                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2L2 7L12 12L22 7L12 2Z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2 17L12 22L22 17"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2 12L12 17L22 12"/>
+                    </svg>
+                </div>
+                <h1 class="text-2xl font-bold text-white mb-1">Vocalyx</h1>
+                <p class="text-blue-100 text-sm">Email Verification Complete</p>
+            </div>
+            
+            <!-- Success Content -->
+            <div class="px-6 py-8 text-center">
+                <!-- Success Icon -->
+                <div class="w-20 h-20 bg-gradient-to-r from-green-400 to-emerald-500 rounded-full mx-auto mb-6 flex items-center justify-center shadow-lg">
+                    <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                </div>
+                
+                <h2 class="text-xl font-bold text-gray-900 mb-3">Email Verified Successfully!</h2>
+                <p class="text-gray-600 mb-6 text-sm">Your email address has been verified. You now have full access to all Vocalyx features.</p>
+                
+                <!-- Features Unlocked -->
+                <div class="bg-green-50 border border-green-200 rounded-xl p-4 mb-6">
+                    <h3 class="text-sm font-semibold text-gray-900 mb-3 flex items-center justify-center">
+                        <svg class="w-4 h-4 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        Features Unlocked
+                    </h3>
+                    <div class="space-y-2 text-xs">
+                        <div class="flex items-center text-gray-700">
+                            <svg class="w-3 h-3 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
+                            </svg>
+                            Voice recording and transcription
+                        </div>
+                        <div class="flex items-center text-gray-700">
+                            <svg class="w-3 h-3 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"/>
+                            </svg>
+                            Google Drive integration
+                        </div>
+                        <div class="flex items-center text-gray-700">
+                            <svg class="w-3 h-3 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                            Class record management
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Action Button -->
+                <a href="http://localhost:5173/login" class="inline-flex items-center bg-gradient-to-r from-vocalyx-primary to-vocalyx-secondary hover:from-vocalyx-secondary hover:to-vocalyx-primary text-white font-semibold px-6 py-3 rounded-lg transition-colors duration-200 shadow-md hover:shadow-lg">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/>
+                    </svg>
+                    Continue to Login
+                </a>
+                
+                <!-- Security Notice -->
+                <div class="mt-6 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p class="text-xs text-blue-800 flex items-center justify-center">
+                        <svg class="w-3 h-3 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                        </svg>
+                        Your account is now secure and ready to use
+                    </p>
+                </div>
             </div>
         </div>
-        <h1 class="text-3xl font-bold text-gray-900 mb-4">Email Verified!</h1>
-        <p class="text-gray-600 mb-8">Your email has been successfully verified. You can now log in to your account.</p>
-        <a href="http://localhost:5173/login" class="inline-block bg-[#333D79] hover:bg-[#2B3377] text-white font-semibold px-6 py-3 rounded-lg transition duration-200">
-            Go to Login
-        </a>
+        
         {% else %}
-        <div class="mb-6">
-            <div class="w-20 h-20 bg-red-100 rounded-full mx-auto flex items-center justify-center">
-                <svg class="w-10 h-10 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                </svg>
+        <!-- Error State -->
+        <div class="relative">
+            <!-- Header with gradient background -->
+            <div class="bg-gradient-to-r from-red-500 to-red-600 px-6 py-8 text-center">
+                <div class="w-16 h-16 bg-white bg-opacity-20 rounded-xl mx-auto mb-4 flex items-center justify-center">
+                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2L2 7L12 12L22 7L12 2Z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2 17L12 22L22 17"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2 12L12 17L22 12"/>
+                    </svg>
+                </div>
+                <h1 class="text-2xl font-bold text-white mb-1">Vocalyx</h1>
+                <p class="text-red-100 text-sm">Verification Error</p>
+            </div>
+            
+            <!-- Error Content -->
+            <div class="px-6 py-8 text-center">
+                <!-- Error Icon -->
+                <div class="w-20 h-20 bg-gradient-to-r from-red-400 to-red-500 rounded-full mx-auto mb-6 flex items-center justify-center shadow-lg">
+                    <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </div>
+                
+                <h2 class="text-xl font-bold text-gray-900 mb-3">Verification Failed</h2>
+                <p class="text-gray-600 mb-6 text-sm">{{ error_message }}</p>
+                
+                <!-- Help Section -->
+                <div class="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-6">
+                    <h3 class="text-sm font-semibold text-gray-900 mb-3 flex items-center justify-center">
+                        <svg class="w-4 h-4 text-orange-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 18.5c-.77.833.192 2.5 1.732 2.5z"/>
+                        </svg>
+                        What you can do:
+                    </h3>
+                    <div class="space-y-2 text-xs text-left">
+                        <div class="flex items-start text-gray-700">
+                            <svg class="w-3 h-3 text-orange-500 mr-2 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            <span>Check if the verification link has expired (links expire after 24 hours)</span>
+                        </div>
+                        <div class="flex items-start text-gray-700">
+                            <svg class="w-3 h-3 text-orange-500 mr-2 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                            </svg>
+                            <span>Make sure you're using the most recent verification email</span>
+                        </div>
+                        <div class="flex items-start text-gray-700">
+                            <svg class="w-3 h-3 text-orange-500 mr-2 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192L5.636 18.364M12 12h.01M12 12v.01"/>
+                            </svg>
+                            <span>Try creating a new account if the problem persists</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Action Button -->
+                <a href="http://localhost:5173/signup" class="inline-flex items-center bg-gradient-to-r from-vocalyx-primary to-vocalyx-secondary hover:from-vocalyx-secondary hover:to-vocalyx-primary text-white font-semibold px-6 py-3 rounded-lg transition-colors duration-200 shadow-md hover:shadow-lg">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
+                    </svg>
+                    Create New Account
+                </a>
+                
+                <!-- Support Notice -->
+                <div class="mt-6 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                    <p class="text-xs text-gray-600 flex items-center justify-center">
+                        <svg class="w-3 h-3 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        Need help? Contact our support team
+                    </p>
+                </div>
             </div>
         </div>
-        <h1 class="text-3xl font-bold text-gray-900 mb-4">Verification Failed</h1>
-        <p class="text-gray-600 mb-8">{{ error_message }}</p>
-        <a href="http://localhost:5173/signup" class="inline-block bg-[#333D79] hover:bg-[#2B3377] text-white font-semibold px-6 py-3 rounded-lg transition duration-200">
-            Back to Sign Up
-        </a>
         {% endif %}
     </div>
 </body>

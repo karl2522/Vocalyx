@@ -1,28 +1,30 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { ArrowLeft, BarChart3, ChevronDown, Download, FileSpreadsheet, FileText, HelpCircle, Mic, MicOff, MoreVertical, Upload, Users, X, Plus, Edit, Trash2 } from 'lucide-react';
+import { ArrowLeft, BarChart3, ChevronDown, Download, Edit, FileSpreadsheet, FileText, HelpCircle, Mic, MicOff, MoreVertical, Plus, Trash2, Upload, Users, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useNavigate, useParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { classRecordService } from '../services/api';
+import googleDriveService from '../services/googleDriveService';
 import { speakText, stopSpeaking } from '../utils/speechSynthesis';
 import useVoiceRecognition from '../utils/useVoiceRecognition';
-import { findStudentRowSmart, parseVoiceCommand, applyPhoneticCorrections, cleanName} from '../utils/voicecommandParser';
+import { applyPhoneticCorrections, cleanName, findStudentRowSmart, parseVoiceCommand } from '../utils/voicecommandParser';
+import AddCategoryModal from './modals/AddCategoryModal.jsx';
 import BatchGradingModal from './modals/BatchGradingModal';
 import ColumnMappingModal from './modals/ColumnMappingModal';
+import DeleteCategoryModal from './modals/DeleteCategoryModal.jsx';
+import DeleteStudentModal from './modals/DeleteStudentModal.jsx';
+import DriveFilePickerModal from './modals/DriveFilePickerModal.jsx';
+import DuplicateStudentModal from './modals/DuplicateStudentModal.jsx';
+import EditCategoryModal from './modals/EditCategoryModal.jsx';
 import ImportProgressIndicator from './modals/ImportProgressIndicator';
+import ImportScoresInfoModal from './modals/ImportScoresInfoModal.jsx';
+import ImportStudentsInfoModal from './modals/ImportStudentsInfoModal.jsx';
 import ImportStudentsModal from './modals/ImportStudentsModal';
 import OverrideConfirmationModal from './modals/OverrideConfirmationModal';
-import VoiceGuideModal from './modals/VoiceGuideModal';
-import DuplicateStudentModal from './modals/DuplicateStudentModal.jsx';
-import ImportStudentsInfoModal from './modals/ImportStudentsInfoModal.jsx';
-import ImportScoresInfoModal from './modals/ImportScoresInfoModal.jsx';
 import StudentConfirmationModal from './modals/StudentConfirmationModal.jsx';
-import DeleteStudentModal from './modals/DeleteStudentModal.jsx';
-import AddCategoryModal from './modals/AddCategoryModal.jsx';
-import DeleteCategoryModal from './modals/DeleteCategoryModal.jsx';
-import EditCategoryModal from './modals/EditCategoryModal.jsx';
+import VoiceGuideModal from './modals/VoiceGuideModal';
 
 const ClassRecordExcel = () => {
   const { id } = useParams();
@@ -83,6 +85,10 @@ const ClassRecordExcel = () => {
   const [showSheetSelector, setShowSheetSelector] = useState(false);
 
   const [overrideConfirmation, setOverrideConfirmation] = useState(null);
+
+  // Drive file picker state
+  const [showDriveFilePicker, setShowDriveFilePicker] = useState(false);
+  const [importType, setImportType] = useState('students'); // 'students' or 'scores'
 
   const { 
     isListening, 
@@ -604,22 +610,15 @@ const ClassRecordExcel = () => {
   };
 
   const handleImportScores = () => {
-    // Create hidden file input for scores
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.xlsx,.xls,.csv';
-    input.style.display = 'none';
+    // Check if user has Google Drive access
+    if (!googleDriveService.hasGoogleAccess()) {
+      toast.error('Please sign in with Google to access Drive files');
+      return;
+    }
     
-    input.onchange = async (event) => {
-      const file = event.target.files[0];
-      if (file) {
-        await processScoresImportFile(file);
-      }
-    };
-    
-    document.body.appendChild(input);
-    input.click();
-    document.body.removeChild(input);
+    // Set import type and open Drive file picker
+    setImportType('scores');
+    setShowDriveFilePicker(true);
   };
 
   const processScoresImportFile = async (file) => {
@@ -1768,22 +1767,15 @@ const handleBatchRowRangeCommand = async (data) => {
 };
 
 const handleImportStudents = () => {
-  // Create hidden file input
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.xlsx,.xls,.csv';
-  input.style.display = 'none';
+  // Check if user has Google Drive access
+  if (!googleDriveService.hasGoogleAccess()) {
+    toast.error('Please sign in with Google to access Drive files');
+    return;
+  }
   
-  input.onchange = async (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      await processImportFile(file);
-    }
-  };
-  
-  document.body.appendChild(input);
-  input.click();
-  document.body.removeChild(input);
+  // Set import type and open Drive file picker
+  setImportType('students');
+  setShowDriveFilePicker(true);
 };
 
 const processImportFile = async (file) => {
@@ -1878,6 +1870,39 @@ const processImportFile = async (file) => {
   } catch (error) {
     console.error('Import error:', error);
     toast.error(`Import failed: ${error.message}`);
+    setImportProgress(null);
+  }
+};
+
+// Handle Drive file selection and processing
+const handleDriveFileSelect = async (driveFile) => {
+  try {
+    setImportProgress({ status: 'downloading', message: 'Downloading file from Drive...' });
+    
+    // Download file from Drive
+    const response = await fetch(`${import.meta.env.NODE_ENV === 'production' 
+      ? 'https://vocalyx-c61a072bf25a.herokuapp.com' 
+      : 'http://127.0.0.1:8000'}/api/drive/download/${driveFile.id}/`, {
+      headers: googleDriveService.getHeaders()
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Download failed: ${response.status} ${response.statusText}`);
+    }
+    
+    const blob = await response.blob();
+    const file = new File([blob], driveFile.name, { type: blob.type });
+    
+    // Process based on import type
+    if (importType === 'students') {
+      await processImportFile(file);
+    } else if (importType === 'scores') {
+      await processScoresImportFile(file);
+    }
+    
+  } catch (error) {
+    console.error('Drive file processing error:', error);
+    toast.error(`Failed to process Drive file: ${error.message}`);
     setImportProgress(null);
   }
 };
@@ -4226,6 +4251,14 @@ const handleExportToPDF = async () => {
 
          <ImportProgressIndicator 
           importProgress={importProgress}
+        />
+
+        {/* Google Drive File Picker Modal */}
+        <DriveFilePickerModal
+          isOpen={showDriveFilePicker}
+          onClose={() => setShowDriveFilePicker(false)}
+          onFileSelect={handleDriveFileSelect}
+          importType={importType}
         />
 
         {/* 📖 Voice Guide Modal */}

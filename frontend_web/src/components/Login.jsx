@@ -1,20 +1,37 @@
-import { useMsal } from "@azure/msal-react";
+// import { useMsal } from "@azure/msal-react";
 import * as Checkbox from "@radix-ui/react-checkbox";
 import { useEffect, useState } from "react";
 import { FaCheck, FaEnvelope, FaLock } from "react-icons/fa";
 import { FcGoogle } from "react-icons/fc";
+import { IoEye, IoEyeOff } from "react-icons/io5";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { login } from "../services/api";
-import { microsoft } from "../utils";
+// import { microsoft } from "../utils";
 import { showToast } from "../utils/toast.jsx";
 import LogoutReasonModal from "./modals/LogoutReasonModal.jsx";
 import SessionTimeoutModal from "./modals/SessionTimeoutModal.jsx";
 
 function Login() {
-    const { instance } = useMsal();
+    // const { instance } = useMsal();
     const navigate = useNavigate();
     const { googleLogin, setUser, showSessionTimeoutModal, handleStayLoggedIn, handleLogout } = useAuth();
+
+    // CSS to disable browser's built-in password toggle
+    const passwordToggleStyles = `
+      input[type="password"]::-webkit-textfield-decoration-container {
+        display: none !important;
+      }
+      input[type="password"]::-webkit-credentials-auto-fill-button {
+        display: none !important;
+      }
+      input[type="password"]::-ms-reveal {
+        display: none !important;
+      }
+      input[type="password"]::-ms-clear {
+        display: none !important;
+      }
+    `;
     const [formData, setFormData] = useState({
       email: "",
       password: "",
@@ -22,6 +39,7 @@ function Login() {
     });
     const [loading, setLoading] = useState(false);
     const [googleLoading, setGoogleLoading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
 
     const handleChange = (e) => {
       const { id, value} = e.target;
@@ -57,52 +75,55 @@ function Login() {
         }
       } catch (error) {
         console.error('Google login error:', error);
+        console.error('Error message:', error.message);
+        console.error('Error type:', typeof error);
+        console.error('Error object:', error);
         showToast.error(error.message || "Google login failed");
       } finally {
         setGoogleLoading(false);
       }
     };
 
-    const handleMicrosoftLogin = async () => {
-      try {
-        const loginRequest = {
-          scopes: ["User.Read", "profile", "email", "openid"],
-          prompt: "select_account"
-        };
+    // const handleMicrosoftLogin = async () => {
+    //   try {
+    //     const loginRequest = {
+    //       scopes: ["User.Read", "profile", "email", "openid"],
+    //       prompt: "select_account"
+    //     };
 
-        const response = await instance.loginPopup(loginRequest);
-        console.log('Microsoft auth response:', response);
+    //     const response = await instance.loginPopup(loginRequest);
+    //     console.log('Microsoft auth response:', response);
 
-        if (response.accessToken) {
-          const res = await fetch('http://127.0.0.1:8000/api/auth/microsoft/', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              access_token: response.accessToken,
-              id_token: response.idToken
-            }),
-          });
+    //     if (response.accessToken) {
+    //       const res = await fetch('http://127.0.0.1:8000/api/auth/microsoft/', {
+    //         method: 'POST',
+    //         headers: {
+    //           'Content-Type': 'application/json',
+    //         },
+    //         body: JSON.stringify({
+    //           access_token: response.accessToken,
+    //           id_token: response.idToken
+    //         }),
+    //       });
 
-          const data = await res.json();
-          if (res.ok) {
-            // Update these lines to match your Google login storage pattern
-            localStorage.setItem('authToken', data.token); // Changed from 'token' to 'authToken'
-            localStorage.setItem('refreshToken', data.refresh); // Add this line if your backend sends refresh token
-            localStorage.setItem('user', JSON.stringify(data.user));
-            setUser(data.user); // Add this line to update context
-            showToast.success("Microsoft login successful!");
-            navigate("/class-records");
-          } else {
-            throw new Error(data.error || 'Microsoft login failed');
-          }
-        }
-      } catch (error) {
-        console.error('Microsoft login error:', error);
-        showToast.error(error.message || "Microsoft login failed");
-      }
-    };
+    //       const data = await res.json();
+    //       if (res.ok) {
+    //         // Update these lines to match your Google login storage pattern
+    //         localStorage.setItem('authToken', data.token); // Changed from 'token' to 'authToken'
+    //         localStorage.setItem('refreshToken', data.refresh); // Add this line if your backend sends refresh token
+    //         localStorage.setItem('user', JSON.stringify(data.user));
+    //         setUser(data.user); // Add this line to update context
+    //         showToast.success("Microsoft login successful!");
+    //         navigate("/class-records");
+    //       } else {
+    //         throw new Error(data.error || 'Microsoft login failed');
+    //       }
+    //     }
+    //   } catch (error) {
+    //     console.error('Microsoft login error:', error);
+    //     showToast.error(error.message || "Microsoft login failed");
+    //   }
+    // };
 
 
     const handleSubmit = async (e) => {
@@ -144,20 +165,22 @@ function Login() {
     };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white to-gray-100 flex items-center justify-center p-4 sm:p-6 md:p-8">
+    <>
+      <style dangerouslySetInnerHTML={{ __html: passwordToggleStyles }} />
+      <div className="min-h-screen bg-gradient-to-br from-white to-gray-100 flex items-center justify-center p-4 sm:p-6 md:p-8">
       <div className="w-full max-w-6xl flex overflow-hidden rounded-2xl sm:rounded-3xl shadow-xl sm:shadow-2xl">
         {/* Left side - Login Form */}
-        <div className="w-full md:w-1/2 bg-white p-5 sm:p-8 md:p-10 flex flex-col">
-          <div className="mb-4 sm:mb-6">
-            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#333D79]">
+        <div className="w-full md:w-1/2 bg-white p-6 sm:p-10 md:p-12 flex flex-col justify-center">
+          <div className="mb-8 sm:mb-10">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-[#333D79] mb-3">
               Welcome to <span className="text-[#2B3377]">Vocalyx</span>
             </h1>
-            <p className="text-sm sm:text-base text-gray-600 mt-1 sm:mt-2">Sign in to continue to your account</p>
+            <p className="text-base sm:text-lg text-gray-600 leading-relaxed">Sign in to continue to your account</p>
           </div>
 
           {/* Social Login Buttons */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 mb-5 sm:mb-6">
-            <div className="relative flex w-full h-10 sm:h-11">
+          <div className="flex justify-center mb-5 sm:mb-6">
+            <div className="relative flex w-full max-w-xs h-10 sm:h-11">
               {/* Custom styled button that visually appears to users */}
               <button
                 type="button"
@@ -170,12 +193,13 @@ function Login() {
                 ) : (
                   <>
                     <FcGoogle className="w-4 h-4 sm:w-5 sm:h-5" />
-                    <span>Google</span>
+                    <span>Continue with Google</span>
                   </>
                 )}
               </button>
             </div>
-            <button 
+            {/* Microsoft button commented out */}
+            {/* <button 
               onClick={handleMicrosoftLogin}
               className="h-10 sm:h-11 flex items-center justify-center gap-2 py-2 px-3 sm:px-4 bg-white border border-gray-300 rounded-lg shadow-md text-sm sm:text-base hover:bg-gray-50 transition-colors"
             >
@@ -185,7 +209,7 @@ function Login() {
                 className="w-4 h-4 sm:w-5 sm:h-5" 
               />
               <span>Microsoft</span>
-            </button>
+            </button> */}
           </div>
 
           <div className="relative my-5 sm:my-6">
@@ -229,13 +253,25 @@ function Login() {
                 </div>
                 <input
                   id="password"
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   value={formData.password}
                   onChange={handleChange}
                   placeholder="••••••••"
                   required
-                  className="w-full pl-9 sm:pl-10 pr-3 sm:pr-4 py-2 sm:py-2.5 text-sm sm:text-base text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#333D79] focus:border-transparent"
+                  autoComplete="current-password"
+                  className="w-full pl-9 sm:pl-10 pr-12 py-2 sm:py-2.5 text-sm sm:text-base text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#333D79] focus:border-transparent"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 sm:pr-4 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  {showPassword ? (
+                    <IoEyeOff className="h-4 w-4 sm:h-5 sm:w-5" />
+                  ) : (
+                    <IoEye className="h-4 w-4 sm:h-5 sm:w-5" />
+                  )}
+                </button>
               </div>
             </div>
 
@@ -333,7 +369,8 @@ function Login() {
         onClose={() => setShowLogoutModal(false)}
         reason={logoutReason}
       />
-    </div>
+      </div>
+    </>
   );
 }
 export default Login

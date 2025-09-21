@@ -84,13 +84,20 @@ class GoogleDriveService:
             # Build query string
             query_parts = []
             if query:
-                query_parts.append(f"name contains '{query}'")
+                # If query contains mimeType, use it as-is (it's already a proper Drive API query)
+                if 'mimeType' in query:
+                    query_parts.append(query)
+                else:
+                    # Otherwise, treat it as a name search
+                    query_parts.append(f"name contains '{query}'")
             if folder_id:
                 query_parts.append(f"'{folder_id}' in parents")
             
             if query_parts:
                 params['q'] = ' and '.join(query_parts)
+                logger.info(f"Drive API query: {params['q']}")
             
+            logger.info(f"Drive API request params: {params}")
             response = requests.get(
                 f"{self.DRIVE_API_BASE_URL}/files",
                 headers=self.headers,
@@ -104,6 +111,7 @@ class GoogleDriveService:
                     'files': response.json().get('files', [])
                 }
             else:
+                logger.error(f"Drive API error {response.status_code}: {response.text}")
                 return {
                     'success': False,
                     'error': f'Failed to list files: {response.status_code}',

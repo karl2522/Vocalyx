@@ -17,6 +17,12 @@ class CustomUser(AbstractUser):
     institution = models.CharField(max_length=255, default="Cebu Institute of Technology - University")
     position = models.CharField(max_length=255, default="Teacher/Instructor")
     bio = models.TextField(blank=True, null=True)
+    
+    # Google Drive integration fields
+    google_access_token = models.TextField(null=True, blank=True)  # Encrypted
+    google_refresh_token = models.TextField(null=True, blank=True)  # Encrypted
+    google_token_expires_at = models.DateTimeField(null=True, blank=True)
+    google_connected_at = models.DateTimeField(null=True, blank=True)
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username', 'first_name', 'last_name']
@@ -38,6 +44,30 @@ class CustomUser(AbstractUser):
     @property
     def has_microsoft(self):
         return self.microsoft_id is not None and self.microsoft_id != ''
+    
+    @property
+    def has_google_drive(self):
+        """Check if user has valid Google Drive connection with non-expired tokens"""
+        # For Google-authenticated users, they have Drive access via their Google login
+        if self.has_google:
+            return True
+        
+        # For email users, they need stored tokens
+        if not self.google_access_token or not self.google_refresh_token:
+            return False
+        if not self.google_token_expires_at:
+            return False
+        return self.google_token_expires_at > timezone.now()
+    
+    @property
+    def google_drive_connected(self):
+        """Check if user has ever connected Google Drive (even if tokens are expired)"""
+        # For Google-authenticated users, they are automatically connected
+        if self.has_google:
+            return True
+        
+        # For email users, check if they have stored tokens
+        return self.google_access_token is not None and self.google_connected_at is not None
 
 
 class UserActivity(models.Model):

@@ -1,20 +1,20 @@
 "use client"
 
 import {
-  ChevronUp,
-  CornerLeftDown,
-  CornerRightDown,
-  Menu,
-  X,
-  Instagram,
-  Github,
-  Linkedin,
-  Mail,
-  Phone,
-  MapPin,
+    ChevronUp,
+    CornerLeftDown,
+    CornerRightDown,
+    Github,
+    Instagram,
+    Linkedin,
+    Mail,
+    MapPin,
+    Menu,
+    Phone,
+    X,
 } from "lucide-react"
+import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
-import { useState, useEffect } from "react"
 import { about, capuras, chavez, export1, gadiane, logo, microphone, notes, omen, pejana, sync, voice } from "../utils"
 
 function LandingPage() {
@@ -293,240 +293,167 @@ function LandingPage() {
               </div>
             </div>
 
-            {/* Right Column - Phone Mockup */}
+            {/* Right Column - Dashboard Preview */}
             <div className="relative w-full h-full flex justify-center md:justify-end items-center order-1 md:order-2 pr-0 sm:pr-6 md:pr-12 lg:pr-20">
-              {/* iPhone style device */}
-              <div className="relative border-[8px] sm:border-[10px] md:border-[12px] border-black rounded-[30px] md:rounded-[40px] h-[400px] sm:h-[500px] md:h-[560px] lg:h-[640px] w-[200px] sm:w-[250px] md:w-[280px] lg:w-[310px] shadow-xl">
-                {/* Screen content */}
-                <div className="relative h-full w-full bg-white overflow-hidden rounded-[22px] md:rounded-[28px] shadow-inner">
-                  {/* Status bar */}
-                  <div className="h-5 sm:h-6 md:h-7 bg-[#333D79] flex justify-between items-center px-2 sm:px-3 md:px-4">
-                    <div className="flex items-center h-full">
-                      <span className="text-white text-[10px] sm:text-xs font-medium">9:41</span>
-                    </div>
-                    <div className="w-[80px] sm:w-[100px] md:w-[120px] h-4 sm:h-5 md:h-6 bg-black absolute left-1/2 top-0 transform -translate-x-1/2 rounded-b-[10px] sm:rounded-b-[12px] md:rounded-b-[14px] flex items-center justify-center">
-                      <div className="w-10 sm:w-12 md:w-16 h-1 sm:h-1.5 rounded-full bg-gray-800"></div>
-                    </div>
-                    <div className="flex space-x-1 sm:space-x-2">
-                      <svg
-                          className="w-2.5 h-2.5 sm:w-3 sm:h-3 md:w-3.5 md:h-3.5 text-white"
-                          fill="currentColor"
-                          viewBox="0 0 24 24"
-                      >
-                        <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.4 0-8-3.6-8-8s3.6-8 8-8 8 3.6 8 8-3.6 8-8 8z" />
-                      </svg>
-                      <svg
-                          className="w-2.5 h-2.5 sm:w-3 sm:h-3 md:w-3.5 md:h-3.5 text-white"
-                          fill="currentColor"
-                          viewBox="0 0 24 24"
-                      >
-                        <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.4 0-8-3.6-8-8s3.6-8 8-8 8 3.6 8 8-3.6 8-8 8z" />
-                      </svg>
-                      <svg
-                          className="w-2.5 h-2.5 sm:w-3 sm:h-3 md:w-3.5 md:h-3.5 text-white"
-                          fill="currentColor"
-                          viewBox="0 0 24 24"
-                      >
-                        <path d="M16 2H8C4.7 2 2 4.7 2 8v8c0 3.3 2.7 6 6 6h8c3.3 0 6-2.7 6-6V8c0-3.3-2.7-6-6-6z" />
-                      </svg>
+              {/* Dashboard Preview Container */}
+              <div className="relative w-full max-w-md lg:max-w-lg xl:max-w-xl bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
+                {/* Browser Header */}
+                <div className="h-8 bg-gray-100 border-b border-gray-200 flex items-center px-3">
+                  <div className="flex space-x-2">
+                    <div className="w-3 h-3 bg-red-400 rounded-full"></div>
+                    <div className="w-3 h-3 bg-yellow-400 rounded-full"></div>
+                    <div className="w-3 h-3 bg-green-400 rounded-full"></div>
+                  </div>
+                  <div className="flex-1 mx-4">
+                    <div className="bg-white rounded-md px-3 py-1 text-xs text-gray-500 text-center">
+                      vocalyx.com/dashboard
                     </div>
                   </div>
-
-                  {/* App header with gradient */}
-                  <div className="bg-[#333D79] px-3 sm:px-4 md:px-5 pt-2 sm:pt-2.5 md:pt-3 pb-3 sm:pb-3.5 md:pb-4">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <h3 className="text-white font-bold text-base sm:text-lg md:text-xl">Vocalyx</h3>
-                        <p className="text-white/80 text-xs sm:text-sm">Welcome back, Teacher</p>
-                      </div>
-                      <div className="h-7 w-7 sm:h-8 sm:w-8 md:h-10 md:w-10 bg-white rounded-full flex items-center justify-center shadow-md">
-                        <svg
-                            className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5 text-[#333D79]"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                        >
-                          <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth="2"
-                              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                          />
-                        </svg>
-                      </div>
-                    </div>
-
-                    {/* Search bar */}
-                    <div className="mt-2 sm:mt-2.5 md:mt-3 relative">
-                      <div className="absolute inset-y-0 left-0 pl-2 sm:pl-2.5 md:pl-3 flex items-center pointer-events-none">
-                        <svg
-                            className="w-3 h-3 sm:w-3.5 sm:h-3.5 md:w-4 md:h-4 text-gray-400"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                        >
-                          <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth="2"
-                              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                          />
-                        </svg>
-                      </div>
-                      <div className="block w-full pl-7 sm:pl-8 md:pl-10 pr-2 sm:pr-2.5 md:pr-3 py-1.5 sm:py-2 md:py-2.5 border border-gray-200 rounded-lg text-xs sm:text-sm bg-white shadow-sm text-gray-400">
-                        Search classes...
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* App content */}
-                  <div className="px-3 sm:px-4 md:px-5 py-2 sm:py-3 md:py-4">
-                    <div className="flex justify-between items-center mb-2 sm:mb-2.5 md:mb-3">
-                      <h3 className="font-semibold text-black text-xs sm:text-sm md:text-base">My Classes</h3>
-                      <span className="text-[#333D79] text-[10px] sm:text-xs font-medium">View All</span>
-                    </div>
-
-                    {/* Class cards */}
-                    <div className="space-y-2 sm:space-y-2.5 md:space-y-3">
-                      {/* Class Card 1 */}
-                      <div className="bg-gray-50 p-2 sm:p-2.5 md:p-3 rounded-xl border border-gray-200 shadow-sm">
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <h4 className="font-medium text-black text-xs sm:text-sm">Computer Programming</h4>
-                            <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1">BSIT-2A • 35 students</p>
-                          </div>
-                          <div className="bg-[#333D79]/10 h-6 w-6 sm:h-7 sm:w-7 md:h-8 md:w-8 rounded-full flex items-center justify-center">
-                            <svg
-                                className="w-3 h-3 sm:w-3.5 sm:h-3.5 md:w-4 md:h-4 text-[#333D79]"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                            >
-                              <path
-                                  d="M9 6h11l-4 4m0 0l4 4H9"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                              />
-                            </svg>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Class Card 2 */}
-                      <div className="bg-gray-50 p-2 sm:p-2.5 md:p-3 rounded-xl border border-gray-200 shadow-sm">
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <h4 className="font-medium text-black text-xs sm:text-sm">Database Systems</h4>
-                            <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1">BSIT-3B • 28 students</p>
-                          </div>
-                          <div className="bg-[#333D79]/10 h-6 w-6 sm:h-7 sm:w-7 md:h-8 md:w-8 rounded-full flex items-center justify-center">
-                            <svg
-                                className="w-3 h-3 sm:w-3.5 sm:h-3.5 md:w-4 md:h-4 text-[#333D79]"
-                                fill="currentColor"
-                                viewBox="0 0 20 20"
-                            >
-                              <path d="M3 12v3c0 1.657 3.134 3 7 3s7-1.343 7-3v-3c0 1.657-3.134 3-7 3s-7-1.343-7-3z" />
-                              <path d="M3 7v3c0 1.657 3.134 3 7 3s7-1.343 7-3V7c0 1.657-3.134 3-7 3S3 8.657 3 7z" />
-                              <path d="M17 5c0 1.657-3.134 3-7 3S3 6.657 3 5s3.134-3 7-3z" />
-                            </svg>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Class Card 3 */}
-                      <div className="bg-gray-50 p-2 sm:p-2.5 md:p-3 rounded-xl border border-gray-200 shadow-sm">
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <h4 className="font-medium text-black text-xs sm:text-sm">Web Development</h4>
-                            <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1">BSIT-3A • 32 students</p>
-                          </div>
-                          <div className="bg-[#333D79] h-6 w-6 sm:h-7 sm:w-7 md:h-8 md:w-8 rounded-full flex items-center justify-center">
-                            <svg
-                                className="w-3 h-3 sm:w-3.5 sm:h-3.5 md:w-4 md:h-4 text-white"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                            >
-                              <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth="2"
-                                  d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
-                              />
-                            </svg>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Bottom Navigation */}
-                  <div className="absolute bottom-0 left-0 right-0 h-10 sm:h-12 md:h-16 border-t border-gray-200 bg-white flex justify-around items-center px-1 sm:px-1.5 md:px-2">
-                    <div className="flex flex-col items-center">
-                      <svg
-                          className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5 text-[#333D79]"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                      >
-                        <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2"
-                            d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
-                        />
-                      </svg>
-                      <span className="text-[8px] sm:text-[10px] md:text-xs text-[#333D79] mt-0.5 md:mt-1">Home</span>
-                    </div>
-                    <div className="flex flex-col items-center opacity-60">
-                      <svg
-                          className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5 text-gray-500"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                      >
-                        <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2"
-                            d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-                        />
-                      </svg>
-                      <span className="text-[8px] sm:text-[10px] md:text-xs text-gray-500 mt-0.5 md:mt-1">Classes</span>
-                    </div>
-                    <div className="flex flex-col items-center opacity-60">
-                      <svg
-                          className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5 text-gray-500"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                      >
-                        <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2"
-                            d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37.588-.964.215-2.159-.64-2.77-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.964.588 2.159.215 2.77-.64z"
-                        />
-                        <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2"
-                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                        />
-                      </svg>
-                      <span className="text-[8px] sm:text-[10px] md:text-xs text-gray-500 mt-0.5 md:mt-1">Settings</span>
-                    </div>
-                  </div>
-
-                  {/* Home indicator */}
-                  <div className="absolute bottom-1 left-1/2 transform -translate-x-1/2 w-[60px] sm:w-[80px] md:w-[100px] h-[3px] sm:h-[4px] md:h-[5px] bg-black rounded-full"></div>
                 </div>
 
-                {/* Side buttons */}
-                <div className="absolute -right-[2px] top-[90px] sm:top-[110px] md:top-[130px] w-[3px] sm:w-[3px] md:w-[4px] h-[30px] sm:h-[35px] md:h-[45px] bg-[#222] rounded-l-lg"></div>
-                <div className="absolute -left-[2px] top-[70px] sm:top-[85px] md:top-[100px] w-[3px] sm:w-[3px] md:w-[4px] h-[25px] sm:h-[30px] md:h-[35px] bg-[#222] rounded-r-lg"></div>
-                <div className="absolute -left-[2px] top-[110px] sm:top-[130px] md:top-[150px] w-[3px] sm:w-[3px] md:w-[4px] h-[45px] sm:h-[55px] md:h-[65px] bg-[#222] rounded-r-lg"></div>
+                {/* Dashboard Content */}
+                <div className="bg-[#F5F7FB] p-4">
+                  {/* Header */}
+                  <div className="flex items-start justify-between mb-4">
+                    <div>
+                      <h2 className="text-lg font-bold text-gray-900 mb-1">Class Records</h2>
+                      <p className="text-sm text-gray-600">Manage and explore your academic records</p>
+                    </div>
+                    <button className="flex items-center gap-1.5 bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white px-3 py-1.5 rounded-lg text-sm font-medium">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      New Record
+                    </button>
+                  </div>
+
+                  {/* View Toggle */}
+                  <div className="flex items-center justify-start mb-4">
+                    <div className="flex bg-gray-100 rounded-lg p-1">
+                      <button className="p-1.5 rounded-md bg-white text-[#333D79] shadow-sm">
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                        </svg>
+                      </button>
+                      <button className="p-1.5 rounded-md text-gray-500">
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Records Grid */}
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Record Card 1 */}
+                    <div className="bg-white rounded-lg border border-gray-200 p-2.5">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-6 h-6 bg-gray-100 rounded flex items-center justify-center">
+                          <svg className="w-3 h-3 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                        <span className="text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded font-medium">Fall 2024</span>
+                      </div>
+                      <h3 className="font-medium text-gray-900 text-xs mb-1.5">Advanced Mathematics</h3>
+                      <div className="space-y-0.5 text-xs text-gray-500">
+                        <div className="flex items-center gap-1">
+                          <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                          </svg>
+                          <span>Prof. Johnson</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span>28 Students</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Record Card 2 */}
+                    <div className="bg-white rounded-lg border border-gray-200 p-2.5">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-6 h-6 bg-gray-100 rounded flex items-center justify-center">
+                          <svg className="w-3 h-3 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                        <span className="text-xs bg-green-50 text-green-700 px-1.5 py-0.5 rounded font-medium">Spring 2024</span>
+                      </div>
+                      <h3 className="font-medium text-gray-900 text-xs mb-1.5">Computer Science 101</h3>
+                      <div className="space-y-0.5 text-xs text-gray-500">
+                        <div className="flex items-center gap-1">
+                          <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                          </svg>
+                          <span>Dr. Smith</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span>35 Students</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Record Card 3 */}
+                    <div className="bg-white rounded-lg border border-gray-200 p-2.5">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-6 h-6 bg-gray-100 rounded flex items-center justify-center">
+                          <svg className="w-3 h-3 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                        <span className="text-xs bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded font-medium">Summer 2024</span>
+                      </div>
+                      <h3 className="font-medium text-gray-900 text-xs mb-1.5">Physics Laboratory</h3>
+                      <div className="space-y-0.5 text-xs text-gray-500">
+                        <div className="flex items-center gap-1">
+                          <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                          </svg>
+                          <span>Prof. Williams</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span>22 Students</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Record Card 4 */}
+                    <div className="bg-white rounded-lg border border-gray-200 p-2.5">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-6 h-6 bg-gray-100 rounded flex items-center justify-center">
+                          <svg className="w-3 h-3 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                        <span className="text-xs bg-orange-50 text-orange-700 px-1.5 py-0.5 rounded font-medium">Fall 2024</span>
+                      </div>
+                      <h3 className="font-medium text-gray-900 text-xs mb-1.5">Data Structures</h3>
+                      <div className="space-y-0.5 text-xs text-gray-500">
+                        <div className="flex items-center gap-1">
+                          <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                          </svg>
+                          <span>Dr. Brown</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span>31 Students</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Decorative elements */}
@@ -577,16 +504,16 @@ function LandingPage() {
                 </p>
               </div>
 
-              {/* Offline Grading */}
+              {/* Google Integration */}
               <div className="bg-white p-6 sm:p-7 md:p-8 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-300 border border-gray-100">
                 <div className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 mb-4 sm:mb-5 md:mb-6">
-                  <img src={sync || "/placeholder.svg"} alt="Offline Grading" className="w-full h-full text-[#333D79]" />
+                  <img src={sync || "/placeholder.svg"} alt="Google Integration" className="w-full h-full text-[#333D79]" />
                 </div>
                 <h3 className="text-lg sm:text-xl font-semibold text-black mb-3 md:mb-4">
-                  Offline Grading with Auto-Sync
+                  Google Sheets Integration
                 </h3>
                 <p className="text-sm sm:text-base text-gray-600 leading-relaxed">
-                  Grade offline with automatic syncing, ensuring seamless data updates when reconnected.
+                  Real-time synchronization with Google Sheets for seamless data management and collaboration across your team.
                 </p>
               </div>
             </div>

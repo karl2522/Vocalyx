@@ -1,11 +1,13 @@
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { useEffect, useState } from 'react';
-import { toast } from 'react-hot-toast';
 import { FiArrowLeft, FiCamera, FiEdit, FiInfo, FiSave, FiUser, FiX } from 'react-icons/fi';
 import { MdOutlineAlternateEmail, MdOutlineEmail, MdOutlineSchool } from 'react-icons/md';
 import { RiGraduationCapLine, RiUserSettingsLine } from 'react-icons/ri';
 import { useNavigate } from 'react-router-dom'; // Add this import
 import { useAuth } from '../auth/AuthContext';
+import { auth } from '../config/firebase';
 import { userService } from '../services/api';
+import { getPendingActionsCount } from '../utils/notificationUtils';
 import { showToast } from '../utils/toast';
 
 // Custom animation styles
@@ -65,6 +67,8 @@ const Profile = () => {
   const [activeTab, setActiveTab] = useState('profile');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isConnectingGoogle, setIsConnectingGoogle] = useState(false);
+  const [isSendingVerification, setIsSendingVerification] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -107,6 +111,33 @@ const Profile = () => {
 
     fetchProfile();
   }, []); // Run once on mount
+
+  // Refresh user data when component becomes visible (e.g., when navigating back from verification)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && user) {
+        const fetchProfile = async () => {
+          try {
+            const response = await userService.getProfile();
+            const freshUser = response.data.user;
+            setUser(freshUser);
+            localStorage.setItem('user', JSON.stringify(freshUser));
+          } catch (error) {
+            console.error('Failed to refresh profile:', error);
+          }
+        };
+        fetchProfile();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
+    };
+  }, [user]);
 
   useEffect(() => {
     if (user && !isLoading) {
@@ -211,6 +242,211 @@ const Profile = () => {
   const handleBackToRecords = () => {
     navigate('/class-records');
   };
+
+  // Handle Google Drive connection for email users
+  const handleConnectGoogleDrive = async () => {
+    if (isConnectingGoogle) return;
+    
+    setIsConnectingGoogle(true);
+    try {
+      console.log('Starting Google Drive connection...');
+      
+      // Configure Google provider with Drive scopes
+      const googleProvider = new GoogleAuthProvider();
+      googleProvider.addScope('https://www.googleapis.com/auth/drive');
+      googleProvider.addScope('https://www.googleapis.com/auth/spreadsheets');
+      googleProvider.addScope('profile');
+      googleProvider.addScope('email');
+      
+      // Sign in with Google popup
+      const result = await signInWithPopup(auth, googleProvider);
+      
+      // Get tokens
+      const idToken = await result.user.getIdToken();
+      const credential = result._tokenResponse || result.credential;
+      const accessToken = credential?.oauthAccessToken || credential?.accessToken;
+      
+      // Get additional token info
+      let refreshToken = null;
+      let expiresIn = 3600;
+      
+      try {
+        const googleCredential = GoogleAuthProvider.credentialFromResult(result);
+        if (googleCredential?.accessToken) {
+          const tokenInfoResponse = await fetch(`https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${googleCredential.accessToken}`);
+          if (tokenInfoResponse.ok) {
+            const tokenInfo = await tokenInfoResponse.json();
+            refreshToken = googleCredential.accessToken;
+            expiresIn = tokenInfo.expires_in || 3600;
+          }
+        }
+      } catch (tokenError) {
+        console.warn('Could not get additional token info:', tokenError);
+        if (accessToken) {
+          refreshToken = accessToken;
+        }
+      }
+      
+      console.log('Google auth successful, sending to backend:', {
+        hasIdToken: !!idToken,
+        hasAccessToken: !!accessToken,
+        hasRefreshToken: !!refreshToken,
+        expiresIn
+      });
+      
+      // Send tokens to backend for Google Drive connection
+      const response = await fetch('http://127.0.0.1:8000/api/google-drive/connect/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken') || localStorage.getItem('access_token')}`,
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+          expires_in: expiresIn,
+          id_token: idToken
+        }),
+      });
+      
+      let data;
+      try {
+        data = await response.json();
+      } catch (jsonError) {
+        console.error('Failed to parse response JSON:', jsonError);
+        throw new Error(`Server response error: ${response.status} ${response.statusText}`);
+      }
+      
+      if (response.ok) {
+        console.log('Google Drive connection successful:', data);
+        showToast.success('Google Drive connected successfully!');
+        
+        // Refresh user profile to get updated connection status
+        const profileResponse = await userService.getProfile();
+        const freshUser = profileResponse.data.user;
+        setUser(freshUser);
+        localStorage.setItem('user', JSON.stringify(freshUser));
+        
+      } else {
+        console.error('Google Drive connection failed:', data);
+        throw new Error(data.error || `Server error: ${response.status} ${response.statusText}`);
+      }
+      
+    } catch (error) {
+      console.error('Google Drive connection error:', error);
+      
+      // Handle specific Firebase auth errors
+      if (error.code === 'auth/popup-closed-by-user') {
+        showToast.error('Connection was cancelled. Please try again.');
+      } else if (error.code === 'auth/popup-blocked') {
+        showToast.error('Popup was blocked by browser. Please allow popups and try again.');
+      } else if (error.code === 'auth/cancelled-popup-request') {
+        showToast.error('Another connection popup is already open');
+      } else if (error.code === 'auth/web-storage-unsupported') {
+        showToast.error('Browser storage is not supported. Please try a different browser.');
+      } else if (error.code && error.code.startsWith('auth/')) {
+        showToast.error(`Authentication error: ${error.message}`);
+      } else if (error.message && error.message.includes('Cross-Origin-Opener-Policy')) {
+        showToast.error('Browser security policy blocked the connection. Please try again or use a different browser.');
+      } else if (error.message && error.message.includes('Unexpected end of JSON input')) {
+        showToast.error('Server response error. Please check your connection and try again.');
+      } else {
+        showToast.error(error.message || 'Failed to connect Google Drive');
+      }
+    } finally {
+      setIsConnectingGoogle(false);
+    }
+  };
+
+  // Handle Google Drive disconnection
+  const handleDisconnectGoogleDrive = async () => {
+    if (!user?.google_drive_connected) return;
+    
+    try {
+      console.log('Disconnecting Google Drive...');
+      
+      const response = await fetch('http://127.0.0.1:8000/api/google-drive/disconnect/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken') || localStorage.getItem('access_token')}`,
+        },
+        credentials: 'include',
+      });
+      
+      let data;
+      try {
+        data = await response.json();
+      } catch (jsonError) {
+        console.error('Failed to parse response JSON:', jsonError);
+        throw new Error(`Server response error: ${response.status} ${response.statusText}`);
+      }
+      
+      if (response.ok) {
+        console.log('Google Drive disconnected successfully:', data);
+        showToast.success('Google Drive disconnected successfully!');
+        
+        // Refresh user profile to get updated connection status
+        const profileResponse = await userService.getProfile();
+        const freshUser = profileResponse.data.user;
+        setUser(freshUser);
+        localStorage.setItem('user', JSON.stringify(freshUser));
+        
+      } else {
+        console.error('Google Drive disconnection failed:', data);
+        throw new Error(data.error || `Server error: ${response.status} ${response.statusText}`);
+      }
+      
+    } catch (error) {
+      console.error('Google Drive disconnection error:', error);
+      showToast.error(error.message || 'Failed to disconnect Google Drive');
+    }
+  };
+
+  // Handle email verification resend
+  const handleResendVerification = async () => {
+    if (isSendingVerification || user?.email_verified) return;
+    
+    setIsSendingVerification(true);
+    try {
+      console.log('Sending email verification...');
+      
+      const response = await fetch('http://127.0.0.1:8000/api/resend-verification/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken') || localStorage.getItem('access_token')}`,
+        },
+        credentials: 'include',
+      });
+      
+      let data;
+      try {
+        data = await response.json();
+      } catch (jsonError) {
+        console.error('Failed to parse response JSON:', jsonError);
+        throw new Error(`Server response error: ${response.status} ${response.statusText}`);
+      }
+      
+      if (response.ok) {
+        console.log('Verification email sent successfully:', data);
+        showToast.success('Verification email sent! Please check your inbox and spam folder.');
+        // Refresh user data to update notification count
+        await fetchProfile();
+      } else {
+        console.error('Failed to send verification email:', data);
+        throw new Error(data.error || `Server error: ${response.status} ${response.statusText}`);
+      }
+      
+    } catch (error) {
+      console.error('Email verification error:', error);
+      showToast.error(error.message || 'Failed to send verification email');
+    } finally {
+      setIsSendingVerification(false);
+    }
+  };
+
 
   if (isLoading) {
     return (
@@ -353,17 +589,24 @@ const Profile = () => {
                   <span>Profile Information</span>
                 </button>
                 
-                <button
-                  onClick={() => setActiveTab('account')}
-                  className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition-colors ${
-                    activeTab === 'account' 
-                      ? 'bg-[#EEF0F8] text-[#333D79] font-medium' 
-                      : 'text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  <MdOutlineAlternateEmail size={20} />
-                  <span>Account Settings</span>
-                </button>
+                 <button
+                   onClick={() => setActiveTab('account')}
+                   className={`w-full text-left px-4 py-3 rounded-lg flex items-center justify-between transition-colors ${
+                     activeTab === 'account' 
+                       ? 'bg-[#EEF0F8] text-[#333D79] font-medium' 
+                       : 'text-gray-700 hover:bg-gray-50'
+                   }`}
+                 >
+                   <div className="flex items-center gap-3">
+                     <MdOutlineAlternateEmail size={20} />
+                     <span>Account Settings</span>
+                   </div>
+                   {getPendingActionsCount(user) > 0 && (
+                     <span className="bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                       {getPendingActionsCount(user)}
+                     </span>
+                   )}
+                 </button>
               </div>
             </div>
           </div>
@@ -540,7 +783,7 @@ const Profile = () => {
               )}
               
               {activeTab === 'account' && (
-                <div className="p-6">
+                <div className="p-6 slide-in">
                   <div className="rounded-lg bg-[#EEF0F8] p-4 mb-6 flex items-start gap-3 border border-[#DCE3F9]">
                     <FiInfo size={20} className="text-[#333D79] mt-0.5" />
                     <div>
@@ -555,48 +798,138 @@ const Profile = () => {
                   <div className="space-y-6">
                     <div>
                       <h3 className="text-sm font-medium text-gray-500 mb-2">Email Address</h3>
-                      <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-[#EEF0F8] flex items-center justify-center">
-                            <MdOutlineEmail size={20} className="text-[#333D79]" />
-                          </div>
-                          <div>
-                            <p className="text-gray-800 font-medium">{user?.email}</p>
-                            <p className="text-xs text-gray-500">Primary email</p>
-                          </div>
-                        </div>
-                        <div className="px-3 py-1 bg-green-100 text-green-800 text-xs rounded-full">
-                          Verified
-                        </div>
-                      </div>
+                       <div className={`flex items-center justify-between p-4 border border-gray-200 rounded-lg ${
+                         user?.email_verified ? 'bg-gradient-to-r from-green-50 to-blue-50' : 'bg-gradient-to-r from-red-50 to-red-100'
+                       }`}>
+                         <div className="flex items-center gap-3">
+                           <div className={`w-12 h-12 rounded-full flex items-center justify-center shadow-sm ${
+                             user?.email_verified 
+                               ? 'bg-gradient-to-br from-green-100 to-green-200 ring-2 ring-green-300' 
+                               : 'bg-gradient-to-br from-red-100 to-red-200 ring-2 ring-red-300'
+                           }`}>
+                             <MdOutlineEmail size={24} className={user?.email_verified ? 'text-green-700' : 'text-red-700'} />
+                           </div>
+                           <div>
+                             <p className="text-gray-800 font-semibold flex items-center gap-2">
+                               Email Address
+                               {user?.email_verified && (
+                                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                   <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                   </svg>
+                                   Verified
+                                 </span>
+                               )}
+                               {!user?.email_verified && (
+                                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                   <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                     <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                   </svg>
+                                   Not Verified
+                                 </span>
+                               )}
+                             </p>
+                             <p className="text-gray-800 text-xs">{user?.email}</p>
+                           </div>
+                         </div>
+                         {!user?.email_verified && (
+                           <button 
+                             onClick={handleResendVerification}
+                             disabled={isSendingVerification}
+                             className="px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 bg-gradient-to-r from-red-500 to-red-600 text-white hover:from-red-600 hover:to-red-700 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                           >
+                             {isSendingVerification ? (
+                               <div className="flex items-center gap-2">
+                                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                 <span>Sending...</span>
+                               </div>
+                             ) : (
+                               'Verify Email'
+                             )}
+                           </button>
+                         )}
+                         {user?.email_verified && (
+                           <div className="px-3 py-1 bg-green-100 text-green-800 text-xs rounded-full font-medium">
+                             Verified
+                           </div>
+                         )}
+                       </div>
                     </div>
                     
                     <div>
                       <h3 className="text-sm font-medium text-gray-500 mb-2">Connected Accounts</h3>
                       
-                      <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg mb-2">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-[#EEF0F8] flex items-center justify-center">
-                            <img src="/assets/google.png" alt="Google" className="h-5 w-5" />
-                          </div>
-                          <div>
-                            <p className="text-gray-800 font-medium">Google</p>
-                            <p className="text-xs text-gray-500">
-                              {user?.google_id ? 'Connected' : 'Not connected'}
-                            </p>
-                          </div>
-                        </div>
-                        
-                        <button className={`px-3 py-1.5 text-xs rounded-lg ${
-                          user?.google_id 
-                            ? 'bg-red-50 text-red-600 hover:bg-red-100'
-                            : 'bg-[#EEF0F8] text-[#333D79] hover:bg-[#DCE3F9]'
-                        } transition-colors`}>
-                          {user?.google_id ? 'Disconnect' : 'Connect'}
-                        </button>
-                      </div>
+                       <div className={`flex items-center justify-between p-4 border border-gray-200 rounded-lg mb-2 ${
+                         user?.has_google_drive 
+                           ? 'bg-gradient-to-r from-green-50 to-blue-50' 
+                           : 'bg-gradient-to-r from-red-50 to-red-100'
+                       }`}>
+                         <div className="flex items-center gap-3">
+                           <div className={`w-12 h-12 rounded-full flex items-center justify-center shadow-sm ${
+                             user?.has_google_drive 
+                               ? 'bg-gradient-to-br from-green-100 to-green-200 ring-2 ring-green-300' 
+                               : 'bg-gradient-to-br from-red-100 to-red-200 ring-2 ring-red-300'
+                           }`}>
+                             <img src="/assets/google.png" alt="Google" className="h-6 w-6" />
+                           </div>
+                           <div>
+                             <p className="text-gray-800 font-semibold flex items-center gap-2">
+                               Google Drive
+                               {user?.has_google_drive && (
+                                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                   <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                   </svg>
+                                   Active
+                                 </span>
+                               )}
+                               {!user?.google_drive_connected && (
+                                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                   <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                     <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                   </svg>
+                                   Not Connected
+                                 </span>
+                               )}
+                             </p>
+                             <p className={`text-xs ${
+                               user?.has_google_drive 
+                                 ? 'text-green-600 font-medium' 
+                                 : user?.google_drive_connected 
+                                   ? 'text-orange-600' 
+                                   : 'text-red-600 font-medium'
+                             }`}>
+                               {user?.has_google_drive 
+                                 ? 'Connected & Active - Full Drive access'
+                                 : user?.google_drive_connected 
+                                   ? 'Connected (Expired) - Reconnect needed'
+                                   : 'Not connected - Connect for Drive access'}
+                             </p>
+                           </div>
+                         </div>
+                         
+                         <button 
+                           onClick={user?.google_drive_connected ? handleDisconnectGoogleDrive : handleConnectGoogleDrive}
+                           disabled={isConnectingGoogle}
+                           className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                             user?.google_drive_connected 
+                               ? 'bg-red-100 text-red-700 hover:bg-red-200 border border-red-300' 
+                               : 'bg-gradient-to-r from-red-500 to-red-600 text-white hover:from-red-600 hover:to-red-700 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed'
+                           }`}
+                         >
+                           {isConnectingGoogle ? (
+                             <div className="flex items-center gap-2">
+                               <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                               <span>Connecting...</span>
+                             </div>
+                           ) : (
+                             user?.google_drive_connected ? 'Disconnect' : 'Connect Drive'
+                           )}
+                         </button>
+                       </div>
                       
-                      <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                      {/* Microsoft connection - commented out */}
+                      {/* <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-full bg-[#EEF0F8] flex items-center justify-center">
                             <img src="/assets/microsoft.png" alt="Microsoft" className="h-5 w-5" />
@@ -616,7 +949,7 @@ const Profile = () => {
                         } transition-colors`}>
                           {user?.microsoft_id ? 'Disconnect' : 'Connect'}
                         </button>
-                      </div>
+                      </div> */}
                     </div>
                   </div>
                 </div>
