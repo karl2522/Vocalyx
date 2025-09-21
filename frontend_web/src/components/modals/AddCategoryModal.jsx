@@ -34,7 +34,7 @@ const AddCategoryModal = ({
 
   const handleSubmit = () => {
     if (!validateForm()) return;
-    
+
     const categoryData = {
         categoryName: categoryName.trim(),
         subCategoryCount: parseInt(subCategoryCount),
@@ -70,7 +70,8 @@ const AddCategoryModal = ({
         break;
       }
     }
-    
+
+
     // Remove plural 's' if present for individual items
     if (baseName.endsWith('s') && baseName.length > 3) {
       baseName = baseName.slice(0, -1);
