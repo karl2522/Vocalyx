@@ -1,6 +1,10 @@
-import { BookOpen, Calendar, X, User, FileText, AlertTriangle, CheckCircle } from 'lucide-react';
+import { AlertTriangle, BookOpen, Calendar, CheckCircle, FileText, Upload, User, X } from 'lucide-react';
 import PropTypes from 'prop-types';
-import { useRef, useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import apiService from '../../services/api';
+import { showToast } from '../../utils/toast.jsx';
+import DriveFilePickerModal from './DriveFilePickerModal';
 
 const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing, existingRecords = [] }) => {
   const [formData, setFormData] = useState({
@@ -13,6 +17,13 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
   const [errors, setErrors] = useState({});
   const [duplicateInfo, setDuplicateInfo] = useState(null);
   const modalRef = useRef(null);
+
+  // Import state
+  const [importPreview, setImportPreview] = useState(null);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importError, setImportError] = useState('');
+  const [showDrivePicker, setShowDrivePicker] = useState(false);
+  const [importProcessing, setImportProcessing] = useState(false);
 
   // 🔥 NEW: Real-time duplicate detection
   useEffect(() => {
@@ -88,6 +99,9 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
     // Clear errors when modal opens/closes
     setErrors({});
     setDuplicateInfo(null);
+    // no-op: removed importFile state
+    setImportPreview(null);
+    setImportError('');
   }, [editData, isEditing, isOpen]);
 
   const handleInputChange = (e) => {
@@ -149,6 +163,9 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
     setFormData({ name: '', semester: '', teacher_name: '', description: '' });
     setErrors({});
     setDuplicateInfo(null);
+    // no-op: removed importFile state
+    setImportPreview(null);
+    setImportError('');
     onClose();
   };
 
@@ -160,24 +177,131 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
   };
 
   // 🔥 NEW: Check if form can be submitted
-  const canSubmit = !loading && 
-                   !errors.name && 
-                   !errors.semester && 
-                   formData.name.trim() && 
-                   formData.semester.trim() && 
-                   duplicateInfo?.type !== 'exact';
+  const manualValid = !loading && !errors.name && !errors.semester && formData.name.trim() && formData.semester.trim() && duplicateInfo?.type !== 'exact';
+  const canSubmit = manualValid;
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    setImportError('');
+    setImportPreview(null);
+    if (!file) return;
+    const ext = file.name.toLowerCase();
+    if (!ext.endsWith('.csv') && !ext.endsWith('.xlsx')) {
+      setImportError('Only .csv or .xlsx files are supported');
+      return;
+    }
+    try {
+      setImportLoading(true);
+      setImportProcessing(true);
+      // Close the create modal while processing to avoid overlap/confusion
+      onClose();
+      const res = await apiService.classRecordService.previewImportUpload(file);
+      setImportPreview(res.data);
+      // Auto-import after preview using auto mapping
+      let mapping = res.data?.mapping || {};
+      if (typeof mapping === 'string') {
+        try { mapping = JSON.parse(mapping); } catch { /* ignore */ }
+      }
+      await apiService.classRecordService.importUpload(file, mapping, '', '');
+      showToast.success('Class record imported successfully');
+      setTimeout(() => window.location.reload(), 600);
+    } catch (err) {
+      const msg = err?.response?.data?.error || 'Failed to import file';
+      setImportError(msg);
+      showToast.error(msg);
+    } finally {
+      setImportLoading(false);
+      setImportProcessing(false);
+    }
+  };
+
+  const handleDrivePick = async (file) => {
+    try {
+      setImportError('');
+      setImportLoading(true);
+      setImportProcessing(true);
+      // Close the create modal while processing to avoid overlap/confusion
+      onClose();
+      const preview = await apiService.classRecordService.previewImportDrive(file.id, file.name);
+      let mapping = preview.data?.mapping || {};
+      if (typeof mapping === 'string') {
+        try { mapping = JSON.parse(mapping); } catch { /* ignore */ }
+      }
+      await apiService.classRecordService.importDrive(file.id, file.name, mapping, '', '');
+      showToast.success('Class record imported successfully from Drive');
+      setTimeout(() => window.location.reload(), 600);
+    } catch (err) {
+      const msg = err?.response?.data?.error || 'Failed to import from Drive';
+      setImportError(msg);
+      showToast.error(msg);
+    } finally {
+      setImportLoading(false);
+      setShowDrivePicker(false);
+      setImportProcessing(false);
+    }
+  };
+
+  // Show full-screen analyzing/importing overlay and hide this modal entirely
+  if (importProcessing) {
+    return createPortal(
+      <div className="fixed inset-0 z-[9999]">
+        {/* Backdrop with subtle gradient and blur */}
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-[2px] transition-opacity duration-300" />
+
+        {/* Center content */}
+        <div className="relative w-full h-full flex items-center justify-center p-6">
+          <div className="w-full max-w-md rounded-3xl shadow-2xl overflow-hidden bg-white/95 border border-white/60">
+            {/* Visual */}
+            <div className="flex flex-col items-center text-center p-8 pb-6">
+              <img src="/assets/vocalyxPerson.png" alt="Analyzing" className="w-52 h-52 drop-shadow-lg" style={{ animation: 'gentleBounce 1.8s ease-in-out infinite' }} />
+              <h3 className="mt-4 text-lg font-semibold text-[#333D79]">We are analyzing your file</h3>
+              <p className="mt-1 text-sm text-gray-600">Mapping columns and preparing your class record template</p>
+            </div>
+
+            {/* Animated progress */}
+            <div className="px-8 pb-8">
+              <div className="relative w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div className="absolute inset-0">
+                  <div className="w-1/2 h-full bg-gradient-to-r from-[#333D79] via-[#4A5491] to-[#333D79] animate-[progressMove_1.6s_infinite] rounded-full" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center justify-center gap-2 text-xs text-gray-500">
+                <span className="inline-block w-1.5 h-1.5 bg-[#333D79] rounded-full animate-pulse" />
+                <span>Hang tight, this usually takes a few seconds</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Keyframes for progress movement */}
+        <style>{`@keyframes progressMove {0%{transform:translateX(-60%)} 50%{transform:translateX(10%)} 100%{transform:translateX(120%)}} @keyframes gentleBounce {0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)}}`}</style>
+      </div>,
+      document.body
+    );
+  }
+
+  if (showDrivePicker) {
+    return createPortal(
+      <DriveFilePickerModal
+        isOpen={true}
+        onClose={() => setShowDrivePicker(false)}
+        onFileSelect={handleDrivePick}
+        importType="scores"
+      />, document.body
+    );
+  }
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center" onMouseDown={handleBackdropClick}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" onMouseDown={handleBackdropClick}>
       {/* Backdrop */}
-      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300" style={{zIndex: 100}} aria-hidden="true"></div>
-      <div ref={modalRef} className="relative z-[101] w-full max-w-md mx-auto">
+      <div className="fixed inset-0 bg-black/20 backdrop-blur-[2px] transition-opacity duration-300" style={{zIndex: 100}} aria-hidden="true"></div>
+      <div ref={modalRef} className="relative z-[101] w-full max-w-lg mx-auto">
         {/* Modal Card */}
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-[#E5E7EB]">
+        <div className="bg-white rounded-2xl shadow-2xl w-full border border-[#E5E7EB]">
           {/* 🔥 UPDATED: Header with dynamic title */}
-          <div className="flex items-center justify-between px-6 py-5 rounded-t-2xl" style={{background: 'linear-gradient(90deg, #333D79 0%, #4A5491 100%)'}}>
+          <div className="flex items-center justify-between px-5 py-4 rounded-t-2xl" style={{background: 'linear-gradient(90deg, #333D79 0%, #4A5491 100%)'}}>
             <div className="flex items-center space-x-3">
               <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center shadow">
                 <BookOpen className="w-5 h-5 text-white" />
@@ -195,10 +319,14 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
             </button>
           </div>
 
+          {/* No tabs - streamlined UI */}
+
           {/* Form */}
-          <form onSubmit={handleSubmit} className="p-6 space-y-5">
-            {/* Class Record Name */}
+          <form onSubmit={handleSubmit} className="p-5 space-y-3">
+            {/* Manual Fields */}
             <div>
+              {/* Class Record Name */}
+              <div>
               <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
                 Class Record Name <span className="text-red-500">*</span>
               </label>
@@ -210,7 +338,7 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
                   value={formData.name}
                   onChange={handleInputChange}
                   placeholder="e.g., Mathematics 101, Physics Lab"
-                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#333D79] focus:border-[#333D79] focus:outline-none transition-all duration-200 text-gray-900 bg-gray-50 ${
+                  className={`w-full px-3 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#333D79] focus:border-[#333D79] focus:outline-none transition-all duration-200 text-gray-900 bg-gray-50 ${
                     errors.name ? 'border-red-500 bg-red-50' : 
                     duplicateInfo?.type === 'exact' ? 'border-red-500 bg-red-50' :
                     duplicateInfo?.type === 'similar' ? 'border-yellow-500 bg-yellow-50' :
@@ -222,10 +350,10 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
               {errors.name && (
                 <p className="mt-1 text-sm text-red-600">{errors.name}</p>
               )}
-            </div>
+              </div>
 
-            {/* Semester */}
-            <div>
+              {/* Semester */}
+              <div>
               <label htmlFor="semester" className="block text-sm font-medium text-gray-700 mb-2">
                 Semester <span className="text-red-500">*</span>
               </label>
@@ -235,7 +363,7 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
                   name="semester"
                   value={formData.semester}
                   onChange={handleInputChange}
-                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#333D79] focus:border-[#333D79] focus:outline-none transition-all duration-200 appearance-none bg-gray-50 text-gray-900 ${
+                  className={`w-full px-3 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#333D79] focus:border-[#333D79] focus:outline-none transition-all duration-200 appearance-none bg-gray-50 text-gray-900 ${
                     errors.semester ? 'border-red-500 bg-red-50' : 
                     duplicateInfo?.type === 'exact' ? 'border-red-500 bg-red-50' :
                     duplicateInfo?.type === 'similar' ? 'border-yellow-500 bg-yellow-50' :
@@ -252,10 +380,10 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
               {errors.semester && (
                 <p className="mt-1 text-sm text-red-600">{errors.semester}</p>
               )}
-            </div>
+              </div>
 
-            {/* 🔥 NEW: Teacher Name Field */}
-            <div>
+              {/* 🔥 NEW: Teacher Name Field */}
+              <div>
               <label htmlFor="teacher_name" className="block text-sm font-medium text-gray-700 mb-2">
                 Teacher Name
               </label>
@@ -267,7 +395,7 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
                   value={formData.teacher_name}
                   onChange={handleInputChange}
                   placeholder="e.g., Dr. Smith, Prof. Johnson"
-                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#333D79] focus:border-[#333D79] focus:outline-none transition-all duration-200 text-gray-900 bg-gray-50 ${
+                  className={`w-full px-3 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#333D79] focus:border-[#333D79] focus:outline-none transition-all duration-200 text-gray-900 bg-gray-50 ${
                     duplicateInfo?.type === 'exact' ? 'border-red-500 bg-red-50' :
                     duplicateInfo?.type === 'similar' ? 'border-yellow-500 bg-yellow-50' :
                     'border-gray-300'
@@ -275,44 +403,25 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
                 />
                 <User className="absolute right-3 top-3 w-5 h-5 text-gray-400" />
               </div>
-            </div>
+              </div>
 
-            {/* 🔥 NEW: Duplicate Detection Alert */}
-            {duplicateInfo && (
-              <div className={`p-4 rounded-lg border ${
+              {/* 🔥 NEW: Duplicate Detection Alert (compact) */}
+              {duplicateInfo && (
+              <div className={`flex items-start gap-2 p-2 rounded-md border text-sm ${
                 duplicateInfo.type === 'exact' 
-                  ? 'bg-red-50 border-red-200' 
-                  : 'bg-yellow-50 border-yellow-200'
+                  ? 'bg-red-50 border-red-200 text-red-700' 
+                  : 'bg-yellow-50 border-yellow-200 text-yellow-700'
               }`}>
-                <div className="flex items-start gap-3">
-                  {duplicateInfo.type === 'exact' ? (
-                    <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-                  ) : (
-                    <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-                  )}
-                  <div className="flex-1">
-                    <p className={`text-sm font-medium ${
-                      duplicateInfo.type === 'exact' ? 'text-red-800' : 'text-yellow-800'
-                    }`}>
-                      {duplicateInfo.type === 'exact' ? 'Duplicate Found!' : 'Similar Record Found'}
-                    </p>
-                    <p className={`text-sm mt-1 ${
-                      duplicateInfo.type === 'exact' ? 'text-red-700' : 'text-yellow-700'
-                    }`}>
-                      {duplicateInfo.message}
-                    </p>
-                    {duplicateInfo.type === 'similar' && (
-                      <p className="text-xs text-yellow-600 mt-2">
-                        ✅ You can still create this record since it's in a different semester.
-                      </p>
-                    )}
-                  </div>
+                <AlertTriangle className={`w-4 h-4 mt-0.5 ${duplicateInfo.type === 'exact' ? 'text-red-600' : 'text-yellow-600'}`} />
+                <div className="flex-1 leading-snug">
+                  <span className="font-medium mr-1">{duplicateInfo.type === 'exact' ? 'Duplicate found.' : 'Similar record found.'}</span>
+                  <span>{duplicateInfo.message}</span>
                 </div>
               </div>
-            )}
+              )}
 
-            {/* 🔥 NEW: Description Field */}
-            <div>
+              {/* 🔥 NEW: Description Field */}
+              <div>
               <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
                 Description
               </label>
@@ -323,27 +432,107 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
                   value={formData.description}
                   onChange={handleInputChange}
                   placeholder="Optional description for this class record..."
-                  rows="3"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#333D79] focus:border-[#333D79] focus:outline-none transition-all duration-200 text-gray-900 bg-gray-50 resize-none"
+                  rows="2"
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#333D79] focus:border-[#333D79] focus:outline-none transition-all duration-200 text-gray-900 bg-gray-50 resize-none"
                 />
                 <FileText className="absolute right-3 top-3 w-5 h-5 text-gray-400" />
               </div>
+              </div>
+
+              {/* Drive rename note when editing */}
+              {isEditing && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 text-sm text-blue-800">
+                Changes to <span className="font-medium">Class Record Name</span> or <span className="font-medium">Semester</span> will also rename the linked Google Sheet in your Drive to: <code className="bg-blue-100 px-1 py-0.5 rounded">{`${formData.name || editData?.name || ''} - ${formData.semester || editData?.semester || ''}`.trim()}</code>.
+              </div>
+              )}
+            </div>
+
+            {/* Import UI */}
+            {/* Import Section */}
+            <div className="mt-4 space-y-3 border-t border-gray-200 pt-4">
+              <div className="text-sm text-gray-800 font-medium">Or import from a file</div>
+
+              <div className="flex gap-3">
+                <label className="group inline-flex items-center gap-2 px-3.5 py-2.5 rounded-lg border border-[#D7DBEE] bg-white hover:bg-[#F7F8FF] shadow-sm hover:shadow cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-[#333D79]/30 focus:ring-offset-2 active:scale-[0.98]">
+                  <Upload className="w-4 h-4 text-[#333D79] group-hover:text-[#2A2F66] transition-colors" />
+                  <span className="text-sm text-[#1F2A44]">From Computer</span>
+                  <input id="file-input-hidden" type="file" accept=".csv,.xlsx" className="hidden" onChange={handleFileChange} />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowDrivePicker(true)}
+                  className="group inline-flex items-center gap-2 px-3.5 py-2.5 rounded-lg border border-[#D7DBEE] bg-white hover:bg-[#F7F8FF] shadow-sm hover:shadow transition-all focus:outline-none focus:ring-2 focus:ring-[#333D79]/30 focus:ring-offset-2 active:scale-[0.98] cursor-pointer"
+                >
+                  <Upload className="w-4 h-4 text-[#333D79] group-hover:text-[#2A2F66] transition-colors" />
+                  <span className="text-sm text-[#1F2A44]">From Google Drive</span>
+                </button>
+              </div>
+              {importError && <p className="text-sm text-red-600">{importError}</p>}
+
+                {importLoading && (
+                  <div className="text-sm text-gray-600">Analyzing file...</div>
+                )}
+
+                {importPreview && (
+                  <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                    <div className="text-sm text-gray-800 font-medium mb-2">Detected Columns</div>
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {importPreview.mappedHeaders?.map((h, i) => (
+                        <span key={i} className="px-2 py-1 text-xs bg-white border border-gray-300 rounded">{h}</span>
+                      ))}
+                    </div>
+                    {importPreview.unmapped?.length > 0 && (
+                      <div className="text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 rounded p-2">
+                        Some headers were not recognized: {importPreview.unmapped.join(', ')}
+                      </div>
+                    )}
+                    {Array.isArray(importPreview.preview) && importPreview.preview.length > 0 && (
+                      <div className="mt-3">
+                        <div className="text-sm text-gray-800 font-medium mb-1">Preview (first rows)</div>
+                        <div className="overflow-auto border border-gray-200 rounded">
+                          <table className="min-w-full text-xs">
+                            <thead className="bg-gray-100">
+                              <tr>
+                                {Object.keys(importPreview.preview[0]).map((col) => (
+                                  <th key={col} className="text-left px-2 py-1 border-b border-gray-200 whitespace-nowrap">{col}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {importPreview.preview.map((row, idx) => (
+                                <tr key={idx} className="odd:bg-white even:bg-gray-50">
+                                  {Object.keys(importPreview.preview[0]).map((col) => (
+                                    <td key={col} className="px-2 py-1 border-b border-gray-100 whitespace-nowrap">{row[col]}</td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+              {/* Drive input removed; use Drive picker modal */}
+
+              {/* No separate Import CTA */}
             </div>
 
             {/* 🔥 ENHANCED: Buttons with smart state management */}
-            <div className="flex space-x-3 pt-4">
+            <div className="flex space-x-3 pt-2">
               <button
                 type="button"
                 onClick={handleClose}
-                className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors duration-200 font-medium"
+                className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors duration-200 font-medium"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={!canSubmit}
-                className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all duration-200 shadow-md ${
-                  !canSubmit
+                className={`flex-1 px-4 py-2.5 rounded-lg font-medium transition-all duration-200 shadow-md ${
+                  (!canSubmit)
                     ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                     : 'bg-gradient-to-r from-[#333D79] to-[#4A5491] hover:from-[#2A2F66] hover:to-[#3A4080] text-white hover:shadow-lg'
                 }`}
@@ -372,7 +561,7 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
 
             {/* 🔥 NEW: Form hints */}
             {!duplicateInfo && formData.name && formData.semester && (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+              <div className="bg-green-50 border border-green-200 rounded-lg p-2.5">
                 <div className="flex items-center gap-2">
                   <CheckCircle className="w-4 h-4 text-green-600" />
                   <p className="text-sm text-green-700 font-medium">
@@ -384,6 +573,7 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
           </form>
         </div>
       </div>
+      
     </div>
   );
 };

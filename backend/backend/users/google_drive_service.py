@@ -314,3 +314,48 @@ class GoogleDriveService:
                 'success': False,
                 'error': f'Request failed: {str(e)}'
             } 
+
+    def rename_file(self, file_id: str, new_name: str) -> Dict:
+        """
+        Rename a Drive file by updating its metadata.
+
+        Args:
+            file_id: The ID of the file to rename
+            new_name: The new file name
+
+        Returns:
+            Dict with success status and updated file info or error
+        """
+        try:
+            payload = {
+                'name': new_name
+            }
+            response = requests.patch(
+                f"{self.DRIVE_API_BASE_URL}/files/{file_id}",
+                headers=self.headers,
+                json=payload,
+                timeout=15
+            )
+
+            if response.status_code in (200, 201):
+                info = response.json()
+                return {
+                    'success': True,
+                    'file': {
+                        'id': info.get('id'),
+                        'name': info.get('name')
+                    }
+                }
+            else:
+                return {
+                    'success': False,
+                    'error': f'Rename failed: {response.status_code}',
+                    'details': response.text
+                }
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Drive API rename file failed: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Request failed: {str(e)}'
+            }

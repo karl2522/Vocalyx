@@ -15,7 +15,7 @@ import {
 } from "lucide-react"
 import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
-import { about, capuras, chavez, export1, gadiane, logoWhite, microphone, notes, omen, pejana, sync, voice } from "../utils"
+import { about, capuras, chavez, export1, gadiane, logoBlue, microphone, notes, omen, pejana, sync, voice } from "../utils"
 
 function LandingPage() {
 
@@ -95,7 +95,7 @@ function LandingPage() {
           <div className="flex items-center justify-between">
             <div className="flex justify-center items-center">
               <img
-                  src={logoWhite || "/placeholder.svg"}
+                  src={logoBlue || "/placeholder.svg"}
                   alt="Vocalyx Logo"
                   width={150}
                   height={50}
@@ -732,7 +732,7 @@ function LandingPage() {
                 {/* Logo and Description */}
                 <div className="space-y-5">
                   <div className="flex items-center">
-                    <img src={logo || "/placeholder.svg"} alt="Vocalyx Logo" className="h-20 w-auto" />
+                    <img src={logoBlue || "/placeholder.svg"} alt="Vocalyx Logo" className="h-20 w-auto" />
                     <h2 className="text-black font-bold text-3xl ml-3">Vocalyx</h2>
                   </div>
                   <p className="text-gray-600 text-base leading-relaxed pr-4">
