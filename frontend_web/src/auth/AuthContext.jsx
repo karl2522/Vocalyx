@@ -285,8 +285,21 @@ export const AuthProvider = ({ children }) => {
         expiresIn
       });
 
-      // Send tokens to backend for login (will automatically establish Google Drive connection)
-      return await handleAuthResponse(idToken, accessToken, 'login', refreshToken, expiresIn);
+      // Try login first, if it fails due to user not existing, try signup
+      try {
+        console.log('Attempting Firebase login...');
+        return await handleAuthResponse(idToken, accessToken, 'login', refreshToken, expiresIn);
+      } catch (error) {
+        // If login fails due to user not existing, try signup
+        if (error.message && error.message.includes('No account found')) {
+          console.log('User not found during login, attempting signup...');
+          showToast.info("Creating new account...", "First time login");
+          return await handleAuthResponse(idToken, accessToken, 'signup', refreshToken, expiresIn);
+        }
+        // If it's a different error, throw it
+        console.error('Firebase login error (not user-not-found):', error.message);
+        throw error;
+      }
     } catch (error) {
       console.error('Firebase Google login error:', error);
       

@@ -732,7 +732,7 @@ function LandingPage() {
                 {/* Logo and Description */}
                 <div className="space-y-5">
                   <div className="flex items-center">
-                    <img src={logo || "/placeholder.svg"} alt="Vocalyx Logo" className="h-20 w-auto" />
+                    <img src={logoWhite || "/placeholder.svg"} alt="Vocalyx Logo" className="h-20 w-auto" />
                     <h2 className="text-black font-bold text-3xl ml-3">Vocalyx</h2>
                   </div>
                   <p className="text-gray-600 text-base leading-relaxed pr-4">
