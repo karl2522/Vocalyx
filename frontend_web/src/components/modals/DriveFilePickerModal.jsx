@@ -1,4 +1,5 @@
 import { AlertCircle, Download, FileSpreadsheet, Search, X } from 'lucide-react';
+import PropTypes from 'prop-types';
 import { useEffect, useState } from 'react';
 import googleDriveService from '../../services/googleDriveService';
 
@@ -96,8 +97,12 @@ const DriveFilePickerModal = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[80vh] flex flex-col">
+    <>
+      {/* Full-screen backdrop layer (separate fixed element to avoid layout offsets) */}
+      <div className="fixed inset-0 z-[200] bg-black/20 backdrop-blur-[2px]"></div>
+      {/* Modal container on top of backdrop */}
+      <div className="fixed inset-0 z-[210] flex items-center justify-center">
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[80vh] flex flex-col">
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
           <div>
@@ -209,9 +214,17 @@ const DriveFilePickerModal = ({
             Cancel
           </button>
         </div>
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 
 export default DriveFilePickerModal;
+
+DriveFilePickerModal.propTypes = {
+  isOpen: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
+  onFileSelect: PropTypes.func.isRequired,
+  importType: PropTypes.string,
+};

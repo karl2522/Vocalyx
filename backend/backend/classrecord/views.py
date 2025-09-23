@@ -15,6 +15,9 @@ from .serializers import (
 )
 from users.google_sheets_service import GoogleSheetsService
 from users.google_drive_service import GoogleDriveService
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from .import_service import build_preview, ImportParseError, read_csv_bytes, read_xlsx_bytes, detect_and_map_headers, validate_required_mappings, normalize_rows
+import json
 # Remove the service account imports since we're switching to user-based approach
 # from utils.google_service_account_sheets import GoogleServiceAccountSheets
 
@@ -22,6 +25,7 @@ from users.google_drive_service import GoogleDriveService
 class ClassRecordViewSet(viewsets.ModelViewSet):
     serializer_class = ClassRecordSerializer
     permission_classes = [IsAuthenticated]
+    parser_classes = [JSONParser, FormParser, MultiPartParser]
 
     def get_queryset(self):
         return ClassRecord.objects.filter(user=self.request.user)
@@ -115,6 +119,37 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
             print(f"   Full traceback: {traceback.format_exc()}")
             # Don't re-raise - allow ClassRecord creation to succeed even if Google Sheets fails
             print("📝 ClassRecord created successfully, but Google Sheets integration failed.")
+
+    def perform_update(self, serializer):
+        """Update the record; if name or semester changes, rename the Drive file accordingly."""
+        instance: ClassRecord = self.get_object()
+        old_name = instance.name
+        old_semester = instance.semester
+
+        class_record = serializer.save()
+
+        try:
+            # Only attempt Drive rename if we actually have a sheet and the display name changed
+            display_old = f"{old_name} - {old_semester}".strip()
+            display_new = f"{class_record.name} - {class_record.semester}".strip()
+
+            if class_record.google_sheet_id and display_old != display_new:
+                access_token = self.request.headers.get('X-Google-Access-Token')
+                if not access_token:
+                    print("⚠️ Update: No X-Google-Access-Token provided; skipping Google Drive rename.")
+                    return
+
+                drive_service = GoogleDriveService(access_token)
+                result = drive_service.rename_file(class_record.google_sheet_id, display_new)
+                if result.get('success'):
+                    print(f"✅ Renamed Drive file to '{display_new}' for class record {class_record.id}")
+                else:
+                    print("⚠️ Failed to rename Drive file:", result)
+
+        except Exception as e:
+            import traceback
+            print(f"⚠️ Error during Drive rename on update: {str(e)}")
+            print(traceback.format_exc())
 
     def perform_destroy(self, instance):
         """Extend the default destroy method to delete the Google Sheet."""
@@ -376,6 +411,240 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
                 'status': 'error',
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
+
+    # -------- Import Endpoints --------
+    @action(detail=False, methods=['post'], url_path='import/preview-upload')
+    def preview_import_upload(self, request):
+        """
+        Preview an uploaded .csv/.xlsx file; return auto-mapped headers and sample rows.
+        """
+        try:
+            uploaded = request.FILES.get('file')
+            if not uploaded:
+                return Response({'error': 'No file provided'}, status=400)
+
+            preview = build_preview(uploaded.read(), uploaded.name)
+            return Response(preview)
+        except ImportParseError as e:
+            return Response({'error': str(e)}, status=400)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+    @action(detail=False, methods=['post'], url_path='import/upload')
+    def import_upload(self, request):
+        """
+        Finalize import from an uploaded file with a provided mapping.
+        """
+        try:
+            uploaded = request.FILES.get('file')
+            mapping = request.data.get('mapping')
+            if isinstance(mapping, str):
+                try:
+                    mapping = json.loads(mapping)
+                except Exception:
+                    return Response({'error': 'Invalid mapping JSON'}, status=400)
+            name = (request.data.get('name') or '').strip()
+            semester = (request.data.get('semester') or '').strip()
+            if not semester:
+                semester = '1st Semester'
+
+            # Enforce Google Sheet creation prerequisites
+            access_token = request.headers.get('X-Google-Access-Token')
+            template_id = getattr(settings, 'GOOGLE_SHEETS_TEMPLATE_ID', None)
+            if not access_token:
+                return Response({'error': 'Missing X-Google-Access-Token. Please connect Google and retry.'}, status=400)
+            if not template_id:
+                return Response({'error': 'Template not configured. Please set GOOGLE_SHEETS_TEMPLATE_ID on the server.'}, status=400)
+
+            if not uploaded:
+                return Response({'error': 'No file provided'}, status=400)
+            if not mapping:
+                return Response({'error': 'Mapping is required'}, status=400)
+
+            # Derive name from filename if not provided
+            if not name:
+                try:
+                    import os
+                    base = os.path.basename(uploaded.name)
+                    name = os.path.splitext(base)[0]
+                except Exception:
+                    name = uploaded.name
+
+            # Soft-check required mappings; continue and surface row-level errors instead of hard failing
+            missing = validate_required_mappings(mapping)
+
+            # Read full rows
+            lower = uploaded.name.lower()
+            if lower.endswith('.csv'):
+                headers, rows = read_csv_bytes(uploaded.read())
+            else:
+                headers, rows = read_xlsx_bytes(uploaded.read())
+
+            valid_rows, row_errors = normalize_rows(rows, mapping)
+
+            # Create ClassRecord and store imported data in JSON fields as per model
+            class_record = ClassRecord.objects.create(
+                user=request.user,
+                name=name,
+                semester=semester,
+                imported_excel_headers=list(mapping.values()),
+                imported_excel_data=valid_rows,
+                imported_file_name=uploaded.name,
+                is_excel_imported=True,
+                excel_last_modified=timezone.now(),
+            )
+
+            # Attempt to create Google Sheet same as perform_create does (optional, best effort)
+            try:
+                access_token = request.headers.get('X-Google-Access-Token')
+                template_id = getattr(settings, 'GOOGLE_SHEETS_TEMPLATE_ID', None)
+                if access_token and template_id:
+                    user_sheets_service = GoogleSheetsService(access_token)
+                    copy_result = user_sheets_service.copy_template_sheet(
+                        template_file_id=template_id,
+                        new_name=f"{class_record.name} - {class_record.semester}"
+                    )
+                    if copy_result.get('success'):
+                        copied_file_info = copy_result['file']
+                        class_record.google_sheet_id = copied_file_info['id']
+                        class_record.google_sheet_url = copied_file_info.get('webViewLink')
+                        class_record.save()
+                        # Make public editable (best effort)
+                        user_sheets_service.update_sheet_permissions(
+                            file_id=copied_file_info['id'], make_editable=True
+                        )
+            except Exception:
+                pass
+
+            return Response({
+                'status': 'success',
+                'classRecordId': class_record.id,
+                'importedCount': len(valid_rows),
+                'skippedCount': len(row_errors),
+                'errors': row_errors[:50],
+            }, status=201)
+        except ImportParseError as e:
+            return Response({'error': str(e)}, status=400)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+    @action(detail=False, methods=['post'], url_path='import/preview-drive')
+    def preview_import_drive(self, request):
+        try:
+            file_id = request.data.get('fileId')
+            file_name = request.data.get('fileName')
+            access_token = request.headers.get('X-Google-Access-Token')
+            if not file_id or not file_name:
+                return Response({'error': 'fileId and fileName are required'}, status=400)
+            if not access_token:
+                return Response({'error': 'Missing X-Google-Access-Token'}, status=400)
+
+            drive = GoogleDriveService(access_token)
+            download = drive.get_file_content(file_id)
+            if not download.get('success'):
+                return Response({'error': download.get('error', 'Failed to download file'), 'details': download.get('details')}, status=400)
+
+            preview = build_preview(download['content'], file_name)
+            return Response(preview)
+        except ImportParseError as e:
+            return Response({'error': str(e)}, status=400)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+    @action(detail=False, methods=['post'], url_path='import/drive')
+    def import_drive(self, request):
+        try:
+            file_id = request.data.get('fileId')
+            file_name = request.data.get('fileName')
+            mapping = request.data.get('mapping')
+            name = (request.data.get('name') or '').strip()
+            semester = (request.data.get('semester') or '').strip()
+            access_token = request.headers.get('X-Google-Access-Token')
+            if not semester:
+                semester = '1st Semester'
+
+            if not file_id or not file_name:
+                return Response({'error': 'fileId and fileName are required'}, status=400)
+            if not mapping:
+                return Response({'error': 'Mapping is required'}, status=400)
+            if not access_token:
+                return Response({'error': 'Missing X-Google-Access-Token'}, status=400)
+            template_id = getattr(settings, 'GOOGLE_SHEETS_TEMPLATE_ID', None)
+            if not template_id:
+                return Response({'error': 'Template not configured. Please set GOOGLE_SHEETS_TEMPLATE_ID on the server.'}, status=400)
+
+            if isinstance(mapping, str):
+                try:
+                    mapping = json.loads(mapping)
+                except Exception:
+                    return Response({'error': 'Invalid mapping JSON'}, status=400)
+
+            missing = validate_required_mappings(mapping)
+
+            drive = GoogleDriveService(access_token)
+            download = drive.get_file_content(file_id)
+            if not download.get('success'):
+                return Response({'error': download.get('error', 'Failed to download file'), 'details': download.get('details')}, status=400)
+
+            content = download['content']
+            if file_name.lower().endswith('.csv'):
+                headers, rows = read_csv_bytes(content)
+            else:
+                headers, rows = read_xlsx_bytes(content)
+
+            valid_rows, row_errors = normalize_rows(rows, mapping)
+
+            # Derive name from file when not provided
+            if not name:
+                try:
+                    import os
+                    base = os.path.basename(file_name)
+                    name = os.path.splitext(base)[0]
+                except Exception:
+                    name = file_name
+
+            class_record = ClassRecord.objects.create(
+                user=request.user,
+                name=name,
+                semester=semester,
+                imported_excel_headers=list(mapping.values()),
+                imported_excel_data=valid_rows,
+                imported_file_name=file_name,
+                is_excel_imported=True,
+                excel_last_modified=timezone.now(),
+            )
+
+            # Attempt to create Google Sheet same as perform_create (best effort)
+            try:
+                template_id = getattr(settings, 'GOOGLE_SHEETS_TEMPLATE_ID', None)
+                if access_token and template_id:
+                    user_sheets_service = GoogleSheetsService(access_token)
+                    copy_result = user_sheets_service.copy_template_sheet(
+                        template_file_id=template_id,
+                        new_name=f"{class_record.name} - {class_record.semester}"
+                    )
+                    if copy_result.get('success'):
+                        copied_file_info = copy_result['file']
+                        class_record.google_sheet_id = copied_file_info['id']
+                        class_record.google_sheet_url = copied_file_info.get('webViewLink')
+                        class_record.save()
+                        user_sheets_service.update_sheet_permissions(
+                            file_id=copied_file_info['id'], make_editable=True
+                        )
+            except Exception:
+                pass
+
+            return Response({
+                'status': 'success',
+                'classRecordId': class_record.id,
+                'importedCount': len(valid_rows),
+                'skippedCount': len(row_errors),
+                'errors': row_errors[:50],
+            }, status=201)
+        except ImportParseError as e:
+            return Response({'error': str(e)}, status=400)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
 
     @action(detail=True, methods=['get'])
     def columns(self, request, pk=None):

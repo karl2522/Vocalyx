@@ -20,6 +20,7 @@ const capuras = "/assets/capuras.png";
 const chavez = "/assets/chavez.png";
 const gadiane = "/assets/gadiane.png";
 const pejana = "/assets/pejana.png";
+const vocalyxPerson = "/assets/vocalyxPerson.png";
 
-export { about, capuras, chavez, display, display1, display2, export1, gadiane, github, google, instagram, linkedin, microphone, microsoft, notes, omen, pejana, play, sync, voice, logoBlue, logoWhite };
+export { about, capuras, chavez, display, display1, display2, export1, gadiane, github, google, instagram, linkedin, microphone, microsoft, notes, omen, pejana, play, sync, voice, logoBlue, logoWhite,vocalyxPerson};
 

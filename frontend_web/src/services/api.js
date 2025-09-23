@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = ' http://127.0.0.1:8000/api';
+const API_URL = 'http://127.0.0.1:8000/api';
 
 const api = axios.create({
     baseURL: API_URL,
@@ -162,7 +162,7 @@ export const logout = async () => {
 // Add refresh token function
 export const refreshToken = async (refreshTokenStr) => {
     try {
-        const response = await api.post('/refresh-token/', {
+        const response = await api.post('/token/refresh/', {
             refresh: refreshTokenStr
         });
         return response.data;
@@ -222,8 +222,17 @@ export const classRecordService = {
     // Get a specific class record by ID
     getClassRecord: (id) => api.get(`/class-records/${id}/`),
     
-    // Update a class record
-    updateClassRecord: (id, recordData) => api.patch(`/class-records/${id}/`, recordData),
+    // Update a class record (send Google access token if available for Drive rename)
+    updateClassRecord: (id, recordData) => {
+        const googleAccessToken = localStorage.getItem('googleAccessToken');
+        const config = {};
+        if (googleAccessToken) {
+            config.headers = {
+                'X-Google-Access-Token': googleAccessToken
+            };
+        }
+        return api.patch(`/class-records/${id}/`, recordData, config);
+    },
     
     // Delete a class record
     deleteClassRecord: (id) => {
@@ -519,6 +528,44 @@ export const classRecordService = {
         
         return api.get(`/sheets/${sheetId}/get-categories/`, { params });
     },
+
+    // -------- ClassRecord Import APIs --------
+    previewImportUpload: (file) => {
+        const form = new FormData();
+        form.append('file', file);
+        return api.post('/class-records/import/preview-upload/', form, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        });
+    },
+
+    importUpload: (file, mapping, name, semester) => {
+        const form = new FormData();
+        form.append('file', file);
+        form.append('mapping', JSON.stringify(mapping));
+        form.append('name', name);
+        form.append('semester', semester);
+        return api.post('/class-records/import/upload/', form, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        });
+    },
+
+    previewImportDrive: (fileId, fileName) => {
+        const googleAccessToken = localStorage.getItem('googleAccessToken');
+        const config = {};
+        if (googleAccessToken) {
+            config.headers = { 'X-Google-Access-Token': googleAccessToken };
+        }
+        return api.post('/class-records/import/preview-drive/', { fileId, fileName }, config);
+    },
+
+    importDrive: (fileId, fileName, mapping, name, semester) => {
+        const googleAccessToken = localStorage.getItem('googleAccessToken');
+        const config = {};
+        if (googleAccessToken) {
+            config.headers = { 'X-Google-Access-Token': googleAccessToken };
+        }
+        return api.post('/class-records/import/drive/', { fileId, fileName, mapping, name, semester }, config);
+    },
 };
 
 export const enhancedClassRecordService = {
@@ -526,71 +573,50 @@ export const enhancedClassRecordService = {
     
     // Override createClassRecord to log activity
     createClassRecord: async (recordData) => {
-        try {
-            const response = await classRecordService.createClassRecord(recordData);
-            
-            // Log activity
-            await activityService.logActivity(
-                'record_created',
-                `Created class record "${recordData.name}"`,
-                {
-                    description: `Created new class record for ${recordData.semester}`,
-                    metadata: { 
-                        semester: recordData.semester,
-                        teacher: recordData.teacher_name 
-                    },
-                    classRecordId: response.data.id
-                }
-            );
-            
-            return response;
-        } catch (error) {
-            throw error;
-        }
+        const response = await classRecordService.createClassRecord(recordData);
+        await activityService.logActivity(
+            'record_created',
+            `Created class record "${recordData.name}"`,
+            {
+                description: `Created new class record for ${recordData.semester}`,
+                metadata: { 
+                    semester: recordData.semester,
+                    teacher: recordData.teacher_name 
+                },
+                classRecordId: response.data.id
+            }
+        );
+        return response;
     },
     
     // Override updateClassRecord to log activity
     updateClassRecord: async (id, recordData) => {
-        try {
-            const response = await classRecordService.updateClassRecord(id, recordData);
-            
-            // Log activity
-            await activityService.logActivity(
-                'record_updated',
-                `Updated class record "${recordData.name || 'record'}"`,
-                {
-                    description: `Modified class record details`,
-                    metadata: recordData,
-                    classRecordId: id
-                }
-            );
-            
-            return response;
-        } catch (error) {
-            throw error;
-        }
+        const response = await classRecordService.updateClassRecord(id, recordData);
+        await activityService.logActivity(
+            'record_updated',
+            `Updated class record "${recordData.name || 'record'}"`,
+            {
+                description: `Modified class record details`,
+                metadata: recordData,
+                classRecordId: id
+            }
+        );
+        return response;
     },
     
     // Override deleteClassRecord to log activity
     deleteClassRecord: async (id, recordName = 'record') => {
-        try {
-            const response = await classRecordService.deleteClassRecord(id);
-            
-            // Log activity
-            await activityService.logActivity(
-                'record_deleted',
-                `Deleted class record "${recordName}"`,
-                {
-                    description: `Permanently removed class record`,
-                    metadata: { deleted_record_id: id },
-                    classRecordId: id
-                }
-            );
-            
-            return response;
-        } catch (error) {
-            throw error;
-        }
+        const response = await classRecordService.deleteClassRecord(id);
+        await activityService.logActivity(
+            'record_deleted',
+            `Deleted class record "${recordName}"`,
+            {
+                description: `Permanently removed class record`,
+                metadata: { deleted_record_id: id },
+                classRecordId: id
+            }
+        );
+        return response;
     }
 };
 

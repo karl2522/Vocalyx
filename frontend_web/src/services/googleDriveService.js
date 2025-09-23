@@ -1,3 +1,5 @@
+import { refreshToken as refreshJwt } from './api';
+
 const BACKEND_URL = import.meta.env.NODE_ENV === 'production' 
   ? 'https://vocalyx-c61a072bf25a.herokuapp.com' 
   : 'http://127.0.0.1:8000';
@@ -29,6 +31,28 @@ class GoogleDriveService {
     return headers;
   }
 
+  async requestWithAuth(input, init = {}) {
+    // First attempt
+    let response = await fetch(input, { ...init, headers: { ...(init.headers || {}), ...this.getHeaders() } });
+    if (response.status !== 401) return response;
+
+    // Try refresh JWT using stored refresh token
+    try {
+      const refreshStr = localStorage.getItem('refreshToken') || localStorage.getItem('refresh_token');
+      if (!refreshStr) return response; // no refresh token
+      const data = await refreshJwt(refreshStr);
+      if (data && data.access) {
+        localStorage.setItem('authToken', data.access);
+        localStorage.setItem('access_token', data.access);
+        // retry once with new token
+        response = await fetch(input, { ...init, headers: { ...(init.headers || {}), ...this.getHeaders() } });
+      }
+    } catch {
+      // swallow and return original/failed response
+    }
+    return response;
+  }
+
   /**
    * Test Google Drive connection
    */
@@ -39,12 +63,10 @@ class GoogleDriveService {
         throw new Error('No Google access token found. Please sign in with Google again.');
       }
 
-      const response = await fetch(`${this.baseURL}/drive/test/`, {
+      const response = await this.requestWithAuth(`${this.baseURL}/drive/test/`, {
         method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify({
-          access_token: googleAccessToken
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ access_token: googleAccessToken })
       });
 
       if (!response.ok) {
@@ -70,10 +92,7 @@ class GoogleDriveService {
       if (pageSize) params.append('page_size', pageSize.toString());
       if (folderId) params.append('folder_id', folderId);
 
-      const response = await fetch(`${this.baseURL}/drive/files/?${params}`, {
-        method: 'GET',
-        headers: this.getHeaders()
-      });
+      const response = await this.requestWithAuth(`${this.baseURL}/drive/files/?${params}`, { method: 'GET' });
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -100,10 +119,8 @@ class GoogleDriveService {
       }
 
       // Get headers without Content-Type for FormData
-      const headers = this.getHeaders();
-      delete headers['Content-Type']; // Let browser set it for FormData
-
-      const response = await fetch(`${this.baseURL}/drive/upload/`, {
+      const headers = {}; // Let browser set content-type for FormData
+      const response = await this.requestWithAuth(`${this.baseURL}/drive/upload/`, {
         method: 'POST',
         headers,
         body: formData
@@ -125,13 +142,10 @@ class GoogleDriveService {
    */
   async createFolder(folderName, parentFolderId = null) {
     try {
-      const response = await fetch(`${this.baseURL}/drive/folder/`, {
+      const response = await this.requestWithAuth(`${this.baseURL}/drive/folder/`, {
         method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify({
-          folder_name: folderName,
-          parent_folder_id: parentFolderId
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folder_name: folderName, parent_folder_id: parentFolderId })
       });
 
       if (!response.ok) {
@@ -150,10 +164,7 @@ class GoogleDriveService {
    */
   async downloadFile(fileId, filename = null) {
     try {
-      const response = await fetch(`${this.baseURL}/drive/download/${fileId}/`, {
-        method: 'GET',
-        headers: this.getHeaders()
-      });
+      const response = await this.requestWithAuth(`${this.baseURL}/drive/download/${fileId}/`, { method: 'GET' });
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
