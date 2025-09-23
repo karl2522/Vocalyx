@@ -268,6 +268,10 @@ DATABASES = {
     }
 }
 
+# Override with DATABASE_URL if provided (for Heroku deployment)
+if 'DATABASE_URL' in os.environ:
+    DATABASES['default'] = dj_database_url.parse(os.environ['DATABASE_URL'])
+
 
 SECURE_SSL_REDIRECT = False if DEBUG else True
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
