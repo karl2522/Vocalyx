@@ -9,7 +9,7 @@ import { classRecordService } from '../services/api';
 import googleDriveService from '../services/googleDriveService';
 import { speakText, stopSpeaking } from '../utils/speechSynthesis';
 import useVoiceRecognition from '../utils/useVoiceRecognition';
-import { applyPhoneticCorrections, cleanName, findStudentRowSmart, parseVoiceCommand } from '../utils/voicecommandParser';
+import { applyPhoneticCorrections, cleanName, findStudentRowSmart, parseVoiceCommand } from '../utils/voiceCommandParser';
 import AddCategoryModal from './modals/AddCategoryModal.jsx';
 import BatchGradingModal from './modals/BatchGradingModal';
 import ColumnMappingModal from './modals/ColumnMappingModal';

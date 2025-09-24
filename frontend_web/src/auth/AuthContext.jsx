@@ -6,7 +6,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { auth, googleProvider } from '../config/firebase';
 import { refreshToken } from '../services/api';
 import { clearAuthState } from '../utils/auth';
-import sessionTimer from '../utils/sessiontimer';
+import sessionTimer from '../utils/sessionTimer';
 import { showToast } from '../utils/toast';
 
 // Environment variables

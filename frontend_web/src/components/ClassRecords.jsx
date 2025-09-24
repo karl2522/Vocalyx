@@ -13,7 +13,7 @@ import {
 import { RiSoundModuleLine } from 'react-icons/ri';
 import { Link } from 'react-router-dom';
 import { enhancedClassRecordService as classRecordService } from '../services/api';
-import { showToast } from '../utils/toast.jsx';
+import { showToast } from '../utils/toast';
 import { TopNavbar } from './layouts/TopNavbar.jsx';
 import CreateClassRecordModal from './modals/CreateClassRecordModal';
 
