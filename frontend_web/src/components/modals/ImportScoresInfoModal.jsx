@@ -1,34 +1,47 @@
-import { 
-  Target,
-  FileSpreadsheet,
-  Shuffle,
+import {
+  BarChart3,
   CheckCircle,
-  Shield,
+  FileSpreadsheet,
   Lightbulb,
-  BarChart3
+  Shield,
+  Shuffle,
+  Target
 } from 'lucide-react';
+import PropTypes from 'prop-types';
 
 const ImportScoresInfoModal = ({ showModal, setShowModal, onProceed }) => {
   if (!showModal) return null;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 bg-gradient-to-r from-purple-50 to-indigo-50">
-          <div className="flex items-center space-x-3">
-            <BarChart3 className="w-6 h-6 text-purple-600" />
-            <div>
-              <h2 className="text-xl font-bold text-slate-900">Import Scores from Excel</h2>
-              <p className="text-sm text-slate-600 mt-1">
-                Add grades to existing students using Excel files with smart column mapping
-              </p>
+      <div className="bg-white rounded-2xl overflow-hidden shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col">
+        {/* Header - Subtle gradient, icons, extra padding */}
+        <div className="px-7 py-6 border-b border-slate-200 bg-gradient-to-r from-[#E6E9F7] to-white flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#E6E9F7' }}>
+                <BarChart3 className="w-5 h-5" style={{ color: '#333D79' }} />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">Import Scores</h2>
+                <p className="text-sm text-slate-600">Upload an Excel file to add scores to your class</p>
+              </div>
+            </div>
+            <div className="hidden sm:flex items-center gap-2">
+              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs" style={{ backgroundColor: '#E6E9F7', color: '#333D79' }}>
+                <Shield className="w-3.5 h-3.5" />
+                Safe Import
+              </span>
+              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs" style={{ backgroundColor: '#E6E9F7', color: '#333D79' }}>
+                <Shuffle className="w-3.5 h-3.5" />
+                Auto-mapping
+              </span>
             </div>
           </div>
         </div>
 
-        {/* Content */}
-        <div className="p-6 overflow-y-auto max-h-[70vh]">
+        {/* Content - Scrollable */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
           <div className="space-y-6">
             {/* How it Works */}
             <div>
@@ -136,7 +149,7 @@ const ImportScoresInfoModal = ({ showModal, setShowModal, onProceed }) => {
                 <ul className="space-y-2 text-sm text-emerald-700">
                   <li className="flex items-start space-x-2">
                     <CheckCircle className="w-4 h-4 text-emerald-600 mt-0.5 flex-shrink-0" />
-                    <span><strong>Column headers will be renamed</strong> to match your Excel file (e.g., "QUIZ 1" becomes "Quiz 1")</span>
+                    <span><strong>Column headers will be renamed</strong> to match your Excel file (e.g., &quot;QUIZ 1&quot; becomes &quot;Quiz 1&quot;)</span>
                   </li>
                   <li className="flex items-start space-x-2">
                     <CheckCircle className="w-4 h-4 text-emerald-600 mt-0.5 flex-shrink-0" />
@@ -198,7 +211,7 @@ const ImportScoresInfoModal = ({ showModal, setShowModal, onProceed }) => {
                   </li>
                   <li className="flex items-start space-x-2">
                     <Lightbulb className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
-                    <span><strong>Use "Merge - Skip Existing"</strong> to protect scores already in your sheet</span>
+                    <span><strong>Use &quot;Merge - Skip Existing&quot;</strong> to protect scores already in your sheet</span>
                   </li>
                   <li className="flex items-start space-x-2">
                     <Lightbulb className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
@@ -229,7 +242,8 @@ const ImportScoresInfoModal = ({ showModal, setShowModal, onProceed }) => {
                 setShowModal(false);
                 onProceed();
               }}
-              className="px-6 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors shadow-md flex items-center space-x-2"
+              className="px-6 py-2 text-white rounded-lg font-medium transition-colors shadow-md flex items-center space-x-2"
+              style={{ backgroundColor: '#333D79' }}
             >
               <BarChart3 className="w-4 h-4" />
               <span>Choose Excel File</span>
@@ -239,6 +253,12 @@ const ImportScoresInfoModal = ({ showModal, setShowModal, onProceed }) => {
       </div>
     </div>
   );
+};
+
+ImportScoresInfoModal.propTypes = {
+  showModal: PropTypes.bool.isRequired,
+  setShowModal: PropTypes.func.isRequired,
+  onProceed: PropTypes.func.isRequired,
 };
 
 export default ImportScoresInfoModal;

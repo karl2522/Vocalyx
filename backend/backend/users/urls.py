@@ -16,6 +16,7 @@ from .views import (
     sheets_import_students_preview, sheets_import_students_execute, sheets_preview_column_import,
     sheets_analyze_columns_mapping, sheets_execute_column_import, sheets_rename_column_header,
     sheets_analyze_columns_mapping_enhanced, sheets_execute_column_import_enhanced, get_import_history,
+    sheets_auto_map_columns, sheets_execute_auto_mapping,
     sheets_update_max_score_service_account, sheets_update_batch_max_scores_service_account,
     sheets_update_range_service_account, delete_student_from_sheet, update_multiple_cells_service_account,
     sheets_add_category_service_account, sheets_delete_category_service_account, sheets_edit_category_service_account,
@@ -95,6 +96,10 @@ urlpatterns = [
     path('sheets/<str:sheet_id>/analyze-columns-mapping-enhanced/', sheets_analyze_columns_mapping_enhanced, name='sheets_analyze_columns_mapping_enhanced'),
     path('sheets/<str:sheet_id>/execute-column-import-enhanced/', sheets_execute_column_import_enhanced, name='sheets_execute_column_import_enhanced'),
     path('sheets/<str:sheet_id>/import-history/', get_import_history, name='get_import_history'),
+
+    # Auto-mapping endpoints
+    path('sheets/<str:sheet_id>/auto-map-columns/', sheets_auto_map_columns, name='sheets_auto_map_columns'),
+    path('sheets/<str:sheet_id>/execute-auto-mapping/', sheets_execute_auto_mapping, name='sheets_execute_auto_mapping'),
 
     path('sheets/<str:sheet_id>/update-max-score/', sheets_update_max_score_service_account, name='sheets_update_max_score'),
     path('sheets/<str:sheet_id>/update-batch-max-scores/', sheets_update_batch_max_scores_service_account, name='sheets_update_batch_max_scores'),

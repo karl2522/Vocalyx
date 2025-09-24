@@ -444,6 +444,29 @@ export const classRecordService = {
         return api.get(`/sheets/${sheetId}/import-history/`);
     },
 
+    // Auto-mapping endpoints
+    autoMapColumns: (sheetId, importColumns, classRecordId, sheetName = null, importData = null) => {
+        const payload = { 
+            import_columns: importColumns,
+            class_record_id: classRecordId
+        };
+        if (sheetName) payload.sheet_name = sheetName;
+        if (importData) payload.import_data = importData;
+        
+        return api.post(`/sheets/${sheetId}/auto-map-columns/`, payload);
+    },
+
+    executeAutoMapping: (sheetId, decisions, importData, classRecordId, sheetName = null) => {
+        const payload = { 
+            decisions: decisions,
+            import_data: importData,
+            class_record_id: classRecordId
+        };
+        if (sheetName) payload.sheet_name = sheetName;
+        
+        return api.post(`/sheets/${sheetId}/execute-auto-mapping/`, payload);
+    },
+
     updateMaxScore: (sheetId, columnName, maxScore, sheetName = null) => {
         const payload = { 
             column_name: columnName,
