@@ -1,4 +1,4 @@
-import { AlertCircle, Download, FileSpreadsheet, Search, X } from 'lucide-react';
+import { AlertCircle, Download, FileSpreadsheet, RefreshCw, Search, X } from 'lucide-react';
 import PropTypes from 'prop-types';
 import { useEffect, useState } from 'react';
 import googleDriveService from '../../services/googleDriveService';
@@ -20,12 +20,17 @@ const DriveFilePickerModal = ({
     }
   }, [isOpen]);
 
-  const loadDriveFiles = async () => {
+  const loadDriveFiles = async (forceRefresh = false) => {
     try {
       setLoading(true);
       setError(null);
+      setFiles([]); // Clear existing files on refresh
       
-      console.log('🔍 Loading Drive files...');
+      console.log('🔍 Loading Drive files...', forceRefresh ? '(force refresh)' : '');
+      
+      // Check if we have a Google access token
+      const googleAccessToken = localStorage.getItem('googleAccessToken');
+      console.log('🔍 Google access token exists:', !!googleAccessToken);
       
       // List more files to find Excel/CSV files
       const result = await googleDriveService.listFiles({
@@ -33,6 +38,8 @@ const DriveFilePickerModal = ({
       });
 
       console.log('📁 Drive API result:', result);
+      console.log('📁 Drive API success:', result.success);
+      console.log('📁 Drive API files count:', result.files?.length || 0);
 
       if (result.success) {
         const allFiles = result.files || [];
@@ -58,11 +65,15 @@ const DriveFilePickerModal = ({
         console.log(`✅ Found ${excelFiles.length} Excel/CSV files (.xlsx/.csv) out of ${allFiles.length} total files`);
       } else {
         console.error('❌ Drive API error:', result.error);
+        console.error('❌ Drive API result:', result);
         setError(result.error || 'Failed to load files from Drive');
+        setFiles([]); // Clear files on error
       }
     } catch (error) {
       console.error('❌ Error loading Drive files:', error);
-      setError('Error connecting to Google Drive');
+      console.error('❌ Error details:', error.message);
+      setError(`Error connecting to Google Drive: ${error.message}`);
+      setFiles([]); // Clear files on error
     } finally {
       setLoading(false);
     }
@@ -134,6 +145,15 @@ const DriveFilePickerModal = ({
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
+            <button
+              type="button"
+              onClick={() => loadDriveFiles(true)}
+              className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-2"
+              title="Refresh Drive files"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Refresh
+            </button>
             <button
               type="submit"
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"

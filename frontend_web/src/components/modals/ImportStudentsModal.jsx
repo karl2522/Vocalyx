@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { CheckCircle, XCircle, AlertTriangle, FileText, Users, Eye, EyeOff } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Eye, EyeOff, FileText, Users, XCircle } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
 
 const ImportStudentsModal = ({ 
   showImportModal, 
@@ -11,8 +11,15 @@ const ImportStudentsModal = ({
   newStudentsCount = 0,
   newStudentsData = [],
 }) => {
-  const [showDetails, setShowDetails] = useState(true);
+  const [showDetails, setShowDetails] = useState(false);
   const [selectedTab, setSelectedTab] = useState('conflicts'); // 'conflicts' or 'summary'
+  
+  // Ensure details are hidden each time the modal opens
+  useEffect(() => {
+    if (showImportModal) {
+      setShowDetails(false);
+    }
+  }, [showImportModal]);
   
   if (!showImportModal) return null;
   
@@ -33,7 +40,8 @@ const ImportStudentsModal = ({
     // 🔥 FIXED: Set importing status right away
     setImportProgress({ 
       status: 'importing', 
-      message: 'Processing import... Please wait.' 
+      message: 'Processing import... Please wait.',
+      entity: 'students'
     });
     
     // Execute import (this will update progress as it goes)
@@ -51,7 +59,7 @@ const ImportStudentsModal = ({
   
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
+      <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
         {/* Enhanced Header */}
         <div className="px-6 py-4 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-indigo-50">
           <div className="flex items-center justify-between">

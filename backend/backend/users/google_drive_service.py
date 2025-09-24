@@ -83,19 +83,26 @@ class GoogleDriveService:
             
             # Build query string
             query_parts = []
+            
             if query:
-                # If query contains mimeType, use it as-is (it's already a proper Drive API query)
-                if 'mimeType' in query:
+                # If query contains mimeType or looks like a Drive API query, use it as-is
+                if 'mimeType' in query or 'trashed=' in query or 'and' in query.lower():
                     query_parts.append(query)
                 else:
                     # Otherwise, treat it as a name search
                     query_parts.append(f"name contains '{query}'")
+            
             if folder_id:
                 query_parts.append(f"'{folder_id}' in parents")
             
+            # Always exclude files in trash unless already specified
+            if not any('trashed=' in part for part in query_parts):
+                query_parts.append('trashed=false')
+            
+            # Build final query
             if query_parts:
                 params['q'] = ' and '.join(query_parts)
-                logger.info(f"Drive API query: {params['q']}")
+            logger.info(f"Drive API query: {params['q']}")
             
             logger.info(f"Drive API request params: {params}")
             response = requests.get(

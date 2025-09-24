@@ -19,6 +19,7 @@ import DriveFilePickerModal from './modals/DriveFilePickerModal.jsx';
 import DuplicateStudentModal from './modals/DuplicateStudentModal.jsx';
 import EditCategoryModal from './modals/EditCategoryModal.jsx';
 import ImportProgressIndicator from './modals/ImportProgressIndicator';
+import ImportReviewModal from './modals/ImportReviewModal.jsx';
 import ImportScoresInfoModal from './modals/ImportScoresInfoModal.jsx';
 import ImportStudentsInfoModal from './modals/ImportStudentsInfoModal.jsx';
 import ImportStudentsModal from './modals/ImportStudentsModal';
@@ -60,6 +61,10 @@ const ClassRecordExcel = () => {
   const [showColumnImportModal, setShowColumnImportModal] = useState(false);
   const [columnAnalysis, setColumnAnalysis] = useState(null);
   const [pendingImportData, setPendingImportData] = useState(null);
+  
+  // Auto-mapping state
+  const [showImportReviewModal, setShowImportReviewModal] = useState(false);
+  const [autoMappingResult, setAutoMappingResult] = useState(null);
   const [currentSheetName, setCurrentSheetName] = useState(''); // Add this state
   const [availableCategories, setAvailableCategories] = useState([]); // Add this state
 
@@ -628,7 +633,7 @@ const ClassRecordExcel = () => {
     }
 
     try {
-      setImportProgress({ status: 'reading', message: 'Reading Excel file...' });
+      setImportProgress({ status: 'reading', message: 'Reading Excel file...', entity: 'scores' });
       
       // Read Excel file
       const data = await file.arrayBuffer();
@@ -640,7 +645,7 @@ const ClassRecordExcel = () => {
         throw new Error('Excel file must have at least a header row and one data row');
       }
       
-      setImportProgress({ status: 'parsing', message: 'Parsing columns and scores...' });
+      setImportProgress({ status: 'parsing', message: 'Parsing columns and scores...', entity: 'scores' });
       
       // Parse headers and data
       const headers = jsonData[0].map(h => String(h || '').trim());
@@ -651,6 +656,17 @@ const ClassRecordExcel = () => {
       const scoreColumns = headers.filter(header => 
         !studentColumns.some(sc => header.toUpperCase().includes(sc.toUpperCase()))
       );
+
+      // Create unique keys for duplicate import column names (e.g., QUIZ, QUIZ)
+      const nameCounts = {};
+      const uniqueScoreColumns = scoreColumns.map(orig => {
+        const key = orig || '';
+        const lower = key.toLowerCase();
+        const n = (nameCounts[lower] || 0) + 1;
+        nameCounts[lower] = n;
+        // Append stable internal suffix when duplicated
+        return nameCounts[lower] > 1 ? `${key}__${n}` : key;
+      });
       
       if (scoreColumns.length === 0) {
         throw new Error('No score columns found in the Excel file');
@@ -668,9 +684,11 @@ const ClassRecordExcel = () => {
       const columnData = {};
       const students = [];
       
-      for (const scoreColumn of scoreColumns) {
+      for (let idx = 0; idx < scoreColumns.length; idx++) {
+        const scoreColumn = scoreColumns[idx];
+        const uniqueKey = uniqueScoreColumns[idx];
         const columnIndex = headers.indexOf(scoreColumn);
-        columnData[scoreColumn] = {};
+        columnData[uniqueKey] = {};
         
         for (let i = 0; i < dataRows.length; i++) {
         const row = dataRows[i];
@@ -679,14 +697,9 @@ const ClassRecordExcel = () => {
         const score = String(row[columnIndex] || '').trim();
         
         if (lastName && firstName && score) {
-          const studentKey1 = `${firstName} ${lastName}`;  // "Zachary Banks"
-          const studentKey2 = `${lastName}, ${firstName}`; // "Banks, Zachary" 
-          const studentKey3 = `${lastName} ${firstName}`;  // "Banks Zachary"
+          const studentKey = `${firstName} ${lastName}`;  // "Zachary Banks"
           
-          // Use the first format as primary, but log all for debugging
-          const studentKey = studentKey1;
-          
-          columnData[scoreColumn][studentKey] = score;
+          columnData[uniqueKey][studentKey] = score;
           
           // Track students
           if (!students.find(s => s.key === studentKey)) {
@@ -702,29 +715,33 @@ const ClassRecordExcel = () => {
     }
       
       const importData = {
-        columns: scoreColumns,
+        // Use unique keys to track duplicate import columns distinctly
+        columns: uniqueScoreColumns,
         columnData,
         students,
         totalDataPoints: Object.values(columnData).reduce((sum, scores) => sum + Object.keys(scores).length, 0)
       };
       
-      setImportProgress({ status: 'analyzing', message: 'Analyzing column mapping options...' });
+      setImportProgress({ status: 'auto-mapping', message: 'Auto-mapping columns...', entity: 'scores' });
       
-      // Analyze columns for mapping
-      const analysisResponse = await classRecordService.analyzeColumnsForMappingEnhanced(
+      // NEW: Use auto-mapping instead of manual mapping
+      const autoMappingResponse = await classRecordService.autoMapColumns(
         classRecord.google_sheet_id,
-        scoreColumns,
-        classRecord.id, // 🔥 NEW: Pass class record ID for history tracking
-        currentSheet?.sheet_name
+        uniqueScoreColumns,
+        classRecord.id,
+        currentSheet?.sheet_name,
+        // pass importData so server can preview exceeds-max
+        importData
       );
       
-      if (!analysisResponse.data?.success) {
-        throw new Error(analysisResponse.data?.error || 'Failed to analyze columns');
+      if (!autoMappingResponse.data?.success) {
+        throw new Error(autoMappingResponse.data?.error || 'Auto-mapping failed');
       }
       
+      // Store for review modal
+      setAutoMappingResult(autoMappingResponse.data);
       setPendingImportData(importData);
-      setColumnAnalysis(analysisResponse.data);
-      setShowColumnImportModal(true);
+      setShowImportReviewModal(true);
       setImportProgress(null);
       
     } catch (error) {
@@ -736,7 +753,7 @@ const ClassRecordExcel = () => {
 
   const handleConfirmColumnMapping = async (mappings) => {
     try {
-      setImportProgress({ status: 'importing', message: 'Importing column data and renaming headers...' });
+      setImportProgress({ status: 'importing', message: 'Importing column data and renaming headers...', entity: 'scores' });
       
      const response = await classRecordService.executeColumnImportEnhanced(
         classRecord.google_sheet_id,
@@ -750,12 +767,24 @@ const ClassRecordExcel = () => {
         throw new Error(response.data?.error || 'Import failed');
       }
       
-      const { results, summary } = response.data;
+      const { summary } = response.data;
       const sheetInfo = currentSheet ? ` in ${currentSheet.sheet_name}` : '';
       
-      toast.success(`✅ ${summary}${sheetInfo}`);
+      toast.success(`Scores import complete${sheetInfo}. ${summary}`, { duration: 4500 });
       if (voiceEnabled) {
         speakText(`Column import completed. ${summary}${sheetInfo}`);
+      }
+
+      // Warn if any scores exceeded max and were skipped
+      const exceededTotal = response.data.exceedsMaxTotal || 0;
+      if (exceededTotal > 0) {
+        const as = response.data.actionSummary || {};
+        const byColumn = Object.entries(as)
+          .filter(([, v]) => (v && v.exceedsMax) > 0)
+          .map(([k, v]) => `${k} (${v.exceedsMax})`)
+          .join(', ');
+        const detail = byColumn ? `: ${byColumn}` : '';
+        toast(`Some scores exceeded the column max and were skipped${detail}`, { duration: 7000 });
       }
       
       // Clean up
@@ -769,6 +798,84 @@ const ClassRecordExcel = () => {
       toast.error(`Import failed: ${error.message}`);
       setImportProgress(null);
     }
+  };
+
+  // NEW: Auto-mapping handlers
+  const handleConfirmAutoMapping = async (decisions) => {
+    try {
+      setImportProgress({ status: 'importing', message: 'Importing with auto-mapping...', entity: 'scores' });
+      
+      const response = await classRecordService.executeAutoMapping(
+        classRecord.google_sheet_id,
+        decisions,
+        pendingImportData,
+        classRecord.id,
+        currentSheet?.sheet_name
+      );
+      
+      if (!response.data?.success) {
+        throw new Error(response.data?.error || 'Import failed');
+      }
+      
+      const { summary } = response.data;
+      const sheetInfo = currentSheet ? ` in ${currentSheet.sheet_name}` : '';
+      
+      toast.success(`Scores import complete${sheetInfo}. ${summary || ''}`.trim(), { duration: 4500 });
+      if (voiceEnabled) {
+        speakText(`Import completed with auto-mapping. ${summary}${sheetInfo}`);
+      }
+
+      // Warn if any scores exceeded max and were skipped
+      const exceededTotal2 = response.data.exceedsMaxTotal || 0;
+      if (exceededTotal2 > 0) {
+        const as2 = response.data.actionSummary || {};
+        const byColumn2 = Object.entries(as2)
+          .filter(([, v]) => (v && v.exceedsMax) > 0)
+          .map(([k, v]) => `${k} (${v.exceedsMax})`)
+          .join(', ');
+        const detail2 = byColumn2 ? `: ${byColumn2}` : '';
+        toast(`Some scores exceeded the column max and were skipped${detail2}`, { duration: 7000 });
+      }
+      
+      // Clean up
+      setImportProgress(null);
+      setShowImportReviewModal(false);
+      setAutoMappingResult(null);
+      setPendingImportData(null);
+      
+    } catch (error) {
+      console.error('Auto-mapping execution error:', error);
+      toast.error(`Import failed: ${error.message}`);
+      setImportProgress(null);
+    }
+  };
+
+  const handleEditMapping = () => {
+    // From review → open manual mapping with analysis populated
+    (async () => {
+      try {
+        setImportProgress({ status: 'analyzing', message: 'Analyzing mapping options...' });
+        // Ensure we have columns from the pending import
+        const importColumns = pendingImportData?.columns || [];
+        const analysisResponse = await classRecordService.analyzeColumnsForMappingEnhanced(
+          classRecord.google_sheet_id,
+          importColumns,
+          classRecord.id,
+          currentSheet?.sheet_name
+        );
+        if (!analysisResponse.data?.success) {
+          throw new Error(analysisResponse.data?.error || 'Failed to analyze columns');
+        }
+        setColumnAnalysis(analysisResponse.data);
+        setShowImportReviewModal(false);
+        setShowColumnImportModal(true);
+      } catch (e) {
+        console.error('Edit mapping analysis error:', e);
+        toast.error(`Failed to open mapping editor: ${e.message}`);
+      } finally {
+        setImportProgress(null);
+      }
+    })();
   };
 
  const executeCommand = (command) => {
@@ -1785,7 +1892,7 @@ const processImportFile = async (file) => {
   }
 
   try {
-    setImportProgress({ status: 'reading', message: 'Reading Excel file...' });
+    setImportProgress({ status: 'reading', message: 'Reading Excel file...', entity: 'students' });
     
     // Read Excel file
     const data = await file.arrayBuffer();
@@ -1797,7 +1904,7 @@ const processImportFile = async (file) => {
       throw new Error('Excel file must have at least a header row and one data row');
     }
     
-    setImportProgress({ status: 'parsing', message: 'Parsing student data...' });
+    setImportProgress({ status: 'parsing', message: 'Parsing student data...', entity: 'students' });
     
     // Parse headers and find columns
     const headers = jsonData[0].map(h => String(h || '').trim());
@@ -1862,7 +1969,7 @@ const processImportFile = async (file) => {
       });
     }
 
-    setImportProgress({ status: 'checking', message: 'Checking for duplicates...' });
+    setImportProgress({ status: 'checking', message: 'Checking for duplicates...', entity: 'students' });
     
     // Check for conflicts with existing students
     await checkImportConflicts(students);
@@ -1877,7 +1984,7 @@ const processImportFile = async (file) => {
 // Handle Drive file selection and processing
 const handleDriveFileSelect = async (driveFile) => {
   try {
-    setImportProgress({ status: 'downloading', message: 'Downloading file from Drive...' });
+      setImportProgress({ status: 'downloading', message: 'Downloading file from Drive...', entity: importType });
     
     // Download file from Drive
     const response = await fetch(`${import.meta.env.NODE_ENV === 'production' 
@@ -1948,7 +2055,8 @@ const checkImportConflicts = async (studentsToImport) => {
     
     setImportProgress({ 
       status: 'conflicts', 
-      message: `Found ${preview.conflictCount} conflicts, ${preview.newCount} new students` 
+      message: `Found ${preview.conflictCount} conflicts, ${preview.newCount} new students`,
+      entity: 'students'
     });
     
     if (preview.conflictCount > 0) {
@@ -1970,6 +2078,7 @@ const executeImport = async (newStudents, resolvedConflicts) => {
     setImportProgress({ 
       status: 'importing', 
       message: `Preparing to import ${newStudents.length} students in bulk...`,
+      entity: 'students',
       current: 0,
       total: newStudents.length
     });
@@ -1980,6 +2089,7 @@ const executeImport = async (newStudents, resolvedConflicts) => {
     setImportProgress({ 
       status: 'importing', 
       message: 'Executing bulk import to Google Sheets...',
+      entity: 'students',
       current: 0,
       total: newStudents.length
     });
@@ -2007,23 +2117,24 @@ const executeImport = async (newStudents, resolvedConflicts) => {
     // 🔥 ENHANCED: Show completion with performance info
     setImportProgress({ 
       status: 'completed', 
-      message: `✅ Bulk import completed in ${duration}s`,
+      message: `Imported ${response.data.newStudentsAdded} student(s), overridden ${response.data.conflictsOverridden}, skipped ${response.data.conflictsSkipped}. (${duration}s)`,
+      entity: 'students',
       current: newStudents.length,
       total: newStudents.length
     });
     
-    // Show success message
-    toast.success(`✅ ${sheetInfo} (${duration}s)`);
+    // Show success message (clear, actionable)
+    toast.success(`Students import complete${sheetInfo}: ${response.data.newStudentsAdded} added, ${response.data.conflictsOverridden} overridden, ${response.data.conflictsSkipped} skipped • ${duration}s`, { duration: 5000 });
     if (voiceEnabled) {
       speakText(`Import completed in ${duration} seconds. ${sheetInfo}`);
     }
     
-    // Clean up after showing completion for 2 seconds
+    // Clean up after short delay
     setTimeout(() => {
       setImportProgress(null);
       setShowImportModal(false);
       setImportConflicts([]);
-    }, 2000);
+    }, 1500);
     
   } catch (error) {
     console.error('Import execution error:', error);
@@ -4186,6 +4297,20 @@ const handleExportToPDF = async () => {
           onConfirmMapping={handleConfirmColumnMapping}
           setImportProgress={setImportProgress}
           classRecordId={classRecord?.id}
+          onBack={() => {
+            // return to review modal when backing out of manual mapping
+            if (autoMappingResult) {
+              setShowImportReviewModal(true);
+            }
+          }}
+        />
+
+        <ImportReviewModal
+          showModal={showImportReviewModal}
+          setShowModal={setShowImportReviewModal}
+          autoMappingResult={autoMappingResult}
+          onConfirmImport={handleConfirmAutoMapping}
+          onEditMapping={handleEditMapping}
         />
 
         <DuplicateStudentModal

@@ -1,4 +1,5 @@
 import logging
+import re
 import requests
 from typing import Dict
 from google.oauth2 import service_account
@@ -28,6 +29,320 @@ class GoogleServiceAccountSheets:
         )
         self.drive_service = build('drive', 'v3', credentials=self.credentials)
         self.sheets_service = build('sheets', 'v4', credentials=self.credentials)
+
+    def _column_index_to_a1(self, index: int) -> str:
+        """Convert a 0-based column index to A1 notation letters (A, ..., Z, AA, AB, ...)."""
+        if index < 0:
+            raise ValueError("Column index must be non-negative")
+        result = []
+        n = index
+        while True:
+            n, rem = divmod(n, 26)
+            result.append(chr(ord('A') + rem))
+            if n == 0:
+                break
+            n -= 1  # Excel-style base-26 (no zero digit)
+        return ''.join(reversed(result))
+
+    # ===== Helpers for category handling =====
+    def _parse_category_and_index(self, header: str):
+        if not header:
+            return None, None
+        name = str(header).strip().upper()
+        # normalize multiple spaces
+        import re
+        name = re.sub(r"\s+", " ", name)
+        # Split into tokens
+        tokens = name.split(" ")
+        category = tokens[0]
+        index = None
+        if len(tokens) >= 2 and tokens[1].isdigit():
+            index = int(tokens[1])
+        return category, index
+
+    def _is_exam_category(self, category: str) -> bool:
+        if not category:
+            return False
+        return category in {"PRELIM", "MIDTERM", "PREFINAL", "FINAL"}
+
+    def _is_non_exam_scored_category(self, category: str) -> bool:
+        if not category:
+            return False
+        return category in {"QUIZ", "LAB", "LABORATORY", "SEAT", "SEATWORK", "ASSIGN", "ASSIGNMENT", "ASSIGNMENTS"}
+
+    def _get_sheet_id_by_title(self, spreadsheet_id: str, title: str) -> int:
+        meta = self.sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+        for sheet in meta.get('sheets', []):
+            props = sheet.get('properties', {})
+            if props.get('title') == title:
+                return props.get('sheetId')
+        raise ValueError(f"Sheet title not found: {title}")
+
+    def execute_auto_mapping(self, sheet_id: str, decisions: list, import_data: dict, sheet_name: str = None) -> dict:
+        """Execute decisions including creating new non-exam columns after the last filled column in the category."""
+        try:
+            # Load current sheet data
+            if sheet_name:
+                sheet_data = self.get_specific_sheet_data(sheet_id, sheet_name)
+            else:
+                sheet_data = self.get_sheet_data(sheet_id)
+
+            if not sheet_data['success']:
+                return sheet_data
+
+            headers = sheet_data['headers'][:]  # copy
+            table_data = sheet_data['tableData']
+            target_sheet_name = sheet_data['sheet_name']
+
+            # Prepare category metrics
+            column_data_counts = []  # per column data count
+            for col_index, _ in enumerate(headers):
+                count = 0
+                for row in table_data:
+                    if col_index < len(row) and row[col_index] and str(row[col_index]).strip():
+                        count += 1
+                column_data_counts.append(count)
+
+            # Build category indices map
+            category_to_indices = {}
+            category_to_index_numbers = {}
+            for idx, header in enumerate(headers):
+                cat, cat_idx = self._parse_category_and_index(header)
+                if not cat:
+                    continue
+                category_to_indices.setdefault(cat, []).append(idx)
+                if cat_idx is not None:
+                    category_to_index_numbers.setdefault(cat, []).append(cat_idx)
+
+            # Plan structural inserts and final mappings
+            inserts = []  # list of dicts: {insert_at, header}
+            final_mappings = []  # importColumn -> targetColumn
+
+            for decision in decisions:
+                import_col = decision.get('importColumn')
+                action = decision.get('action', 'merge')
+                target_col = decision.get('targetColumn')
+
+                if action != 'new':
+                    # Keep existing mapping as-is
+                    if target_col:
+                        final_mappings.append({
+                            'importColumn': import_col,
+                            'targetColumn': target_col,
+                            'action': action
+                        })
+                    continue
+
+                # Handle new column creation for non-exam categories
+                cat, idx_num = self._parse_category_and_index(import_col)
+                if not cat:
+                    # Fallback: append at end
+                    cat = None
+
+                if cat and self._is_exam_category(cat):
+                    # Do not auto-add for exam columns
+                    return {
+                        'success': False,
+                        'error': f"Cannot auto-add exam column for '{import_col}'."
+                    }
+
+                # Determine insertion point within category
+                candidate_indices = category_to_indices.get(cat, []) if cat else list(range(len(headers)))
+                if candidate_indices:
+                    # last filled = max index with dataCount>0 among category indices
+                    last_filled = -1
+                    for ci in candidate_indices:
+                        if column_data_counts[ci] > 0 and ci > last_filled:
+                            last_filled = ci
+                    # find first empty after last_filled within category
+                    chosen_index = None
+                    for ci in candidate_indices:
+                        if ci > last_filled and column_data_counts[ci] == 0:
+                            chosen_index = ci
+                            break
+                    if chosen_index is None:
+                        # Insert after last_filled or at end of category group
+                        insert_at = (max(candidate_indices) + 1) if last_filled < 0 else (last_filled + 1)
+                        # Name header: preserve category; assign next index if category recognized
+                        if cat:
+                            existing_numbers = category_to_index_numbers.get(cat, [])
+                            next_num = (max(existing_numbers) + 1) if existing_numbers else 1
+                            header_title = f"{cat} {next_num}"
+                        else:
+                            header_title = import_col
+                        inserts.append({'insert_at': insert_at, 'header': header_title})
+                        # Track header state post-insert for subsequent decisions
+                        headers.insert(insert_at, header_title)
+                        column_data_counts.insert(insert_at, 0)
+                        for indices in category_to_indices.values():
+                            for k in range(len(indices)):
+                                if indices[k] >= insert_at:
+                                    indices[k] += 1
+                        if cat:
+                            category_to_indices.setdefault(cat, []).append(insert_at)
+                            category_to_indices[cat].sort()
+                            category_to_index_numbers.setdefault(cat, []).append(next_num)
+                        # Final mapping to the new header
+                        final_mappings.append({
+                            'importColumn': import_col,
+                            'targetColumn': header_title,
+                            'action': 'replace'
+                        })
+                    else:
+                        # Use the empty column: rename its header to the import title
+                        header_title = import_col
+                        final_mappings.append({
+                            'importColumn': import_col,
+                            'targetColumn': headers[chosen_index],
+                            'action': 'replace'
+                        })
+                else:
+                    # No category found; append to end
+                    insert_at = len(headers)
+                    header_title = import_col
+                    inserts.append({'insert_at': insert_at, 'header': header_title})
+                    headers.append(header_title)
+                    column_data_counts.append(0)
+                    final_mappings.append({
+                        'importColumn': import_col,
+                        'targetColumn': header_title,
+                        'action': 'replace'
+                    })
+
+            # Apply structural inserts (from right to left to keep indices stable)
+            if inserts:
+                target_sheet_id = self._get_sheet_id_by_title(sheet_id, target_sheet_name)
+                requests = []
+                for ins in sorted(inserts, key=lambda x: x['insert_at'], reverse=True):
+                    requests.append({
+                        'insertDimension': {
+                            'range': {
+                                'sheetId': target_sheet_id,
+                                'dimension': 'COLUMNS',
+                                'startIndex': ins['insert_at'],
+                                'endIndex': ins['insert_at'] + 1
+                            },
+                            'inheritFromBefore': True
+                        }
+                    })
+                # Execute insertions
+                self.sheets_service.spreadsheets().batchUpdate(
+                    spreadsheetId=sheet_id,
+                    body={'requests': requests}
+                ).execute()
+                # Set header values for inserted columns
+                header_updates = []
+                for ins in inserts:
+                    col_letter = self._column_index_to_a1(ins['insert_at'])
+                    header_updates.append({
+                        'range': f"'{target_sheet_name}'!{col_letter}2",
+                        'values': [[ins['header']]]
+                    })
+                if header_updates:
+                    self.sheets_service.spreadsheets().values().batchUpdate(
+                        spreadsheetId=sheet_id,
+                        body={'valueInputOption': 'USER_ENTERED', 'data': header_updates}
+                    ).execute()
+
+            # Now perform data writes using existing bulk path
+            import_result = self.import_column_data_bulk(
+                sheet_id,
+                final_mappings,
+                import_data,
+                target_sheet_name
+            )
+
+            # Attach structural info
+            import_result.setdefault('structuralChanges', [])
+            for ins in inserts:
+                import_result['structuralChanges'].append({
+                    'insertedAt': ins['insert_at'],
+                    'header': ins['header'],
+                    'sheet': target_sheet_name
+                })
+
+            return import_result
+
+        except Exception as e:
+            logger.error(f"Execute auto-mapping error: {str(e)}")
+            return {'success': False, 'error': f'Failed to execute auto-mapping: {str(e)}'}
+
+    def preview_exceeds_max(self, sheet_id: str, column_mappings: list, import_data: dict, sheet_name: str = None) -> dict:
+        """Preview which mapped columns will have scores exceeding the max and count them.
+
+        Returns {
+          'success': True,
+          'indexed': [ { 'exceeds': n, 'targetColumn': str, 'max': float|None } ... ],  # aligned to column_mappings order
+          'preview': { importColumn: { 'exceeds': int, 'targetColumn': str } }  # legacy
+        }
+        """
+        try:
+            # Load current sheet data to resolve sheet name and columns
+            if sheet_name:
+                sheet_data = self.get_specific_sheet_data(sheet_id, sheet_name)
+            else:
+                sheet_data = self.get_sheet_data(sheet_id)
+
+            if not sheet_data['success']:
+                return sheet_data
+
+            headers = sheet_data['headers']
+            target_sheet_name = sheet_data['sheet_name']
+
+            result = {}
+            indexed = []
+            for idx, mapping in enumerate(column_mappings):
+                import_column = mapping.get('importColumn')
+                target_column = mapping.get('targetColumn')
+                if not import_column or not target_column:
+                    indexed.append({'exceeds': 0, 'targetColumn': target_column, 'max': None})
+                    continue
+                # Resolve target index
+                try:
+                    target_index = headers.index(target_column)
+                except ValueError:
+                    # target column not found; skip
+                    result[import_column] = {'exceeds': 0, 'targetColumn': target_column}
+                    continue
+                col_letter = self._column_index_to_a1(target_index)
+                # Get max value from row 3
+                max_score_value = None
+                try:
+                    max_cell_range = f"'{target_sheet_name}'!{col_letter}3"
+                    max_resp = self.sheets_service.spreadsheets().values().get(
+                        spreadsheetId=sheet_id,
+                        range=max_cell_range
+                    ).execute()
+                    values = max_resp.get('values', [])
+                    if values and values[0]:
+                        candidate = str(values[0][0]).strip()
+                        try:
+                            max_score_value = float(candidate)
+                        except ValueError:
+                            max_score_value = None
+                except Exception:
+                    max_score_value = None
+
+                exceeds = 0
+                if max_score_value is not None:
+                    col_data = import_data.get('columnData', {}).get(import_column, {})
+                    for _, v in col_data.items():
+                        try:
+                            num = float(str(v))
+                            if num > max_score_value:
+                                exceeds += 1
+                        except Exception:
+                            # ignore non-numeric
+                            continue
+
+                result[import_column] = {'exceeds': exceeds, 'targetColumn': target_column}
+
+                indexed.append({'exceeds': exceeds, 'targetColumn': target_column, 'max': max_score_value})
+
+            return {'success': True, 'preview': result, 'indexed': indexed}
+        except Exception as e:
+            logger.error(f"Preview exceeds max error: {str(e)}")
+            return {'success': False, 'error': str(e)}
 
     def copy_template_sheet(self, template_file_id: str, new_name: str) -> Dict:
         """
@@ -2422,7 +2737,9 @@ class GoogleServiceAccountSheets:
                 'cellsSkipped': 0,
                 'cellsMerged': 0,
                 'conflictsResolved': 0,
+                'exceedsMaxTotal': 0,
                 'errors': [],
+                'warnings': [],
                 'actionSummary': {}
             }
 
@@ -2453,20 +2770,12 @@ class GoogleServiceAccountSheets:
                     continue
 
                 try:
-                    # Find target column index
+                    # Find target column index and convert to A1 letter(s)
                     target_index = headers.index(target_column)
-                    column_letter = chr(65 + target_index)
+                    column_letter = self._column_index_to_a1(target_index)
 
-                    # Step 1: Prepare header rename (batch this too)
-                    if import_column != target_column:
-                        all_header_updates.append({
-                            'range': f"'{target_sheet_name}'!{column_letter}2",
-                            'values': [[import_column]]
-                        })
-                        results['columnsRenamed'] += 1
-                        # Update local headers for subsequent operations
-                        headers[target_index] = import_column
-                        print(f"🔥 BATCH: Will rename column '{target_column}' → '{import_column}'")
+                    # Step 1: Do NOT rename existing headers. Keep template column names intact.
+                    # (Header renames are only performed when inserting brand-new columns elsewhere.)
 
                     # Step 2: Prepare data updates for this column
                     column_data = import_data.get('columnData', {}).get(import_column, {})
@@ -2480,10 +2789,38 @@ class GoogleServiceAccountSheets:
                         'cellsUpdated': 0,
                         'cellsSkipped': 0,
                         'conflictsResolved': 0,
-                        'studentsNotFound': []
+                        'studentsNotFound': [],
+                        'exceedsMax': 0
                     }
 
                     print(f"🔥 BATCH: Processing {len(column_data)} students for column {import_column}")
+
+                    # Robust: read max score by scanning rows 3-5, fallback to parse header
+                    max_score_value = None
+                    try:
+                        # scan rows 3 to 5
+                        for row_idx in [3, 4, 5]:
+                            max_cell_range = f"'{target_sheet_name}'!{column_letter}{row_idx}"
+                            max_resp = self.sheets_service.spreadsheets().values().get(
+                                spreadsheetId=sheet_id,
+                                range=max_cell_range
+                            ).execute()
+                            values = max_resp.get('values', [])
+                            if values and values[0]:
+                                candidate = str(values[0][0]).strip()
+                                try:
+                                    max_score_value = float(candidate)
+                                    break
+                                except ValueError:
+                                    continue
+                        if max_score_value is None:
+                            # try parse from header text e.g. "Quiz 2 (20)"
+                            import re
+                            m = re.search(r"\((\d+(?:\.\d+)?)\)", str(import_column))
+                            if m:
+                                max_score_value = float(m.group(1))
+                    except Exception as e:
+                        logger.warning(f"Max score fetch failed for {target_column}: {str(e)}")
 
                     for student_key, import_score in column_data.items():
                         # Find student row by matching names
@@ -2551,6 +2888,21 @@ class GoogleServiceAccountSheets:
                                 final_score = import_score
 
                         # 🔥 NEW: Instead of individual update, add to batch
+                        if should_update:
+                            # Guard: skip writes that exceed max score (if numeric max exists)
+                            try:
+                                if max_score_value is not None and str(final_score).strip() != '':
+                                    fnum = float(str(final_score))
+                                    if fnum > max_score_value:
+                                        action_stats['exceedsMax'] += 1
+                                        results['exceedsMaxTotal'] += 1
+                                        results['warnings'].append(
+                                            f"{import_column}: score {fnum} exceeds max {max_score_value} for student '{student_key}'"
+                                        )
+                                        should_update = False
+                            except Exception:
+                                pass
+
                         if should_update:
                             sheet_row = student_row_index + 4  # +3 for headers, +1 for 1-based
                             all_data_updates.append({
@@ -4236,4 +4588,372 @@ class GoogleServiceAccountSheets:
                 'success': False,
                 'error': f'Failed to get categories: {str(e)}'
             }
+
+    # ===== AUTO-MAPPING SYSTEM =====
+    
+    def auto_map_columns_with_confidence(self, sheet_id: str, import_columns: list, 
+                                       sheet_name: str = None, user_id: int = None) -> dict:
+        """
+        Automatically map import columns to target columns with confidence scoring.
+        Returns decisions that can be auto-applied or reviewed by user.
+        """
+        try:
+            # Get existing columns with analysis
+            existing_analysis = self.analyze_columns_for_mapping(sheet_id, import_columns, sheet_name, user_id)
+            
+            if not existing_analysis['success']:
+                return existing_analysis
+            
+            # Auto-mapping algorithm
+            decisions = []
+            used_targets = set()
+            
+            for import_col in import_columns:
+                decision = self._find_best_mapping(
+                    import_col, existing_analysis['columnAnalysis'], used_targets
+                )
+                decisions.append(decision)
+                if decision['targetColumn']:
+                    used_targets.add(decision['targetColumn'])
+            
+            # Calculate overall confidence
+            overall_confidence = self._calculate_overall_confidence(decisions)
+            
+            # Generate warnings and summary
+            warnings = self._generate_warnings(decisions)
+            summary = self._generate_summary(decisions)
+            
+            return {
+                'success': True,
+                'decisions': decisions,
+                'overallConfidence': overall_confidence,
+                'confidenceLevel': 'high' if overall_confidence >= 0.8 else 'medium' if overall_confidence >= 0.6 else 'low',
+                'autoApply': overall_confidence >= 0.8,
+                'warnings': warnings,
+                'summary': summary,
+                'totalColumns': len(import_columns),
+                'mappedColumns': len([d for d in decisions if d['targetColumn']]),
+                'newColumns': len([d for d in decisions if d['action'] == 'new'])
+            }
+            
+        except Exception as e:
+            logger.error(f"Auto-map columns error: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Failed to auto-map columns: {str(e)}'
+            }
+    
+    def _normalize_header(self, header: str) -> str:
+        """Advanced header normalization with synonyms"""
+        if not header:
+            return ""
+            
+        # Remove punctuation, extra spaces, convert case
+        clean = re.sub(r'[^\w\s]', '', header.lower().strip())
+        clean = re.sub(r'\s+', ' ', clean)
+        
+        # Handle common variations with synonyms
+        synonyms = {
+            'student id': ['sid', 'id', 'student number', 'student_id', 'studentid'],
+            'first name': ['firstname', 'given name', 'first', 'fn', 'first_name'],
+            'last name': ['lastname', 'surname', 'family name', 'last', 'ln', 'last_name'],
+            'middle name': ['middlename', 'middle', 'mi', 'middle_name'],
+            'quiz': ['qz', 'q', 'quiz exam'],
+            'midterm': ['mid term', 'midterm exam', 'mid exam', 'midterm test'],
+            'final': ['final exam', 'final test', 'fin', 'final assessment'],
+            'assignment': ['ass', 'assign', 'homework', 'hw', 'assignment work'],
+            'project': ['proj', 'project work', 'project assignment'],
+            'exam': ['test', 'assessment', 'evaluation', 'examination'],
+            'lab': ['laboratory', 'lab work', 'lab exercise'],
+            'attendance': ['att', 'attend', 'presence'],
+            'participation': ['part', 'class participation', 'class part'],
+            'total': ['tot', 'sum', 'grand total', 'final total'],
+            'average': ['avg', 'mean', 'overall average'],
+            'grade': ['gr', 'final grade', 'letter grade']
+        }
+        
+        # Find synonym match
+        for canonical, variants in synonyms.items():
+            if any(variant in clean for variant in variants + [canonical]):
+                return canonical
+        
+        return clean
+    
+    def _find_best_mapping(self, import_col: str, existing_columns: list, used_targets: set) -> dict:
+        """Find best mapping for an import column using multi-layer matching"""
+        # Layer 1: Exact & Normalized Matching
+        exact_match = self._exact_match(import_col, existing_columns, used_targets)
+        if exact_match:
+            return exact_match
+        
+        # Layer 2: Semantic Similarity Matching
+        semantic_match = self._semantic_match(import_col, existing_columns, used_targets)
+        if semantic_match and semantic_match['confidence'] >= 0.8:
+            return semantic_match
+        
+        # Layer 3: Pattern-Based Assessment Matching
+        pattern_match = self._pattern_match_assessments(import_col, existing_columns, used_targets)
+        if pattern_match and pattern_match['confidence'] >= 0.7:
+            return pattern_match
+        
+        # Layer 4: Fuzzy Matching (fallback)
+        fuzzy_match = self._fuzzy_match(import_col, existing_columns, used_targets)
+        if fuzzy_match and fuzzy_match['confidence'] >= 0.6:
+            return fuzzy_match
+        
+        # No suitable match found - create new column
+        return {
+            'importColumn': import_col,
+            'targetColumn': None,
+            'action': 'new',
+            'newColumnTitle': import_col.title(),
+            'confidence': 1.0,
+            'risk': 'none',
+            'method': 'new_column',
+            'reason': 'No suitable match found - creating new column'
+        }
+    
+    def _exact_match(self, import_col: str, existing_columns: list, used_targets: set) -> dict:
+        """Exact matches after normalization"""
+        normalized_import = self._normalize_header(import_col)
+        
+        # If the import is a bare category (no index) for non-exam categories,
+        # avoid mapping onto filled columns; prefer new/empty columns later.
+        cat, idx_num = self._parse_category_and_index(import_col)
+        is_non_exam = self._is_non_exam_scored_category(cat)
+
+        for col_info in existing_columns:
+            if col_info['columnName'] in used_targets:
+                continue
+                
+            normalized_target = self._normalize_header(col_info['columnName'])
+            
+            if normalized_import == normalized_target:
+                # For non-exam categories, never map onto filled columns; always prefer new.
+                if is_non_exam and not col_info.get('isEmpty', False):
+                    continue
+                # Determine action based on existing data
+                action = 'replace' if col_info['isEmpty'] else 'merge'
+                risk = 'none' if col_info['isEmpty'] else col_info['availability']
+                
+                return {
+                    'importColumn': import_col,
+                    'targetColumn': col_info['columnName'],
+                    'action': action,
+                    'confidence': 1.0,
+                    'risk': risk,
+                    'method': 'exact_match',
+                    'reason': f'Exact match: {import_col} → {col_info["columnName"]}'
+                }
+        
+        return None
+    
+    def _semantic_match(self, import_col: str, existing_columns: list, used_targets: set) -> dict:
+        """Use string similarity for fuzzy matching"""
+        from difflib import SequenceMatcher
+        
+        cat, idx_num = self._parse_category_and_index(import_col)
+        is_non_exam = self._is_non_exam_scored_category(cat)
+
+        best_match = None
+        best_score = 0
+        
+        for col_info in existing_columns:
+            if col_info['columnName'] in used_targets:
+                continue
+            
+            # Calculate similarity using SequenceMatcher
+            similarity = SequenceMatcher(None, import_col.lower(), col_info['columnName'].lower()).ratio()
+            
+            # Token-based similarity
+            import_tokens = set(self._normalize_header(import_col).split())
+            target_tokens = set(self._normalize_header(col_info['columnName']).split())
+            
+            if import_tokens or target_tokens:
+                token_overlap = len(import_tokens & target_tokens) / len(import_tokens | target_tokens)
+                # Weighted score: 60% string similarity, 40% token overlap
+                combined_score = 0.6 * similarity + 0.4 * token_overlap
+            else:
+                combined_score = similarity
+            
+            # For non-exam categories, never map onto filled columns via semantic
+            if is_non_exam and not col_info.get('isEmpty', False):
+                continue
+
+            if combined_score > best_score and combined_score >= 0.7:
+                best_score = combined_score
+                best_match = col_info
+        
+        if best_match:
+            action = 'replace' if best_match['isEmpty'] else 'merge'
+            risk = 'none' if best_match['isEmpty'] else best_match['availability']
+            
+            return {
+                'importColumn': import_col,
+                'targetColumn': best_match['columnName'],
+                'action': action,
+                'confidence': best_score,
+                'risk': risk,
+                'method': 'semantic_match',
+                'reason': f'Semantic match: {import_col} → {best_match["columnName"]} (similarity: {best_score:.2f})'
+            }
+        
+        return None
+    
+    def _pattern_match_assessments(self, import_col: str, existing_columns: list, used_targets: set) -> dict:
+        """Match assessment patterns (Quiz 1, Midterm, etc.)"""
+        import_patterns = {
+            'quiz': r'(quiz|qz|q)\s*(\d+)',
+            'midterm': r'(midterm|mid)\s*(\d+)?',
+            'final': r'(final|fin)\s*(\d+)?',
+            'assignment': r'(assignment|ass|assign|hw|homework)\s*(\d+)',
+            'project': r'(project|proj)\s*(\d+)?',
+            'exam': r'(exam|test)\s*(\d+)',
+            'lab': r'(lab|laboratory)\s*(\d+)'
+        }
+        
+        for pattern_type, pattern in import_patterns.items():
+            match = re.search(pattern, import_col.lower())
+            if match:
+                # Find matching pattern in targets
+                for col_info in existing_columns:
+                    if col_info['columnName'] in used_targets:
+                        continue
+                        
+                    target_match = re.search(pattern, col_info['columnName'].lower())
+                    if target_match:
+                        # Check if numbers match (if present)
+                        import_num = match.group(2) if match.group(2) else None
+                        target_num = target_match.group(2) if target_match.group(2) else None
+                        
+                        if import_num == target_num or (not import_num and not target_num):
+                            confidence = 0.95 if import_num == target_num else 0.85
+                            action = 'replace' if col_info['isEmpty'] else 'merge'
+                            risk = 'none' if col_info['isEmpty'] else col_info['availability']
+                            
+                            return {
+                                'importColumn': import_col,
+                                'targetColumn': col_info['columnName'],
+                                'action': action,
+                                'confidence': confidence,
+                                'risk': risk,
+                                'method': f'pattern_{pattern_type}',
+                                'reason': f'Pattern match: {pattern_type} {import_num or ""} → {col_info["columnName"]}'
+                            }
+        
+        return None
+    
+    def _fuzzy_match(self, import_col: str, existing_columns: list, used_targets: set) -> dict:
+        """Fallback fuzzy matching for remaining columns"""
+        best_match = None
+        best_score = 0
+        
+        for col_info in existing_columns:
+            if col_info['columnName'] in used_targets:
+                continue
+            
+            # Simple fuzzy matching based on common substrings
+            import_lower = import_col.lower()
+            target_lower = col_info['columnName'].lower()
+            
+            # Check for common words
+            import_words = set(import_lower.split())
+            target_words = set(target_lower.split())
+            
+            common_words = import_words & target_words
+            if common_words:
+                # Calculate score based on common words and length similarity
+                word_score = len(common_words) / max(len(import_words), len(target_words))
+                length_score = 1 - abs(len(import_lower) - len(target_lower)) / max(len(import_lower), len(target_lower))
+                
+                combined_score = 0.7 * word_score + 0.3 * length_score
+                
+                if combined_score > best_score and combined_score >= 0.5:
+                    best_score = combined_score
+                    best_match = col_info
+        
+        if best_match:
+            action = 'replace' if best_match['isEmpty'] else 'merge'
+            risk = 'none' if best_match['isEmpty'] else best_match['availability']
+            
+            return {
+                'importColumn': import_col,
+                'targetColumn': best_match['columnName'],
+                'action': action,
+                'confidence': best_score,
+                'risk': risk,
+                'method': 'fuzzy_match',
+                'reason': f'Fuzzy match: {import_col} → {best_match["columnName"]} (score: {best_score:.2f})'
+            }
+        
+        return None
+    
+    def _calculate_overall_confidence(self, decisions: list) -> float:
+        """Calculate overall confidence score for all mappings"""
+        if not decisions:
+            return 0.0
+        
+        # Weight by importance (exact matches > semantic > pattern > fuzzy > new)
+        weights = {
+            'exact_match': 1.0,
+            'semantic_match': 0.9,
+            'pattern_quiz': 0.85,
+            'pattern_midterm': 0.85,
+            'pattern_final': 0.85,
+            'pattern_assignment': 0.8,
+            'pattern_project': 0.8,
+            'pattern_exam': 0.8,
+            'pattern_lab': 0.8,
+            'fuzzy_match': 0.7,
+            'new_column': 0.6
+        }
+        
+        weighted_sum = 0.0
+        total_weight = 0.0
+        
+        for decision in decisions:
+            weight = weights.get(decision['method'], 0.5)
+            weighted_sum += decision['confidence'] * weight
+            total_weight += weight
+        
+        return weighted_sum / total_weight if total_weight > 0 else 0.0
+    
+    def _generate_warnings(self, decisions: list) -> list:
+        """Generate warnings for risky mappings"""
+        warnings = []
+        
+        for decision in decisions:
+            if decision['action'] == 'replace' and decision['risk'] in ['medium', 'high']:
+                warnings.append(f"High risk: '{decision['importColumn']}' will overwrite existing data in '{decision['targetColumn']}'")
+            
+            if decision['confidence'] < 0.6:
+                warnings.append(f"Low confidence: '{decision['importColumn']}' mapping may not be accurate")
+            
+            if decision['method'] == 'new_column':
+                warnings.append(f"New column: '{decision['importColumn']}' will be created as '{decision['newColumnTitle']}'")
+        
+        return warnings
+    
+    def _generate_summary(self, decisions: list) -> list:
+        """Generate summary of import actions"""
+        summary = []
+        
+        mapped_count = len([d for d in decisions if d['targetColumn']])
+        new_count = len([d for d in decisions if d['action'] == 'new'])
+        replace_count = len([d for d in decisions if d['action'] == 'replace'])
+        merge_count = len([d for d in decisions if d['action'] == 'merge'])
+        
+        if mapped_count > 0:
+            summary.append(f"{mapped_count} columns will be mapped to existing columns")
+        
+        if new_count > 0:
+            summary.append(f"{new_count} new columns will be created")
+        
+        if replace_count > 0:
+            summary.append(f"{replace_count} columns will be replaced")
+        
+        if merge_count > 0:
+            summary.append(f"{merge_count} columns will be merged (fill blanks only)")
+        
+        return summary
 

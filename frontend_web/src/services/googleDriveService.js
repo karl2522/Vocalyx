@@ -31,6 +31,26 @@ class GoogleDriveService {
     return headers;
   }
 
+  async ensureGoogleAccessToken() {
+    try {
+      const resp = await fetch(`${this.baseURL}/google-drive/token/`, {
+        method: 'GET',
+        headers: this.getHeaders()
+      });
+      if (!resp.ok) {
+        return null;
+      }
+      const data = await resp.json();
+      if (data && data.access_token) {
+        localStorage.setItem('googleAccessToken', data.access_token);
+        return data.access_token;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
   async requestWithAuth(input, init = {}) {
     // First attempt
     let response = await fetch(input, { ...init, headers: { ...(init.headers || {}), ...this.getHeaders() } });
@@ -50,6 +70,15 @@ class GoogleDriveService {
     } catch {
       // swallow and return original/failed response
     }
+    if (response.status !== 401) return response;
+
+    // Try to refresh Google Drive access token and retry once more
+    try {
+      const newGoogleToken = await this.ensureGoogleAccessToken();
+      if (newGoogleToken) {
+        response = await fetch(input, { ...init, headers: { ...(init.headers || {}), ...this.getHeaders() } });
+      }
+    } catch {}
     return response;
   }
 
@@ -87,18 +116,33 @@ class GoogleDriveService {
     try {
       const { query, pageSize = 10, folderId } = options;
       
+      console.log('🔍 GoogleDriveService.listFiles called with options:', options);
+      
       const params = new URLSearchParams();
       if (query) params.append('query', query);
       if (pageSize) params.append('page_size', pageSize.toString());
       if (folderId) params.append('folder_id', folderId);
 
-      const response = await this.requestWithAuth(`${this.baseURL}/drive/files/?${params}`, { method: 'GET' });
+      const url = `${this.baseURL}/drive/files/?${params}`;
+      console.log('🔍 Making request to:', url);
+      // Ensure we have a valid Google token first
+      if (!localStorage.getItem('googleAccessToken')) {
+        await this.ensureGoogleAccessToken();
+      }
+      const response = await this.requestWithAuth(url, { method: 'GET' });
+
+      console.log('🔍 Drive API response status:', response.status);
+      console.log('🔍 Drive API response ok:', response.ok);
 
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Drive API error response:', errorText);
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      return await response.json();
+      const result = await response.json();
+      console.log('🔍 Drive API response data:', result);
+      return result;
     } catch (error) {
       console.error('Failed to list Drive files:', error);
       throw error;
