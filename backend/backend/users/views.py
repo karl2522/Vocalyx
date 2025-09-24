@@ -1557,6 +1557,100 @@ def sheets_execute_column_import_enhanced(request, sheet_id):
         return Response({'error': str(e)}, status=500)
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def sheets_auto_map_columns(request, sheet_id):
+    """Auto-map import columns with confidence scoring"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+
+        import_columns = request.data.get('import_columns', [])
+        sheet_name = request.data.get('sheet_name')
+        class_record_id = request.data.get('class_record_id')
+        
+        if not import_columns:
+            return Response({'error': 'import_columns is required'}, status=400)
+
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+        
+        auto_map_result = service.auto_map_columns_with_confidence(
+            sheet_id, import_columns, sheet_name, request.user.id
+        )
+        
+        # If client provided import_data, compute exceeds-max preview for display
+        try:
+            import_data = request.data.get('import_data')
+            if import_data and auto_map_result.get('success'):
+                # Build column_mappings from decisions to preview
+                decisions = auto_map_result.get('decisions', [])
+                column_mappings = [
+                    {
+                        'importColumn': d.get('importColumn'),
+                        'targetColumn': d.get('targetColumn')
+                    }
+                    for d in decisions if d.get('targetColumn')
+                ]
+                preview = service.preview_exceeds_max(sheet_id, column_mappings, import_data, sheet_name)
+                if preview.get('success'):
+                    auto_map_result['exceedsMaxPreview'] = preview['preview']
+        except Exception as _:
+            pass
+
+        return Response(auto_map_result)
+        
+    except Exception as e:
+        logger.error(f"Auto-map columns error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def sheets_execute_auto_mapping(request, sheet_id):
+    """Execute import with auto-mapping decisions"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+
+        decisions = request.data.get('decisions', [])
+        import_data = request.data.get('import_data', {})
+        sheet_name = request.data.get('sheet_name')
+        class_record_id = request.data.get('class_record_id')
+        
+        if not decisions:
+            return Response({'error': 'decisions are required'}, status=400)
+
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+        
+        # Execute using new auto-mapping executor (handles inserts for non-exam)
+        import_result = service.execute_auto_mapping(
+            sheet_id,
+            decisions,
+            import_data,
+            sheet_name
+        )
+
+        # Optionally save import history, mirroring enhanced flow
+        if import_result.get('success') and class_record_id:
+            try:
+                history_result = service.save_import_history(
+                    column_mappings,
+                    import_data,
+                    sheet_id,
+                    request.user.id,
+                    class_record_id,
+                    sheet_name
+                )
+                if history_result.get('success'):
+                    import_result['import_history'] = history_result
+            except Exception as e:
+                logger.warning(f"Auto-mapping history save failed: {str(e)}")
+
+        return Response(import_result)
+        
+    except Exception as e:
+        logger.error(f"Execute auto-mapping error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_import_history(request, sheet_id):

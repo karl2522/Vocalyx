@@ -1,21 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  ArrowRight, 
-  AlertTriangle, 
-  CheckCircle, 
-  XCircle, 
-  Target, 
-  Database,
-  Shuffle,
-  Eye,
-  BarChart3,
-  Clock,
-  RefreshCw,
-  Shield,      // 🔥 NEW
-  Merge,       // 🔥 NEW  
-  Plus,        // 🔥 NEW
-  SkipForward  // 🔥 NEW
-} from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle, Clock, Database, Edit3, Merge, Plus, RefreshCw, Shield, SkipForward, Target, X, XCircle } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
 
 const ColumnMappingModal = ({ 
   showMappingModal, 
@@ -24,10 +8,10 @@ const ColumnMappingModal = ({
   columnAnalysis,
   onConfirmMapping,
   setImportProgress,
-  classRecordId
+  classRecordId,
+  onBack
 }) => {
   const [mappings, setMappings] = useState([]);
-  const [selectedTab, setSelectedTab] = useState('mapping');
   const [forceReimportColumns, setForceReimportColumns] = useState([]);
 
   // 🔥 ENHANCED: Better initial action selection based on risk
@@ -161,6 +145,9 @@ const ColumnMappingModal = ({
   const handleCancel = () => {
     setShowMappingModal(false);
     setImportProgress(null);
+    if (typeof onBack === 'function') {
+      onBack();
+    }
   };
 
   const getRiskColor = (risk) => {
@@ -236,58 +223,42 @@ const ColumnMappingModal = ({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl max-w-7xl w-full max-h-[90vh] overflow-hidden">
-        {/* Header - Keep existing header */}
-        <div className="px-6 py-4 border-b border-slate-200 bg-gradient-to-r from-purple-50 to-indigo-50">
+      <div className="bg-white rounded-xl overflow-hidden shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
+        {/* Header - Consistent with Import Preview */}
+        <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-[#E6E9F7] to-white">
           <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-bold text-slate-900 flex items-center space-x-2">
-                <Shuffle className="w-6 h-6 text-purple-600" />
-                <span>Column Mapping & Import</span>
-              </h2>
-              <p className="text-sm text-slate-600 mt-1">
-                Map your import columns to existing template columns with smart merge strategies
-              </p>
-            </div>
-            
             <div className="flex items-center space-x-3">
-              <div className="flex space-x-2">
-                <div className="bg-purple-100 px-3 py-2 rounded-lg text-center">
-                  <div className="text-lg font-bold text-purple-800">{mappings.length}</div>
-                  <div className="text-xs text-purple-600">Import Columns</div>
-                </div>
-                <div className="bg-green-100 px-3 py-2 rounded-lg text-center">
-                  <div className="text-lg font-bold text-green-800">{validMappings.length}</div>
-                  <div className="text-xs text-green-600">Will Import</div>
-                </div>
-                {alreadyImported.length > 0 && (
-                  <div className="bg-orange-100 px-3 py-2 rounded-lg text-center">
-                    <div className="text-lg font-bold text-orange-800">{alreadyImported.length}</div>
-                    <div className="text-xs text-orange-600">Already Imported</div>
-                  </div>
-                )}
+              <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#E6E9F7' }}>
+                <Edit3 className="w-5 h-5" style={{ color: '#333D79' }} />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Edit Column Mapping</h2>
+                <p className="text-gray-600">Review and adjust the automatic column mapping</p>
               </div>
             </div>
+            <button onClick={handleCancel} className="text-gray-400 hover:text-gray-600 transition-colors">
+              <X className="w-5 h-5" />
+            </button>
           </div>
 
-          {/* Keep existing already imported notification */}
+          {/* Already imported notification (compact) */}
           {alreadyImported.length > 0 && (
-            <div className="mt-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+            <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded-lg">
               <div className="flex items-start space-x-3">
-                <Clock className="w-5 h-5 text-orange-600 mt-0.5" />
+                <Clock className="w-4 h-4 text-orange-600 mt-0.5" />
                 <div>
-                  <h4 className="font-medium text-orange-800">
+                  <h4 className="text-sm font-medium text-orange-800">
                     {alreadyImported.length} column{alreadyImported.length > 1 ? 's' : ''} already imported
                   </h4>
-                  <p className="text-sm text-orange-700 mt-1">
+                  <p className="text-xs text-orange-700 mt-1">
                     These columns have been previously imported and will be skipped:
                   </p>
-                  <div className="mt-2 space-y-1">
+                  <div className="mt-1 space-y-1">
                     {alreadyImported.map((col, index) => (
                       <div key={index} className="flex items-center justify-between bg-white p-2 rounded border border-orange-200">
                         <div className="flex items-center space-x-2">
                           <span className="font-medium text-orange-800">"{col.columnName}"</span>
-                          <span className="text-sm text-orange-600">
+                          <span className="text-xs text-orange-600">
                             → {col.targetColumn} (imported {col.importedDate})
                           </span>
                         </div>
@@ -306,37 +277,11 @@ const ColumnMappingModal = ({
             </div>
           )}
           
-          {/* Tab Navigation */}
-          <div className="flex space-x-4 mt-4">
-            <button
-              onClick={() => setSelectedTab('mapping')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                selectedTab === 'mapping'
-                  ? 'bg-white text-purple-700 shadow-sm border border-purple-200'
-                  : 'text-slate-600 hover:text-slate-800 hover:bg-white/50'
-              }`}
-            >
-              <Target className="w-4 h-4 inline mr-2" />
-              Column Mapping ({mappings.length})
-            </button>
-            <button
-              onClick={() => setSelectedTab('preview')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                selectedTab === 'preview'
-                  ? 'bg-white text-purple-700 shadow-sm border border-purple-200'
-                  : 'text-slate-600 hover:text-slate-800 hover:bg-white/50'
-              }`}
-            >
-              <Eye className="w-4 h-4 inline mr-2" />
-              Import Preview
-            </button>
-          </div>
         </div>
 
-        {/* 🔥 ENHANCED: Content with better mapping interface */}
-        <div className="flex-1 overflow-hidden">
-          {selectedTab === 'mapping' ? (
-            <div className="p-6 overflow-y-auto max-h-[65vh]">
+        {/* Content - Consistent spacing */}
+        <div className="flex-1 overflow-y-auto p-6">
+            <div className="">
               <div className="space-y-4">
                 {mappings.map((mapping, index) => {
                   const suggestion = columnAnalysis?.mappingSuggestions?.find(s => s.importColumn === mapping.importColumn);
@@ -516,115 +461,22 @@ const ColumnMappingModal = ({
                 })}
               </div>
             </div>
-          ) : (
-            /* Enhanced Preview Tab */
-            <div className="p-6 overflow-y-auto max-h-[65vh]">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Import Summary */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-slate-900 flex items-center space-x-2">
-                    <BarChart3 className="w-5 h-5 text-purple-600" />
-                    <span>Import Summary</span>
-                  </h3>
-                  
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                      <div className="text-lg font-bold text-green-800">{validMappings.length}</div>
-                      <div className="text-sm text-green-700">Columns to Import</div>
-                    </div>
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                      <div className="text-lg font-bold text-red-800">{skippedMappings.length}</div>
-                      <div className="text-sm text-red-700">Columns to Skip</div>
-                    </div>
-                  </div>
-
-                  {alreadyImported.length > 0 && (
-                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
-                      <div className="text-lg font-bold text-orange-800">{alreadyImported.length}</div>
-                      <div className="text-sm text-orange-700">Already Imported</div>
-                    </div>
-                  )}
-
-                  {/* 🔥 NEW: Strategy breakdown */}
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                    <h4 className="font-medium text-blue-800 mb-2">Merge Strategies:</h4>
-                    <div className="space-y-1 text-sm">
-                      {['replace', 'merge_skip', 'merge_update', 'merge_add'].map(action => {
-                        const count = validMappings.filter(m => m.action === action).length;
-                        if (count === 0) return null;
-                        const actionInfo = getActionInfo(action);
-                        return (
-                          <div key={action} className="flex items-center space-x-2">
-                            {actionInfo.icon}
-                            <span className="text-blue-700">{count} × {actionInfo.label}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Actions Preview */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-slate-900">What Will Happen:</h3>
-                  <div className="space-y-2">
-                    {validMappings.map((mapping, index) => {
-                      const actionInfo = getActionInfo(mapping.action);
-                      return (
-                        <div key={index} className="flex items-center space-x-3 p-2 bg-slate-50 rounded">
-                          {actionInfo.icon}
-                          <span className="text-sm">
-                            <strong>"{mapping.targetColumn}"</strong> will be renamed to <strong>"{mapping.importColumn}"</strong>
-                            <br />
-                            <span className="text-xs text-slate-600">{actionInfo.description}</span>
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-              
-              {/* Enhanced Detailed Preview */}
-              <div className="mt-6 bg-slate-50 border border-slate-200 rounded-lg p-4">
-                <h4 className="font-semibold text-slate-900 mb-2">Import Details:</h4>
-                <ul className="space-y-1 text-sm text-slate-700">
-                  <li>• Column headers will be renamed to match your import data</li>
-                  <li>• Student scores will be mapped by matching names</li>
-                  <li>• Merge strategies will preserve or modify existing data as selected</li>
-                  <li>• Template structure will be preserved</li>
-                  <li>• Import history will be tracked to prevent future duplicates</li>
-                  {validMappings.length > 0 && (
-                    <li>• Total data points to import: {validMappings.reduce((sum, mapping) => {
-                      const columnData = importData?.columnData?.[mapping.importColumn] || {};
-                      return sum + Object.keys(columnData).length;
-                    }, 0)}</li>
-                  )}
-                </ul>
-              </div>
-            </div>
-          )}
         </div>
-
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-200 bg-slate-50">
-          <div className="flex justify-between items-center">
+        
+        <div className="border-t border-gray-200 p-4 bg-white sticky bottom-0">
+          <div className="flex gap-3 items-center">
             <button
               onClick={handleCancel}
-              className="px-4 py-2 text-slate-700 hover:bg-slate-200 rounded-lg font-medium transition-colors"
+              className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
             >
-              Cancel Import
+              Cancel
             </button>
-            
-            <div className="flex items-center space-x-4">
-              <div className="text-sm text-slate-600 bg-white px-3 py-2 rounded-lg border border-slate-200">
-                {validMappings.length} columns ready to import
-              </div>
-              
+            <div className="ml-auto flex gap-2">
               <button
                 onClick={handleConfirm}
                 disabled={validMappings.length === 0}
-                className="px-6 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                className={`px-4 py-2 rounded-lg transition-colors text-white ${validMappings.length === 0 ? 'cursor-not-allowed' : 'hover:opacity-90'}`}
+                style={{ backgroundColor: validMappings.length === 0 ? '#94A3B8' : '#333D79' }}
               >
                 Import Columns & Data
               </button>

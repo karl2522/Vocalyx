@@ -1,18 +1,18 @@
-import React, { useState } from 'react';
-import { Upload, FileText, CheckCircle, AlertTriangle, X, Info } from 'lucide-react';
+import { AlertTriangle, CheckCircle, FileText, Info, Upload, X } from 'lucide-react';
+import React from 'react';
 
 const ImportStudentsInfoModal = ({ showModal, onClose, onProceed }) => {
   if (!showModal) return null;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col"> {/* 🔥 FIXED: Added flex flex-col */}
+      <div className="bg-white rounded-2xl overflow-hidden shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col"> {/* rounded + overflow for proper clipping */}
         {/* Header - Fixed */}
         <div className="px-6 py-4 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-indigo-50 flex-shrink-0"> {/* 🔥 FIXED: Added flex-shrink-0 */}
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                <Upload className="w-5 h-5 text-blue-600" />
+              <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#E6E9F7' }}>
+                <Upload className="w-5 h-5" style={{ color: '#333D79' }} />
               </div>
               <div>
                 <h2 className="text-xl font-bold text-slate-900">Import Students</h2>
@@ -163,7 +163,8 @@ const ImportStudentsInfoModal = ({ showModal, onClose, onProceed }) => {
             </button>
             <button
               onClick={onProceed}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors shadow-md flex items-center space-x-2"
+              className="px-6 py-2 text-white rounded-lg font-medium transition-colors shadow-md flex items-center space-x-2"
+              style={{ backgroundColor: '#333D79' }}
             >
               <Upload className="w-4 h-4" />
               <span>Choose Excel File</span>
