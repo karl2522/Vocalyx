@@ -405,10 +405,23 @@ SERVICE_ACCOUNT_FILE = os.path.join(BASE_DIR.parent, 'vocalyx2-service-account.j
 google_service_account_json = os.getenv('GOOGLE_SERVICE_ACCOUNT_CREDENTIALS')
 if google_service_account_json:
     try:
+        # Clean up the JSON string - remove any extra escaping
+        google_service_account_json = google_service_account_json.strip()
+        if google_service_account_json.startswith("'") and google_service_account_json.endswith("'"):
+            google_service_account_json = google_service_account_json[1:-1]
+        
         GOOGLE_SERVICE_ACCOUNT_CREDENTIALS = json.loads(google_service_account_json)
+        
+        # Verify the private key format
+        private_key = GOOGLE_SERVICE_ACCOUNT_CREDENTIALS.get('private_key', '')
+        if '-----BEGIN PRIVATE KEY-----' not in private_key:
+            raise ValueError("Invalid private key format")
+            
         print("✅ Google Service Account credentials loaded from environment variable")
-    except json.JSONDecodeError as e:
+    except (json.JSONDecodeError, ValueError) as e:
         print(f"❌ Error parsing Google Service Account credentials from environment: {e}")
+        print("🔧 Falling back to file or disabling Google Sheets features")
+        GOOGLE_SERVICE_ACCOUNT_CREDENTIALS = {}
 # Fall back to file (for local development)
 elif os.path.exists(SERVICE_ACCOUNT_FILE):
     with open(SERVICE_ACCOUNT_FILE, 'r') as f:
