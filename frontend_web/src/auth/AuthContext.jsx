@@ -10,12 +10,19 @@ import sessionTimer from '../utils/sessionTimer';
 import { showToast } from '../utils/toast';
 
 // Environment variables
-const REDIRECT_URI = import.meta.env.NODE_ENV === 'production' 
+const REDIRECT_URI = import.meta.env.PROD 
   ? 'https://vocalyx-frontend.vercel.app/' 
   : 'http://localhost:5173';
-const BACKEND_URL = import.meta.env.NODE_ENV === 'production' 
+const BACKEND_URL = import.meta.env.PROD 
   ? 'https://vocalyx-c61a072bf25a.herokuapp.com' 
   : 'http://127.0.0.1:8000';
+
+console.log('🔍 Environment Detection:', {
+  'import.meta.env.PROD': import.meta.env.PROD,
+  'import.meta.env.NODE_ENV': import.meta.env.NODE_ENV,
+  'BACKEND_URL': BACKEND_URL,
+  'REDIRECT_URI': REDIRECT_URI
+});
 
 const AuthContext = createContext(null);
 

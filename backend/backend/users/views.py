@@ -21,6 +21,7 @@ from .models import CustomUser
 from .utils import send_verification_email, get_current_utc_time, get_user_login
 from .google_drive_service import GoogleDriveService
 from firebase_admin import auth
+import firebase_admin
 from .google_sheets_service import GoogleSheetsService
 from .google_token_service import google_token_service
 from .token_utils import token_encryption

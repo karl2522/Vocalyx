@@ -1987,7 +1987,7 @@ const handleDriveFileSelect = async (driveFile) => {
       setImportProgress({ status: 'downloading', message: 'Downloading file from Drive...', entity: importType });
     
     // Download file from Drive
-    const response = await fetch(`${import.meta.env.NODE_ENV === 'production' 
+    const response = await fetch(`${import.meta.env.PROD 
       ? 'https://vocalyx-c61a072bf25a.herokuapp.com' 
       : 'http://127.0.0.1:8000'}/api/drive/download/${driveFile.id}/`, {
       headers: googleDriveService.getHeaders()

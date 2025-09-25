@@ -10,6 +10,11 @@ import { userService } from '../services/api';
 import { getPendingActionsCount } from '../utils/notificationUtils';
 import { showToast } from '../utils/toast';
 
+// Backend URL configuration
+const BACKEND_URL = import.meta.env.PROD 
+  ? 'https://vocalyx-c61a072bf25a.herokuapp.com' 
+  : 'http://127.0.0.1:8000';
+
 // Custom animation styles
 const profileStyles = `
   @keyframes fadeInUp {
@@ -295,7 +300,7 @@ const Profile = () => {
       });
       
       // Send tokens to backend for Google Drive connection
-      const response = await fetch('http://127.0.0.1:8000/api/google-drive/connect/', {
+      const response = await fetch(`${BACKEND_URL}/api/google-drive/connect/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -366,7 +371,7 @@ const Profile = () => {
     try {
       console.log('Disconnecting Google Drive...');
       
-      const response = await fetch('http://127.0.0.1:8000/api/google-drive/disconnect/', {
+      const response = await fetch(`${BACKEND_URL}/api/google-drive/disconnect/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -412,7 +417,7 @@ const Profile = () => {
     try {
       console.log('Sending email verification...');
       
-      const response = await fetch('http://127.0.0.1:8000/api/resend-verification/', {
+      const response = await fetch(`${BACKEND_URL}/api/resend-verification/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
