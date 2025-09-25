@@ -397,14 +397,28 @@ GOOGLE_SHEETS_TEMPLATE_ID = os.getenv('GOOGLE_SHEETS_TEMPLATE_ID', '1h-dR0ergnvg
 # Google API Key for public sheet access (fallback when user auth fails)
 GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 
-# Load Google Service Account Credentials from JSON file
+# Load Google Service Account Credentials from JSON file or environment variable
 GOOGLE_SERVICE_ACCOUNT_CREDENTIALS = {}
 SERVICE_ACCOUNT_FILE = os.path.join(BASE_DIR.parent, 'vocalyx2-service-account.json')
-if os.path.exists(SERVICE_ACCOUNT_FILE):
+
+# Try to load from environment variable first (for Heroku)
+google_service_account_json = os.getenv('GOOGLE_SERVICE_ACCOUNT_CREDENTIALS')
+if google_service_account_json:
+    try:
+        GOOGLE_SERVICE_ACCOUNT_CREDENTIALS = json.loads(google_service_account_json)
+        print("✅ Google Service Account credentials loaded from environment variable")
+    except json.JSONDecodeError as e:
+        print(f"❌ Error parsing Google Service Account credentials from environment: {e}")
+# Fall back to file (for local development)
+elif os.path.exists(SERVICE_ACCOUNT_FILE):
     with open(SERVICE_ACCOUNT_FILE, 'r') as f:
         GOOGLE_SERVICE_ACCOUNT_CREDENTIALS = json.load(f)
     print(f"✅ Google Service Account credentials loaded from {SERVICE_ACCOUNT_FILE}")
 else:
+    print(f"❌ Warning: Google Service Account credentials not found")
+    print(f"   - Environment variable: GOOGLE_SERVICE_ACCOUNT_CREDENTIALS")
+    print(f"   - File path: {SERVICE_ACCOUNT_FILE}")
+    print("Google Sheets features will be disabled")
     print(f"❌ Warning: Service account file not found at {SERVICE_ACCOUNT_FILE}")
     print(f"📁 Checking current directory: {BASE_DIR}")
     print(f"📁 Checking parent directory: {BASE_DIR.parent}")

@@ -1159,6 +1159,14 @@ def get_class_records_with_live_counts_cached(request):
         serializer = ClassRecordSerializer(class_records, many=True)
         records_data = serializer.data
 
+        # Check if Google Service Account credentials are available
+        if not settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS:
+            logger.warning("Google Service Account credentials not available, skipping live counts")
+            # Return records without live counts
+            for record in records_data:
+                record['student_count'] = 0  # Default value
+            return Response(records_data)
+
         service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
 
         for record in records_data:
