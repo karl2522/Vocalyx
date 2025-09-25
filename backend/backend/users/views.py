@@ -485,6 +485,10 @@ def firebase_auth_view(request):
         if not id_token:
             return Response({'error': 'No ID token provided'}, status=400)
 
+        # Check if Firebase Admin SDK is initialized
+        if not firebase_admin._apps:
+            return Response({'error': 'Firebase authentication is not available'}, status=503)
+
         try:
             decoded_token = auth.verify_id_token(id_token)
         except Exception as e:

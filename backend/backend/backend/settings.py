@@ -38,11 +38,33 @@ DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*', '10.0.165.206', '192.168.1.10', '.herokuapp.com', "192.168.254.101"]
 
+# Firebase configuration - support both file and environment variable
 FIREBASE_SERVICE_ACCOUNT_PATH = os.path.join(BASE_DIR.parent, 'firebase-service-account.json')
 
+# Initialize Firebase Admin SDK
 if not firebase_admin._apps:
-    cred = credentials.Certificate(FIREBASE_SERVICE_ACCOUNT_PATH)
-    firebase_admin.initialize_app(cred)
+    try:
+        # First, try to use environment variable (for Heroku)
+        firebase_credentials_json = os.getenv('FIREBASE_SERVICE_ACCOUNT_KEY')
+        if firebase_credentials_json:
+            import json
+            firebase_config = json.loads(firebase_credentials_json)
+            cred = credentials.Certificate(firebase_config)
+            firebase_admin.initialize_app(cred)
+            print("✅ Firebase Admin SDK initialized from environment variable")
+        # Fall back to service account file (for local development)
+        elif os.path.exists(FIREBASE_SERVICE_ACCOUNT_PATH):
+            cred = credentials.Certificate(FIREBASE_SERVICE_ACCOUNT_PATH)
+            firebase_admin.initialize_app(cred)
+            print("✅ Firebase Admin SDK initialized from service account file")
+        else:
+            print(f"⚠️ Firebase service account not found. Checked:")
+            print(f"   - Environment variable: FIREBASE_SERVICE_ACCOUNT_KEY")
+            print(f"   - File path: {FIREBASE_SERVICE_ACCOUNT_PATH}")
+            print("Firebase authentication features will be disabled")
+    except Exception as e:
+        print(f"❌ Warning: Failed to initialize Firebase Admin SDK: {e}")
+        print("Firebase authentication features will be disabled")
 
 
 # Application definition
