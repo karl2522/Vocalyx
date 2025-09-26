@@ -24,7 +24,6 @@ import ImportScoresInfoModal from './modals/ImportScoresInfoModal.jsx';
 import ImportStudentsInfoModal from './modals/ImportStudentsInfoModal.jsx';
 import ImportStudentsModal from './modals/ImportStudentsModal';
 import OverrideConfirmationModal from './modals/OverrideConfirmationModal';
-import PerfectScoreManagerModal from './modals/PerfectScoreManagerModal';
 import StudentConfirmationModal from './modals/StudentConfirmationModal.jsx';
 import VoiceGuideModal from './modals/VoiceGuideModal';
 
@@ -60,7 +59,6 @@ const ClassRecordExcel = () => {
   const [showDeleteCategoryModal, setShowDeleteCategoryModal] = useState(false);
   const [showEditCategoryModal, setShowEditCategoryModal] = useState(false);
   const [showColumnImportModal, setShowColumnImportModal] = useState(false);
-  const [showPerfectScoreManagerModal, setShowPerfectScoreManagerModal] = useState(false);
   const [columnAnalysis, setColumnAnalysis] = useState(null);
   const [pendingImportData, setPendingImportData] = useState(null);
   
@@ -4194,17 +4192,6 @@ const handleExportToPDF = async () => {
                     
                     <button
                       onClick={() => {
-                        setShowPerfectScoreManagerModal(true);
-                        closeAllDropdowns();
-                      }}
-                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
-                    >
-                      <Edit className="w-4 h-4 text-purple-600" />
-                      <span>Manage Perfect Scores</span>
-                    </button>
-                    
-                    <button
-                      onClick={() => {
                         setShowEditCategoryModal(true);
                         closeAllDropdowns();
                       }}
@@ -4262,18 +4249,6 @@ const handleExportToPDF = async () => {
         {/* Embedded Google Sheet */}
         <div className="flex-1 p-4">
           <div className="h-full bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden relative">
-            
-            {/* 🔥 NEW: Perfect Score Manager Notification */}
-            <div className="absolute top-4 right-4 z-10 bg-gradient-to-r from-purple-500 to-blue-500 text-white px-4 py-2 rounded-lg shadow-lg flex items-center space-x-2 text-sm">
-              <Edit className="w-4 h-4" />
-              <span>Perfect scores are managed through the</span>
-              <button
-                onClick={() => setShowPerfectScoreManagerModal(true)}
-                className="underline font-semibold hover:text-yellow-200 transition-colors"
-              >
-                Perfect Score Manager
-              </button>
-            </div>
             
             {/* 🔥 ENHANCED: Dynamic iframe that switches sheets */}
             <iframe
@@ -4620,19 +4595,6 @@ const handleExportToPDF = async () => {
             onClose={() => setShowAddCategoryModal(false)}
             onSubmit={handleAddCategory}
             isLoading={categoryLoading}
-          />
-        )}
-
-        {showPerfectScoreManagerModal && (
-          <PerfectScoreManagerModal
-            isOpen={showPerfectScoreManagerModal}
-            onClose={() => setShowPerfectScoreManagerModal(false)}
-            sheetId={classRecord?.google_sheet_id}
-            sheetName={currentSheet?.sheet_name || localStorage.getItem('activeSheetName')}
-            onUpdate={() => {
-              // Refresh sheet data when perfect scores are updated
-              loadSheetData();
-            }}
           />
         )}
 
