@@ -671,6 +671,40 @@ export const applyPhoneticCorrections = (transcript) => {
   return corrected;
 };
 
+// 🚀 NEW: Lightweight punctuation normalization for voice transcripts
+// - Preserves decimal points inside numbers (e.g., 50.5)
+// - Preserves dashes inside IDs (e.g., 22-2711-726)
+// - Replaces disruptive punctuation between tokens with spaces
+// - Removes trailing punctuation at the end
+export const normalizeTranscript = (text) => {
+  if (!text) return '';
+
+  let t = String(text);
+
+  // Normalize unicode dashes to ASCII hyphen
+  t = t.replace(/[\u2012-\u2015]/g, '-');
+
+  // Temporarily protect decimal points between digits
+  t = t.replace(/(\d)\.(\d)/g, '$1__DECIMAL__$2');
+
+  // Replace common punctuation (not decimals/IDs) with spaces
+  t = t.replace(/[!,?;:]+/g, ' ');
+
+  // Convert stray periods not part of decimals into spaces
+  t = t.replace(/\.(?=\s|$)/g, ' ');
+
+  // Restore decimals
+  t = t.replace(/(\d)__DECIMAL__(\d)/g, '$1.$2');
+
+  // Collapse whitespace
+  t = t.replace(/\s+/g, ' ').trim();
+
+  // Remove trailing punctuation like ".,!?;:)" and closing brackets
+  t = t.replace(/[)\]\}.,!?:;]+$/g, '').trim();
+
+  return t;
+};
+
 // 🚀 ENHANCED: Better name cleaning with more edge cases
 export const cleanName = (name) => {
   return name
@@ -915,28 +949,28 @@ const findBestColumnMatch = (transcript, headers) => {
 const extractScoreFromEnd = (transcript) => {
   const patterns = [
     // 🔥 NEW: Score keyword patterns (highest priority)
-    /score\s+(\d+(?:\.\d+)?)\s*$/i,                      // "score 30"
-    /score\s+is\s+(\d+(?:\.\d+)?)\s*$/i,                 // "score is 30"  
-    /score\s+of\s+(\d+(?:\.\d+)?)\s*$/i,                 // "score of 30"
-    /gets?\s+score\s+(\d+(?:\.\d+)?)\s*$/i,              // "gets score 30"
-    /has\s+score\s+(\d+(?:\.\d+)?)\s*$/i,                // "has score 30"
-    /received\s+score\s+(\d+(?:\.\d+)?)\s*$/i,           // "received score 30"
-    /earned\s+score\s+(\d+(?:\.\d+)?)\s*$/i,             // "earned score 30"
+    /score\s+(\d+(?:\.\d+)?)\s*[)\].,!?:;-]*$/i,                      // "score 30"
+    /score\s+is\s+(\d+(?:\.\d+)?)\s*[)\].,!?:;-]*$/i,                 // "score is 30"  
+    /score\s+of\s+(\d+(?:\.\d+)?)\s*[)\].,!?:;-]*$/i,                 // "score of 30"
+    /gets?\s+score\s+(\d+(?:\.\d+)?)\s*[)\].,!?:;-]*$/i,              // "gets score 30"
+    /has\s+score\s+(\d+(?:\.\d+)?)\s*[)\].,!?:;-]*$/i,                // "has score 30"
+    /received\s+score\s+(\d+(?:\.\d+)?)\s*[)\].,!?:;-]*$/i,           // "received score 30"
+    /earned\s+score\s+(\d+(?:\.\d+)?)\s*[)\].,!?:;-]*$/i,             // "earned score 30"
     
     // 🔥 NEW: Grade keyword patterns  
-    /grade\s+(\d+(?:\.\d+)?)\s*$/i,                      // "grade 30"
-    /grade\s+is\s+(\d+(?:\.\d+)?)\s*$/i,                 // "grade is 30"
-    /grade\s+of\s+(\d+(?:\.\d+)?)\s*$/i,                 // "grade of 30"
-    /gets?\s+grade\s+(\d+(?:\.\d+)?)\s*$/i,              // "gets grade 30"
+    /grade\s+(\d+(?:\.\d+)?)\s*[)\].,!?:;-]*$/i,                      // "grade 30"
+    /grade\s+is\s+(\d+(?:\.\d+)?)\s*[)\].,!?:;-]*$/i,                 // "grade is 30"
+    /grade\s+of\s+(\d+(?:\.\d+)?)\s*[)\].,!?:;-]*$/i,                 // "grade of 30"
+    /gets?\s+grade\s+(\d+(?:\.\d+)?)\s*[)\].,!?:;-]*$/i,              // "gets grade 30"
     
     // 🔥 Existing patterns (keep these for compatibility)
-    /(\d+(?:\.\d+)?)\s*$/,                               // "30" (plain number)
-    /(\d+)\s*(?:percent|%)\s*$/,                         // "30 percent"
-    /(\d+)\s*(?:points?|pts?)\s*$/,                      // "30 points"
-    /(\d+)\s*out\s*of\s*\d+\s*$/,                        // "30 out of 100"
-    /got\s*(\d+(?:\.\d+)?)\s*$/,                         // "got 30"
-    /received\s*(\d+(?:\.\d+)?)\s*$/,                    // "received 30"
-    /earned\s*(\d+(?:\.\d+)?)\s*$/                       // "earned 30"
+    /(\d+(?:\.\d+)?)\s*[)\].,!?:;-]*$/,                               // "30" (plain number)
+    /(\d+)\s*(?:percent|%)\s*[)\].,!?:;-]*$/,                         // "30 percent"
+    /(\d+)\s*(?:points?|pts?)\s*[)\].,!?:;-]*$/,                      // "30 points"
+    /(\d+)\s*out\s*of\s*\d+\s*[)\].,!?:;-]*$/,                        // "30 out of 100"
+    /got\s*(\d+(?:\.\d+)?)\s*[)\].,!?:;-]*$/,                         // "got 30"
+    /received\s*(\d+(?:\.\d+)?)\s*[)\].,!?:;-]*$/,                    // "received 30"
+    /earned\s*(\d+(?:\.\d+)?)\s*[)\].,!?:;-]*$/                       // "earned 30"
   ];
   
   for (const pattern of patterns) {
@@ -963,6 +997,9 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
   // Stage 1: Apply basic phonetic corrections
   normalizedTranscript = applyPhoneticCorrections(normalizedTranscript);
   console.log('🎙️ After phonetic corrections:', normalizedTranscript);
+
+  // Stage 1.1: Normalize punctuation to tolerate trailing dots/commas
+  normalizedTranscript = normalizeTranscript(normalizedTranscript);
 
   // Stage 2: Check for batch commands first (highest priority)
   const batchCommand = parseBatchCommand(normalizedTranscript);

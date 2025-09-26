@@ -334,5 +334,181 @@
     "student_name": null,
     "confidence": 0.6360348463058472,
     "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-09-25T21:24:19.353213+00:00",
+    "original": "Chris 5 Omen 50.",
+    "corrected": "chris 5 omen 50.",
+    "student_name": null,
+    "confidence": 0.6420257091522217,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-09-25T21:24:43.643302+00:00",
+    "original": "PS5. Caprese 50.",
+    "corrected": "ps5. capuras 50.",
+    "student_name": null,
+    "confidence": 0.5460473895072937,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-09-25T21:25:53.160371+00:00",
+    "original": "Omen 20 sign 1.",
+    "corrected": "omen 20 sign 1.",
+    "student_name": null,
+    "confidence": 0.6394181847572327,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-09-25T21:26:12.218937+00:00",
+    "original": "Assign one Omen 50.",
+    "corrected": "assign one omen 50.",
+    "student_name": null,
+    "confidence": 0.5855281949043274,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-09-25T21:26:23.552797+00:00",
+    "original": "Assign one Omen 50.",
+    "corrected": "assign one omen 50.",
+    "student_name": null,
+    "confidence": 0.5868647694587708,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-09-25T21:27:00.090554+00:00",
+    "original": "PS5 capuras 50.",
+    "corrected": "ps5 capuras 50.",
+    "student_name": null,
+    "confidence": 0.5810556411743164,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-09-25T21:27:09.318633+00:00",
+    "original": "Grease, 1 Omen 50.",
+    "corrected": "grease, 1 omen 50.",
+    "student_name": null,
+    "confidence": 0.48987284302711487,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-09-25T21:29:17.071174+00:00",
+    "original": "Omen 3 5, 5, 0.",
+    "corrected": "omen 3 5, 5, 0.",
+    "student_name": null,
+    "confidence": 0.295460045337677,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-09-25T21:30:06.106114+00:00",
+    "original": "Omen 3 5, 5, 0.",
+    "corrected": "omen 3 5, 5, 0.",
+    "student_name": null,
+    "confidence": 0.295460045337677,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-09-25T21:30:45.520025+00:00",
+    "original": "Omen 3 5, 5, 0.",
+    "corrected": "omen 3 5, 5, 0.",
+    "student_name": null,
+    "confidence": 0.2954599857330322,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-09-25T21:31:28.659750+00:00",
+    "original": "Omen 3 5, 5, 0.",
+    "corrected": "omen 3 5, 5, 0.",
+    "student_name": null,
+    "confidence": 0.295460045337677,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-09-25T21:31:44.472702+00:00",
+    "original": "Omen 3 5, 5, 0.",
+    "corrected": "omen 3 5, 5, 0.",
+    "student_name": null,
+    "confidence": 0.295460045337677,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-09-26T07:30:44.103350+00:00",
+    "original": "Grease. 5 capuras.",
+    "corrected": "grease. 5 capuras",
+    "student_name": null,
+    "confidence": 0.39975500106811523,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-09-26T07:31:03.447735+00:00",
+    "original": "Grease. 5 capuras.",
+    "corrected": "grease. 5 capuras",
+    "student_name": null,
+    "confidence": 0.3997548520565033,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-09-26T07:31:05.769087+00:00",
+    "original": "Capuras quiz 5.",
+    "corrected": "capuras quiz 5.",
+    "student_name": null,
+    "confidence": 0.69573974609375,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-09-26T07:31:32.887225+00:00",
+    "original": "Grease. 5 capuras.",
+    "corrected": "grease. 5 capuras",
+    "student_name": null,
+    "confidence": 0.39975500106811523,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-09-26T07:33:51.873167+00:00",
+    "original": "Capuras 50.",
+    "corrected": "capuras 50.",
+    "student_name": null,
+    "confidence": 0.5019296407699585,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-09-26T07:40:41.348194+00:00",
+    "original": "Capuras 50.",
+    "corrected": "capuras 50.",
+    "student_name": null,
+    "confidence": 0.5690564513206482,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-09-26T07:40:53.788964+00:00",
+    "original": "Capuras 50.",
+    "corrected": "capuras 50.",
+    "student_name": null,
+    "confidence": 0.6071665287017822,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-09-26T07:41:05.626631+00:00",
+    "original": "Capuras 50.",
+    "corrected": "capuras 50.",
+    "student_name": null,
+    "confidence": 0.5797628164291382,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-09-26T09:52:43.606693+00:00",
+    "original": "Capuras quiz 5.",
+    "corrected": "capuras quiz 5.",
+    "student_name": null,
+    "confidence": 0.573813259601593,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-09-26T09:52:58.225780+00:00",
+    "original": "Capuras 50.",
+    "corrected": "capuras 50.",
+    "student_name": null,
+    "confidence": 0.5215120315551758,
+    "correction_type": "automatic"
   }
 ]
