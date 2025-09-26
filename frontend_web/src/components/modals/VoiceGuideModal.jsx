@@ -1,5 +1,5 @@
+import { Download, Hash, Mic, Plus, Settings, Trash2, User, Users, X } from 'lucide-react';
 import React from 'react';
-import { Mic, X, User, Users, Hash, Plus, Settings, Download, Trash2 } from 'lucide-react';
 
 const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
   if (!showVoiceGuide) return null;
@@ -43,10 +43,10 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                 <div>
-                  <div className="font-medium text-blue-900 mb-2">🎯 Grade Entry</div>
+                  <div className="font-medium text-blue-900 mb-2">🎯 Grade Entry (Single Entry)</div>
                   <div className="text-blue-700 space-y-1">
-                    <div>"[Student Name] [Column] [Score]"</div>
-                    <div className="text-xs text-blue-600">Example: "Maria Quiz 1 eighty-five"</div>
+                    <div>"[Column] [Student Name] [Score]" <span className="text-xs text-blue-600">(Best for numbered columns like Quiz 1, Lab 1)</span></div>
+                    <div className="text-xs text-blue-600">Examples: "Quiz 1 Maria eighty-five", "Lab 2 John score ninety"</div>
                   </div>
                 </div>
                 <div>
@@ -80,12 +80,13 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
               </div>
               <div className="space-y-3 text-sm">
                 <div>
-                  <div className="font-medium text-slate-700 mb-2">By Student Name:</div>
+                  <div className="font-medium text-slate-700 mb-2">Single Entry (Numbered Columns):</div>
                   <div className="bg-slate-50 rounded p-3 space-y-1 text-slate-600">
-                    <div>"Maria Quiz 1 eighty-five"</div>
-                    <div>"John Lab 2 score ninety"</div>
-                    <div>"Sarah Assignment 3 seventy-five"</div>
+                    <div>"Quiz 1 Maria eighty-five"</div>
+                    <div>"Lab 2 John score ninety"</div>
+                    <div>"Seat 1 Sarah seventy-five"</div>
                   </div>
+                  <div className="text-xs text-amber-700 mt-2">Tip: Say the column first so the number (e.g., "1") isn’t mistaken for the score.</div>
                 </div>
               </div>
             </div>

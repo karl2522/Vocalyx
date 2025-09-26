@@ -119,6 +119,14 @@ const ClassRecordExcel = () => {
     edit: false
   });
   const [showVoiceGuide, setShowVoiceGuide] = useState(false);
+  // 🔊 Single-entry voice processing state
+  const [voicePhase, setVoicePhase] = useState('idle'); // idle | listening | recognized | verifying | processing | writing | done | error
+  const [voiceStatus, setVoiceStatus] = useState('');
+  const [voiceBusy, setVoiceBusy] = useState(false);
+  const [isSlow, setIsSlow] = useState(false);
+  const voiceCancelRef = useRef(false);
+  const slowTimerRef = useRef(null);
+  const processingStartRef = useRef(null);
 
   const isFirstRender = useRef(true);
 
@@ -276,7 +284,7 @@ const ClassRecordExcel = () => {
     if (interimBatchCommand && batchMode && currentBatchColumn) {
       console.log('🔥 REAL-TIME: Processing interim command:', interimBatchCommand);
       
-      const studentScorePattern = /^(.+?)\s+(\d+(?:\.\d+)?)$/;
+      const studentScorePattern = /^(.+?)\s+(\d+(?:\.\d+)?)[)\].,!?:;-]*$/;
       const match = interimBatchCommand.trim().match(studentScorePattern);
       
       if (match) {
@@ -292,7 +300,8 @@ const ClassRecordExcel = () => {
         console.log('🔥 REAL-TIME: Calling processBatchEntry for:', cleanedName, score);
         
         // 🔥 Use the corrected name
-        processBatchEntry(cleanedName, score.trim());
+        const cleanedScore = score.trim().replace(/[)\].,!?:;-]+$/g, '');
+        processBatchEntry(cleanedName, cleanedScore);
         
         // 🔥 Clear immediately
         setInterimBatchCommand('');
@@ -2572,6 +2581,11 @@ const handleAutoNumberStudents = async () => {
     }
 
   try {
+      // 🔊 Verifying phase while resolving target student/column
+      setVoiceBusy(true);
+      setVoicePhase('verifying');
+      setVoiceStatus(`Finding ${data.searchName} and validating "${data.column}"...`);
+
       // Get fresh data for student search
       let sheetsResponse;
       if (currentSheet) {
@@ -2584,7 +2598,16 @@ const handleAutoNumberStudents = async () => {
       }
       
       if (!sheetsResponse.data?.success || !sheetsResponse.data.tableData?.length) {
+          setVoicePhase('error');
+          setVoiceBusy(true); // Keep overlay visible to show error
+          setVoiceStatus('Could not load student data');
           toast.error('Could not load student data');
+          // Auto-clear error state after 3 seconds
+          setTimeout(() => {
+            setVoiceBusy(false);
+            setVoicePhase('idle');
+            setVoiceStatus('');
+          }, 3000);
           return;
       }
 
@@ -2629,6 +2652,10 @@ const handleAutoNumberStudents = async () => {
         if (voiceEnabled) {
             speakText(`Found multiple students named ${data.searchName}. Please select the correct student from the options shown.`);
         }
+        // Keep overlay visible while awaiting user selection
+        setVoiceBusy(true);
+        setVoicePhase('verifying');
+        setVoiceStatus('Awaiting selection...');
         return;
     }
 
@@ -2677,6 +2704,12 @@ const handleAutoNumberStudents = async () => {
           }
 
           // 🔥 FIXED: Use correct row index
+          if (voiceCancelRef.current) {
+            setVoicePhase('idle');
+            setVoiceBusy(false);
+            setVoiceStatus('');
+            return;
+          }
           await performScoreUpdate(correctRowIndex, data, studentName, convertedTableData);
           
       } else {
@@ -2684,6 +2717,15 @@ const handleAutoNumberStudents = async () => {
           if (voiceEnabled) {
               speakText(`Student ${data.searchName} not found`);
           }
+          setVoicePhase('error');
+          setVoiceBusy(true); // Keep overlay visible to show error
+          setVoiceStatus('Student not found');
+          // Auto-clear error state after 3 seconds
+          setTimeout(() => {
+            setVoiceBusy(false);
+            setVoicePhase('idle');
+            setVoiceStatus('');
+          }, 3000);
       }
   } catch (error) {
       console.error('Voice command error:', error);
@@ -2691,11 +2733,32 @@ const handleAutoNumberStudents = async () => {
       if (voiceEnabled) {
           speakText('Failed to process the command. Please try again.');
       }
+      setVoicePhase('error');
+      setVoiceBusy(true); // Keep overlay visible to show error
+      setVoiceStatus('Processing failed');
+      // Auto-clear error state after 3 seconds
+      setTimeout(() => {
+        setVoiceBusy(false);
+        setVoicePhase('idle');
+        setVoiceStatus('');
+      }, 3000);
   }
 };
 
   const performScoreUpdate = async (rowIndex, data, studentName, convertedTableData) => {
     try {
+        if (voiceCancelRef.current) {
+          setVoicePhase('idle');
+          setVoiceBusy(false);
+          setVoiceStatus('');
+          return;
+        }
+
+        // 🔊 Writing phase indicator
+        setVoiceBusy(true);
+        setVoicePhase('writing');
+        setVoiceStatus(`Writing ${data.value} to ${data.column} for ${studentName}...`);
+
         // 🔥 NEW: Validate max score again, even during override
         const validation = validateScore(data.column, data.value);
         if (!validation.valid) {
@@ -2703,6 +2766,9 @@ const handleAutoNumberStudents = async () => {
           if (voiceEnabled) {
             speakText(validation.error);
           }
+          setVoicePhase('error');
+          setVoiceBusy(false);
+          setVoiceStatus(validation.error);
           return;
         }
 
@@ -2724,6 +2790,13 @@ const handleAutoNumberStudents = async () => {
           );
         }
 
+        if (voiceCancelRef.current) {
+            setVoicePhase('idle');
+            setVoiceBusy(false);
+            setVoiceStatus('');
+            return;
+        }
+
         if (response.data?.success) {
             addRecentStudent(studentName);
             
@@ -2731,6 +2804,16 @@ const handleAutoNumberStudents = async () => {
             if (voiceEnabled) {
                 speakText(`Updated ${data.column} to ${data.value} for ${studentName}`);
             }
+            // 🔊 Complete and clear after a brief moment
+            setVoicePhase('done');
+            setVoiceStatus('Saved');
+            if (slowTimerRef.current) clearTimeout(slowTimerRef.current);
+            setTimeout(() => {
+              setVoiceBusy(false);
+              setVoicePhase('idle');
+              setVoiceStatus('');
+              setIsSlow(false);
+            }, 1200);
         } else {
             throw new Error(response.data?.error || 'Failed to update cell');
         }
@@ -2740,6 +2823,15 @@ const handleAutoNumberStudents = async () => {
         if (voiceEnabled) {
             speakText('Failed to update the grade. Please try again.');
         }
+        setVoicePhase('error');
+        setVoiceBusy(true); // Keep overlay visible to show error
+        setVoiceStatus('Update failed');
+        // Auto-clear error state after 3 seconds
+        setTimeout(() => {
+          setVoiceBusy(false);
+          setVoicePhase('idle');
+          setVoiceStatus('');
+        }, 3000);
     }
   };
 
@@ -2839,7 +2931,10 @@ const handleDuplicateStudentSelect = async (selectedIndex) => {
         return;
     }
 
-    // Update the score
+    // Update the score with writing indicator
+    setVoiceBusy(true);
+    setVoicePhase('writing');
+    setVoiceStatus(`Writing ${command.value} to ${command.column} for ${studentName}...`);
     await performScoreUpdate(correctRowIndex, command, studentName, convertedTableData);
 };
 
@@ -2848,14 +2943,54 @@ const handleDuplicateModalClose = () => {
     setDuplicateModalData(null);
 };
 
+// Helper function to get user-friendly command names
+const getCommandDisplayName = (commandType) => {
+  const commandNames = {
+    'SMART_NAME_GRADE_ENTRY': 'Grade Entry',
+    'ADD_STUDENT': 'Add Student',
+    'DELETE_STUDENT_BY_NAME': 'Delete Student',
+    'DELETE_STUDENT_BY_ID': 'Delete Student by ID',
+    'UPDATE_MAX_SCORE': 'Update Max Score',
+    'UPDATE_BATCH_MAX_SCORE': 'Update Batch Max Score',
+    'STUDENT_ID_GRADE_ENTRY': 'Grade Entry by ID',
+    'SORT_STUDENTS': 'Sort Students',
+    'EXPORT_EXCEL': 'Export to Excel',
+    'EXPORT_PDF': 'Export to PDF',
+    'EXPORT_CSV': 'Export to CSV',
+    'BATCH_EVERYONE': 'Batch Grade Everyone',
+    'UPDATE_STUDENT_ID': 'Update Student ID',
+    'BATCH_STUDENT_LIST': 'Batch Grade List',
+    'BATCH_ROW_RANGE': 'Batch Grade Range'
+  };
+  return commandNames[commandType] || 'Unknown Command';
+};
+
    const handleVoiceCommand = (transcript) => {
   if (!transcript.trim()) return;
+  if (voiceBusy) {
+    // prevent overlapping operations in single entry mode
+    return;
+  }
 
   console.log('Voice command received:', transcript);
 
   if (batchMode) {
       handleBatchVoiceCommand(transcript);
       return;
+  }
+
+  // 🔊 Persist overlay and show processing state for single entry
+  try {
+    setVoiceBusy(true);
+    setVoicePhase('processing');
+    setVoiceStatus('Processing command...');
+    setIsSlow(false);
+    voiceCancelRef.current = false;
+    if (slowTimerRef.current) clearTimeout(slowTimerRef.current);
+    processingStartRef.current = Date.now();
+    slowTimerRef.current = setTimeout(() => setIsSlow(true), 6000);
+  } catch {
+    // no-op safeguard
   }
 
   // 🔥 NEW: Handle override confirmation responses
@@ -2886,11 +3021,34 @@ const handleDuplicateModalClose = () => {
       commandHistory: [],
       alternatives: []
   });
+  // If parser fails to recognize a meaningful command, surface an error and exit busy
+  if (!command || !command.type || command.type === 'UNKNOWN_COMMAND') {
+    setVoicePhase('error');
+    setVoiceBusy(true); // Keep overlay visible to show error
+    setVoiceStatus('Command not recognized');
+    toast.error('Voice command not recognized');
+    if (voiceEnabled) {
+      speakText('Command not recognized. Please try again. For numbered columns, say column, student, score.');
+    }
+    // Auto-clear error state after 3 seconds
+    setTimeout(() => {
+      setVoiceBusy(false);
+      setVoicePhase('idle');
+      setVoiceStatus('');
+    }, 3000);
+    return;
+  }
   
   // Handle duplicate selection
   if (command.type === 'SELECT_DUPLICATE' && duplicateOptions) {
       handleDuplicateSelection(command.data.selectedOption);
       return;
+  }
+  
+  // 🔊 Voice feedback when command is recognized
+  if (voiceEnabled) {
+    const commandName = getCommandDisplayName(command.type);
+    speakText(`Command recognized: ${commandName}`);
   }
   
   executeCommand(command);
@@ -4154,24 +4312,50 @@ const handleExportToPDF = async () => {
           </div>
         )}
 
-        {/* 🔥 NEW: Real-time Transcript Display */}
-        {(isListening || transcript.trim()) && (
+        {/* 🔥 NEW: Real-time Transcript / Processing Overlay */}
+        {(isListening || transcript.trim() || (!batchMode && (voiceBusy || ['processing','verifying','writing','done','error'].includes(voicePhase)))) && (
           <div className="fixed bottom-6 left-6 z-50 max-w-md">
             <div className="bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden backdrop-blur-sm">
               {/* Header */}
               <div className={`px-4 py-3 flex items-center justify-between ${
                 isListening 
                   ? 'bg-gradient-to-r from-red-50 to-red-100 border-b border-red-200' 
-                  : 'bg-gradient-to-r from-green-50 to-green-100 border-b border-green-200'
+                  : (voicePhase === 'error'
+                      ? 'bg-gradient-to-r from-red-50 to-red-100 border-b border-red-200'
+                      : (voicePhase === 'done' 
+                          ? 'bg-gradient-to-r from-emerald-50 to-emerald-100 border-b border-emerald-200' 
+                          : (voiceBusy 
+                              ? 'bg-gradient-to-r from-amber-50 to-amber-100 border-b border-amber-200' 
+                              : 'bg-gradient-to-r from-green-50 to-green-100 border-b border-green-200')))
               }`}>
                 <div className="flex items-center space-x-2">
                   <div className={`w-2 h-2 rounded-full ${
-                    isListening ? 'bg-red-500 animate-pulse' : 'bg-green-500'
+                    isListening 
+                      ? 'bg-red-500 animate-pulse' 
+                      : (voicePhase === 'error'
+                          ? 'bg-red-500'
+                          : (voicePhase === 'done' 
+                              ? 'bg-emerald-500' 
+                              : (voiceBusy ? 'bg-amber-500 animate-pulse' : 'bg-green-500')))
                   }`}></div>
                   <span className={`text-sm font-medium ${
-                    isListening ? 'text-red-700' : 'text-green-700'
+                    isListening 
+                      ? 'text-red-700' 
+                      : (voicePhase === 'error'
+                          ? 'text-red-700'
+                          : (voicePhase === 'done' 
+                              ? 'text-emerald-700' 
+                              : (voiceBusy ? 'text-amber-700' : 'text-green-700')))
                   }`}>
-                    {isListening ? '🎙️ Listening...' : '✅ Voice Input'}
+                  {isListening 
+                    ? '🎙️ Listening...'
+                    : (voicePhase === 'error'
+                        ? (voiceStatus ? `${voiceStatus}` : 'Error')
+                        : (voicePhase === 'done' 
+                            ? '✅ Saved'
+                            : (voiceBusy 
+                                ? (voicePhase === 'verifying' ? 'Verifying...' : voicePhase === 'writing' ? 'Writing…' : 'Processing…') 
+                                : '✅ Voice Input')))}
                   </span>
                   {batchMode && (
                     <span className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded-full font-medium">
@@ -4183,17 +4367,31 @@ const handleExportToPDF = async () => {
                 {/* Close button */}
                 <button
                   onClick={() => {
-                    if (isListening) {
-                      stopListening();
+                    if (voiceBusy) {
+                      // cancel current operation
+                      try {
+                        voiceCancelRef.current = true;
+                        if (slowTimerRef.current) clearTimeout(slowTimerRef.current);
+                        setIsSlow(false);
+                        setVoiceBusy(false);
+                        setVoicePhase('idle');
+                        setVoiceStatus('');
+                      } catch {
+                        // no-op safeguard
+                      }
+                    } else {
+                      if (isListening) {
+                        stopListening();
+                      }
+                      clearTranscript();
                     }
-                    clearTranscript();
                   }}
                   className={`p-1 rounded-full transition-colors ${
                     isListening 
                       ? 'hover:bg-red-200 text-red-600' 
-                      : 'hover:bg-green-200 text-green-600'
+                      : (voiceBusy ? 'hover:bg-amber-200 text-amber-700' : 'hover:bg-green-200 text-green-600')
                   }`}
-                  title="Clear transcript"
+                  title={voiceBusy ? 'Cancel' : 'Clear transcript'}
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -4214,8 +4412,28 @@ const handleExportToPDF = async () => {
                     {/* Processing status */}
                     {!isListening && transcript.trim() && (
                       <div className="flex items-center space-x-2 text-xs text-slate-600">
-                        <div className="w-3 h-3 border border-slate-400 border-t-transparent rounded-full animate-spin"></div>
-                        <span>Processing command...</span>
+                        {(voiceBusy || ['processing','verifying','writing'].includes(voicePhase)) && (
+                          <div className="w-3 h-3 border border-slate-400 border-t-transparent rounded-full animate-spin"></div>
+                        )}
+                        <span>{voiceStatus || 'Processing command...'}</span>
+                        {isSlow && (
+                          <button className="ml-2 text-amber-700 underline"
+                            onClick={() => {
+                              try {
+                                voiceCancelRef.current = true;
+                                if (slowTimerRef.current) clearTimeout(slowTimerRef.current);
+                                setIsSlow(false);
+                                setVoiceBusy(false);
+                                setVoicePhase('idle');
+                                setVoiceStatus('');
+                              } catch {
+                                // no-op safeguard
+                              }
+                            }}
+                          >
+                            Still working… Cancel
+                          </button>
+                        )}
                       </div>
                     )}
                     
@@ -4238,7 +4456,8 @@ const handleExportToPDF = async () => {
                     {!batchMode && (
                       <div className="bg-blue-50 rounded-lg p-2 border border-blue-200">
                         <div className="text-xs text-blue-600">
-                          💡 Try: "Maria Quiz 1 eighty-five" or "John Lab 2 ninety"
+                          💡 For numbered columns, say: <span className="font-semibold">"[Column] [Student] [Score]"</span>
+                          <div className="mt-1">Examples: "Quiz 1 Maria eighty-five", "Lab 2 John ninety"</div>
                           {currentSheet && (
                             <div className="mt-1">Sheet: <span className="font-medium">{currentSheet.sheet_name}</span></div>
                           )}
@@ -4251,12 +4470,12 @@ const handleExportToPDF = async () => {
                   <div className="text-center py-6">
                     <Mic className="w-8 h-8 mx-auto text-slate-400 mb-2" />
                     <div className="text-sm text-slate-600 mb-1">
-                      {isListening ? 'Speak now...' : 'Start speaking to see transcript'}
+                      {isListening ? 'Speak now...' : (voiceBusy ? (voiceStatus || 'Processing…') : 'Start speaking to see transcript')}
                     </div>
                     <div className="text-xs text-slate-500">
                       {batchMode 
                         ? 'Batch mode active - Say student names and scores'
-                        : 'Voice commands will appear here'
+                        : (voiceBusy ? (isSlow ? 'Still working… this may take a moment' : 'Processing your command') : 'Voice commands will appear here')
                       }
                     </div>
                   </div>

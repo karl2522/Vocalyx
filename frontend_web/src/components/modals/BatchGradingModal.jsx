@@ -1,7 +1,7 @@
+import { Mic, Users, X } from 'lucide-react';
 import React from 'react';
-import { Users, X, Mic } from 'lucide-react';
-import BatchEntryItem from '../BatchEntryItem';
 import toast from 'react-hot-toast';
+import BatchEntryItem from '../BatchEntryItem';
 
 const BatchGradingModal = ({
   showBatchModal,
@@ -50,10 +50,11 @@ const BatchGradingModal = ({
     console.log('🔥 RETRY ENTRY:', entryId, originalInput);
     setBatchEntries(prev => prev.filter(e => e.id !== entryId));
     setTimeout(() => {
-      const match = originalInput.match(/^(.+?)\s+(\d+(?:\.\d+)?)$/);
+      const match = originalInput.match(/^(.+?)\s+(\d+(?:\.\d+)?)[)\].,!?:;-]*$/);
       if (match) {
         const [, studentName, score] = match;
-        processBatchEntry(studentName.trim(), score.trim());
+        const cleanedScore = score.trim().replace(/[)\].,!?:;-]+$/g, '');
+        processBatchEntry(studentName.trim(), cleanedScore);
       }
     }, 100);
   };

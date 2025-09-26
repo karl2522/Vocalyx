@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "541901084386",
+    "project_id": "vocalyx-d897e",
+    "storage_bucket": "vocalyx-d897e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:541901084386:android:eae1ce3deaebdf8e37f0bb",
+        "android_client_info": {
+          "package_name": "com.example.vocalyxapk"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBWxrPYETiXno2gQOg6ZfMT1tCyT9i07Fs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
