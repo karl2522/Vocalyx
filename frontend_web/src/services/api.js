@@ -509,6 +509,14 @@ export const classRecordService = {
         return api.post(`/sheets/${sheetId}/update-category-perfect-scores/`, payload);
     },
 
+    // NEW: Protect perfect score row from editing
+    protectPerfectScoreRow: (sheetId, sheetName = null) => {
+        const payload = {};
+        if (sheetName) payload.sheet_name = sheetName;
+        
+        return api.post(`/sheets/${sheetId}/protect-perfect-score-row/`, payload);
+    },
+
     updateSheetRange: (sheetId, updateData, sheetName = null) => {
         const payload = { 
             range: updateData.range,

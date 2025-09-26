@@ -3347,6 +3347,109 @@ class GoogleServiceAccountSheets:
                 'error': f'Failed to update category perfect scores: {str(e)}'
             }
 
+    def protect_perfect_score_row(self, sheet_id: str, sheet_name: str = None) -> dict:
+        """
+        Protect Row 3 (perfect scores) from editing in Google Sheets using protected ranges.
+        
+        Args:
+            sheet_id: ID of the spreadsheet
+            sheet_name: Name of the specific sheet (if None, uses first sheet)
+            
+        Returns:
+            Dict containing protection result
+        """
+        try:
+            # Get sheet data to find the correct sheet ID
+            if sheet_name:
+                sheet_data = self.get_specific_sheet_data(sheet_id, sheet_name)
+            else:
+                sheet_data = self.get_sheet_data(sheet_id)
+
+            if not sheet_data['success']:
+                return sheet_data
+
+            target_sheet_name = sheet_data['sheet_name']
+            
+            # Get the internal sheet ID (different from sheet name)
+            meta = self.sheets_service.spreadsheets().get(spreadsheetId=sheet_id).execute()
+            target_sheet_id = None
+            for sheet in meta.get('sheets', []):
+                if sheet['properties']['title'] == target_sheet_name:
+                    target_sheet_id = sheet['properties']['sheetId']
+                    break
+                    
+            if target_sheet_id is None:
+                return {
+                    'success': False,
+                    'error': f'Sheet "{target_sheet_name}" not found'
+                }
+
+            # 🔥 Create protected range for Row 3 (perfect scores)
+            # Row 3 is index 2 in 0-based indexing
+            protected_range = {
+                "protectedRangeId": None,  # Let Google generate an ID
+                "range": {
+                    "sheetId": target_sheet_id,
+                    "startRowIndex": 2,  # Row 3 (0-based)
+                    "endRowIndex": 3,    # Row 3 (exclusive end)
+                },
+                "description": "Perfect Score Row - Managed by Vocalyx Perfect Score Manager",
+                "warningOnly": False,  # Actually restrict editing
+                "requestingUserCanEdit": True,  # Service account can still edit
+                "editors": {
+                    "users": [],  # No specific users can edit
+                    "groups": [],  # No groups can edit
+                    "domainUsersCanEdit": False  # Domain users cannot edit
+                }
+            }
+
+            # Apply the protection
+            requests = [{
+                "addProtectedRange": {
+                    "protectedRange": protected_range
+                }
+            }]
+
+            body = {
+                "requests": requests
+            }
+
+            result = self.sheets_service.spreadsheets().batchUpdate(
+                spreadsheetId=sheet_id,
+                body=body
+            ).execute()
+
+            logger.info(f"Successfully protected Row 3 in sheet '{target_sheet_name}'")
+
+            return {
+                'success': True,
+                'protected_range_id': result.get('replies', [{}])[0].get('addProtectedRange', {}).get('protectedRange', {}).get('protectedRangeId'),
+                'sheet_name': target_sheet_name,
+                'message': f"Row 3 (Perfect Scores) is now protected in '{target_sheet_name}'. Use the Perfect Score Manager to make changes."
+            }
+
+        except HttpError as e:
+            if e.resp.status == 400:
+                # Check if protection already exists
+                if 'already exists' in str(e) or 'overlapping' in str(e):
+                    return {
+                        'success': True,
+                        'message': 'Perfect score row is already protected',
+                        'sheet_name': target_sheet_name if 'target_sheet_name' in locals() else sheet_name
+                    }
+            
+            logger.error(f"HTTP error protecting perfect score row: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Failed to protect perfect score row: {str(e)}'
+            }
+        except Exception as e:
+            logger.error(f"Protect perfect score row error: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Failed to protect perfect score row: {str(e)}'
+            }
+
     def update_range(self, sheet_id, range_name, values, sheet_name=None):
         """Update a range of cells in the sheet"""
         try:

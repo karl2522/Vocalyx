@@ -23,6 +23,7 @@ from .views import (
     sheets_get_categories_service_account,
     # NEW: Perfect score management views
     sheets_get_category_structure_service_account, sheets_update_category_perfect_scores_service_account,
+    sheets_protect_perfect_score_row_service_account,
     # Google Drive connection management
     check_google_drive_connection, connect_google_account, refresh_google_tokens,
     disconnect_google_account, get_google_drive_token
@@ -123,6 +124,7 @@ urlpatterns = [
     # NEW: Perfect score management endpoints
     path('sheets/<str:sheet_id>/get-category-structure/', sheets_get_category_structure_service_account, name='get_category_structure'),
     path('sheets/<str:sheet_id>/update-category-perfect-scores/', sheets_update_category_perfect_scores_service_account, name='update_category_perfect_scores'),
+    path('sheets/<str:sheet_id>/protect-perfect-score-row/', sheets_protect_perfect_score_row_service_account, name='protect_perfect_score_row'),
     
     # Google Drive connection management endpoints
     path('google-drive/check/', check_google_drive_connection, name='check_google_drive_connection'),
