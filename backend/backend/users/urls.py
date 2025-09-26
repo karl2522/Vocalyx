@@ -21,9 +21,6 @@ from .views import (
     sheets_update_range_service_account, delete_student_from_sheet, update_multiple_cells_service_account,
     sheets_add_category_service_account, sheets_delete_category_service_account, sheets_edit_category_service_account,
     sheets_get_categories_service_account,
-    # NEW: Perfect score management views
-    sheets_get_category_structure_service_account, sheets_update_category_perfect_scores_service_account,
-    sheets_protect_perfect_score_row_service_account,
     # Google Drive connection management
     check_google_drive_connection, connect_google_account, refresh_google_tokens,
     disconnect_google_account, get_google_drive_token
