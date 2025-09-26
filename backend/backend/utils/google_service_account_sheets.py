@@ -3489,7 +3489,8 @@ class GoogleServiceAccountSheets:
             updates = []
 
             for col_index, header in enumerate(headers):
-                column_letter = chr(65 + col_index)
+                # Convert column index to proper Excel column letter using existing helper
+                column_letter = self._column_index_to_a1(col_index)
 
                 # 🔥 SKIP formula columns - same logic as add_student
                 header_name = header.upper()
@@ -3677,7 +3678,8 @@ class GoogleServiceAccountSheets:
 
                 # Clear only data columns (not formula columns)
                 for col_index, header in enumerate(headers):
-                    column_letter = chr(65 + col_index)
+                    # Convert column index to proper Excel column letter using existing helper
+                    column_letter = self._column_index_to_a1(col_index)
 
                     # 🔥 SKIP formula columns
                     header_name = header.upper()
@@ -3697,7 +3699,8 @@ class GoogleServiceAccountSheets:
 
                 # Update each column for this student
                 for col_index, header in enumerate(headers):
-                    column_letter = chr(65 + col_index)
+                    # Convert column index to proper Excel column letter using existing helper
+                    column_letter = self._column_index_to_a1(col_index)
 
                     # 🔥 SKIP formula columns
                     header_name = header.upper()
@@ -4644,14 +4647,8 @@ class GoogleServiceAccountSheets:
 
             # 🔥 FIX: Handle column letters properly for columns beyond Z
             def get_column_letter(col_index):
-                """Convert column index to Excel column letter(s)"""
-                if col_index < 26:
-                    return chr(65 + col_index)  # A-Z
-                else:
-                    # For columns AA, AB, etc.
-                    first_letter = chr(65 + (col_index // 26) - 1)
-                    second_letter = chr(65 + (col_index % 26))
-                    return first_letter + second_letter
+                """Convert column index to Excel column letter(s) - supports A-Z, AA-ZZ, AAA-ZZZ, etc."""
+                return self._column_index_to_a1(col_index)
 
             # Update category name in Row 1
             category_col_letter = get_column_letter(category_col)

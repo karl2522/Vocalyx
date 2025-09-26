@@ -494,29 +494,6 @@ export const classRecordService = {
         return api.post(`/sheets/${sheetId}/update-batch-max-scores/`, payload);
     },
 
-    // NEW: Perfect score management methods
-    getCategoryStructure: (sheetId, sheetName = null) => {
-        const params = sheetName ? { sheet_name: sheetName } : {};
-        return api.get(`/sheets/${sheetId}/get-category-structure/`, { params });
-    },
-
-    updateCategoryPerfectScores: (sheetId, updates, sheetName = null) => {
-        const payload = { 
-            updates: updates  // Array of {column_name, perfect_score}
-        };
-        if (sheetName) payload.sheet_name = sheetName;
-        
-        return api.post(`/sheets/${sheetId}/update-category-perfect-scores/`, payload);
-    },
-
-    // NEW: Protect perfect score row from editing
-    protectPerfectScoreRow: (sheetId, sheetName = null) => {
-        const payload = {};
-        if (sheetName) payload.sheet_name = sheetName;
-        
-        return api.post(`/sheets/${sheetId}/protect-perfect-score-row/`, payload);
-    },
-
     updateSheetRange: (sheetId, updateData, sheetName = null) => {
         const payload = { 
             range: updateData.range,

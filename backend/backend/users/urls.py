@@ -121,11 +121,6 @@ urlpatterns = [
     path('sheets/<str:sheet_id>/edit-category/', sheets_edit_category_service_account, name='edit_category'),
     path('sheets/<str:sheet_id>/get-categories/', sheets_get_categories_service_account, name='get_categories'),
     
-    # NEW: Perfect score management endpoints
-    path('sheets/<str:sheet_id>/get-category-structure/', sheets_get_category_structure_service_account, name='get_category_structure'),
-    path('sheets/<str:sheet_id>/update-category-perfect-scores/', sheets_update_category_perfect_scores_service_account, name='update_category_perfect_scores'),
-    path('sheets/<str:sheet_id>/protect-perfect-score-row/', sheets_protect_perfect_score_row_service_account, name='protect_perfect_score_row'),
-    
     # Google Drive connection management endpoints
     path('google-drive/check/', check_google_drive_connection, name='check_google_drive_connection'),
     path('google-drive/connect/', connect_google_account, name='connect_google_account'),
