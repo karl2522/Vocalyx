@@ -49,12 +49,28 @@ class GoogleServiceAccountSheets:
         if not header:
             return None, None
         name = str(header).strip().upper()
+        
+        # 🔥 ENHANCED: Skip if this looks like a student info field
+        student_info_patterns = {
+            'FIRSTNAME', 'FIRST NAME', 'LASTNAME', 'LAST NAME', 
+            'MIDDLENAME', 'MIDDLE NAME', 'STUDENT ID', 'STUDENTID',
+            'NO.', 'NUMBER', 'EMAIL', 'PHONE', 'ADDRESS'
+        }
+        
+        if name in student_info_patterns:
+            return None, None
+            
         # normalize multiple spaces
         import re
         name = re.sub(r"\s+", " ", name)
         # Split into tokens
         tokens = name.split(" ")
         category = tokens[0]
+        
+        # 🔥 ENHANCED: Additional validation for category
+        if not category or len(category) < 2:
+            return None, None
+            
         index = None
         if len(tokens) >= 2 and tokens[1].isdigit():
             index = int(tokens[1])
@@ -3160,42 +3176,94 @@ class GoogleServiceAccountSheets:
             # Parse categories and subcategories
             categories = {}
             
+            # 🔥 ENHANCED: Define columns that should NOT have perfect scores
+            student_info_columns = {
+                'NO.', 'NO', 'NUMBER', 
+                'LASTNAME', 'LAST NAME', 'SURNAME',
+                'FIRSTNAME', 'FIRST NAME', 'GIVEN NAME',
+                'MIDDLENAME', 'MIDDLE NAME', 'MIDDLE INITIAL',
+                'STUDENT ID', 'STUDENTID', 'ID', 'STUDENT_ID',
+                'EMAIL', 'PHONE', 'ADDRESS', 'SECTION', 'YEAR'
+            }
+            
             for index, header in enumerate(headers):
-                if header and header not in ['NO.', 'LASTNAME', 'FIRSTNAME', 'MIDDLE NAME', 'STUDENT ID']:
-                    # Parse category and subcategory
-                    category, subcategory_index = self._parse_category_and_index(header)
+                if not header:
+                    continue
                     
-                    if category:
-                        # Get perfect score for this column
-                        perfect_score = 100  # Default
-                        if index < len(max_scores) and max_scores[index]:
-                            try:
-                                perfect_score = int(float(max_scores[index]))
-                            except (ValueError, TypeError):
-                                perfect_score = 100
+                header_upper = str(header).strip().upper()
+                
+                # 🔥 Skip student info columns
+                if header_upper in student_info_columns:
+                    continue
+                
+                # 🔥 Skip columns that contain "TOTAL" (calculated totals)
+                if 'TOTAL' in header_upper:
+                    continue
+                    
+                # Parse category and subcategory
+                category, subcategory_index = self._parse_category_and_index(header)
+                
+                if category:
+                    # 🔥 ENHANCED: Only include gradeable categories
+                    # Skip non-gradeable categories like student info
+                    if category in student_info_columns:
+                        continue
+                    
+                    # 🔥 Skip categories that are clearly not gradeable
+                    non_gradeable_categories = {
+                        'STUDENT', 'INFO', 'INFORMATION', 'PERSONAL', 'CONTACT',
+                        'TOTAL', 'SUMMARY', 'AVERAGE', 'PERCENT', 'PERCENTAGE'
+                    }
+                    
+                    if category in non_gradeable_categories:
+                        continue
+                    
+                    # Get perfect score for this column
+                    perfect_score = 100  # Default
+                    if index < len(max_scores) and max_scores[index]:
+                        try:
+                            perfect_score = int(float(max_scores[index]))
+                        except (ValueError, TypeError):
+                            perfect_score = 100
 
-                        # Initialize category if not exists
-                        if category not in categories:
-                            categories[category] = {
-                                'name': category,
-                                'subcategories': {}
-                            }
-
-                        # Add subcategory
-                        categories[category]['subcategories'][header] = {
-                            'column_name': header,
-                            'perfect_score': perfect_score,
-                            'column_index': index
+                    # Initialize category if not exists
+                    if category not in categories:
+                        categories[category] = {
+                            'name': category,
+                            'subcategories': {}
                         }
+
+                    # Add subcategory
+                    categories[category]['subcategories'][header] = {
+                        'column_name': header,
+                        'perfect_score': perfect_score,
+                        'column_index': index
+                    }
 
             # Convert to list format for easier frontend handling
             category_list = []
             for cat_name, cat_data in categories.items():
                 subcategories = list(cat_data['subcategories'].values())
-                category_list.append({
-                    'name': cat_name,
-                    'subcategories': subcategories
-                })
+                
+                # 🔥 ENHANCED: Only include categories that have actual subcategories
+                # and are clearly gradeable (have valid perfect scores > 0)
+                valid_subcategories = [
+                    sub for sub in subcategories 
+                    if sub['perfect_score'] > 0 and 
+                       not any(keyword in sub['column_name'].upper() 
+                              for keyword in ['TOTAL', 'SUM', 'AVERAGE', 'PERCENT'])
+                ]
+                
+                if valid_subcategories:
+                    category_list.append({
+                        'name': cat_name,
+                        'subcategories': valid_subcategories
+                    })
+
+            # 🔥 ENHANCED: Log what we found for debugging
+            logger.info(f"Perfect Score Manager: Found {len(category_list)} valid categories")
+            for cat in category_list:
+                logger.info(f"  Category '{cat['name']}': {len(cat['subcategories'])} subcategories")
 
             return {
                 'success': True,
