@@ -3136,6 +3136,149 @@ class GoogleServiceAccountSheets:
                 'error': f'Failed to update batch max scores: {str(e)}'
             }
 
+    def get_category_structure_with_scores(self, sheet_id: str, sheet_name: str = None) -> dict:
+        """
+        Get the category structure with current perfect scores for the management modal.
+        
+        Returns:
+            Dict containing categories with their subcategories and perfect scores
+        """
+        try:
+            # Get sheet data to analyze structure
+            if sheet_name:
+                sheet_data = self.get_specific_sheet_data(sheet_id, sheet_name)
+            else:
+                sheet_data = self.get_sheet_data(sheet_id)
+
+            if not sheet_data['success']:
+                return sheet_data
+
+            headers = sheet_data['headers']  # Row 2 (column names)
+            max_scores = sheet_data['max_scores'] if 'max_scores' in sheet_data else []
+            target_sheet_name = sheet_data['sheet_name']
+
+            # Parse categories and subcategories
+            categories = {}
+            
+            for index, header in enumerate(headers):
+                if header and header not in ['NO.', 'LASTNAME', 'FIRSTNAME', 'MIDDLE NAME', 'STUDENT ID']:
+                    # Parse category and subcategory
+                    category, subcategory_index = self._parse_category_and_index(header)
+                    
+                    if category:
+                        # Get perfect score for this column
+                        perfect_score = 100  # Default
+                        if index < len(max_scores) and max_scores[index]:
+                            try:
+                                perfect_score = int(float(max_scores[index]))
+                            except (ValueError, TypeError):
+                                perfect_score = 100
+
+                        # Initialize category if not exists
+                        if category not in categories:
+                            categories[category] = {
+                                'name': category,
+                                'subcategories': {}
+                            }
+
+                        # Add subcategory
+                        categories[category]['subcategories'][header] = {
+                            'column_name': header,
+                            'perfect_score': perfect_score,
+                            'column_index': index
+                        }
+
+            # Convert to list format for easier frontend handling
+            category_list = []
+            for cat_name, cat_data in categories.items():
+                subcategories = list(cat_data['subcategories'].values())
+                category_list.append({
+                    'name': cat_name,
+                    'subcategories': subcategories
+                })
+
+            return {
+                'success': True,
+                'categories': category_list,
+                'sheet_name': target_sheet_name
+            }
+
+        except Exception as e:
+            logger.error(f"Get category structure error: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Failed to get category structure: {str(e)}'
+            }
+
+    def update_category_perfect_scores(self, sheet_id: str, updates: list, sheet_name: str = None) -> dict:
+        """
+        Update perfect scores for multiple subcategories independently.
+        
+        Args:
+            sheet_id: ID of the spreadsheet
+            updates: List of {column_name, perfect_score} objects
+            sheet_name: Optional specific sheet name
+            
+        Returns:
+            Dict containing update results
+        """
+        try:
+            results = {
+                'success': True,
+                'updated_columns': 0,
+                'failed_columns': 0,
+                'errors': [],
+                'updated_cells': 0
+            }
+
+            # Update each column individually using existing method
+            for update in updates:
+                column_name = update.get('column_name')
+                perfect_score = update.get('perfect_score')
+                
+                if not column_name or perfect_score is None:
+                    results['failed_columns'] += 1
+                    results['errors'].append(f"Invalid update data: {update}")
+                    continue
+
+                try:
+                    result = self.update_max_score_in_sheet(sheet_id, column_name, str(perfect_score), sheet_name)
+                    
+                    if result['success']:
+                        results['updated_columns'] += 1
+                        results['updated_cells'] += result.get('updated_cells', 0)
+                        logger.info(f"✅ Updated {column_name} perfect score to {perfect_score}")
+                    else:
+                        results['failed_columns'] += 1
+                        results['errors'].append(f"{column_name}: {result.get('error', 'Unknown error')}")
+                        logger.error(f"❌ Failed to update {column_name}: {result.get('error')}")
+
+                except Exception as e:
+                    results['failed_columns'] += 1
+                    results['errors'].append(f"{column_name}: {str(e)}")
+                    logger.error(f"❌ Exception updating {column_name}: {str(e)}")
+
+            # Determine overall success
+            if results['failed_columns'] > 0:
+                results['success'] = results['updated_columns'] > 0  # Partial success if some worked
+
+            summary = f"Updated {results['updated_columns']} subcategories"
+            if results['failed_columns'] > 0:
+                summary += f", {results['failed_columns']} failed"
+
+            return {
+                'success': results['success'],
+                'results': results,
+                'summary': summary
+            }
+
+        except Exception as e:
+            logger.error(f"Update category perfect scores error: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Failed to update category perfect scores: {str(e)}'
+            }
+
     def update_range(self, sheet_id, range_name, values, sheet_name=None):
         """Update a range of cells in the sheet"""
         try:

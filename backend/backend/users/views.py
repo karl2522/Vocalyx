@@ -1888,6 +1888,54 @@ def sheets_add_category_service_account(request, sheet_id):
 @permission_classes([IsAuthenticated])
 def sheets_delete_category_service_account(request, sheet_id):
     """Delete a category and all its columns from Google Sheet using service account"""
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def sheets_get_category_structure_service_account(request, sheet_id):
+    """Get category structure with perfect scores for management modal"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+        
+        sheet_name = request.GET.get('sheet_name')  # Optional specific sheet
+        
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+        result = service.get_category_structure_with_scores(sheet_id, sheet_name)
+        
+        return Response(result)
+        
+    except Exception as e:
+        logger.error(f"Get category structure error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def sheets_update_category_perfect_scores_service_account(request, sheet_id):
+    """Update perfect scores for specific subcategories independently"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+        
+        updates = request.data.get('updates', [])  # Array of {column_name, perfect_score}
+        sheet_name = request.data.get('sheet_name')  # Optional specific sheet
+        
+        if not updates:
+            return Response({'error': 'updates array is required'}, status=400)
+            
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+        result = service.update_category_perfect_scores(sheet_id, updates, sheet_name)
+        
+        return Response(result)
+        
+    except Exception as e:
+        logger.error(f"Update category perfect scores error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def sheets_delete_category_service_account(request, sheet_id):
+    """Delete a category and all its columns from Google Sheet using service account"""
     try:
         from utils.google_service_account_sheets import GoogleServiceAccountSheets
 

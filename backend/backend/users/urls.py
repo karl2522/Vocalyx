@@ -21,6 +21,8 @@ from .views import (
     sheets_update_range_service_account, delete_student_from_sheet, update_multiple_cells_service_account,
     sheets_add_category_service_account, sheets_delete_category_service_account, sheets_edit_category_service_account,
     sheets_get_categories_service_account,
+    # NEW: Perfect score management views
+    sheets_get_category_structure_service_account, sheets_update_category_perfect_scores_service_account,
     # Google Drive connection management
     check_google_drive_connection, connect_google_account, refresh_google_tokens,
     disconnect_google_account, get_google_drive_token
@@ -117,6 +119,10 @@ urlpatterns = [
     path('sheets/<str:sheet_id>/delete-category/', sheets_delete_category_service_account, name='delete_category'),
     path('sheets/<str:sheet_id>/edit-category/', sheets_edit_category_service_account, name='edit_category'),
     path('sheets/<str:sheet_id>/get-categories/', sheets_get_categories_service_account, name='get_categories'),
+    
+    # NEW: Perfect score management endpoints
+    path('sheets/<str:sheet_id>/get-category-structure/', sheets_get_category_structure_service_account, name='get_category_structure'),
+    path('sheets/<str:sheet_id>/update-category-perfect-scores/', sheets_update_category_perfect_scores_service_account, name='update_category_perfect_scores'),
     
     # Google Drive connection management endpoints
     path('google-drive/check/', check_google_drive_connection, name='check_google_drive_connection'),
