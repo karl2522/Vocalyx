@@ -49,12 +49,28 @@ class GoogleServiceAccountSheets:
         if not header:
             return None, None
         name = str(header).strip().upper()
+        
+        # 🔥 ENHANCED: Skip if this looks like a student info field
+        student_info_patterns = {
+            'FIRSTNAME', 'FIRST NAME', 'LASTNAME', 'LAST NAME', 
+            'MIDDLENAME', 'MIDDLE NAME', 'STUDENT ID', 'STUDENTID',
+            'NO.', 'NUMBER', 'EMAIL', 'PHONE', 'ADDRESS'
+        }
+        
+        if name in student_info_patterns:
+            return None, None
+            
         # normalize multiple spaces
         import re
         name = re.sub(r"\s+", " ", name)
         # Split into tokens
         tokens = name.split(" ")
         category = tokens[0]
+        
+        # 🔥 ENHANCED: Additional validation for category
+        if not category or len(category) < 2:
+            return None, None
+            
         index = None
         if len(tokens) >= 2 and tokens[1].isdigit():
             index = int(tokens[1])
@@ -3136,6 +3152,201 @@ class GoogleServiceAccountSheets:
                 'error': f'Failed to update batch max scores: {str(e)}'
             }
 
+    def get_category_structure_with_scores(self, sheet_id: str, sheet_name: str = None) -> dict:
+        """
+        Get the category structure with current perfect scores for the management modal.
+        
+        Returns:
+            Dict containing categories with their subcategories and perfect scores
+        """
+        try:
+            # Get sheet data to analyze structure
+            if sheet_name:
+                sheet_data = self.get_specific_sheet_data(sheet_id, sheet_name)
+            else:
+                sheet_data = self.get_sheet_data(sheet_id)
+
+            if not sheet_data['success']:
+                return sheet_data
+
+            headers = sheet_data['headers']  # Row 2 (column names)
+            max_scores = sheet_data['max_scores'] if 'max_scores' in sheet_data else []
+            target_sheet_name = sheet_data['sheet_name']
+
+            # Parse categories and subcategories
+            categories = {}
+            
+            # 🔥 ENHANCED: Define columns that should NOT have perfect scores
+            student_info_columns = {
+                'NO.', 'NO', 'NUMBER', 
+                'LASTNAME', 'LAST NAME', 'SURNAME',
+                'FIRSTNAME', 'FIRST NAME', 'GIVEN NAME',
+                'MIDDLENAME', 'MIDDLE NAME', 'MIDDLE INITIAL',
+                'STUDENT ID', 'STUDENTID', 'ID', 'STUDENT_ID',
+                'EMAIL', 'PHONE', 'ADDRESS', 'SECTION', 'YEAR'
+            }
+            
+            for index, header in enumerate(headers):
+                if not header:
+                    continue
+                    
+                header_upper = str(header).strip().upper()
+                
+                # 🔥 Skip student info columns
+                if header_upper in student_info_columns:
+                    continue
+                
+                # 🔥 Skip columns that contain "TOTAL" (calculated totals)
+                if 'TOTAL' in header_upper:
+                    continue
+                    
+                # Parse category and subcategory
+                category, subcategory_index = self._parse_category_and_index(header)
+                
+                if category:
+                    # 🔥 ENHANCED: Only include gradeable categories
+                    # Skip non-gradeable categories like student info
+                    if category in student_info_columns:
+                        continue
+                    
+                    # 🔥 Skip categories that are clearly not gradeable
+                    non_gradeable_categories = {
+                        'STUDENT', 'INFO', 'INFORMATION', 'PERSONAL', 'CONTACT',
+                        'TOTAL', 'SUMMARY', 'AVERAGE', 'PERCENT', 'PERCENTAGE'
+                    }
+                    
+                    if category in non_gradeable_categories:
+                        continue
+                    
+                    # Get perfect score for this column
+                    perfect_score = 100  # Default
+                    if index < len(max_scores) and max_scores[index]:
+                        try:
+                            perfect_score = int(float(max_scores[index]))
+                        except (ValueError, TypeError):
+                            perfect_score = 100
+
+                    # Initialize category if not exists
+                    if category not in categories:
+                        categories[category] = {
+                            'name': category,
+                            'subcategories': {}
+                        }
+
+                    # Add subcategory
+                    categories[category]['subcategories'][header] = {
+                        'column_name': header,
+                        'perfect_score': perfect_score,
+                        'column_index': index
+                    }
+
+            # Convert to list format for easier frontend handling
+            category_list = []
+            for cat_name, cat_data in categories.items():
+                subcategories = list(cat_data['subcategories'].values())
+                
+                # 🔥 ENHANCED: Only include categories that have actual subcategories
+                # and are clearly gradeable (have valid perfect scores > 0)
+                valid_subcategories = [
+                    sub for sub in subcategories 
+                    if sub['perfect_score'] > 0 and 
+                       not any(keyword in sub['column_name'].upper() 
+                              for keyword in ['TOTAL', 'SUM', 'AVERAGE', 'PERCENT'])
+                ]
+                
+                if valid_subcategories:
+                    category_list.append({
+                        'name': cat_name,
+                        'subcategories': valid_subcategories
+                    })
+
+            # 🔥 ENHANCED: Log what we found for debugging
+            logger.info(f"Perfect Score Manager: Found {len(category_list)} valid categories")
+            for cat in category_list:
+                logger.info(f"  Category '{cat['name']}': {len(cat['subcategories'])} subcategories")
+
+            return {
+                'success': True,
+                'categories': category_list,
+                'sheet_name': target_sheet_name
+            }
+
+        except Exception as e:
+            logger.error(f"Get category structure error: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Failed to get category structure: {str(e)}'
+            }
+
+    def update_category_perfect_scores(self, sheet_id: str, updates: list, sheet_name: str = None) -> dict:
+        """
+        Update perfect scores for multiple subcategories independently.
+        
+        Args:
+            sheet_id: ID of the spreadsheet
+            updates: List of {column_name, perfect_score} objects
+            sheet_name: Optional specific sheet name
+            
+        Returns:
+            Dict containing update results
+        """
+        try:
+            results = {
+                'success': True,
+                'updated_columns': 0,
+                'failed_columns': 0,
+                'errors': [],
+                'updated_cells': 0
+            }
+
+            # Update each column individually using existing method
+            for update in updates:
+                column_name = update.get('column_name')
+                perfect_score = update.get('perfect_score')
+                
+                if not column_name or perfect_score is None:
+                    results['failed_columns'] += 1
+                    results['errors'].append(f"Invalid update data: {update}")
+                    continue
+
+                try:
+                    result = self.update_max_score_in_sheet(sheet_id, column_name, str(perfect_score), sheet_name)
+                    
+                    if result['success']:
+                        results['updated_columns'] += 1
+                        results['updated_cells'] += result.get('updated_cells', 0)
+                        logger.info(f"✅ Updated {column_name} perfect score to {perfect_score}")
+                    else:
+                        results['failed_columns'] += 1
+                        results['errors'].append(f"{column_name}: {result.get('error', 'Unknown error')}")
+                        logger.error(f"❌ Failed to update {column_name}: {result.get('error')}")
+
+                except Exception as e:
+                    results['failed_columns'] += 1
+                    results['errors'].append(f"{column_name}: {str(e)}")
+                    logger.error(f"❌ Exception updating {column_name}: {str(e)}")
+
+            # Determine overall success
+            if results['failed_columns'] > 0:
+                results['success'] = results['updated_columns'] > 0  # Partial success if some worked
+
+            summary = f"Updated {results['updated_columns']} subcategories"
+            if results['failed_columns'] > 0:
+                summary += f", {results['failed_columns']} failed"
+
+            return {
+                'success': results['success'],
+                'results': results,
+                'summary': summary
+            }
+
+        except Exception as e:
+            logger.error(f"Update category perfect scores error: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Failed to update category perfect scores: {str(e)}'
+            }
+
     def update_range(self, sheet_id, range_name, values, sheet_name=None):
         """Update a range of cells in the sheet"""
         try:
@@ -3278,7 +3489,8 @@ class GoogleServiceAccountSheets:
             updates = []
 
             for col_index, header in enumerate(headers):
-                column_letter = chr(65 + col_index)
+                # Convert column index to proper Excel column letter using existing helper
+                column_letter = self._column_index_to_a1(col_index)
 
                 # 🔥 SKIP formula columns - same logic as add_student
                 header_name = header.upper()
@@ -3466,7 +3678,8 @@ class GoogleServiceAccountSheets:
 
                 # Clear only data columns (not formula columns)
                 for col_index, header in enumerate(headers):
-                    column_letter = chr(65 + col_index)
+                    # Convert column index to proper Excel column letter using existing helper
+                    column_letter = self._column_index_to_a1(col_index)
 
                     # 🔥 SKIP formula columns
                     header_name = header.upper()
@@ -3486,7 +3699,8 @@ class GoogleServiceAccountSheets:
 
                 # Update each column for this student
                 for col_index, header in enumerate(headers):
-                    column_letter = chr(65 + col_index)
+                    # Convert column index to proper Excel column letter using existing helper
+                    column_letter = self._column_index_to_a1(col_index)
 
                     # 🔥 SKIP formula columns
                     header_name = header.upper()
@@ -4433,14 +4647,8 @@ class GoogleServiceAccountSheets:
 
             # 🔥 FIX: Handle column letters properly for columns beyond Z
             def get_column_letter(col_index):
-                """Convert column index to Excel column letter(s)"""
-                if col_index < 26:
-                    return chr(65 + col_index)  # A-Z
-                else:
-                    # For columns AA, AB, etc.
-                    first_letter = chr(65 + (col_index // 26) - 1)
-                    second_letter = chr(65 + (col_index % 26))
-                    return first_letter + second_letter
+                """Convert column index to Excel column letter(s) - supports A-Z, AA-ZZ, AAA-ZZZ, etc."""
+                return self._column_index_to_a1(col_index)
 
             # Update category name in Row 1
             category_col_letter = get_column_letter(category_col)

@@ -38,11 +38,33 @@ DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*', '10.0.165.206', '192.168.1.10', '.herokuapp.com', "192.168.254.101"]
 
+# Firebase configuration - support both file and environment variable
 FIREBASE_SERVICE_ACCOUNT_PATH = os.path.join(BASE_DIR.parent, 'firebase-service-account.json')
 
+# Initialize Firebase Admin SDK
 if not firebase_admin._apps:
-    cred = credentials.Certificate(FIREBASE_SERVICE_ACCOUNT_PATH)
-    firebase_admin.initialize_app(cred)
+    try:
+        # First, try to use environment variable (for Heroku)
+        firebase_credentials_json = os.getenv('FIREBASE_SERVICE_ACCOUNT_KEY')
+        if firebase_credentials_json:
+            import json
+            firebase_config = json.loads(firebase_credentials_json)
+            cred = credentials.Certificate(firebase_config)
+            firebase_admin.initialize_app(cred)
+            print("✅ Firebase Admin SDK initialized from environment variable")
+        # Fall back to service account file (for local development)
+        elif os.path.exists(FIREBASE_SERVICE_ACCOUNT_PATH):
+            cred = credentials.Certificate(FIREBASE_SERVICE_ACCOUNT_PATH)
+            firebase_admin.initialize_app(cred)
+            print("✅ Firebase Admin SDK initialized from service account file")
+        else:
+            print(f"⚠️ Firebase service account not found. Checked:")
+            print(f"   - Environment variable: FIREBASE_SERVICE_ACCOUNT_KEY")
+            print(f"   - File path: {FIREBASE_SERVICE_ACCOUNT_PATH}")
+            print("Firebase authentication features will be disabled")
+    except Exception as e:
+        print(f"❌ Warning: Failed to initialize Firebase Admin SDK: {e}")
+        print("Firebase authentication features will be disabled")
 
 
 # Application definition
@@ -375,14 +397,41 @@ GOOGLE_SHEETS_TEMPLATE_ID = os.getenv('GOOGLE_SHEETS_TEMPLATE_ID', '1h-dR0ergnvg
 # Google API Key for public sheet access (fallback when user auth fails)
 GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 
-# Load Google Service Account Credentials from JSON file
+# Load Google Service Account Credentials from JSON file or environment variable
 GOOGLE_SERVICE_ACCOUNT_CREDENTIALS = {}
 SERVICE_ACCOUNT_FILE = os.path.join(BASE_DIR.parent, 'vocalyx2-service-account.json')
-if os.path.exists(SERVICE_ACCOUNT_FILE):
+
+# Try to load from environment variable first (for Heroku)
+google_service_account_json = os.getenv('GOOGLE_SERVICE_ACCOUNT_CREDENTIALS')
+if google_service_account_json:
+    try:
+        # Clean up the JSON string - remove any extra escaping
+        google_service_account_json = google_service_account_json.strip()
+        if google_service_account_json.startswith("'") and google_service_account_json.endswith("'"):
+            google_service_account_json = google_service_account_json[1:-1]
+        
+        GOOGLE_SERVICE_ACCOUNT_CREDENTIALS = json.loads(google_service_account_json)
+        
+        # Verify the private key format
+        private_key = GOOGLE_SERVICE_ACCOUNT_CREDENTIALS.get('private_key', '')
+        if '-----BEGIN PRIVATE KEY-----' not in private_key:
+            raise ValueError("Invalid private key format")
+            
+        print("✅ Google Service Account credentials loaded from environment variable")
+    except (json.JSONDecodeError, ValueError) as e:
+        print(f"❌ Error parsing Google Service Account credentials from environment: {e}")
+        print("🔧 Falling back to file or disabling Google Sheets features")
+        GOOGLE_SERVICE_ACCOUNT_CREDENTIALS = {}
+# Fall back to file (for local development)
+elif os.path.exists(SERVICE_ACCOUNT_FILE):
     with open(SERVICE_ACCOUNT_FILE, 'r') as f:
         GOOGLE_SERVICE_ACCOUNT_CREDENTIALS = json.load(f)
     print(f"✅ Google Service Account credentials loaded from {SERVICE_ACCOUNT_FILE}")
 else:
+    print(f"❌ Warning: Google Service Account credentials not found")
+    print(f"   - Environment variable: GOOGLE_SERVICE_ACCOUNT_CREDENTIALS")
+    print(f"   - File path: {SERVICE_ACCOUNT_FILE}")
+    print("Google Sheets features will be disabled")
     print(f"❌ Warning: Service account file not found at {SERVICE_ACCOUNT_FILE}")
     print(f"📁 Checking current directory: {BASE_DIR}")
     print(f"📁 Checking parent directory: {BASE_DIR.parent}")

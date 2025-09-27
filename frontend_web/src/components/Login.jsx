@@ -8,7 +8,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { login } from "../services/api";
 // import { microsoft } from "../utils";
-import { showToast } from "../utils/toast.jsx";
+import { showToast } from "../utils/toast";
 import LogoutReasonModal from "./modals/LogoutReasonModal.jsx";
 import SessionTimeoutModal from "./modals/SessionTimeoutModal.jsx";
 

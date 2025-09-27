@@ -21,6 +21,7 @@ from .models import CustomUser
 from .utils import send_verification_email, get_current_utc_time, get_user_login
 from .google_drive_service import GoogleDriveService
 from firebase_admin import auth
+import firebase_admin
 from .google_sheets_service import GoogleSheetsService
 from .google_token_service import google_token_service
 from .token_utils import token_encryption
@@ -64,7 +65,7 @@ class RegisterView(APIView):
                 user.email_verification_token = verification_token
                 user.save()
 
-                verification_url = f"http://127.0.0.1:8000/api/verify-email/{verification_token}/"
+                verification_url = f"https://vocalyx-c61a072bf25a.herokuapp.com/api/verify-email/{verification_token}/"
 
                 html_message = render_to_string('email/verification_email.html', {
                     'user': user,
@@ -251,7 +252,7 @@ def resend_verification_email(request):
         user.save()
         
         # Create verification URL
-        verification_url = f"http://127.0.0.1:8000/api/verify-email/{verification_token}/"
+        verification_url = f"https://vocalyx-c61a072bf25a.herokuapp.com/api/verify-email/{verification_token}/"
         
         # Render email template
         html_message = render_to_string('email/verification_email.html', {
@@ -484,6 +485,10 @@ def firebase_auth_view(request):
         
         if not id_token:
             return Response({'error': 'No ID token provided'}, status=400)
+
+        # Check if Firebase Admin SDK is initialized
+        if not firebase_admin._apps:
+            return Response({'error': 'Firebase authentication is not available'}, status=503)
 
         try:
             decoded_token = auth.verify_id_token(id_token)
@@ -1153,6 +1158,14 @@ def get_class_records_with_live_counts_cached(request):
         class_records = ClassRecord.objects.filter(user=request.user).order_by('-created_at')
         serializer = ClassRecordSerializer(class_records, many=True)
         records_data = serializer.data
+
+        # Check if Google Service Account credentials are available
+        if not settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS:
+            logger.warning("Google Service Account credentials not available, skipping live counts")
+            # Return records without live counts
+            for record in records_data:
+                record['student_count'] = 0  # Default value
+            return Response(records_data)
 
         service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
 
@@ -1870,6 +1883,12 @@ def sheets_add_category_service_account(request, sheet_id):
             'success': False,
             'error': f'Server error: {str(e)}'
         }, status=500)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def sheets_delete_category_service_account(request, sheet_id):
+    """Delete a category and all its columns from Google Sheet using service account"""
+
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])

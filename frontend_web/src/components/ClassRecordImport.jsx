@@ -6,7 +6,7 @@ import * as XLSX from 'xlsx';
 import { classRecordService } from '../services/api';
 import { speakText, stopSpeaking } from '../utils/speechSynthesis';
 import useVoiceRecognition from '../utils/useVoiceRecognition';
-import { findStudentRowSmart, parseVoiceCommand } from '../utils/voicecommandParser';
+import { findStudentRowSmart, parseVoiceCommand } from '../utils/voiceCommandParser';
 
 const ClassRecordImport = () => {
   const { id } = useParams();

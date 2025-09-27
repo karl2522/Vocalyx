@@ -1,6 +1,6 @@
 import { refreshToken as refreshJwt } from './api';
 
-const BACKEND_URL = import.meta.env.NODE_ENV === 'production' 
+const BACKEND_URL = import.meta.env.PROD 
   ? 'https://vocalyx-c61a072bf25a.herokuapp.com' 
   : 'http://127.0.0.1:8000';
 

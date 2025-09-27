@@ -3,7 +3,7 @@ import PropTypes from 'prop-types';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import apiService from '../../services/api';
-import { showToast } from '../../utils/toast.jsx';
+import { showToast } from '../../utils/toast';
 import DriveFilePickerModal from './DriveFilePickerModal';
 
 const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing, existingRecords = [] }) => {

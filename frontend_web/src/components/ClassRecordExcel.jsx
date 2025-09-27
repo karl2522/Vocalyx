@@ -9,7 +9,7 @@ import { classRecordService } from '../services/api';
 import googleDriveService from '../services/googleDriveService';
 import { speakText, stopSpeaking } from '../utils/speechSynthesis';
 import useVoiceRecognition from '../utils/useVoiceRecognition';
-import { applyPhoneticCorrections, cleanName, findStudentRowSmart, parseVoiceCommand } from '../utils/voicecommandParser';
+import { applyPhoneticCorrections, cleanName, findStudentRowSmart, parseVoiceCommand } from '../utils/voiceCommandParser';
 import AddCategoryModal from './modals/AddCategoryModal.jsx';
 import BatchGradingModal from './modals/BatchGradingModal';
 import ColumnMappingModal from './modals/ColumnMappingModal';
@@ -455,6 +455,16 @@ const ClassRecordExcel = () => {
             window.voiceCommandContext.activeSheet = sheetName;
             console.log(`📊 LOAD SHEET: Updated voice command context with sheet: "${sheetName}"`);
           }
+          
+          // 🔥 NEW: Auto-protect perfect score row when sheet loads
+          try {
+            console.log(`🔒 Auto-protecting perfect score row for sheet: ${sheetName}...`);
+            await classRecordService.protectPerfectScoreRow(sheetId, sheetName);
+            console.log("✅ Perfect score row protected successfully");
+          } catch (protectionError) {
+            console.log("⚠️ Could not protect perfect score row (may already be protected):", protectionError);
+            // Don't show error to user as this is non-critical
+          }
         }
         
         console.log(`✅ LOAD SHEET: Sheet "${sheetName}" data loaded successfully!`);
@@ -490,6 +500,16 @@ const ClassRecordExcel = () => {
           setTableData(convertedTableData);
           
           buildContextDictionary(convertedTableData, sheetsResponse.data.headers);
+          
+          // 🔥 NEW: Auto-protect perfect score row when sheet loads
+          try {
+            console.log("🔒 Auto-protecting perfect score row...");
+            await classRecordService.protectPerfectScoreRow(sheetId);
+            console.log("✅ Perfect score row protected successfully");
+          } catch (protectionError) {
+            console.log("⚠️ Could not protect perfect score row (may already be protected):", protectionError);
+            // Don't show error to user as this is non-critical
+          }
         }
         
         console.log("✅ Voice command data loaded successfully (single sheet)!");
@@ -1996,7 +2016,7 @@ const handleDriveFileSelect = async (driveFile) => {
       setImportProgress({ status: 'downloading', message: 'Downloading file from Drive...', entity: importType });
     
     // Download file from Drive
-    const response = await fetch(`${import.meta.env.NODE_ENV === 'production' 
+    const response = await fetch(`${import.meta.env.PROD 
       ? 'https://vocalyx-c61a072bf25a.herokuapp.com' 
       : 'http://127.0.0.1:8000'}/api/drive/download/${driveFile.id}/`, {
       headers: googleDriveService.getHeaders()
@@ -4228,7 +4248,8 @@ const handleExportToPDF = async () => {
 
         {/* Embedded Google Sheet */}
         <div className="flex-1 p-4">
-          <div className="h-full bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          <div className="h-full bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden relative">
+            
             {/* 🔥 ENHANCED: Dynamic iframe that switches sheets */}
             <iframe
               key={currentSheet?.sheet_id || 'default'} // 🔥 Force re-render when sheet changes

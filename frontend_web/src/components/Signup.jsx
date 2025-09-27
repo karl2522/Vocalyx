@@ -6,7 +6,7 @@ import { IoEye, IoEyeOff } from "react-icons/io5";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { register } from "../services/api";
-import { showToast } from "../utils/toast.jsx";
+import { showToast } from "../utils/toast";
 
 function Signup() {
   const navigate = useNavigate();
