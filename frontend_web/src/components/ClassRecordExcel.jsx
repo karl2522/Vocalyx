@@ -3038,6 +3038,7 @@ const getCommandDisplayName = (commandType) => {
     }, 3000);
     return;
   }
+
   
   // Handle duplicate selection
   if (command.type === 'SELECT_DUPLICATE' && duplicateOptions) {
