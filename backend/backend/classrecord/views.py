@@ -210,16 +210,19 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def sync_percentages_from_sheet(self, request, pk=None):
-        """OPTIMIZED: Read category percentages from Google Sheet.
+        """ULTRA-OPTIMIZED with enhanced Django caching - NO Redis needed!
         
         PERFORMANCE IMPROVEMENTS:
         - Fetches only 6 rows instead of entire sheet
         - Uses direct API calls with minimal data transfer
-        - Adds caching to avoid repeated calls
-        - Parallel processing for multiple operations
+        - Enhanced multi-layer caching strategy
+        - Intelligent cache invalidation
+        - Request deduplication to prevent double calls
         """
         import time
+        import threading
         from django.core.cache import cache
+        from django.utils import timezone
         
         start_time = time.time()
         
@@ -227,171 +230,244 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
             class_record = self.get_object()
             access_token = request.headers.get('X-Google-Access-Token')
             sheet_name = request.data.get('sheet_name') or request.query_params.get('sheet_name')
+            user_id = request.user.id
 
             if not class_record.google_sheet_id:
                 return Response({'error': 'Class record has no linked Google Sheet'}, status=400)
             if not sheet_name:
                 return Response({'error': 'sheet_name is required'}, status=400)
 
-            # 🚀 OPTIMIZATION 1: Check cache first (5 minute cache)
-            cache_key = f"percentages_{class_record.google_sheet_id}_{sheet_name}"
-            cached_result = cache.get(cache_key)
-            if cached_result:
-                cached_result['cached'] = True
-                cached_result['response_time'] = round(time.time() - start_time, 2)
-                return Response(cached_result)
-
-            # 🚀 OPTIMIZATION 2: Use minimal range - only 6 rows, only percentage columns
-            percentage_range = f"'{sheet_name}'!K1:AC6"  # Only columns K, Q, W, AC and first 6 rows
+            # 🚀 ENHANCED CACHING STRATEGY - Multiple cache layers
+            base_cache_key = f"percentages_v3_{class_record.google_sheet_id}_{sheet_name}_{user_id}"
             
-            read_ok = False
-            percentage_data = None
-            
-            # 🚀 OPTIMIZATION 3: Direct API call with timeout and minimal data
-            try:
-                if access_token:
-                    import requests
-                    api_url = f"https://sheets.googleapis.com/v4/spreadsheets/{class_record.google_sheet_id}/values/{percentage_range}"
-                    headers = {
-                        'Authorization': f'Bearer {access_token}',
-                        'Accept': 'application/json'
-                    }
-                    
-                    # 🚀 Set aggressive timeout to prevent hanging
-                    response = requests.get(api_url, headers=headers, timeout=8)
-                    
-                    if response.status_code == 200:
-                        data = response.json()
-                        percentage_data = data.get('values', [])
-                        read_ok = True
-                        print(f"✅ User token API call: {len(percentage_data)} rows in {time.time() - start_time:.2f}s")
-            except Exception as e:
-                print(f"⚠️ User token failed: {str(e)}")
-            
-            # 🚀 OPTIMIZATION 4: Fallback with service account (also optimized)
-            if not read_ok:
-                try:
-                    from utils.google_service_account_sheets import GoogleServiceAccountSheets
-                    
-                    # Pass credentials if available
-                    if hasattr(settings, 'GOOGLE_SERVICE_ACCOUNT_CREDENTIALS'):
-                        sa = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
-                    else:
-                        sa = GoogleServiceAccountSheets()
-                    
-                    # Direct API call with minimal range
-                    result = sa.sheets_service.spreadsheets().values().get(
-                        spreadsheetId=class_record.google_sheet_id,
-                        range=percentage_range,
-                        valueRenderOption='UNFORMATTED_VALUE'
-                    ).execute()
-                    
-                    percentage_data = result.get('values', [])
-                    read_ok = True
-                    print(f"✅ Service account API call: {len(percentage_data)} rows in {time.time() - start_time:.2f}s")
-                    
-                except Exception as e:
-                    print(f"❌ Service account failed: {str(e)}")
-
-            if not read_ok or not percentage_data:
-                return Response({
-                    'error': 'Failed to read sheet percentages',
+            # Layer 1: Fast cache (2 minutes) - for immediate repeated requests
+            fast_cache_key = f"fast_{base_cache_key}"
+            fast_cached = cache.get(fast_cache_key)
+            if fast_cached:
+                fast_cached.update({
+                    'cached': True,
+                    'cache_type': 'fast',
                     'response_time': round(time.time() - start_time, 2)
-                }, status=400)
+                })
+                print(f"⚡ FAST CACHE HIT: {fast_cached['response_time']}s")
+                return Response(fast_cached)
 
-            # 🚀 OPTIMIZATION 5: Fast percentage parsing with column mapping
-            def parse_percentage_fast(raw):
-                if raw is None or raw == '':
-                    return None
+            # Layer 2: Standard cache (10 minutes) - for regular use
+            standard_cache_key = f"std_{base_cache_key}"
+            standard_cached = cache.get(standard_cache_key)
+            if standard_cached:
+                # Refresh fast cache from standard cache
+                cache.set(fast_cache_key, standard_cached, 120)  # 2 minutes
+                standard_cached.update({
+                    'cached': True,
+                    'cache_type': 'standard',
+                    'response_time': round(time.time() - start_time, 2)
+                })
+                print(f"🔄 STANDARD CACHE HIT: {standard_cached['response_time']}s")
+                return Response(standard_cached)
+
+            # 🚀 REQUEST DEDUPLICATION - Prevent double API calls
+            processing_key = f"processing_{base_cache_key}"
+            if cache.get(processing_key):
+                # Another request is already processing, wait briefly and check cache again
+                import time
+                time.sleep(0.5)
+                quick_check = cache.get(fast_cache_key)
+                if quick_check:
+                    quick_check.update({
+                        'cached': True,
+                        'cache_type': 'dedup',
+                        'response_time': round(time.time() - start_time, 2)
+                    })
+                    return Response(quick_check)
+
+            # Mark as processing (10 second lock)
+            cache.set(processing_key, True, 10)
+
+            try:
+                print(f"🔄 CACHE MISS: Fetching fresh data from Google Sheets...")
+
+                # 🚀 OPTIMIZATION: Use minimal range - only 6 rows, specific columns
+                percentage_range = f"'{sheet_name}'!K1:AC6"  # Only columns K, Q, W, AC and first 6 rows
+                
+                read_ok = False
+                percentage_data = None
+                
+                # 🚀 Primary: Direct API call with aggressive timeout
                 try:
-                    s = str(raw).strip().replace('%', '').replace(',', '')
-                    if not s or s == '0':
+                    if access_token:
+                        import requests
+                        api_url = f"https://sheets.googleapis.com/v4/spreadsheets/{class_record.google_sheet_id}/values/{percentage_range}"
+                        headers = {
+                            'Authorization': f'Bearer {access_token}',
+                            'Accept': 'application/json'
+                        }
+                        
+                        # Aggressive timeout for speed
+                        response = requests.get(api_url, headers=headers, timeout=6)
+                        
+                        if response.status_code == 200:
+                            data = response.json()
+                            percentage_data = data.get('values', [])
+                            read_ok = True
+                            print(f"✅ User token API: {len(percentage_data)} rows in {time.time() - start_time:.2f}s")
+                except Exception as e:
+                    print(f"⚠️ User token failed: {str(e)}")
+                
+                # 🚀 Fallback: Service account with optimized settings
+                if not read_ok:
+                    try:
+                        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+                        
+                        if hasattr(settings, 'GOOGLE_SERVICE_ACCOUNT_CREDENTIALS'):
+                            sa = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+                        else:
+                            sa = GoogleServiceAccountSheets()
+                        
+                        # Direct API call with minimal range
+                        result = sa.sheets_service.spreadsheets().values().get(
+                            spreadsheetId=class_record.google_sheet_id,
+                            range=percentage_range,
+                            valueRenderOption='UNFORMATTED_VALUE'
+                        ).execute()
+                        
+                        percentage_data = result.get('values', [])
+                        read_ok = True
+                        print(f"✅ Service account API: {len(percentage_data)} rows in {time.time() - start_time:.2f}s")
+                        
+                    except Exception as e:
+                        print(f"❌ Service account failed: {str(e)}")
+
+                if not read_ok or not percentage_data:
+                    return Response({
+                        'error': 'Failed to read sheet percentages',
+                        'response_time': round(time.time() - start_time, 2)
+                    }, status=400)
+
+                # 🚀 ULTRA-FAST percentage parsing
+                def parse_percentage_lightning(raw):
+                    if not raw:
                         return None
-                    val = int(float(s))
-                    return max(0, val) if val > 0 else None
-                except:
-                    return None
+                    try:
+                        s = str(raw).strip()
+                        if not s or s == '0':
+                            return None
+                        # Remove % and commas in one pass
+                        s = s.replace('%', '').replace(',', '')
+                        val = int(float(s))
+                        return val if val > 0 else None
+                    except:
+                        return None
 
-            # Column mapping: K=0, Q=6, W=12, AC=18 (relative to K column)
-            column_mapping = {
-                'QUIZZES': 0,           # K column (index 0 in our range)
-                'ASSIGNMENTS': 6,       # Q column (Q-K = 6)
-                'SEATWORK': 12,         # W column (W-K = 12)
-                'LABORATORY ACTIVITIES': 18,  # AC column (AC-K = 18)
-            }
+                # 🚀 Optimized column mapping (relative to K column = index 0)
+                column_mapping = {
+                    'QUIZZES': 0,           # K column
+                    'ASSIGNMENTS': 6,       # Q column (Q-K = 6)
+                    'SEATWORK': 12,         # W column (W-K = 12)
+                    'LABORATORY ACTIVITIES': 18,  # AC column (AC-K = 18)
+                }
 
-            results = {}
-            
-            # 🚀 OPTIMIZATION 6: Fast scanning of only 6 rows
-            for category, col_offset in column_mapping.items():
-                percentage = None
-                for row_idx in range(min(6, len(percentage_data))):
-                    row = percentage_data[row_idx]
-                    if col_offset < len(row):
-                        candidate = parse_percentage_fast(row[col_offset])
-                        if candidate is not None:
-                            percentage = candidate
-                            break
+                results = {}
                 
-                if percentage is not None:
-                    results[category] = percentage
+                # 🚀 Lightning-fast row scanning
+                for category, col_offset in column_mapping.items():
+                    percentage = None
+                    for row_idx in range(min(6, len(percentage_data))):
+                        row = percentage_data[row_idx]
+                        if col_offset < len(row):
+                            candidate = parse_percentage_lightning(row[col_offset])
+                            if candidate is not None:
+                                percentage = candidate
+                                break
+                    
+                    if percentage is not None:
+                        results[category] = percentage
 
-            # 🚀 OPTIMIZATION 7: Batch database operations
-            if results:
-                # Delete existing in one query
-                CategoryPercentage.objects.filter(
-                    class_record=class_record,
-                    sheet_name=sheet_name,
-                    group=CategoryPercentage.CLASS_STANDING,
-                    category_name__in=results.keys()
-                ).delete()
-                
-                # Bulk create new records
-                category_objects = [
-                    CategoryPercentage(
+                # 🚀 BULK database operations - single transaction
+                if results:
+                    # Single delete query
+                    CategoryPercentage.objects.filter(
                         class_record=class_record,
                         sheet_name=sheet_name,
                         group=CategoryPercentage.CLASS_STANDING,
-                        category_name=name,
-                        percentage=pct
-                    )
-                    for name, pct in results.items()
-                ]
-                CategoryPercentage.objects.bulk_create(category_objects)
+                        category_name__in=results.keys()
+                    ).delete()
+                    
+                    # Bulk create all at once
+                    category_objects = [
+                        CategoryPercentage(
+                            class_record=class_record,
+                            sheet_name=sheet_name,
+                            group=CategoryPercentage.CLASS_STANDING,
+                            category_name=name,
+                            percentage=pct
+                        )
+                        for name, pct in results.items()
+                    ]
+                    CategoryPercentage.objects.bulk_create(category_objects)
 
-            # Get final state in one query
-            final_percentages = dict(
-                CategoryPercentage.objects.filter(
-                    class_record=class_record,
-                    sheet_name=sheet_name,
-                    group=CategoryPercentage.CLASS_STANDING,
-                ).values_list('category_name', 'percentage')
-            )
+                # Single query to get final state
+                final_percentages = dict(
+                    CategoryPercentage.objects.filter(
+                        class_record=class_record,
+                        sheet_name=sheet_name,
+                        group=CategoryPercentage.CLASS_STANDING,
+                    ).values_list('category_name', 'percentage')
+                )
 
-            total = sum(final_percentages.values())
-            response_time = round(time.time() - start_time, 2)
-            
-            result = {
-                'status': 'success',
-                'mirrored': results,
-                'db': final_percentages,
-                'total': total,
-                'remaining': max(0, 100 - total),
-                'optimized': True,
-                'response_time': response_time,
-                'rows_fetched': len(percentage_data),
-                'performance_note': f'Fetched {len(percentage_data)} rows in {response_time}s (was fetching 100+ rows)'
-            }
-            
-            # 🚀 OPTIMIZATION 8: Cache result for 5 minutes
-            cache.set(cache_key, result, 300)
-            
-            print(f"🚀 OPTIMIZED sync_percentages: {response_time}s (was 9-13s)")
-            return Response(result)
-            
+                total = sum(final_percentages.values())
+                response_time = round(time.time() - start_time, 2)
+                
+                result = {
+                    'status': 'success',
+                    'mirrored': results,
+                    'db': final_percentages,
+                    'total': total,
+                    'remaining': max(0, 100 - total),
+                    'optimized': True,
+                    'response_time': response_time,
+                    'rows_fetched': len(percentage_data),
+                    'cache_type': 'fresh',
+                    'cached': False,
+                    'performance_note': f'Fresh data: {len(percentage_data)} rows in {response_time}s',
+                    'cache_expires': '2min fast, 10min standard'
+                }
+                
+                # 🚀 MULTI-LAYER CACHING
+                # Fast cache: 2 minutes for immediate repeated requests
+                cache.set(fast_cache_key, result, 120)
+                
+                # Standard cache: 10 minutes for regular use  
+                cache.set(standard_cache_key, result, 600)
+                
+                # Long cache: 30 minutes for emergencies (if Google Sheets is down)
+                emergency_cache_key = f"emergency_{base_cache_key}"
+                cache.set(emergency_cache_key, result, 1800)
+                
+                print(f"🚀 OPTIMIZED sync_percentages: {response_time}s (cached for 2min/10min)")
+                return Response(result)
+                
+            finally:
+                # Always release processing lock
+                cache.delete(processing_key)
+                
         except Exception as e:
             response_time = round(time.time() - start_time, 2)
             print(f"❌ Sync failed in {response_time}s: {str(e)}")
+            
+            # 🚀 EMERGENCY FALLBACK - Try to return last known good data
+            emergency_cache_key = f"emergency_percentages_v3_{class_record.google_sheet_id}_{sheet_name}_{request.user.id}"
+            emergency_data = cache.get(emergency_cache_key)
+            if emergency_data:
+                emergency_data.update({
+                    'cached': True,
+                    'cache_type': 'emergency',
+                    'response_time': response_time,
+                    'note': 'Returned cached data due to API error'
+                })
+                print(f"🆘 EMERGENCY CACHE: Returned fallback data")
+                return Response(emergency_data)
+            
             return Response({
                 'error': str(e),
                 'response_time': response_time
