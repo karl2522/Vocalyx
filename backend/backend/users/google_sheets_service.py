@@ -512,7 +512,7 @@ class GoogleSheetsService:
         """
         try:
             # Get data from the specific sheet
-            range_name = f"'{sheet_name}'!A:Z"  # 🔥 Use specific sheet name
+            range_name = f"'{sheet_name}'!A:AZ"  # Include columns up to AZ (covers AC)
             values_url = f"{self.SHEETS_API_BASE_URL}/{sheet_id}/values/{range_name}"
 
             values_response = requests.get(
