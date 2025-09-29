@@ -8,6 +8,7 @@ import * as XLSX from 'xlsx';
 import { classRecordService } from '../services/api';
 import googleDriveService from '../services/googleDriveService';
 import { speakText, stopSpeaking } from '../utils/speechSynthesis';
+import { showToast } from '../utils/toast';
 import useVoiceRecognition from '../utils/useVoiceRecognition';
 import { applyPhoneticCorrections, cleanName, findStudentRowSmart, parseVoiceCommand } from '../utils/voiceCommandParser';
 import AddCategoryModal from './modals/AddCategoryModal.jsx';
@@ -91,6 +92,71 @@ const ClassRecordExcel = () => {
 
   const [overrideConfirmation, setOverrideConfirmation] = useState(null);
 
+  // CLASS STANDING percentages state
+  const [classStandingRemaining, setClassStandingRemaining] = useState(0);
+  const classStandingToastRef = useRef(null);
+
+  // Helper: sync remaining from backend mirror based on current sheet
+  const syncRemaining = useCallback(async () => {
+    try {
+      if (!id || !currentSheet?.sheet_name) return;
+      const res = await classRecordService.syncCategoryPercentages(id, currentSheet.sheet_name);
+      const data = res.data || {};
+      setClassStandingRemaining(Math.max(0, data.remaining || 0));
+    } catch (e) {
+      // Fallback: read via service account and compute from header row (row 1)
+      try {
+        if (!classRecord?.google_sheet_id || !currentSheet?.sheet_name) return;
+        const sa = await classRecordService.getSpecificSheetData(classRecord.google_sheet_id, currentSheet.sheet_name);
+        const headersRow = sa?.data?.headers || [];
+        const idxFromLetter = (letter) => {
+          let total = 0;
+          const up = letter.toUpperCase();
+          for (let i = 0; i < up.length; i++) {
+            total = total * 26 + (up.charCodeAt(i) - 64);
+          }
+          return total - 1; // zero-based
+        };
+        const letters = ['K', 'Q', 'W', 'AC'];
+        const sum = letters.reduce((acc, l) => {
+          const idx = idxFromLetter(l);
+          const cell = headersRow[idx];
+          if (!cell) return acc;
+          let s = String(cell).trim();
+          if (s.endsWith('%')) s = s.slice(0, -1).trim();
+          const val = parseInt(parseFloat(s));
+          if (Number.isFinite(val)) return acc + Math.max(0, val);
+          return acc;
+        }, 0);
+        const remaining = Math.max(0, 100 - sum);
+        setClassStandingRemaining(remaining);
+      } catch (ignored) {
+        // ignore
+      }
+    }
+  }, [id, currentSheet?.sheet_name]);
+
+  // Show sticky toast whenever remaining > 0 on this view
+  useEffect(() => {
+    if (classStandingRemaining > 0) {
+      // Persistent toast (no auto-close)
+      if (classStandingToastRef.current) {
+        showToast.dismiss(classStandingToastRef.current);
+        classStandingToastRef.current = null;
+      }
+      classStandingToastRef.current = showToast.info(
+        `You still have ${classStandingRemaining}% unallocated.`,
+        'Class Standing total is below 100%',
+        { duration: Infinity }
+      );
+    } else {
+      if (classStandingToastRef.current) {
+        showToast.dismiss(classStandingToastRef.current);
+        classStandingToastRef.current = null;
+      }
+    }
+  }, [classStandingRemaining]);
+
   // Drive file picker state
   const [showDriveFilePicker, setShowDriveFilePicker] = useState(false);
   const [importType, setImportType] = useState('students'); // 'students' or 'scores'
@@ -136,6 +202,15 @@ const ClassRecordExcel = () => {
       console.log('🔥 FIRST RENDER: Component mounted');
     }
   }, []);
+
+  // Poll for percentage changes made directly in the Google Sheet UI
+  useEffect(() => {
+    if (!classRecord?.google_sheet_id || !currentSheet?.sheet_name) return;
+    const interval = setInterval(() => {
+      syncRemaining();
+    }, 10000); // every 10s
+    return () => clearInterval(interval);
+  }, [classRecord?.google_sheet_id, currentSheet?.sheet_name, syncRemaining]);
 
   const loadCategories = async () => {
   try {
@@ -351,6 +426,15 @@ const ClassRecordExcel = () => {
             
             // Load data from the first sheet
             await loadSheetData(response.data.google_sheet_id, firstSheet.sheet_name);
+
+            // Sync CLASS STANDING percentages from sheet into backend mirror
+            try {
+              const syncRes = await classRecordService.syncCategoryPercentages(id, firstSheet.sheet_name);
+              const data = syncRes.data || {};
+              setClassStandingRemaining(Math.max(0, data.remaining || 0));
+            } catch (e) {
+              console.warn('⚠️ Failed to sync category percentages:', e);
+            }
             
             console.log("✅ Multi-sheet data loaded successfully!");
           } else {
@@ -469,6 +553,9 @@ const ClassRecordExcel = () => {
         
         console.log(`✅ LOAD SHEET: Sheet "${sheetName}" data loaded successfully!`);
         toast.success(`Switched to sheet: ${sheetName}`);
+
+        // After loading sheet data, refresh mirrored CLASS STANDING percentages
+        await syncRemaining();
       } else {
         console.log(`⚠️ LOAD SHEET: No data available for sheet: "${sheetName}"`);
         toast(`No data found in sheet: ${sheetName}`);
@@ -2261,6 +2348,7 @@ const handleAddCategory = async (categoryData) => {
       
       // 🔥 FIX: Pass the required parameters to loadSheetData
       await loadSheetData(classRecord.google_sheet_id, currentSheet?.sheet_name);
+      await syncRemaining();
       
       setShowAddCategoryModal(false);
     } else {
@@ -2327,6 +2415,7 @@ const handleEditCategory = async (editData) => {
         await loadSheetData(classRecord.google_sheet_id, currentSheet.sheet_name);
       }
       await loadCategories(); // Refresh categories list
+      await syncRemaining();
     } else {
       toast.error(response.data.error || 'Failed to edit category');
     }
@@ -4595,6 +4684,7 @@ const handleExportToPDF = async () => {
             onClose={() => setShowAddCategoryModal(false)}
             onSubmit={handleAddCategory}
             isLoading={categoryLoading}
+            remainingAvailable={classStandingRemaining}
           />
         )}
 

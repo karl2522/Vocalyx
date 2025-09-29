@@ -1,11 +1,12 @@
+import { AlertTriangle, CheckCircle, Eye, Plus, X } from 'lucide-react';
 import React, { useState } from 'react';
-import { Plus, X, Eye, AlertTriangle, CheckCircle } from 'lucide-react';
 
 const AddCategoryModal = ({ 
   isOpen, 
   onClose, 
   onSubmit,
-  isLoading = false 
+  isLoading = false,
+  remainingAvailable = 100
 }) => {
   const [categoryName, setCategoryName] = useState('');
   const [subCategoryCount, setSubCategoryCount] = useState(5);
@@ -35,12 +36,13 @@ const AddCategoryModal = ({
   const handleSubmit = () => {
     if (!validateForm()) return;
 
+    const weightInt = Math.max(0, Math.min(parseInt(Number.isFinite(categoryWeight) ? categoryWeight : 0), remainingAvailable));
 
     const categoryData = {
         categoryName: categoryName.trim(),
         subCategoryCount: parseInt(subCategoryCount),
         subCategories: generateSubCategories(),
-        percentage: `${categoryWeight.toFixed(2)}%`
+        percentage: `${weightInt}%`
     };
     
     console.log('🔥 MODAL: Submitting category data:', categoryData);  // Debug log
@@ -195,10 +197,18 @@ const AddCategoryModal = ({
                 <input
                 type="number"
                 min="0"
-                max="100"
-                step="0.1"
-                value={categoryWeight}
-                onChange={(e) => setCategoryWeight(parseFloat(e.target.value) || 0)}
+                max={remainingAvailable}
+                step="1"
+                value={Number.isFinite(categoryWeight) ? parseInt(categoryWeight) : 0}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value || '0');
+                  if (Number.isNaN(v)) {
+                    setCategoryWeight(0);
+                  } else {
+                    const clamped = Math.max(0, Math.min(v, remainingAvailable));
+                    setCategoryWeight(clamped);
+                  }
+                }}
                 disabled={isLoading}
                 className={`w-24 px-3 py-2 border rounded-lg text-center focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                     errors.categoryWeight 
@@ -212,7 +222,7 @@ const AddCategoryModal = ({
                 {[5, 10, 15, 20].map(num => (
                     <button
                     key={num}
-                    onClick={() => setCategoryWeight(num)}
+                    onClick={() => setCategoryWeight(Math.min(num, remainingAvailable))}
                     disabled={isLoading}
                     className={`px-3 py-1 text-sm rounded-lg transition-colors disabled:opacity-50 ${
                         categoryWeight === num
@@ -228,6 +238,14 @@ const AddCategoryModal = ({
             <p className="text-xs text-slate-500 mt-1">
                 Weight of this category in final grade calculation
             </p>
+            <p className="text-xs text-slate-600 mt-1">
+              Remaining available: <span className="font-semibold">{remainingAvailable}%</span>
+            </p>
+            {remainingAvailable === 0 && (
+              <p className="text-sm text-red-600 mt-2">
+                Current total is already 100%.
+              </p>
+            )}
             </div>
 
               {/* Preview Toggle */}

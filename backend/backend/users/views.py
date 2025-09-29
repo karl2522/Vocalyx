@@ -1868,9 +1868,12 @@ def sheets_add_category_service_account(request, sheet_id):
             return Response({'error': 'sub_category_count must be between 1 and 20'}, status=400)
 
         print(f"🔥 API: Adding category '{category_name}' with {sub_category_count} subcategories and {percentage} to sheet: {sheet_name}")
+        print(f"🔥 API: Full request data: {request.data}")
 
         service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
         result = service.add_category_to_sheet(sheet_id, category_name, sub_categories, sheet_name, percentage)  # 🔥 Pass percentage
+        
+        print(f"🔥 API: Service result: {result}")
 
         if result['success']:
             return Response(result, status=200)
