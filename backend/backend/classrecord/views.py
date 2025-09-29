@@ -5,13 +5,14 @@ from django.shortcuts import get_object_or_404
 from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 from django.conf import settings
-from .models import ClassRecord, Student, GradeCategory, Grade
+from .models import ClassRecord, Student, GradeCategory, Grade, CategoryPercentage
 from .serializers import (
     ClassRecordSerializer,
     ClassRecordDetailSerializer,
     StudentSerializer,
     GradeCategorySerializer,
-    GradeSerializer
+    GradeSerializer,
+    CategoryPercentageSerializer
 )
 from users.google_sheets_service import GoogleSheetsService
 from users.google_drive_service import GoogleDriveService
@@ -206,6 +207,180 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
         instance.delete()
         print(f"✅ ClassRecord '{instance.id}' has been deleted from the database.")
         print("--- Exiting perform_destroy ---")
+
+    @action(detail=True, methods=['post'])
+    def sync_percentages_from_sheet(self, request, pk=None):
+        """Read category percentages from the Google Sheet and mirror to DB.
+
+        Sheet is primary. We read the specified columns per your template:
+        - QUIZZES -> K
+        - ASSIGNMENTS -> Q
+        - SEATWORK -> W
+        - LABORATORY ACTIVITIES -> AC
+
+        We scan the top few rows in those columns to locate a value like "40%" or 40.
+        """
+        try:
+            class_record = self.get_object()
+            access_token = request.headers.get('X-Google-Access-Token')
+            sheet_name = request.data.get('sheet_name') or request.query_params.get('sheet_name')
+
+            if not class_record.google_sheet_id:
+                return Response({'error': 'Class record has no linked Google Sheet'}, status=400)
+            if not sheet_name:
+                return Response({'error': 'sheet_name is required'}, status=400)
+
+            # Try with user token first; if missing or fails, fall back to service account util
+            headers = []
+            table = []
+            read_ok = False
+            details = None
+
+            if access_token:
+                try:
+                    sheets = GoogleSheetsService(access_token)
+                    data = sheets.get_specific_sheet_data(class_record.google_sheet_id, sheet_name)
+                    if data.get('success'):
+                        headers = data.get('headers') or []
+                        table = data.get('tableData') or []
+                        read_ok = True
+                    else:
+                        details = data.get('error')
+                except Exception as e:
+                    details = str(e)
+
+            if not read_ok:
+                try:
+                    from utils.google_service_account_sheets import GoogleServiceAccountSheets
+                    sa = GoogleServiceAccountSheets()
+                    sa_data = sa.get_specific_sheet_data(class_record.google_sheet_id, sheet_name)
+                    if sa_data.get('success'):
+                        headers = sa_data.get('headers') or []
+                        table = sa_data.get('tableData') or []
+                        read_ok = True
+                    else:
+                        details = sa_data.get('error')
+                except Exception as e:
+                    details = str(e)
+
+            if not read_ok:
+                return Response({'error': 'Failed to read sheet', 'details': details}, status=400)
+
+            # Build a matrix-like access for first few rows (including headers as row 0)
+            rows = [headers] + table
+
+            def parse_int_percent(raw):
+                try:
+                    if raw is None:
+                        return None
+                    s = str(raw).strip()
+                    if s == '':
+                        return None
+                    if s.endswith('%'):
+                        s = s[:-1].strip()
+                    # Some templates may include text like '40 %' or '40.0'
+                    s = s.replace(',', '')
+                    # Force integer
+                    value = int(float(s))
+                    return max(0, value)
+                except Exception:
+                    return None
+
+            # Column letter to zero-based index
+            def col_idx(letter):
+                # Supports up to two letters (A..Z, AA..AZ)
+                letter = letter.upper()
+                total = 0
+                for ch in letter:
+                    total = total * 26 + (ord(ch) - ord('A') + 1)
+                return total - 1
+
+            mapping = {
+                'QUIZZES': 'K',
+                'ASSIGNMENTS': 'Q',
+                'SEATWORK': 'W',
+                'LABORATORY ACTIVITIES': 'AC',
+            }
+
+            results = {}
+            for name, col in mapping.items():
+                c = col_idx(col)
+                val = None
+                # scan top 5 rows for a recognizable percent
+                for r in range(0, min(6, len(rows))):
+                    row = rows[r]
+                    if c < len(row):
+                        candidate = parse_int_percent(row[c])
+                        if candidate is not None:
+                            val = candidate
+                            break
+                if val is not None:
+                    results[name] = val
+
+            # Upsert to DB as mirror under CLASS_STANDING
+            mirrored = {}
+            for name, pct in results.items():
+                cp, _ = CategoryPercentage.objects.update_or_create(
+                    class_record=class_record,
+                    sheet_name=sheet_name,
+                    group=CategoryPercentage.CLASS_STANDING,
+                    category_name=name,
+                    defaults={'percentage': int(pct)},
+                )
+                mirrored[name] = cp.percentage
+
+            # Return current DB state for the group (includes any categories not just the defaults)
+            qs = CategoryPercentage.objects.filter(
+                class_record=class_record,
+                sheet_name=sheet_name,
+                group=CategoryPercentage.CLASS_STANDING,
+            )
+            db_map = {cp.category_name: int(cp.percentage) for cp in qs}
+
+            total = sum(db_map.values())
+            return Response({
+                'status': 'success',
+                'mirrored': mirrored,
+                'db': db_map,
+                'total': total,
+                'remaining': max(0, 100 - total),
+            })
+        except Exception as e:
+            return Response({'error': str(e)}, status=400)
+
+    @action(detail=True, methods=['get'])
+    def category_percentages(self, request, pk=None):
+        """Return mirrored CLASS STANDING percentages for a given sheet."""
+        try:
+            class_record = self.get_object()
+            sheet_name = request.query_params.get('sheet_name')
+
+            # If sheet_name not provided, fall back to latest-updated sheet for this class_record/group
+            if not sheet_name:
+                latest = CategoryPercentage.objects.filter(
+                    class_record=class_record,
+                    group=CategoryPercentage.CLASS_STANDING,
+                ).order_by('-updated_at').first()
+                if latest:
+                    sheet_name = latest.sheet_name
+
+            qs = CategoryPercentage.objects.filter(
+                class_record=class_record,
+                group=CategoryPercentage.CLASS_STANDING,
+            )
+            if sheet_name:
+                qs = qs.filter(sheet_name=sheet_name)
+            data = {cp.category_name: int(cp.percentage) for cp in qs}
+            total = sum(data.values())
+            return Response({
+                'status': 'success',
+                'data': data,
+                'total': total,
+                'remaining': max(0, 100 - total),
+                'sheet_name': sheet_name,
+            })
+        except Exception as e:
+            return Response({'error': str(e)}, status=400)
 
     @action(detail=True, methods=['post'])
     def save_spreadsheet(self, request, pk=None):
@@ -759,3 +934,44 @@ class GradeViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return Grade.objects.filter(student__class_record__teacher=self.request.user)
+
+
+class CategoryPercentageViewSet(viewsets.ModelViewSet):
+    serializer_class = CategoryPercentageSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        qs = CategoryPercentage.objects.filter(class_record__user=self.request.user)
+        class_record_id = self.request.query_params.get('class_record_id')
+        sheet_name = self.request.query_params.get('sheet_name')
+        group = self.request.query_params.get('group')
+        if class_record_id:
+            qs = qs.filter(class_record_id=class_record_id)
+        if sheet_name:
+            qs = qs.filter(sheet_name=sheet_name)
+        if group:
+            qs = qs.filter(group=group)
+        return qs
+
+    def perform_create(self, serializer):
+        instance = serializer.save()
+        self._validate_total(instance)
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        self._validate_total(instance)
+
+    def _validate_total(self, instance: CategoryPercentage):
+        # Only enforce for CLASS_STANDING group
+        if instance.group != CategoryPercentage.CLASS_STANDING:
+            return
+        siblings = CategoryPercentage.objects.filter(
+            class_record=instance.class_record,
+            sheet_name=instance.sheet_name,
+            group=instance.group,
+        )
+        total = sum(max(0, int(cp.percentage)) for cp in siblings)
+        if total > 100:
+            # Rollback the last change by raising validation error
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'percentage': 'Total CLASS STANDING percentage cannot exceed 100%.'})

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import ClassRecord, Student, GradeCategory, Grade
+from .models import ClassRecord, Student, GradeCategory, Grade, CategoryPercentage
 
 
 class ClassRecordSerializer(serializers.ModelSerializer):
@@ -60,6 +60,22 @@ class GradeSerializer(serializers.ModelSerializer):
         model = Grade
         fields = ['id', 'student', 'student_name', 'grade_category', 'category_name', 'score', 'max_score',
                   'percentage', 'created_at', 'updated_at']
+        read_only_fields = ['created_at', 'updated_at']
+
+
+class CategoryPercentageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CategoryPercentage
+        fields = [
+            'id',
+            'class_record',
+            'sheet_name',
+            'group',
+            'category_name',
+            'percentage',
+            'created_at',
+            'updated_at',
+        ]
         read_only_fields = ['created_at', 'updated_at']
 
 

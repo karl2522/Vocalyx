@@ -182,3 +182,46 @@ class ColumnImportHistory(models.Model):
 
     def __str__(self):
         return f"{self.excel_column_name} → {self.target_column_name} ({self.imported_at.strftime('%Y-%m-%d')})"
+
+
+class CategoryPercentage(models.Model):
+    """Persist category percentages mirrored from Google Sheets.
+
+    Google Sheet remains the source of truth. This model mirrors the latest known
+    percentages for quick access and validation on the server.
+    """
+
+    CLASS_STANDING = 'CLASS_STANDING'
+
+    GROUP_CHOICES = [
+        (CLASS_STANDING, 'Class Standing'),
+    ]
+
+    class_record = models.ForeignKey(
+        ClassRecord,
+        on_delete=models.CASCADE,
+        related_name='category_percentages'
+    )
+    sheet_name = models.CharField(max_length=255, blank=True, null=True)
+    group = models.CharField(max_length=64, choices=GROUP_CHOICES, default=CLASS_STANDING)
+
+    category_name = models.CharField(max_length=255)
+    percentage = models.IntegerField(default=0)  # whole number percent only
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = (
+            'class_record',
+            'sheet_name',
+            'category_name',
+            'group',
+        )
+        indexes = [
+            models.Index(fields=['class_record', 'sheet_name', 'group']),
+        ]
+        ordering = ['class_record_id', 'sheet_name', 'category_name']
+
+    def __str__(self):
+        return f"{self.category_name} {self.percentage}% [{self.group}]"
