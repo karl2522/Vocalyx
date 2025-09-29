@@ -1868,12 +1868,9 @@ def sheets_add_category_service_account(request, sheet_id):
             return Response({'error': 'sub_category_count must be between 1 and 20'}, status=400)
 
         print(f"🔥 API: Adding category '{category_name}' with {sub_category_count} subcategories and {percentage} to sheet: {sheet_name}")
-        print(f"🔥 API: Full request data: {request.data}")
 
         service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
         result = service.add_category_to_sheet(sheet_id, category_name, sub_categories, sheet_name, percentage)  # 🔥 Pass percentage
-        
-        print(f"🔥 API: Service result: {result}")
 
         if result['success']:
             return Response(result, status=200)
@@ -2153,99 +2150,4 @@ def get_google_drive_token(request):
         
     except Exception as e:
         logger.error(f"Get Google Drive token error: {str(e)}")
-        return Response({'error': str(e)}, status=500)
-
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def sync_category_percentages_from_sheet(request, class_record_id):
-    """Sync category percentages from Google Sheet for a class record"""
-    try:
-        from django.contrib.auth.models import User
-        from classrecord.models import ClassRecord
-        from utils.google_service_account_sheets import GoogleServiceAccountSheets
-        
-        # Get the class record
-        try:
-            class_record = ClassRecord.objects.get(id=class_record_id, teacher=request.user)
-        except ClassRecord.DoesNotExist:
-            return Response({'error': 'Class record not found'}, status=404)
-        
-        sheet_name = request.data.get('sheet_name')
-        
-        # Get Google Sheet ID from class record
-        sheet_id = class_record.google_sheet_id
-        if not sheet_id:
-            return Response({'error': 'No Google Sheet associated with this class record'}, status=400)
-        
-        # Use Google Service Account to get sheet data
-        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
-        
-        # Get categories from the sheet
-        categories_result = service.get_categories_from_sheet(sheet_id, sheet_name)
-        
-        if not categories_result.get('success'):
-            return Response({
-                'success': False,
-                'error': categories_result.get('error', 'Failed to get categories from sheet')
-            }, status=400)
-        
-        categories = categories_result.get('categories', [])
-        
-        return Response({
-            'success': True,
-            'categories': categories,
-            'sheet_name': categories_result.get('sheet_name'),
-            'message': f'Successfully synced {len(categories)} categories from sheet'
-        })
-        
-    except Exception as e:
-        logger.error(f"Sync category percentages error: {str(e)}")
-        return Response({'error': str(e)}, status=500)
-
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def get_category_percentages(request, class_record_id):
-    """Get category percentages from Google Sheet for a class record"""
-    try:
-        from django.contrib.auth.models import User
-        from classrecord.models import ClassRecord
-        from utils.google_service_account_sheets import GoogleServiceAccountSheets
-        
-        # Get the class record
-        try:
-            class_record = ClassRecord.objects.get(id=class_record_id, teacher=request.user)
-        except ClassRecord.DoesNotExist:
-            return Response({'error': 'Class record not found'}, status=404)
-        
-        sheet_name = request.GET.get('sheet_name')
-        
-        # Get Google Sheet ID from class record
-        sheet_id = class_record.google_sheet_id
-        if not sheet_id:
-            return Response({'error': 'No Google Sheet associated with this class record'}, status=400)
-        
-        # Use Google Service Account to get sheet data
-        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
-        
-        # Get categories from the sheet
-        categories_result = service.get_categories_from_sheet(sheet_id, sheet_name)
-        
-        if not categories_result.get('success'):
-            return Response({
-                'success': False,
-                'error': categories_result.get('error', 'Failed to get categories from sheet')
-            }, status=400)
-        
-        categories = categories_result.get('categories', [])
-        
-        return Response({
-            'success': True,
-            'categories': categories,
-            'sheet_name': categories_result.get('sheet_name')
-        })
-        
-    except Exception as e:
-        logger.error(f"Get category percentages error: {str(e)}")
         return Response({'error': str(e)}, status=500)
