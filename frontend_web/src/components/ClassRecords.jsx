@@ -344,6 +344,7 @@ const Pagination = ({ currentPage, totalPages, onPageChange }) => {
 
 const ClassRecords = () => {
   const [classRecords, setClassRecords] = useState([]);
+  const [remainingMap, setRemainingMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState('grid');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -365,7 +366,34 @@ const ClassRecords = () => {
     try {
       setLoading(true);
       const response = await classRecordService.getClassRecordsWithLiveCounts();
-      setClassRecords(response.data);
+      const records = response.data || [];
+      setClassRecords(records);
+
+      // Fetch remaining percentages for each record in parallel (best effort)
+      try {
+        const results = await Promise.all(records.map(async (rec) => {
+          try {
+            // Prefer live sync from the first sheet if available to ensure correctness
+            if (rec.google_sheet_id) {
+              const sheetsList = await classRecordService.getSheetsList(rec.google_sheet_id);
+              const first = sheetsList?.data?.sheets?.[0];
+              if (first?.sheet_name) {
+                const sync = await classRecordService.syncCategoryPercentages(rec.id, first.sheet_name);
+                return [rec.id, Math.max(0, sync.data?.remaining ?? 0)];
+              }
+            }
+            // Fallback to summary without sheet name
+            const res = await classRecordService.getCategoryPercentagesSummary(rec.id);
+            return [rec.id, Math.max(0, res.data?.remaining ?? 0)];
+          } catch (e) {
+            return [rec.id, 0];
+          }
+        }));
+        const map = Object.fromEntries(results);
+        setRemainingMap(map);
+      } catch (e) {
+        // ignore
+      }
     } catch (error) {
       console.error('Error fetching class records:', error);
       showToast.error('Failed to fetch class records');
@@ -679,6 +707,7 @@ const ClassRecords = () => {
                       <h3 className={`font-semibold text-gray-900 mb-1.5 group-hover:text-[#333D79] transition-colors duration-300 ${viewMode === 'list' ? 'text-lg' : ''}`}>
                         {record.name}
                       </h3>
+                      {/* Badge moved below the students line per requirement */}
                       
                       {viewMode === 'list' && (
                         <div className="flex items-center gap-6 text-sm text-gray-600">
@@ -714,6 +743,11 @@ const ClassRecords = () => {
                             <RiSoundModuleLine className="h-4 w-4" />
                             <span>Students: {record.student_count || 0}</span>
                           </div>
+                          {remainingMap[record.id] > 0 && (
+                            <div className="mt-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 inline-flex w-fit items-center gap-1">
+                              You still have {remainingMap[record.id]}% unallocated
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

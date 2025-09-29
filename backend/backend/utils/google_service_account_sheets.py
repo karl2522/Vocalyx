@@ -3765,81 +3765,314 @@ class GoogleServiceAccountSheets:
                 'error': f'Failed to compact student data: {str(e)}'
             }
 
-    def add_category_to_sheet(self, sheet_id: str, category_name: str, sub_categories: list,
-                              sheet_name: str = None, percentage: str = "10.00%") -> dict:
+    def analyze_category_structure(self, sheet_id: str, category_name: str, sheet_name: str = None) -> dict:
         """
-        Add a new category with multiple columns to Google Sheet.
-        Creates subcategory columns + Total column with percentage.
+        Analyze an existing category to understand its complete structure
         """
         try:
-            import time
-
-            print(
-                f"🔥 ADD_CATEGORY: Starting to add '{category_name}' with {len(sub_categories)} subcategories + Total + Percentage")
-
-            # Get current sheet data
+            # Get sheet data
+            if sheet_name:
+                sheet_data = self.get_specific_sheet_data(sheet_id, sheet_name)
+            else:
+                sheet_data = self.get_sheet_data(sheet_id)
+            
+            if not sheet_data['success']:
+                return {'success': False, 'error': 'Failed to get sheet data'}
+            
+            headers = sheet_data['headers']
+            main_headers = sheet_data.get('main_headers', [])
+            sub_headers = sheet_data.get('sub_headers', [])
+            
+            # Find category in main headers
+            category_index = None
+            for i, header in enumerate(main_headers):
+                if header and str(header).strip().upper() == category_name.upper():
+                    category_index = i
+                    break
+            
+            if category_index is None:
+                return {'success': False, 'error': f'Category "{category_name}" not found'}
+            
+            # Find the range of this category
+            start_col = category_index
+            end_col = start_col
+            
+            # Find where this category ends (next category or end of headers)
+            for i in range(category_index + 1, len(main_headers)):
+                if main_headers[i] and str(main_headers[i]).strip().upper() not in ['', category_name.upper()]:
+                    end_col = i - 1
+                    break
+                elif i == len(main_headers) - 1:
+                    end_col = len(main_headers) - 1
+                    break
+            
+            # Extract subcategories
+            subcategories = []
+            for i in range(start_col, end_col + 1):
+                if i < len(sub_headers) and sub_headers[i]:
+                    subcategories.append(str(sub_headers[i]).strip())
+            
+            # Find Total column (usually after subcategories)
+            total_col_index = end_col + 1
+            if total_col_index < len(sub_headers) and 'total' in str(sub_headers[total_col_index]).lower():
+                total_col = total_col_index
+            else:
+                total_col = None
+            
+            # Find Percentage column (usually after Total)
+            percentage_col_index = total_col_index + 1 if total_col else end_col + 1
+            percentage_col = percentage_col_index if percentage_col_index < len(headers) else None
+            
+            return {
+                'success': True,
+                'category_name': category_name,
+                'start_col': start_col,
+                'end_col': end_col,
+                'total_col': total_col,
+                'percentage_col': percentage_col,
+                'subcategories': subcategories,
+                'subcategory_count': len(subcategories),
+                'structure': {
+                    'has_total': total_col is not None,
+                    'has_percentage': percentage_col is not None,
+                    'column_count': end_col - start_col + 1,
+                    'total_columns': (end_col - start_col + 1) + (1 if total_col else 0) + (1 if percentage_col else 0)
+                }
+            }
+            
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+    
+    def find_best_category_to_copy(self, sheet_id: str, sheet_name: str = None) -> dict:
+        """
+        Find the CONSISTENT template category to use for ALL new categories
+        This ensures all new categories have the same styling
+        """
+        try:
+            # Get sheet data
             if sheet_name:
                 sheet_data = self.get_specific_sheet_data(sheet_id, sheet_name)
             else:
                 sheet_data = self.get_sheet_data(sheet_id)
 
             if not sheet_data['success']:
-                return sheet_data
+                return {'success': False, 'error': 'Failed to get sheet data'}
+            
+            main_headers = sheet_data.get('main_headers', [])
+            
+            # 🔥 FIXED: Always use the FIRST assessment category as template for consistency
+            # Priority order for template categories (use first one found)
+            template_priorities = [
+                'LAB', 'LABORATORY', 'LABS',
+                'QUIZ', 'QUIZZES', 'QUIZES', 
+                'ASSIGNMENT', 'ASSIGNMENTS', 'SEATWORK',
+                'TEST', 'TESTS',
+                'PROJECT', 'PROJECTS',
+                'EXAM', 'EXAMS'
+            ]
+            
+            # Find the FIRST suitable template category (for consistency)
+            template_category = None
+            
+            for i, header in enumerate(main_headers):
+                if header:
+                    header_upper = str(header).strip().upper()
+                    
+                    # Check if this is a template-worthy category
+                    for template_name in template_priorities:
+                        if template_name in header_upper:
+                            template_category = str(header).strip()
+                            print(f"🔥 TEMPLATE: Using '{template_category}' as consistent template for all new categories")
+                            break
+                    
+                    if template_category:
+                        break
+            
+            if template_category:
+                # Analyze the template category structure
+                analysis = self.analyze_category_structure(sheet_id, template_category, sheet_name)
+                if analysis['success']:
+                    return {
+                        'success': True,
+                        'template_category': template_category,
+                        'structure': analysis,
+                        'is_consistent_template': True
+                    }
+            
+            return {'success': False, 'error': 'No suitable template category found'}
+            
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
 
-            headers = sheet_data['headers']
-            target_sheet_name = sheet_data['sheet_name']
-
-            print(f"🔥 ADD_CATEGORY: Current headers: {len(headers)} columns")
-            print(f"🔥 ADD_CATEGORY: Target sheet: {target_sheet_name}")
-
-            # Find where to insert after STUDENT INFO section
-            insert_start_index = 5  # After NO., LASTNAME, FIRST NAME, MIDDLE NAME, STUDENT ID
-
-            if 'STUDENT ID' in headers:
-                student_id_index = headers.index('STUDENT ID')
-                insert_start_index = student_id_index + 1
-                print(
-                    f"🔥 ADD_CATEGORY: Found STUDENT ID at index {student_id_index}, will insert at {insert_start_index}")
-
-            # 🔥 FIXED: Calculate total columns needed (subcategories + Total only)
+    def copy_category_layout(self, sheet_id: str, target_category_name: str, sub_categories: list,
+                           percentage: str = "10.00%", sheet_name: str = None) -> dict:
+        """
+        Copy an existing category's layout and modify it for new category
+        """
+        try:
+            print(f"🔥 COPY_CATEGORY: Starting to copy layout for '{target_category_name}' with {len(sub_categories)} subcategories")
+            
+            # Find best template category
+            template_result = self.find_best_category_to_copy(sheet_id, sheet_name)
+            if not template_result['success']:
+                return template_result
+            
+            template_category = template_result['template_category']
+            template_structure = template_result['structure']
+            
+            print(f"🔥 COPY_CATEGORY: Using '{template_category}' as CONSISTENT template for all new categories")
+            print(f"🔥 COPY_CATEGORY: This ensures '{target_category_name}' will have identical styling to '{template_category}'")
+            
+            # Find insertion position (before Class Standing columns)
+            insertion_position = self._find_insertion_position(sheet_id, sheet_name)
+            print(f"🔥 COPY_CATEGORY: Will insert at position {insertion_position}")
+            
+            # Calculate number of columns needed (subcategories + Total only, percentage goes in Total column)
             num_subcategories = len(sub_categories)
-            num_total_columns = num_subcategories + 1  # +1 for Total (percentage goes in same column)
-
-            print(
-                f"🔥 ADD_CATEGORY: Will insert {num_total_columns} columns ({num_subcategories} subcategories + Total)")
-
-            # Step 1: Insert new columns
-            insert_result = self._insert_columns(sheet_id, target_sheet_name, insert_start_index, num_total_columns)
+            num_total_columns = num_subcategories + 1  # + Total (percentage goes in same column)
+            
+            # Insert new columns
+            insert_result = self._insert_columns(sheet_id, sheet_name, insertion_position, num_total_columns)
             if not insert_result['success']:
                 return insert_result
 
-            print(f"✅ ADD_CATEGORY: Successfully inserted {num_total_columns} columns")
-            time.sleep(1)
-
-            # Calculate column letters
-            start_col_letter = chr(65 + insert_start_index)
-            category_end_col_index = insert_start_index + num_subcategories - 1  # Last subcategory column
-            category_end_col = chr(65 + category_end_col_index)
-            total_col_letter = chr(65 + insert_start_index + num_subcategories)
-
-            print(
-                f"🔥 ADD_CATEGORY: Category spans {start_col_letter} to {category_end_col}, Total/Percentage in {total_col_letter}")
-
-            # 🔥 FIXED Step 2: Add category header (Row 1) - spans only across subcategories (NOT Total)
-            category_header_range = f"{start_col_letter}1:{category_end_col}1"
-            category_header_result = self._update_cell_range(
-                sheet_id,
-                target_sheet_name,
-                category_header_range,
-                [[category_name]]
+            print(f"✅ COPY_CATEGORY: Successfully inserted {num_total_columns} columns")
+            
+            # Copy and modify the layout
+            copy_result = self._copy_modify_category_layout(
+                sheet_id, template_structure, target_category_name, sub_categories, 
+                percentage, insertion_position, sheet_name
             )
-
-            if not category_header_result['success']:
-                return category_header_result
-
-            print(f"✅ ADD_CATEGORY: Added category header '{category_name}' at {category_header_range}")
-
-            # 🔥 FIXED Step 3: Add percentage to Total column (Row 1)
+            
+            if not copy_result['success']:
+                return copy_result
+            
+            return {
+                'success': True,
+                'category_name': target_category_name,
+                'sub_categories': sub_categories,
+                'percentage': percentage,
+                'columns_added': num_total_columns,
+                'insert_position': insertion_position,
+                'template_used': template_category,
+                'message': f"Successfully copied '{template_category}' layout for '{target_category_name}'"
+            }
+            
+        except Exception as e:
+            return {'success': False, 'error': f'Failed to copy category layout: {str(e)}'}
+    
+    def _find_insertion_position(self, sheet_id: str, sheet_name: str = None) -> int:
+        """
+        Find the best position to insert new categories (after the last category's Total column, before Class Standing)
+        """
+        try:
+            # Get sheet data
+            if sheet_name:
+                sheet_data = self.get_specific_sheet_data(sheet_id, sheet_name)
+            else:
+                sheet_data = self.get_sheet_data(sheet_id)
+            
+            if not sheet_data['success']:
+                return 5  # Fallback position
+            
+            headers = sheet_data['headers']
+            insert_position = len(headers)  # Default to end
+            
+            # 🔥 FIXED: Look for Class Standing columns first (these are the final calculation columns)
+            class_standing_keywords = ['CLASS STANDING', 'CLASS', 'FINAL GRADE', 'TERM GRADE', 'FINAL SCORE']
+            
+            for i in range(len(headers) - 1, -1, -1):
+                header = headers[i]
+                if header:
+                    header_upper = str(header).upper().strip()
+                    if any(keyword in header_upper for keyword in class_standing_keywords):
+                        insert_position = i
+                        print(f"🔥 INSERTION: Found Class Standing column '{header}' at index {i}")
+                        break
+            
+            # If no Class Standing found, look for the last "TOTAL" column
+            if insert_position == len(headers):
+                print("🔥 INSERTION: No Class Standing found, looking for last TOTAL column")
+                for i in range(len(headers) - 1, -1, -1):
+                    header = headers[i]
+                    if header:
+                        header_upper = str(header).upper().strip()
+                        if header_upper == 'TOTAL':
+                            insert_position = i + 1  # Insert AFTER the Total column
+                            print(f"🔥 INSERTION: Found last TOTAL column '{header}' at index {i}, will insert at {insert_position}")
+                            break
+            
+            # If still no good position found, look for any calculation columns
+            if insert_position == len(headers):
+                print("🔥 INSERTION: No TOTAL found, looking for any calculation columns")
+                calculation_keywords = ['GRADE', 'PERCENTAGE', 'PERCENT', 'FINAL']
+                
+                for i in range(len(headers) - 1, -1, -1):
+                    header = headers[i]
+                    if header:
+                        header_upper = str(header).upper().strip()
+                        if any(keyword in header_upper for keyword in calculation_keywords):
+                            insert_position = i
+                            print(f"🔥 INSERTION: Found calculation column '{header}' at index {i}")
+                            break
+            
+            # If still no good position, look for the last assessment column
+            if insert_position == len(headers):
+                print("🔥 INSERTION: No calculation columns found, looking for last assessment column")
+                for i in range(len(headers) - 1, -1, -1):
+                    header = headers[i]
+                    if header:
+                        header_upper = str(header).upper().strip()
+                        # Skip student info columns and empty columns
+                        if not any(keyword in header_upper for keyword in ['NO', 'LASTNAME', 'FIRSTNAME', 'STUDENT ID', 'MIDDLE NAME']) and header_upper.strip():
+                            insert_position = i + 1
+                            print(f"🔥 INSERTION: Found last assessment column '{header}' at index {i}, will insert at {insert_position}")
+                            break
+            
+            # Fallback
+            if insert_position == len(headers):
+                insert_position = max(5, len(headers))  # At least after student info
+                print(f"🔥 INSERTION: Fallback - will insert at {insert_position}")
+            
+            print(f"🔥 INSERTION: Final insertion position: {insert_position}")
+            return insert_position
+            
+        except Exception as e:
+            print(f"🔥 INSERTION: Error finding insertion position: {str(e)}")
+            return 5  # Safe fallback
+    
+    def _copy_modify_category_layout(self, sheet_id: str, template_structure: dict, target_category_name: str, 
+                                   sub_categories: list, percentage: str, insert_position: int, sheet_name: str = None) -> dict:
+        """
+        Copy the template category layout and modify it for the new category
+        """
+        try:
+            print(f"🔥 COPY_MODIFY: Copying template structure for '{target_category_name}'")
+            
+            # Get sheet data to find target sheet name
+            if sheet_name:
+                target_sheet_name = sheet_name
+            else:
+                sheet_data = self.get_sheet_data(sheet_id)
+                if not sheet_data['success']:
+                    return {'success': False, 'error': 'Failed to get sheet data'}
+                target_sheet_name = sheet_data['sheet_name']
+            
+            num_subcategories = len(sub_categories)
+            num_total_columns = num_subcategories + 1  # + Total (percentage goes in same column)
+            
+            # Calculate column letters
+            start_col_letter = self._column_index_to_a1(insert_position)
+            category_end_col_index = insert_position + num_subcategories - 1
+            category_end_col = self._column_index_to_a1(category_end_col_index)
+            total_col_letter = self._column_index_to_a1(insert_position + num_subcategories)
+            
+            print(f"🔥 COPY_MODIFY: Category spans {start_col_letter} to {category_end_col}, Total in {total_col_letter}")
+            print(f"🔥 COPY_MODIFY: Layout - Row 1: Category header spans {start_col_letter}1:{category_end_col}1, Percentage in {total_col_letter}1")
+            print(f"🔥 COPY_MODIFY: Layout - Row 2: Subcategory headers + 'Total' in {total_col_letter}2")
+            print(f"🔥 COPY_MODIFY: Layout - Row 3: Max scores + total max score in {total_col_letter}3")
+            
+            # Step 1: Add percentage to Total column FIRST (Row 1) - same column as Total
             percentage_result = self._update_cell_range(
                 sheet_id,
                 target_sheet_name,
@@ -3850,25 +4083,33 @@ class GoogleServiceAccountSheets:
             if not percentage_result['success']:
                 return percentage_result
 
-            print(f"✅ ADD_CATEGORY: Added percentage '{percentage}' at {total_col_letter}1")
-
-            # 🔥 FIXED Step 4: Merge the category header cells (excluding Total column)
+            # Step 2: Add category header (Row 1) - spans ONLY across subcategories (NOT Total column)
+            category_header_range = f"{start_col_letter}1:{category_end_col}1"
+            category_header_result = self._update_cell_range(
+                sheet_id,
+                target_sheet_name,
+                category_header_range,
+                [[target_category_name]]
+            )
+            
+            if not category_header_result['success']:
+                return category_header_result
+            
+            # Step 3: Merge the category header cells (ONLY subcategories, NOT Total)
             merge_result = self._merge_cells(
                 sheet_id,
                 target_sheet_name,
                 start_row=0,
                 end_row=0,
-                start_col=insert_start_index,  # Start: F (5)
-                end_col=category_end_col_index  # End: H (7) - Last subcategory column
+                start_col=insert_position,
+                end_col=category_end_col_index
             )
 
             if not merge_result['success']:
-                print(f"⚠️ ADD_CATEGORY: Failed to merge header cells: {merge_result.get('error')}")
-            else:
-                print(f"✅ ADD_CATEGORY: Merged category header cells")
+                print(f"⚠️ COPY_MODIFY: Failed to merge header cells: {merge_result.get('error')}")
 
-            # 🔥 FIXED Step 5: Add individual column headers (Row 2) - subcategories + "Total"
-            subcategory_headers = sub_categories + ["Total"]
+            # Step 4: Add individual column headers (Row 2)
+            subcategory_headers = sub_categories + ["Total"]  # Only subcategories + Total
             subcategory_range = f"{start_col_letter}2:{total_col_letter}2"
 
             headers_result = self._update_cell_range(
@@ -3881,13 +4122,9 @@ class GoogleServiceAccountSheets:
             if not headers_result['success']:
                 return headers_result
 
-            print(f"✅ ADD_CATEGORY: Added column headers at {subcategory_range}")
-
-            # Step 6: Add max scores (Row 3) - individual scores + total score
+            # Step 5: Add max scores (Row 3)
             individual_max_scores = ['100'] * num_subcategories
             total_max_score = str(100 * num_subcategories)
-
-            # Add max scores for subcategories + Total
             all_max_scores = individual_max_scores + [total_max_score]
             max_scores_range = f"{start_col_letter}3:{total_col_letter}3"
 
@@ -3901,47 +4138,474 @@ class GoogleServiceAccountSheets:
             if not max_scores_result['success']:
                 return max_scores_result
 
-            print(f"✅ ADD_CATEGORY: Added max scores at {max_scores_range}")
-
-            # Step 7: Add SUM formulas to Total column for all student rows
+            # Step 6: Add SUM formulas to Total column
             formula_result = self._add_total_formulas(
                 sheet_id,
                 target_sheet_name,
-                insert_start_index,
+                insert_position,
                 num_subcategories
             )
 
-            if formula_result['success']:
-                print(f"✅ ADD_CATEGORY: Added SUM formulas to Total column")
+            if not formula_result['success']:
+                print(f"⚠️ COPY_MODIFY: Failed to add formulas: {formula_result.get('error')}")
 
-            # Step 8: Format the new columns
-            format_result = self._format_new_category_columns_with_total(
+            # Step 7: Apply formatting (copy from template exactly)
+            format_result = self._copy_template_formatting(
                 sheet_id,
                 target_sheet_name,
-                insert_start_index,
+                template_structure,
+                insert_position,
                 num_subcategories,
-                num_total_columns
+                target_category_name
             )
 
-            if format_result['success']:
-                print(f"✅ ADD_CATEGORY: Applied formatting to new columns")
+            if not format_result['success']:
+                print(f"⚠️ COPY_MODIFY: Failed to apply formatting: {format_result.get('error')}")
 
-            print(
-                f"🎉 ADD_CATEGORY: Successfully added category '{category_name}' with {num_subcategories} subcategories + Total + Percentage ({percentage})!")
+            print(f"✅ COPY_MODIFY: Successfully created '{target_category_name}' with {num_subcategories} subcategories")
 
             return {
                 'success': True,
-                'category_name': category_name,
+                'category_name': target_category_name,
                 'sub_categories': sub_categories,
-                'columns_added': num_total_columns,
-                'subcategories_count': num_subcategories,
-                'has_total': True,
-                'has_percentage': True,
                 'percentage': percentage,
-                'insert_start_index': insert_start_index,
-                'sheet_name': target_sheet_name,
-                'message': f"Successfully added '{category_name}' with {num_subcategories} columns + Total + Percentage ({percentage})"
+                'columns_added': num_total_columns,
+                'insert_position': insert_position
             }
+            
+        except Exception as e:
+            return {'success': False, 'error': f'Failed to copy-modify layout: {str(e)}'}
+    
+    def _copy_template_formatting(self, sheet_id: str, sheet_name: str, template_structure: dict, 
+                                 insert_position: int, num_subcategories: int, target_category_name: str) -> dict:
+        """
+        Copy the EXACT formatting from the existing Quizzes category
+        """
+        try:
+            print(f"🔥 COPY_FORMATTING: Copying EXACT formatting from Quizzes category for '{target_category_name}'")
+            
+            # Get sheet properties
+            spreadsheet = self.sheets_service.spreadsheets().get(spreadsheetId=sheet_id).execute()
+            target_sheet_id = None
+
+            for sheet in spreadsheet['sheets']:
+                if sheet['properties']['title'] == sheet_name:
+                    target_sheet_id = sheet['properties']['sheetId']
+                    break
+
+            if target_sheet_id is None:
+                return {'success': False, 'error': f'Sheet "{sheet_name}" not found'}
+
+            # 🔥 FIXED: Copy EXACT columns F-J from Quizzes category (Quiz columns only, not Total)
+            # Columns F-J = columns 5-9 (0-based indexing: F=5, G=6, H=7, I=8, J=9)
+            quizzes_start_col = 5  # Column F
+            quizzes_end_col = 9    # Column J (inclusive), NOT K
+            
+            print(f"🔥 COPY_FORMATTING: Copying EXACT columns F-J (columns {quizzes_start_col} to {quizzes_end_col}) from Quizzes category")
+            
+            # Read the ACTUAL formatting from Quizzes category columns F-J (Quiz columns only, not Total)
+            quizzes_range = f"F1:J200"  # Include more data rows to get data cell formatting
+            print(f"🔥 COPY_FORMATTING: Reading formatting from EXACT range {quizzes_range}")
+            
+            try:
+                # 🔥 INVESTIGATE DEEPER: Try multiple approaches to get formatting
+                print(f"🔥 COPY_FORMATTING: Attempting to read formatting from {quizzes_range}")
+                
+                # Method 1: Try with includeGridData (without valueRenderOption)
+                format_request = {
+                    'ranges': [f"{sheet_name}!{quizzes_range}"],
+                    'includeGridData': True
+                }
+                
+                format_response = self.sheets_service.spreadsheets().get(
+                    spreadsheetId=sheet_id,
+                    **format_request
+                ).execute()
+                
+                print(f"🔥 COPY_FORMATTING: API Response keys: {list(format_response.keys())}")
+                if 'sheets' in format_response:
+                    print(f"🔥 COPY_FORMATTING: Sheets found: {len(format_response['sheets'])}")
+                    if len(format_response['sheets']) > 0:
+                        sheet_data = format_response['sheets'][0]
+                        print(f"🔥 COPY_FORMATTING: Sheet data keys: {list(sheet_data.keys())}")
+                        if 'data' in sheet_data:
+                            print(f"🔥 COPY_FORMATTING: Data found: {len(sheet_data['data'])} ranges")
+                
+                if 'sheets' in format_response and len(format_response['sheets']) > 0:
+                    format_data = format_response['sheets'][0]['data'][0]
+                    format_rows = format_data.get('rowData', [])
+                    
+                    print(f"🔥 COPY_FORMATTING: Successfully read formatting data from Quizzes category")
+                    
+                    # Debug: Print what formatting we found
+                    print(f"🔥 COPY_FORMATTING: Found {len(format_rows)} rows of formatting data")
+                    for row_idx, format_row in enumerate(format_rows):
+                        if 'values' in format_row:
+                            print(f"🔥 COPY_FORMATTING: Row {row_idx + 1}: {len(format_row['values'])} cells")
+                            for col_idx, cell in enumerate(format_row['values']):
+                                if 'effectiveFormat' in cell:
+                                    bg_color = cell['effectiveFormat'].get('backgroundColor', {})
+                                    print(f"🔥 COPY_FORMATTING: Cell {row_idx + 1},{col_idx + 1}: background = {bg_color}")
+                    
+                    # Copy the exact formatting to new category
+                    requests = []
+                    new_total_col = insert_position + num_subcategories
+                    
+                    # Copy formatting row by row from Quizzes columns F-K
+                    for row_idx in range(min(200, len(format_rows))):  # Rows 1-200 (include data rows)
+                        format_row = format_rows[row_idx]
+                        if 'values' in format_row:
+                            format_cells = format_row['values']
+                            
+                            # 🔥 COPY EXACT FORMATTING FROM QUIZZES F-K:
+                            # F, G, H, I, J = subcategory columns (columns 0,1,2,3,4 in format_cells)
+                            # K = Total column (column 5 in format_cells)
+                            
+                            # Copy formatting for subcategory columns (F, G, H, I, J)
+                            for col_idx in range(min(num_subcategories, 5)):  # Max 5 subcategories like Quizzes
+                                if col_idx < len(format_cells) and 'effectiveFormat' in format_cells[col_idx]:
+                                    quizzes_format = format_cells[col_idx]['effectiveFormat']
+                                    
+                                    requests.append({
+                                        'repeatCell': {
+                                            'range': {
+                                                'sheetId': target_sheet_id,
+                                                'startRowIndex': row_idx,
+                                                'endRowIndex': row_idx + 1,
+                                                'startColumnIndex': insert_position + col_idx,
+                                                'endColumnIndex': insert_position + col_idx + 1
+                                            },
+                                            'cell': {
+                                                'userEnteredFormat': quizzes_format
+                                            },
+                                            'fields': 'userEnteredFormat'
+                                        }
+                                    })
+                            
+                            # Copy formatting for Total column (K = column 5 in format_cells)
+                            if len(format_cells) > 5 and 'effectiveFormat' in format_cells[5]:
+                                quizzes_total_format = format_cells[5]['effectiveFormat']
+                                
+                                requests.append({
+                                    'repeatCell': {
+                                        'range': {
+                                            'sheetId': target_sheet_id,
+                                            'startRowIndex': row_idx,
+                                            'endRowIndex': row_idx + 1,
+                                            'startColumnIndex': new_total_col,
+                                            'endColumnIndex': new_total_col + 1
+                                        },
+                                        'cell': {
+                                            'userEnteredFormat': quizzes_total_format
+                                        },
+                                        'fields': 'userEnteredFormat'
+                                    }
+                                })
+                    
+                    # Execute formatting requests
+                    if requests:
+                        batch_update_request = {'requests': requests}
+                        self.sheets_service.spreadsheets().batchUpdate(
+                            spreadsheetId=sheet_id,
+                            body=batch_update_request
+                        ).execute()
+                        
+                        print(f"✅ COPY_FORMATTING: Applied {len(requests)} formatting requests")
+                        print(f"✅ COPY_FORMATTING: '{target_category_name}' now has EXACT formatting from Quizzes category")
+                        
+                        # 🔥 OVERRIDE: Make Total column light green 2 (matching Quizzes template)
+                        print(f"🔥 COPY_FORMATTING: Overriding Total column to light green 2 for '{target_category_name}'")
+                        override_requests = []
+                        
+                        # 1. Header rows (1-3): Light green 2 with borders
+                        override_requests.append({
+                            'repeatCell': {
+                                'range': {
+                                    'sheetId': target_sheet_id,
+                                    'startRowIndex': 0,  # Row 1 (percentage)
+                                    'endRowIndex': 3,    # Row 3 (max score)
+                                    'startColumnIndex': new_total_col,  # Total column
+                                    'endColumnIndex': new_total_col + 1
+                                },
+                                'cell': {
+                                    'userEnteredFormat': {
+                                        'backgroundColor': {'red': 0.713, 'green': 0.843, 'blue': 0.659},  # Light green 2 (#b6d7a8)
+                                        'textFormat': {'bold': True, 'fontSize': 10},
+                                        'horizontalAlignment': 'CENTER',
+                                        'verticalAlignment': 'MIDDLE',
+                                        'borders': {
+                                            'top': {'style': 'SOLID', 'width': 2, 'color': {'red': 0.0, 'green': 0.0, 'blue': 0.0}},    # Bold top border
+                                            'bottom': {'style': 'SOLID', 'width': 2, 'color': {'red': 0.0, 'green': 0.0, 'blue': 0.0}}, # Bold bottom border
+                                            'left': {'style': 'SOLID', 'width': 2, 'color': {'red': 0.0, 'green': 0.0, 'blue': 0.0}},  # Bold left border (separator)
+                                            'right': {'style': 'SOLID', 'width': 2, 'color': {'red': 0.0, 'green': 0.0, 'blue': 0.0}}   # Bold right border
+                                        }
+                                    }
+                                },
+                                'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment,borders)'
+                            }
+                        })
+                        
+                        # 2. Data rows (4+): Light green 2 WITHOUT borders
+                        override_requests.append({
+                            'repeatCell': {
+                                'range': {
+                                    'sheetId': target_sheet_id,
+                                    'startRowIndex': 3,  # Row 4 (data rows start)
+                                    'endRowIndex': 200,  # All data rows (extended range)
+                                    'startColumnIndex': new_total_col,  # Total column
+                                    'endColumnIndex': new_total_col + 1
+                                },
+                                'cell': {
+                                    'userEnteredFormat': {
+                                        'backgroundColor': {'red': 0.713, 'green': 0.843, 'blue': 0.659},  # Light green 2 (#b6d7a8)
+                                        'textFormat': {'fontSize': 10},
+                                        'horizontalAlignment': 'CENTER',
+                                        'verticalAlignment': 'MIDDLE'
+                                        # No borders for data rows
+                                    }
+                                },
+                                'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment)'
+                            }
+                        })
+                        
+                        # Apply the dark green override
+                        if override_requests:
+                            batch_update_request = {'requests': override_requests}
+                            self.sheets_service.spreadsheets().batchUpdate(
+                                spreadsheetId=sheet_id,
+                                body=batch_update_request
+                            ).execute()
+                            print(f"✅ COPY_FORMATTING: Override applied - Total column is now light green 2")
+                        
+                        return {'success': True, 'formats_applied': len(requests)}
+                    else:
+                        print("⚠️ COPY_FORMATTING: No formatting requests generated")
+                        return {'success': True, 'formats_applied': 0}
+                        
+            except Exception as e:
+                print(f"⚠️ COPY_FORMATTING: Could not copy Quizzes formatting: {str(e)}")
+                
+                # 🔥 FALLBACK: Try alternative method using copyPaste
+                print(f"🔥 COPY_FORMATTING: Trying alternative copy method...")
+                try:
+                    return self._copy_formatting_alternative_method(
+                        sheet_id, target_sheet_id, 5, 10,  # F=5, K=10
+                        insert_position, num_subcategories, target_category_name
+                    )
+                except Exception as fallback_error:
+                    print(f"⚠️ COPY_FORMATTING: Alternative method also failed: {str(fallback_error)}")
+                    return {'success': False, 'error': f'Failed to copy Quizzes formatting: {str(e)}'}
+            
+        except Exception as e:
+            return {'success': False, 'error': f'Failed to copy template formatting: {str(e)}'}
+    
+    def _copy_formatting_alternative_method(self, sheet_id: str, target_sheet_id: int, 
+                                          source_start_col: int, source_end_col: int,
+                                          dest_start_col: int, num_subcategories: int, 
+                                          target_category_name: str) -> dict:
+        """
+        Alternative method: Use copyPaste to copy formatting from source to destination
+        """
+        try:
+            print(f"🔥 ALTERNATIVE_FORMATTING: Using copyPaste method for '{target_category_name}'")
+            
+            requests = []
+            
+            # Calculate destination positions
+            dest_total_col = dest_start_col + num_subcategories
+            
+            # Copy formatting from source range F1:J200 (Quiz columns only, not Total)
+            source_range = {
+                'sheetId': target_sheet_id,  # Same sheet, but from existing Quizzes columns
+                'startRowIndex': 0,  # Row 1
+                'endRowIndex': 200,  # Row 200 (include more data rows)
+                'startColumnIndex': source_start_col,  # Column F (5) - Quizzes columns
+                'endColumnIndex': source_end_col       # Column J (9), NOT K
+            }
+            
+            dest_range = {
+                'sheetId': target_sheet_id,
+                'startRowIndex': 0,  # Row 1
+                'endRowIndex': 200,  # Row 200 (include more data rows)
+                'startColumnIndex': dest_start_col,    # New category start
+                'endColumnIndex': dest_total_col       # New category end (exclude Total column)
+            }
+            
+            print(f"🔥 ALTERNATIVE_FORMATTING: Copying from range {source_start_col}:{source_end_col} to {dest_start_col}:{dest_total_col}")
+            print(f"🔥 ALTERNATIVE_FORMATTING: Source range: {source_range}")
+            print(f"🔥 ALTERNATIVE_FORMATTING: Destination range: {dest_range}")
+            print(f"🔥 ALTERNATIVE_FORMATTING: This should copy from Quizzes columns F-J to new category columns")
+            
+            # Use copyPaste to copy formatting only
+            requests.append({
+                'copyPaste': {
+                    'source': source_range,
+                    'destination': dest_range,
+                    'pasteType': 'PASTE_FORMAT_ONLY',  # Only copy formatting, not values
+                    'pasteOrientation': 'NORMAL'
+                }
+            })
+            
+            # Execute the copyPaste request
+            if requests:
+                batch_update_request = {'requests': requests}
+                result = self.sheets_service.spreadsheets().batchUpdate(
+                    spreadsheetId=sheet_id,
+                    body=batch_update_request
+                ).execute()
+                
+                print(f"✅ ALTERNATIVE_FORMATTING: Applied copyPaste formatting for '{target_category_name}'")
+                print(f"🔥 ALTERNATIVE_FORMATTING: CopyPaste result: {result}")
+                
+                # 🔥 ADDITIONAL: Ensure Total column has dark green throughout (as requested)
+                print(f"🔥 ALTERNATIVE_FORMATTING: Applying dark green to Total column for '{target_category_name}'")
+                total_format_requests = []
+                
+                # Apply dark green to Total column for all rows (as requested)
+                total_format_requests.append({
+                    'repeatCell': {
+                        'range': {
+                            'sheetId': target_sheet_id,
+                            'startRowIndex': 0,  # Row 1 (percentage)
+                            'endRowIndex': 100,  # All rows
+                            'startColumnIndex': dest_total_col,  # Total column
+                            'endColumnIndex': dest_total_col + 1
+                        },
+                        'cell': {
+                            'userEnteredFormat': {
+                                'backgroundColor': {'red': 0.0, 'green': 0.5, 'blue': 0.0},  # Dark green (as requested)
+                                'textFormat': {'bold': True, 'fontSize': 10},
+                                'horizontalAlignment': 'CENTER',
+                                'verticalAlignment': 'MIDDLE'
+                            }
+                        },
+                        'fields': 'userEnteredFormat'
+                    }
+                })
+                
+                # Apply the dark green formatting to Total column only
+                if total_format_requests:
+                    batch_update_request = {'requests': total_format_requests}
+                    self.sheets_service.spreadsheets().batchUpdate(
+                        spreadsheetId=sheet_id,
+                        body=batch_update_request
+                    ).execute()
+                    print(f"✅ ALTERNATIVE_FORMATTING: Applied dark green to Total column")
+                
+                return {'success': True, 'formats_applied': 1, 'method': 'copyPaste'}
+            else:
+                print("⚠️ ALTERNATIVE_FORMATTING: No copyPaste requests generated")
+                return {'success': True, 'formats_applied': 0}
+                
+        except Exception as e:
+            print(f"⚠️ ALTERNATIVE_FORMATTING: copyPaste method failed: {str(e)}")
+            # Fallback: Apply manual formatting
+            return self._apply_manual_formatting_fallback(sheet_id, target_sheet_id, dest_start_col, dest_total_col, num_subcategories, target_category_name)
+                
+        except Exception as e:
+            return {'success': False, 'error': f'Alternative formatting method failed: {str(e)}'}
+
+    def _apply_manual_formatting_fallback(self, sheet_id: str, target_sheet_id: int, 
+                                        dest_start_col: int, dest_total_col: int, 
+                                        num_subcategories: int, target_category_name: str) -> dict:
+        """
+        Manual formatting fallback when copyPaste fails
+        """
+        try:
+            print(f"🔥 MANUAL_FORMATTING: Applying manual formatting for '{target_category_name}'")
+            
+            requests = []
+            
+            # 1. Apply light orange to sub-column data rows (Row 4+)
+            sub_column_data_range = {
+                'repeatCell': {
+                    'range': {
+                        'sheetId': target_sheet_id,
+                        'startRowIndex': 3,  # Row 4 (data rows start)
+                        'endRowIndex': 100,  # All data rows
+                        'startColumnIndex': dest_start_col,  # First sub-column
+                        'endColumnIndex': dest_total_col     # Last sub-column (exclude Total)
+                    },
+                    'cell': {
+                        'userEnteredFormat': {
+                            'backgroundColor': {'red': 1.0, 'green': 0.9, 'blue': 0.8},  # Light orange/peach
+                            'textFormat': {'fontSize': 10},
+                            'horizontalAlignment': 'CENTER',
+                            'verticalAlignment': 'MIDDLE'
+                        }
+                    },
+                    'fields': 'userEnteredFormat'
+                }
+            }
+            requests.append(sub_column_data_range)
+            
+            # 2. Apply dark green to Total column (all rows)
+            total_column_range = {
+                'repeatCell': {
+                    'range': {
+                        'sheetId': target_sheet_id,
+                        'startRowIndex': 0,  # Row 1 (percentage)
+                        'endRowIndex': 100,  # All rows
+                        'startColumnIndex': dest_total_col,  # Total column
+                        'endColumnIndex': dest_total_col + 1
+                    },
+                    'cell': {
+                        'userEnteredFormat': {
+                            'backgroundColor': {'red': 0.0, 'green': 0.5, 'blue': 0.0},  # Dark green
+                            'textFormat': {'bold': True, 'fontSize': 10},
+                            'horizontalAlignment': 'CENTER',
+                            'verticalAlignment': 'MIDDLE'
+                        }
+                    },
+                    'fields': 'userEnteredFormat'
+                }
+            }
+            requests.append(total_column_range)
+            
+            # Apply all formatting
+            if requests:
+                batch_update_request = {'requests': requests}
+                self.sheets_service.spreadsheets().batchUpdate(
+                    spreadsheetId=sheet_id,
+                    body=batch_update_request
+                ).execute()
+                print(f"✅ MANUAL_FORMATTING: Applied manual formatting for '{target_category_name}'")
+                print(f"🔥 MANUAL_FORMATTING: Sub-columns data rows: Light orange")
+                print(f"🔥 MANUAL_FORMATTING: Total column: Dark green")
+                
+                return {'success': True, 'formats_applied': len(requests), 'method': 'manual'}
+            else:
+                return {'success': False, 'error': 'No manual formatting requests generated'}
+                
+        except Exception as e:
+            return {'success': False, 'error': f'Manual formatting failed: {str(e)}'}
+
+    def add_category_to_sheet(self, sheet_id: str, category_name: str, sub_categories: list,
+                              sheet_name: str = None, percentage: str = "10.00%") -> dict:
+        """
+        Add a new category using the copy-modify approach.
+        Uses existing category as template and modifies for new category.
+        """
+        try:
+            print(f"🔥 ADD_CATEGORY: Using copy-modify approach for '{category_name}' with {len(sub_categories)} subcategories")
+
+            # Validate inputs
+            if not category_name or not category_name.strip():
+                return {'success': False, 'error': 'category_name is required and cannot be empty'}
+            
+            if not sub_categories or len(sub_categories) == 0:
+                return {'success': False, 'error': 'sub_categories array is required and cannot be empty'}
+            
+            if len(sub_categories) > 20:
+                return {'success': False, 'error': 'sub_categories count cannot exceed 20'}
+
+            # Use the copy-modify approach
+            result = self.copy_category_layout(sheet_id, category_name, sub_categories, percentage, sheet_name)
+            
+            if result['success']:
+                print(f"🎉 ADD_CATEGORY: Successfully created '{category_name}' using template '{result.get('template_used', 'unknown')}'")
+            
+            return result
 
         except Exception as e:
             logger.error(f"Add category to sheet error: {str(e)}")
@@ -3957,11 +4621,11 @@ class GoogleServiceAccountSheets:
         try:
             # Total column is at start_col + num_subcategories
             total_col_index = start_col + num_subcategories
-            total_col_letter = chr(65 + total_col_index)
+            total_col_letter = self._column_index_to_a1(total_col_index)
 
             # Create formula range letters for subcategories
-            first_subcol_letter = chr(65 + start_col)
-            last_subcol_letter = chr(65 + start_col + num_subcategories - 1)
+            first_subcol_letter = self._column_index_to_a1(start_col)
+            last_subcol_letter = self._column_index_to_a1(start_col + num_subcategories - 1)
 
             print(
                 f"🧮 FORMULAS: Adding SUM formulas to column {total_col_letter} (range {first_subcol_letter}:{last_subcol_letter})")

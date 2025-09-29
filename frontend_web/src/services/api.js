@@ -296,6 +296,19 @@ export const classRecordService = {
             column_name: columnName 
         }),
 
+    // 🔥 NEW: Percentages syncing and retrieval
+    syncCategoryPercentages: (classRecordId, sheetName) => {
+        const googleAccessToken = localStorage.getItem('googleAccessToken');
+        const config = { headers: {} };
+        if (googleAccessToken) {
+            config.headers['X-Google-Access-Token'] = googleAccessToken;
+        }
+        return api.post(`/class-records/${classRecordId}/sync_percentages_from_sheet/`, { sheet_name: sheetName }, config);
+    },
+
+    getCategoryPercentages: (classRecordId, sheetName) => 
+        api.get(`/class-records/${classRecordId}/category_percentages/`, { params: { sheet_name: sheetName } }),
+
     // 🔥 FIXED: Use the same 'api' instance instead of axiosInstance
     saveImportedExcel: (id, data) => {
         return api.post(`/class-records/${id}/save_imported_excel/`, data);
@@ -352,6 +365,10 @@ export const classRecordService = {
         api.post(`/sheets/${sheetId}/auto-number-students/`),
 
     getClassRecordsWithLiveCounts: () => api.get('/class-records/live-counts/'),
+
+    // Get mirrored CLASS STANDING percentages summary for dashboard card
+    getCategoryPercentagesSummary: (classRecordId) =>
+        api.get(`/class-records/${classRecordId}/category_percentages/`),
 
     getAllSheetsData: (sheetId) => {
         return api.get(`/sheets/service-account/${sheetId}/all-sheets-data/`);
