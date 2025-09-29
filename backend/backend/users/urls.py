@@ -20,7 +20,7 @@ from .views import (
     sheets_update_max_score_service_account, sheets_update_batch_max_scores_service_account,
     sheets_update_range_service_account, delete_student_from_sheet, update_multiple_cells_service_account,
     sheets_add_category_service_account, sheets_delete_category_service_account, sheets_edit_category_service_account,
-    sheets_get_categories_service_account,
+    sheets_get_categories_service_account, sync_category_percentages_from_sheet, get_category_percentages,
     # Google Drive connection management
     check_google_drive_connection, connect_google_account, refresh_google_tokens,
     disconnect_google_account, get_google_drive_token
@@ -117,6 +117,10 @@ urlpatterns = [
     path('sheets/<str:sheet_id>/delete-category/', sheets_delete_category_service_account, name='delete_category'),
     path('sheets/<str:sheet_id>/edit-category/', sheets_edit_category_service_account, name='edit_category'),
     path('sheets/<str:sheet_id>/get-categories/', sheets_get_categories_service_account, name='get_categories'),
+    
+    # Class record percentage sync endpoint
+    path('class-records/<int:class_record_id>/sync_percentages_from_sheet/', sync_category_percentages_from_sheet, name='sync_category_percentages'),
+    path('class-records/<int:class_record_id>/category_percentages/', get_category_percentages, name='get_category_percentages'),
     
     # Google Drive connection management endpoints
     path('google-drive/check/', check_google_drive_connection, name='check_google_drive_connection'),
