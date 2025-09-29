@@ -365,4 +365,5 @@ const AddCategoryModal = ({
   );
 };
 
+
 export default AddCategoryModal;
