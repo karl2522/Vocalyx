@@ -96,6 +96,23 @@ const ClassRecordExcel = () => {
   const [classStandingRemaining, setClassStandingRemaining] = useState(0);
   const classStandingToastRef = useRef(null);
 
+  // Sheet Navigation Tooltip state
+  const [showNavigationTooltip, setShowNavigationTooltip] = useState(false);
+
+  // Click outside handler for tooltips
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showNavigationTooltip && !event.target.closest('.navigation-tooltip-container')) {
+        setShowNavigationTooltip(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showNavigationTooltip]);
+
   // Helper: sync remaining from backend mirror based on current sheet
   const syncRemaining = useCallback(async () => {
     try {
@@ -4158,6 +4175,89 @@ const handleExportToPDF = async () => {
                           )}
                         </button>
                       ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 🔥 NEW: Navigation Help Tooltip */}
+              {availableSheets.length > 1 && (
+                <div className="relative navigation-tooltip-container">
+                  <button
+                    onClick={() => setShowNavigationTooltip(!showNavigationTooltip)}
+                    className="flex items-center justify-center w-8 h-8 bg-gradient-to-r from-amber-400 to-orange-500 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-110 animate-bounce"
+                    title="Navigation Help"
+                  >
+                    <HelpCircle className="w-4 h-4" />
+                  </button>
+                  
+                  {showNavigationTooltip && (
+                    <div className="absolute right-0 mt-2 w-80 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white rounded-2xl shadow-2xl border border-slate-700 p-0 z-50 overflow-hidden">
+                      {/* Header */}
+                      <div className="bg-gradient-to-r from-indigo-500 to-purple-600 px-4 py-3 flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                          <span className="font-semibold text-sm">Sheet Navigation Guide</span>
+                        </div>
+                        <button
+                          onClick={() => setShowNavigationTooltip(false)}
+                          className="text-white/80 hover:text-white transition-colors"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                      
+                      {/* Content */}
+                      <div className="p-4 space-y-4">
+                        {/* Top Navigation (Voice-enabled) */}
+                        <div className="bg-gradient-to-r from-green-500/20 to-emerald-500/20 rounded-lg p-3 border border-green-500/30 transform transition-all duration-300 hover:scale-105">
+                          <div className="flex items-center space-x-2 mb-2">
+                            <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+                            <span className="font-semibold text-green-400 text-sm">USE THIS ↑ (Top Navigation)</span>
+                          </div>
+                          <p className="text-xs text-slate-300 leading-relaxed">
+                            <span className="text-green-300 font-medium">✅ For Voice Commands:</span> Use the sheet selector above to switch sheets. This fetches sheet data and enables voice recognition features.
+                          </p>
+                          <div className="flex items-center space-x-1 mt-2">
+                            <Mic className="w-3 h-3 text-green-400" />
+                            <span className="text-xs text-green-300">Voice-enabled</span>
+                          </div>
+                        </div>
+                        
+                        {/* Bottom Navigation (View-only) */}
+                        <div className="bg-gradient-to-r from-amber-500/20 to-orange-500/20 rounded-lg p-3 border border-amber-500/30 transform transition-all duration-300 hover:scale-105">
+                          <div className="flex items-center space-x-2 mb-2">
+                            <div className="w-3 h-3 bg-amber-400 rounded-full"></div>
+                            <span className="font-semibold text-amber-400 text-sm">For Viewing Only ↓ (Bottom Navigation)</span>
+                          </div>
+                          <p className="text-xs text-slate-300 leading-relaxed">
+                            <span className="text-amber-300 font-medium">👁️ For Browsing:</span> Use the sheet tabs at the bottom of the embedded spreadsheet for quick viewing only.
+                          </p>
+                          <div className="flex items-center space-x-1 mt-2">
+                            <MicOff className="w-3 h-3 text-amber-400" />
+                            <span className="text-xs text-amber-300">No voice features</span>
+                          </div>
+                        </div>
+                        
+                        {/* Pro Tip */}
+                        <div className="bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-lg p-3 border border-purple-500/30 transform transition-all duration-300 hover:scale-105">
+                          <div className="flex items-center space-x-2 mb-2">
+                            <div className="w-3 h-3 bg-purple-400 rounded-full animate-pulse"></div>
+                            <span className="font-semibold text-purple-400 text-sm">💡 Pro Tip</span>
+                          </div>
+                          <p className="text-xs text-slate-300 leading-relaxed">
+                            Always use the top navigation when you plan to use voice commands for grading or data entry!
+                          </p>
+                        </div>
+                      </div>
+                      
+                      {/* Footer */}
+                      <div className="bg-slate-800/50 px-4 py-2 border-t border-slate-700">
+                        <div className="flex items-center space-x-2 text-xs text-slate-400">
+                          <div className="w-1 h-1 bg-blue-400 rounded-full animate-pulse"></div>
+                          <span>This guide helps you choose the right navigation method</span>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
