@@ -8,7 +8,11 @@ import {
     FiList,
     FiPlus,
     FiTrash2,
-    FiUser
+    FiUser,
+    FiInfo,
+    FiMic,
+    FiEye,
+    FiX
 } from 'react-icons/fi';
 import { RiSoundModuleLine } from 'react-icons/ri';
 import { Link } from 'react-router-dom';
@@ -354,6 +358,9 @@ const ClassRecords = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [editingRecord, setEditingRecord] = useState(null);
   
+  // 🔥 NEW: Navigation tip state
+  const [showNavigationTip, setShowNavigationTip] = useState(true);
+  
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const recordsPerPage = 9;
@@ -619,6 +626,74 @@ const ClassRecords = () => {
             </button>
           </div>
         </div>
+
+        {/* 🔥 NEW: Navigation Tip Banner */}
+        {showNavigationTip && classRecords.length > 0 && (
+          <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border border-blue-200 rounded-xl p-4 shadow-md">
+            <div className="flex items-start gap-4">
+              {/* Icon */}
+              <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center shadow-lg">
+                <FiInfo className="w-5 h-5 text-white" />
+              </div>
+              
+              {/* Content */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                    💡 Sheet Navigation Guide
+                    <span className="text-sm bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-medium">
+                      Pro Tip
+                    </span>
+                  </h4>
+                  <button
+                    onClick={() => setShowNavigationTip(false)}
+                    className="text-gray-400 hover:text-gray-600 transition-colors p-1 hover:bg-white/50 rounded-lg"
+                    title="Dismiss tip"
+                  >
+                    <FiX className="w-4 h-4" />
+                  </button>
+                </div>
+                
+                <p className="text-gray-700 mb-3 leading-relaxed">
+                  When working with your class records, choose the right navigation method for your needs:
+                </p>
+                
+                <div className="grid md:grid-cols-2 gap-3">
+                  {/* Voice Commands */}
+                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+                        <FiMic className="w-3 h-3 text-white" />
+                      </div>
+                      <span className="font-semibold text-green-800 text-sm">For Voice Commands</span>
+                    </div>
+                    <p className="text-xs text-green-700 leading-relaxed">
+                      <span className="font-medium">Use the TOP navigation</span> (sheet selector in toolbar) to switch sheets. This loads data for voice recognition and grading features.
+                    </p>
+                  </div>
+                  
+                  {/* Viewing Only */}
+                  <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-6 h-6 bg-amber-500 rounded-full flex items-center justify-center">
+                        <FiEye className="w-3 h-3 text-white" />
+                      </div>
+                      <span className="font-semibold text-amber-800 text-sm">For Viewing Only</span>
+                    </div>
+                    <p className="text-xs text-amber-700 leading-relaxed">
+                      <span className="font-medium">Use the BOTTOM navigation</span> (sheet tabs in embedded spreadsheet) for quick browsing and viewing data only.
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="mt-3 flex items-center gap-2 text-xs text-gray-600">
+                  <div className="w-1 h-1 bg-blue-400 rounded-full animate-pulse"></div>
+                  <span>This tip helps you choose the right navigation method when you open a class record</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
 
 
