@@ -1,15 +1,18 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { ArrowLeft, BarChart3, ChevronDown, Download, Edit, FileSpreadsheet, FileText, HelpCircle, Mic, MicOff, MoreVertical, Plus, Trash2, Upload, Users, X } from 'lucide-react';
+import { ArrowLeft, BarChart3, ChevronDown, Edit, FileSpreadsheet, HelpCircle, Mic, MicOff, MoreVertical, Plus, Trash2, Upload, Users, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useNavigate, useParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { classRecordService } from '../services/api';
 import googleDriveService from '../services/googleDriveService';
+import googleSheetsService from '../services/googleSheetsService';
 import { speakText, stopSpeaking } from '../utils/speechSynthesis';
+import { showToast } from '../utils/toast';
 import useVoiceRecognition from '../utils/useVoiceRecognition';
-import { applyPhoneticCorrections, cleanName, findStudentRowSmart, parseVoiceCommand } from '../utils/voicecommandParser';
+import { applyPhoneticCorrections, cleanName, findStudentRowSmart, parseVoiceCommand } from '../utils/voiceCommandParser';
+import FinalGradeOverview from './FinalGradeOverview';
 import AddCategoryModal from './modals/AddCategoryModal.jsx';
 import BatchGradingModal from './modals/BatchGradingModal';
 import ColumnMappingModal from './modals/ColumnMappingModal';
@@ -83,6 +86,7 @@ const ClassRecordExcel = () => {
 
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
   const [duplicateModalData, setDuplicateModalData] = useState(null);
+  const [showFinalGradeOverview, setShowFinalGradeOverview] = useState(false);
 
   const [availableSheets, setAvailableSheets] = useState([]);
   const [currentSheet, setCurrentSheet] = useState(null);
@@ -90,6 +94,199 @@ const ClassRecordExcel = () => {
   const [showSheetSelector, setShowSheetSelector] = useState(false);
 
   const [overrideConfirmation, setOverrideConfirmation] = useState(null);
+
+  // CLASS STANDING percentages state
+  const [classStandingRemaining, setClassStandingRemaining] = useState(0);
+  const classStandingToastRef = useRef(null);
+  
+  // Smart polling state for percentage change detection
+  const [lastPercentageHash, setLastPercentageHash] = useState(null);
+
+  // Sheet Navigation Tooltip state
+  const [showNavigationTooltip, setShowNavigationTooltip] = useState(false);
+
+  // Click outside handler for tooltips
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showNavigationTooltip && !event.target.closest('.navigation-tooltip-container')) {
+        setShowNavigationTooltip(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showNavigationTooltip]);
+
+  // Helper: sync remaining from backend mirror based on current sheet
+  const syncRemaining = useCallback(async () => {
+    try {
+      if (!id || !currentSheet?.sheet_name) return;
+      const res = await classRecordService.syncCategoryPercentages(id, currentSheet.sheet_name);
+      const data = res.data || {};
+      setClassStandingRemaining(Math.max(0, data.remaining || 0));
+    } catch (e) {
+      // Fallback: read via service account and compute from header row (row 1)
+      try {
+        if (!classRecord?.google_sheet_id || !currentSheet?.sheet_name) return;
+        const sa = await classRecordService.getSpecificSheetData(classRecord.google_sheet_id, currentSheet.sheet_name);
+        const headersRow = sa?.data?.headers || [];
+        const idxFromLetter = (letter) => {
+          let total = 0;
+          const up = letter.toUpperCase();
+          for (let i = 0; i < up.length; i++) {
+            total = total * 26 + (up.charCodeAt(i) - 64);
+          }
+          return total - 1; // zero-based
+        };
+        const letters = ['K', 'Q', 'W', 'AC'];
+        const sum = letters.reduce((acc, l) => {
+          const idx = idxFromLetter(l);
+          const cell = headersRow[idx];
+          if (!cell) return acc;
+          let s = String(cell).trim();
+          if (s.endsWith('%')) s = s.slice(0, -1).trim();
+          const val = parseInt(parseFloat(s));
+          if (Number.isFinite(val)) return acc + Math.max(0, val);
+          return acc;
+        }, 0);
+        const remaining = Math.max(0, 100 - sum);
+        setClassStandingRemaining(remaining);
+      } catch (ignored) {
+        // ignore
+      }
+    }
+  }, [id, currentSheet?.sheet_name, classRecord?.google_sheet_id]);
+
+  // Helper: Generate hash from percentage values for change detection
+  const generatePercentageHash = useCallback((headers) => {
+    if (!headers || !Array.isArray(headers)) return null;
+    
+    // Extract percentage values from specific columns (K, Q, W, AC)
+    // Convert column letters to indices
+    const idxFromLetter = (letter) => {
+      let total = 0;
+      const up = letter.toUpperCase();
+      for (let i = 0; i < up.length; i++) {
+        total = total * 26 + (up.charCodeAt(i) - 64);
+      }
+      return total - 1; // zero-based
+    };
+    
+    const letters = ['K', 'Q', 'W', 'AC'];
+    const percentageValues = [];
+    
+    letters.forEach(letter => {
+      const idx = idxFromLetter(letter);
+      const cell = headers[idx];
+      if (cell) {
+        let s = String(cell).trim();
+        if (s.endsWith('%')) s = s.slice(0, -1).trim();
+        const val = parseInt(parseFloat(s));
+        if (Number.isFinite(val)) {
+          percentageValues.push(`${letter}:${val}`);
+        }
+      }
+    });
+    
+    return percentageValues.join('|');
+  }, []);
+
+  // Smart polling: Check for percentage changes before syncing
+  const checkForPercentageChanges = useCallback(async () => {
+    try {
+      if (!classRecord?.google_sheet_id || !currentSheet?.sheet_name) return;
+      
+      // Get the specific percentage range (K1:AC6) to check for changes
+      const response = await classRecordService.getSpecificSheetData(
+        classRecord.google_sheet_id, 
+        currentSheet.sheet_name
+      );
+      
+      if (response.data?.main_headers) {
+        const currentHash = generatePercentageHash(response.data.main_headers);
+        
+        // Only sync if percentage values actually changed
+        if (currentHash && currentHash !== lastPercentageHash) {
+          console.log('🔄 Percentage values changed, syncing...');
+          console.log('🔄 Old hash:', lastPercentageHash);
+          console.log('🔄 New hash:', currentHash);
+          
+          // Force sync with cache bypass and manual calculation
+          try {
+            // First try the backend sync
+            const res = await classRecordService.syncCategoryPercentages(id, currentSheet.sheet_name, { force: true });
+            const data = res.data || {};
+            console.log('🔄 Backend sync result:', data);
+            
+            // Always calculate manually from current sheet data for accuracy
+            if (currentHash) {
+              console.log('🔄 Calculating manually from hash:', currentHash);
+              const hashParts = currentHash.split('|');
+              let total = 0;
+              hashParts.forEach(part => {
+                const match = part.match(/:(\d+)$/);
+                if (match) {
+                  total += parseInt(match[1]);
+                }
+              });
+              const remaining = Math.max(0, 100 - total);
+              console.log('🔄 Manual calculation - total:', total, 'remaining:', remaining);
+              console.log('🔄 Backend said remaining:', data.remaining, 'but we calculated:', remaining);
+              setClassStandingRemaining(remaining);
+              
+              // Update the card's remaining percentage as well
+              if (window.updateClassRecordRemaining) {
+                window.updateClassRecordRemaining(classRecord.id, remaining);
+              }
+            } else {
+              setClassStandingRemaining(Math.max(0, data.remaining || 0));
+            }
+          } catch (e) {
+            console.warn('⚠️ Force sync failed, trying regular sync:', e);
+            await syncRemaining();
+          }
+          
+          setLastPercentageHash(currentHash);
+        } else if (currentHash && currentHash === lastPercentageHash) {
+          console.log('✅ No percentage changes detected');
+        } else {
+          console.log('🔍 Hash comparison:', { current: currentHash, last: lastPercentageHash });
+        }
+      } else {
+        console.log('⚠️ No main_headers found in response:', response.data);
+      }
+    } catch (error) {
+      console.warn('⚠️ Error checking percentage changes, falling back to sync:', error);
+      // Fallback to regular sync if change detection fails
+      await syncRemaining();
+    }
+  }, [classRecord?.google_sheet_id, currentSheet?.sheet_name, lastPercentageHash, generatePercentageHash, syncRemaining]);
+
+  // Show sticky toast whenever remaining > 0 on this view
+  useEffect(() => {
+    console.log('🔔 Toast effect triggered, remaining:', classStandingRemaining);
+    if (classStandingRemaining > 0) {
+      // Persistent toast (no auto-close)
+      if (classStandingToastRef.current) {
+        showToast.dismiss(classStandingToastRef.current);
+        classStandingToastRef.current = null;
+      }
+      console.log('🔔 Showing toast for remaining:', classStandingRemaining);
+      classStandingToastRef.current = showToast.info(
+        `You still have ${classStandingRemaining}% unallocated.`,
+        'Class Standing total is below 100%',
+        { duration: Infinity }
+      );
+    } else {
+      console.log('🔔 Hiding toast, remaining is 0');
+      if (classStandingToastRef.current) {
+        showToast.dismiss(classStandingToastRef.current);
+        classStandingToastRef.current = null;
+      }
+    }
+  }, [classStandingRemaining]);
 
   // Drive file picker state
   const [showDriveFilePicker, setShowDriveFilePicker] = useState(false);
@@ -136,6 +333,24 @@ const ClassRecordExcel = () => {
       console.log('🔥 FIRST RENDER: Component mounted');
     }
   }, []);
+
+  // Smart polling: Check for percentage changes every 5 seconds
+  useEffect(() => {
+    if (!classRecord?.google_sheet_id || !currentSheet?.sheet_name) return;
+    const interval = setInterval(() => {
+      checkForPercentageChanges();
+    }, 5000); // every 5s - smart polling
+    return () => clearInterval(interval);
+  }, [classRecord?.google_sheet_id, currentSheet?.sheet_name, checkForPercentageChanges]);
+
+  // Backup polling: Fallback every 30 seconds in case smart polling fails
+  useEffect(() => {
+    if (!classRecord?.google_sheet_id || !currentSheet?.sheet_name) return;
+    const backupInterval = setInterval(() => {
+      syncRemaining();
+    }, 30000); // every 30s - backup
+    return () => clearInterval(backupInterval);
+  }, [classRecord?.google_sheet_id, currentSheet?.sheet_name, syncRemaining]);
 
   const loadCategories = async () => {
   try {
@@ -351,6 +566,15 @@ const ClassRecordExcel = () => {
             
             // Load data from the first sheet
             await loadSheetData(response.data.google_sheet_id, firstSheet.sheet_name);
+
+            // Sync CLASS STANDING percentages from sheet into backend mirror
+            try {
+              const syncRes = await classRecordService.syncCategoryPercentages(id, firstSheet.sheet_name);
+              const data = syncRes.data || {};
+              setClassStandingRemaining(Math.max(0, data.remaining || 0));
+            } catch (e) {
+              console.warn('⚠️ Failed to sync category percentages:', e);
+            }
             
             console.log("✅ Multi-sheet data loaded successfully!");
           } else {
@@ -455,10 +679,43 @@ const ClassRecordExcel = () => {
             window.voiceCommandContext.activeSheet = sheetName;
             console.log(`📊 LOAD SHEET: Updated voice command context with sheet: "${sheetName}"`);
           }
+          
+          // 🔥 NEW: Auto-protect perfect score row when sheet loads
+          try {
+            console.log(`🔒 Auto-protecting perfect score row for sheet: ${sheetName}...`);
+            await classRecordService.protectPerfectScoreRow(sheetId, sheetName);
+            console.log("✅ Perfect score row protected successfully");
+          } catch (protectionError) {
+            console.log("⚠️ Could not protect perfect score row (may already be protected):", protectionError);
+            // Don't show error to user as this is non-critical
+          }
         }
         
         console.log(`✅ LOAD SHEET: Sheet "${sheetName}" data loaded successfully!`);
         toast.success(`Switched to sheet: ${sheetName}`);
+
+        // After loading sheet data, refresh mirrored CLASS STANDING percentages
+        await syncRemaining();
+        
+        // Initialize percentage hash for change detection
+        try {
+          const response = await classRecordService.getSpecificSheetData(classRecord.google_sheet_id, sheetName);
+          console.log('🔍 Hash initialization response:', response.data);
+          if (response.data?.main_headers) {
+            const initialHash = generatePercentageHash(response.data.main_headers);
+            setLastPercentageHash(initialHash);
+            console.log('🔍 Initialized percentage hash:', initialHash);
+          } else if (response.data?.headers) {
+            // Fallback to headers if main_headers not available
+            const initialHash = generatePercentageHash(response.data.headers);
+            setLastPercentageHash(initialHash);
+            console.log('🔍 Initialized percentage hash (fallback):', initialHash);
+          } else {
+            console.log('⚠️ No headers found for hash initialization:', response.data);
+          }
+        } catch (error) {
+          console.warn('⚠️ Could not initialize percentage hash:', error);
+        }
       } else {
         console.log(`⚠️ LOAD SHEET: No data available for sheet: "${sheetName}"`);
         toast(`No data found in sheet: ${sheetName}`);
@@ -490,6 +747,16 @@ const ClassRecordExcel = () => {
           setTableData(convertedTableData);
           
           buildContextDictionary(convertedTableData, sheetsResponse.data.headers);
+          
+          // 🔥 NEW: Auto-protect perfect score row when sheet loads
+          try {
+            console.log("🔒 Auto-protecting perfect score row...");
+            await classRecordService.protectPerfectScoreRow(sheetId);
+            console.log("✅ Perfect score row protected successfully");
+          } catch (protectionError) {
+            console.log("⚠️ Could not protect perfect score row (may already be protected):", protectionError);
+            // Don't show error to user as this is non-critical
+          }
         }
         
         console.log("✅ Voice command data loaded successfully (single sheet)!");
@@ -1996,7 +2263,7 @@ const handleDriveFileSelect = async (driveFile) => {
       setImportProgress({ status: 'downloading', message: 'Downloading file from Drive...', entity: importType });
     
     // Download file from Drive
-    const response = await fetch(`${import.meta.env.NODE_ENV === 'production' 
+    const response = await fetch(`${import.meta.env.PROD 
       ? 'https://vocalyx-c61a072bf25a.herokuapp.com' 
       : 'http://127.0.0.1:8000'}/api/drive/download/${driveFile.id}/`, {
       headers: googleDriveService.getHeaders()
@@ -2241,6 +2508,10 @@ const handleAddCategory = async (categoryData) => {
       
       // 🔥 FIX: Pass the required parameters to loadSheetData
       await loadSheetData(classRecord.google_sheet_id, currentSheet?.sheet_name);
+      await syncRemaining();
+      
+      // Reset percentage hash after category changes
+      setLastPercentageHash(null);
       
       setShowAddCategoryModal(false);
     } else {
@@ -2307,6 +2578,10 @@ const handleEditCategory = async (editData) => {
         await loadSheetData(classRecord.google_sheet_id, currentSheet.sheet_name);
       }
       await loadCategories(); // Refresh categories list
+      await syncRemaining();
+      
+      // Reset percentage hash after category changes
+      setLastPercentageHash(null);
     } else {
       toast.error(response.data.error || 'Failed to edit category');
     }
@@ -3949,6 +4224,42 @@ const handleExportToPDF = async () => {
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
+  const handleCheckCompleteness = async () => {
+    try {
+      if (!classRecord?.google_sheet_id) {
+        showToast.error('No Google Sheet is linked to this class record.');
+        return;
+      }
+      const res = await googleSheetsService.analyzeScoreCompleteness(
+        classRecord.google_sheet_id,
+        { fastFail: false, classRecordId: classRecord?.id, force: true }
+      );
+      if (res.success) {
+        const ready = !!res.overallReady;
+        if (ready) {
+          showToast.success('Complete');
+        } else {
+          // Build a concise summary: per sheet first few missing cells
+          const parts = [];
+          (res.sheets || []).forEach(sheet => {
+            if (!sheet.ready) {
+              const mc = sheet.missingCells || [];
+              const examples = mc.slice(0, 3).map(m => `${m.header} (row ${m.rowIndex})`).join(', ');
+              const more = mc.length > 3 ? `, +${mc.length - 3} more` : '';
+              parts.push(`${sheet.sheetName}: ${examples || 'missing values'}${more}`);
+            }
+          });
+          const msg = parts.length ? `Incomplete — ${parts.join(' | ')}` : 'Incomplete';
+          showToast.error(msg);
+        }
+      } else {
+        showToast.error(res.error || 'Analysis failed');
+      }
+    } catch (e) {
+      showToast.error('Analysis error: ' + e.message);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -4055,6 +4366,89 @@ const handleExportToPDF = async () => {
                 </div>
               )}
 
+              {/* 🔥 NEW: Navigation Help Tooltip */}
+              {availableSheets.length > 1 && (
+                <div className="relative navigation-tooltip-container">
+                  <button
+                    onClick={() => setShowNavigationTooltip(!showNavigationTooltip)}
+                    className="flex items-center justify-center w-8 h-8 bg-gradient-to-r from-amber-400 to-orange-500 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-110 animate-bounce"
+                    title="Navigation Help"
+                  >
+                    <HelpCircle className="w-4 h-4" />
+                  </button>
+                  
+                  {showNavigationTooltip && (
+                    <div className="absolute right-0 mt-2 w-80 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white rounded-2xl shadow-2xl border border-slate-700 p-0 z-50 overflow-hidden">
+                      {/* Header */}
+                      <div className="bg-gradient-to-r from-indigo-500 to-purple-600 px-4 py-3 flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                          <span className="font-semibold text-sm">Sheet Navigation Guide</span>
+                        </div>
+                        <button
+                          onClick={() => setShowNavigationTooltip(false)}
+                          className="text-white/80 hover:text-white transition-colors"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                      
+                      {/* Content */}
+                      <div className="p-4 space-y-4">
+                        {/* Top Navigation (Voice-enabled) */}
+                        <div className="bg-gradient-to-r from-green-500/20 to-emerald-500/20 rounded-lg p-3 border border-green-500/30 transform transition-all duration-300 hover:scale-105">
+                          <div className="flex items-center space-x-2 mb-2">
+                            <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+                            <span className="font-semibold text-green-400 text-sm">USE THIS ↑ (Top Navigation)</span>
+                          </div>
+                          <p className="text-xs text-slate-300 leading-relaxed">
+                            <span className="text-green-300 font-medium">✅ For Voice Commands:</span> Use the sheet selector above to switch sheets. This fetches sheet data and enables voice recognition features.
+                          </p>
+                          <div className="flex items-center space-x-1 mt-2">
+                            <Mic className="w-3 h-3 text-green-400" />
+                            <span className="text-xs text-green-300">Voice-enabled</span>
+                          </div>
+                        </div>
+                        
+                        {/* Bottom Navigation (View-only) */}
+                        <div className="bg-gradient-to-r from-amber-500/20 to-orange-500/20 rounded-lg p-3 border border-amber-500/30 transform transition-all duration-300 hover:scale-105">
+                          <div className="flex items-center space-x-2 mb-2">
+                            <div className="w-3 h-3 bg-amber-400 rounded-full"></div>
+                            <span className="font-semibold text-amber-400 text-sm">For Viewing Only ↓ (Bottom Navigation)</span>
+                          </div>
+                          <p className="text-xs text-slate-300 leading-relaxed">
+                            <span className="text-amber-300 font-medium">👁️ For Browsing:</span> Use the sheet tabs at the bottom of the embedded spreadsheet for quick viewing only.
+                          </p>
+                          <div className="flex items-center space-x-1 mt-2">
+                            <MicOff className="w-3 h-3 text-amber-400" />
+                            <span className="text-xs text-amber-300">No voice features</span>
+                          </div>
+                        </div>
+                        
+                        {/* Pro Tip */}
+                        <div className="bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-lg p-3 border border-purple-500/30 transform transition-all duration-300 hover:scale-105">
+                          <div className="flex items-center space-x-2 mb-2">
+                            <div className="w-3 h-3 bg-purple-400 rounded-full animate-pulse"></div>
+                            <span className="font-semibold text-purple-400 text-sm">💡 Pro Tip</span>
+                          </div>
+                          <p className="text-xs text-slate-300 leading-relaxed">
+                            Always use the top navigation when you plan to use voice commands for grading or data entry!
+                          </p>
+                        </div>
+                      </div>
+                      
+                      {/* Footer */}
+                      <div className="bg-slate-800/50 px-4 py-2 border-t border-slate-700">
+                        <div className="flex items-center space-x-2 text-xs text-slate-400">
+                          <div className="w-1 h-1 bg-blue-400 rounded-full animate-pulse"></div>
+                          <span>This guide helps you choose the right navigation method</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Tools Dropdown */}
               <div className="relative" onClick={(e) => e.stopPropagation()}>
                 <button
@@ -4069,42 +4463,6 @@ const handleExportToPDF = async () => {
                 {dropdowns.tools && (
                   <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-slate-200 py-2 z-50">
                     {/* Export options */}
-                    <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
-                      Export Options
-                    </div>
-                    <button
-                      onClick={() => {
-                        handleExportToExcel();
-                        closeAllDropdowns();
-                      }}
-                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
-                    >
-                      <FileSpreadsheet className="w-4 h-4 text-green-600" />
-                      <span>Export to Excel (clean)</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        handleExportToPDF();
-                        closeAllDropdowns();
-                      }}
-                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
-                    >
-                      <Download className="w-4 h-4 text-red-600" />
-                      <span>Export to PDF (clean)</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        handleExportToCSV();
-                        closeAllDropdowns();
-                      }}
-                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
-                    >
-                      <FileText className="w-4 h-4 text-green-600" />
-                      <span>Export to CSV (clean)</span>
-                    </button>
-                    
-                    <hr className="my-2 border-slate-200" />
 
                     <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
                       Import Options
@@ -4157,6 +4515,30 @@ const handleExportToPDF = async () => {
                     >
                       <span className="w-4 h-4 text-blue-600 text-center font-bold">#</span>
                       <span>Auto-Number Students</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        handleCheckCompleteness();
+                        closeAllDropdowns();
+                      }}
+                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                    >
+                      <span className="w-4 h-4 text-green-600 text-center font-bold">✔</span>
+                      <span>Check Completeness</span>
+                    </button>
+                    
+                    <button
+                      onClick={() => {
+                        setShowFinalGradeOverview(true);
+                        closeAllDropdowns();
+                      }}
+                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                    >
+                      <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                      </svg>
+                      <span>Generate Final Grade</span>
                     </button>
 
                     {/* 🔥 FIXED: Make Categories a simple menu item, not a nested dropdown */}
@@ -4229,7 +4611,8 @@ const handleExportToPDF = async () => {
 
         {/* Embedded Google Sheet */}
         <div className="flex-1 p-4">
-          <div className="h-full bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          <div className="h-full bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden relative">
+            
             {/* 🔥 ENHANCED: Dynamic iframe that switches sheets */}
             <iframe
               key={currentSheet?.sheet_id || 'default'} // 🔥 Force re-render when sheet changes
@@ -4575,6 +4958,7 @@ const handleExportToPDF = async () => {
             onClose={() => setShowAddCategoryModal(false)}
             onSubmit={handleAddCategory}
             isLoading={categoryLoading}
+            remainingAvailable={classStandingRemaining}
           />
         )}
 
@@ -4661,6 +5045,14 @@ const handleExportToPDF = async () => {
           setBatchSheetData={setBatchSheetData}
           processingEntries={processingEntries}
           setProcessingEntries={setProcessingEntries}
+        />
+
+        {/* Final Grade Overview Modal */}
+        <FinalGradeOverview
+          isOpen={showFinalGradeOverview}
+          onClose={() => setShowFinalGradeOverview(false)}
+          classRecord={classRecord}
+          sheetId={classRecord?.google_sheet_id}
         />
       </div>
     );

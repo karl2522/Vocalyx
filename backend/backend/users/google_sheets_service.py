@@ -270,6 +270,42 @@ class GoogleSheetsService:
                 'error': f'Request failed: {str(e)}'
             }
 
+    def get_file_modified_time(self, file_id: str) -> Dict:
+        """
+        Get Drive file modifiedTime for cache/versioning.
+
+        Args:
+            file_id: ID of the spreadsheet file
+
+        Returns:
+            Dict: { success, modifiedTime? }
+        """
+        try:
+            url = f"{self.DRIVE_API_BASE_URL}/files/{file_id}"
+            response = requests.get(
+                url,
+                headers=self.headers,
+                params={'fields': 'modifiedTime'},
+                timeout=10
+            )
+            if response.status_code == 200:
+                data = response.json()
+                return {
+                    'success': True,
+                    'modifiedTime': data.get('modifiedTime')
+                }
+            return {
+                'success': False,
+                'error': f'Failed to get modifiedTime: {response.status_code}',
+                'details': response.text
+            }
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Get file modifiedTime failed: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Request failed: {str(e)}'
+            }
+
     def update_sheet_permissions(self, file_id: str, make_public_readable: bool = False, make_editable: bool = False) -> Dict:
         """
         Update sheet permissions.
@@ -512,7 +548,8 @@ class GoogleSheetsService:
         """
         try:
             # Get data from the specific sheet
-            range_name = f"'{sheet_name}'!A:Z"  # 🔥 Use specific sheet name
+            # Expanded range to include far-right columns like exam headers
+            range_name = f"'{sheet_name}'!A:ZZZ"
             values_url = f"{self.SHEETS_API_BASE_URL}/{sheet_id}/values/{range_name}"
 
             values_response = requests.get(

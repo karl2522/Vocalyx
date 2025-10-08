@@ -1,6 +1,13 @@
 import axios from 'axios';
 
-const API_URL = 'http://127.0.0.1:8000/api';
+const API_URL = import.meta.env.PROD 
+  ? 'https://vocalyx-c61a072bf25a.herokuapp.com/api'
+  : 'http://127.0.0.1:8000/api';
+
+console.log('🔍 API Environment Detection:', {
+  'import.meta.env.PROD': import.meta.env.PROD,
+  'API_URL': API_URL
+});
 
 const api = axios.create({
     baseURL: API_URL,
@@ -289,6 +296,23 @@ export const classRecordService = {
             column_name: columnName 
         }),
 
+    // 🔥 NEW: Percentages syncing and retrieval
+    syncCategoryPercentages: (classRecordId, sheetName, options = {}) => {
+        const googleAccessToken = localStorage.getItem('googleAccessToken');
+        const config = { headers: {} };
+        if (googleAccessToken) {
+            config.headers['X-Google-Access-Token'] = googleAccessToken;
+        }
+        const body = { sheet_name: sheetName };
+        if (options.force) {
+            body.force = true;
+        }
+        return api.post(`/class-records/${classRecordId}/sync_percentages_from_sheet/`, body, config);
+    },
+
+    getCategoryPercentages: (classRecordId, sheetName) => 
+        api.get(`/class-records/${classRecordId}/category_percentages/`, { params: { sheet_name: sheetName } }),
+
     // 🔥 FIXED: Use the same 'api' instance instead of axiosInstance
     saveImportedExcel: (id, data) => {
         return api.post(`/class-records/${id}/save_imported_excel/`, data);
@@ -345,6 +369,10 @@ export const classRecordService = {
         api.post(`/sheets/${sheetId}/auto-number-students/`),
 
     getClassRecordsWithLiveCounts: () => api.get('/class-records/live-counts/'),
+
+    // Get mirrored CLASS STANDING percentages summary for dashboard card
+    getCategoryPercentagesSummary: (classRecordId) =>
+        api.get(`/class-records/${classRecordId}/category_percentages/`),
 
     getAllSheetsData: (sheetId) => {
         return api.get(`/sheets/service-account/${sheetId}/all-sheets-data/`);

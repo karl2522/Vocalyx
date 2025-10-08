@@ -3,17 +3,21 @@ import toast from 'react-hot-toast';
 import {
     FiCalendar,
     FiEdit3,
+    FiEye,
     FiFileText,
     FiGrid,
+    FiInfo,
     FiList,
+    FiMic,
     FiPlus,
     FiTrash2,
-    FiUser
+    FiUser,
+    FiX
 } from 'react-icons/fi';
 import { RiSoundModuleLine } from 'react-icons/ri';
 import { Link } from 'react-router-dom';
 import { enhancedClassRecordService as classRecordService } from '../services/api';
-import { showToast } from '../utils/toast.jsx';
+import { showToast } from '../utils/toast';
 import { TopNavbar } from './layouts/TopNavbar.jsx';
 import CreateClassRecordModal from './modals/CreateClassRecordModal';
 
@@ -344,14 +348,33 @@ const Pagination = ({ currentPage, totalPages, onPageChange }) => {
 
 const ClassRecords = () => {
   const [classRecords, setClassRecords] = useState([]);
+  const [remainingMap, setRemainingMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState('grid');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  
+  // Global function to update remaining percentage for a specific class record
+  useEffect(() => {
+    window.updateClassRecordRemaining = (classRecordId, remaining) => {
+      setRemainingMap(prev => ({
+        ...prev,
+        [classRecordId]: remaining
+      }));
+      console.log('🔄 Updated card remaining for record', classRecordId, 'to', remaining);
+    };
+    
+    return () => {
+      delete window.updateClassRecordRemaining;
+    };
+  }, []);
   
   // 🔥 NEW: Delete & Edit states
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, record: null });
   const [isDeleting, setIsDeleting] = useState(false);
   const [editingRecord, setEditingRecord] = useState(null);
+  
+  // 🔥 NEW: Navigation tip state
+  const [showNavigationTip, setShowNavigationTip] = useState(true);
   
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -365,7 +388,34 @@ const ClassRecords = () => {
     try {
       setLoading(true);
       const response = await classRecordService.getClassRecordsWithLiveCounts();
-      setClassRecords(response.data);
+      const records = response.data || [];
+      setClassRecords(records);
+
+      // Fetch remaining percentages for each record in parallel (best effort)
+      try {
+        const results = await Promise.all(records.map(async (rec) => {
+          try {
+            // Prefer live sync from the first sheet if available to ensure correctness
+            if (rec.google_sheet_id) {
+              const sheetsList = await classRecordService.getSheetsList(rec.google_sheet_id);
+              const first = sheetsList?.data?.sheets?.[0];
+              if (first?.sheet_name) {
+                const sync = await classRecordService.syncCategoryPercentages(rec.id, first.sheet_name);
+                return [rec.id, Math.max(0, sync.data?.remaining ?? 0)];
+              }
+            }
+            // Fallback to summary without sheet name
+            const res = await classRecordService.getCategoryPercentagesSummary(rec.id);
+            return [rec.id, Math.max(0, res.data?.remaining ?? 0)];
+          } catch (e) {
+            return [rec.id, 0];
+          }
+        }));
+        const map = Object.fromEntries(results);
+        setRemainingMap(map);
+      } catch (e) {
+        // ignore
+      }
     } catch (error) {
       console.error('Error fetching class records:', error);
       showToast.error('Failed to fetch class records');
@@ -592,6 +642,74 @@ const ClassRecords = () => {
           </div>
         </div>
 
+        {/* 🔥 NEW: Navigation Tip Banner */}
+        {showNavigationTip && classRecords.length > 0 && (
+          <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border border-blue-200 rounded-xl p-4 shadow-md">
+            <div className="flex items-start gap-4">
+              {/* Icon */}
+              <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center shadow-lg">
+                <FiInfo className="w-5 h-5 text-white" />
+              </div>
+              
+              {/* Content */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                    💡 Sheet Navigation Guide
+                    <span className="text-sm bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-medium">
+                      Pro Tip
+                    </span>
+                  </h4>
+                  <button
+                    onClick={() => setShowNavigationTip(false)}
+                    className="text-gray-400 hover:text-gray-600 transition-colors p-1 hover:bg-white/50 rounded-lg"
+                    title="Dismiss tip"
+                  >
+                    <FiX className="w-4 h-4" />
+                  </button>
+                </div>
+                
+                <p className="text-gray-700 mb-3 leading-relaxed">
+                  When working with your class records, choose the right navigation method for your needs:
+                </p>
+                
+                <div className="grid md:grid-cols-2 gap-3">
+                  {/* Voice Commands */}
+                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+                        <FiMic className="w-3 h-3 text-white" />
+                      </div>
+                      <span className="font-semibold text-green-800 text-sm">For Voice Commands</span>
+                    </div>
+                    <p className="text-xs text-green-700 leading-relaxed">
+                      <span className="font-medium">Use the TOP navigation</span> (sheet selector in toolbar) to switch sheets. This loads data for voice recognition and grading features.
+                    </p>
+                  </div>
+                  
+                  {/* Viewing Only */}
+                  <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-6 h-6 bg-amber-500 rounded-full flex items-center justify-center">
+                        <FiEye className="w-3 h-3 text-white" />
+                      </div>
+                      <span className="font-semibold text-amber-800 text-sm">For Viewing Only</span>
+                    </div>
+                    <p className="text-xs text-amber-700 leading-relaxed">
+                      <span className="font-medium">Use the BOTTOM navigation</span> (sheet tabs in embedded spreadsheet) for quick browsing and viewing data only.
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="mt-3 flex items-center gap-2 text-xs text-gray-600">
+                  <div className="w-1 h-1 bg-blue-400 rounded-full animate-pulse"></div>
+                  <span>This tip helps you choose the right navigation method when you open a class record</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
 
 
 
@@ -679,6 +797,7 @@ const ClassRecords = () => {
                       <h3 className={`font-semibold text-gray-900 mb-1.5 group-hover:text-[#333D79] transition-colors duration-300 ${viewMode === 'list' ? 'text-lg' : ''}`}>
                         {record.name}
                       </h3>
+                      {/* Badge moved below the students line per requirement */}
                       
                       {viewMode === 'list' && (
                         <div className="flex items-center gap-6 text-sm text-gray-600">
@@ -714,6 +833,11 @@ const ClassRecords = () => {
                             <RiSoundModuleLine className="h-4 w-4" />
                             <span>Students: {record.student_count || 0}</span>
                           </div>
+                          {remainingMap[record.id] > 0 && (
+                            <div className="mt-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 inline-flex w-fit items-center gap-1">
+                              You still have {remainingMap[record.id]}% unallocated
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
