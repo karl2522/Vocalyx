@@ -2,6 +2,8 @@ const BACKEND_URL = import.meta.env.PROD
   ? 'https://vocalyx-c61a072bf25a.herokuapp.com' 
   : 'http://127.0.0.1:8000';
 
+import googleDriveService from './googleDriveService';
+
 class GoogleSheetsService {
   constructor() {
     this.baseURL = `${BACKEND_URL}/api`;
@@ -140,6 +142,147 @@ class GoogleSheetsService {
    */
   getViewUrl(sheetId) {
     return `https://docs.google.com/spreadsheets/d/${sheetId}/edit`;
+  }
+
+  /**
+   * Analyze score completeness for Midterm/Final
+   */
+  async analyzeScoreCompleteness(sheetId, { sheetName, fastFail, classRecordId, force } = {}) {
+    const body = {};
+    if (sheetName) body.sheet_name = sheetName;
+    if (fastFail !== undefined) body.fastFail = !!fastFail;
+    if (classRecordId) body.class_record_id = classRecordId;
+    if (force !== undefined) body.force = !!force;
+
+    const response = await fetch(`${this.baseURL}/sheets/${sheetId}/analyze-score-completeness/`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    return await response.json();
+  }
+
+  /**
+   * Get final grade preview with missing score details
+   */
+  async getFinalGradePreview(sheetId, { classRecordId, force = false } = {}) {
+    try {
+      // Ensure we have a fresh Google access token before calling
+      if (!localStorage.getItem('googleAccessToken')) {
+        await googleDriveService.ensureGoogleAccessToken();
+      }
+
+      let response = await googleDriveService.requestWithAuth(
+        `${this.baseURL}/sheets/${sheetId}/final-grade-preview/`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            class_record_id: classRecordId,
+            force: force
+          })
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to get final grade preview:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Mark missing scores as N/A or INC
+   */
+  async markMissingScores(sheetId, { sheetName, studentId, column, value }) {
+    try {
+      const response = await fetch(`${this.baseURL}/sheets/${sheetId}/mark-missing-scores/`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          sheet_name: sheetName,
+          student_id: studentId,
+          column: column,
+          value: value
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to mark missing scores:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Mark multiple missing scores as N/A or INC (batch)
+   */
+  async markMissingScoresBatch(sheetId, updates) {
+    try {
+      const response = await fetch(`${this.baseURL}/sheets/${sheetId}/mark-missing-scores-batch/`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          updates: updates
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to mark missing scores batch:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Export final grades to Excel
+   */
+  async exportFinalGrades(sheetId, { classRecordId }) {
+    try {
+      const response = await fetch(`${this.baseURL}/sheets/${sheetId}/final-grade-export/`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          class_record_id: classRecordId
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      // Handle file download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `FinalGrades_${new Date().toISOString().split('T')[0]}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to export final grades:', error);
+      throw error;
+    }
   }
 }
 
