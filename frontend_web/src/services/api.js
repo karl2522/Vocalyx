@@ -297,13 +297,17 @@ export const classRecordService = {
         }),
 
     // 🔥 NEW: Percentages syncing and retrieval
-    syncCategoryPercentages: (classRecordId, sheetName) => {
+    syncCategoryPercentages: (classRecordId, sheetName, options = {}) => {
         const googleAccessToken = localStorage.getItem('googleAccessToken');
         const config = { headers: {} };
         if (googleAccessToken) {
             config.headers['X-Google-Access-Token'] = googleAccessToken;
         }
-        return api.post(`/class-records/${classRecordId}/sync_percentages_from_sheet/`, { sheet_name: sheetName }, config);
+        const body = { sheet_name: sheetName };
+        if (options.force) {
+            body.force = true;
+        }
+        return api.post(`/class-records/${classRecordId}/sync_percentages_from_sheet/`, body, config);
     },
 
     getCategoryPercentages: (classRecordId, sheetName) => 

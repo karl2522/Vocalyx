@@ -3,15 +3,15 @@ import toast from 'react-hot-toast';
 import {
     FiCalendar,
     FiEdit3,
+    FiEye,
     FiFileText,
     FiGrid,
+    FiInfo,
     FiList,
+    FiMic,
     FiPlus,
     FiTrash2,
     FiUser,
-    FiInfo,
-    FiMic,
-    FiEye,
     FiX
 } from 'react-icons/fi';
 import { RiSoundModuleLine } from 'react-icons/ri';
@@ -352,6 +352,21 @@ const ClassRecords = () => {
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState('grid');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  
+  // Global function to update remaining percentage for a specific class record
+  useEffect(() => {
+    window.updateClassRecordRemaining = (classRecordId, remaining) => {
+      setRemainingMap(prev => ({
+        ...prev,
+        [classRecordId]: remaining
+      }));
+      console.log('🔄 Updated card remaining for record', classRecordId, 'to', remaining);
+    };
+    
+    return () => {
+      delete window.updateClassRecordRemaining;
+    };
+  }, []);
   
   // 🔥 NEW: Delete & Edit states
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, record: null });

@@ -240,31 +240,37 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
             # 🚀 ENHANCED CACHING STRATEGY - Multiple cache layers
             base_cache_key = f"percentages_v3_{class_record.google_sheet_id}_{sheet_name}_{user_id}"
             
-            # Layer 1: Fast cache (2 minutes) - for immediate repeated requests
-            fast_cache_key = f"fast_{base_cache_key}"
-            fast_cached = cache.get(fast_cache_key)
-            if fast_cached:
-                fast_cached.update({
-                    'cached': True,
-                    'cache_type': 'fast',
-                    'response_time': round(time.time() - start_time, 2)
-                })
-                print(f"⚡ FAST CACHE HIT: {fast_cached['response_time']}s")
-                return Response(fast_cached)
+            # Check if force parameter is set to bypass cache
+            force = bool(request.data.get('force', False))
+            
+            if not force:
+                # Layer 1: Fast cache (2 minutes) - for immediate repeated requests
+                fast_cache_key = f"fast_{base_cache_key}"
+                fast_cached = cache.get(fast_cache_key)
+                if fast_cached:
+                    fast_cached.update({
+                        'cached': True,
+                        'cache_type': 'fast',
+                        'response_time': round(time.time() - start_time, 2)
+                    })
+                    print(f"⚡ FAST CACHE HIT: {fast_cached['response_time']}s")
+                    return Response(fast_cached)
 
-            # Layer 2: Standard cache (10 minutes) - for regular use
-            standard_cache_key = f"std_{base_cache_key}"
-            standard_cached = cache.get(standard_cache_key)
-            if standard_cached:
-                # Refresh fast cache from standard cache
-                cache.set(fast_cache_key, standard_cached, 120)  # 2 minutes
-                standard_cached.update({
-                    'cached': True,
-                    'cache_type': 'standard',
-                    'response_time': round(time.time() - start_time, 2)
-                })
-                print(f"🔄 STANDARD CACHE HIT: {standard_cached['response_time']}s")
-                return Response(standard_cached)
+                # Layer 2: Standard cache (10 minutes) - for regular use
+                standard_cache_key = f"std_{base_cache_key}"
+                standard_cached = cache.get(standard_cache_key)
+                if standard_cached:
+                    # Refresh fast cache from standard cache
+                    cache.set(fast_cache_key, standard_cached, 120)  # 2 minutes
+                    standard_cached.update({
+                        'cached': True,
+                        'cache_type': 'standard',
+                        'response_time': round(time.time() - start_time, 2)
+                    })
+                    print(f"🔄 STANDARD CACHE HIT: {standard_cached['response_time']}s")
+                    return Response(standard_cached)
+            else:
+                print(f"🔄 FORCE MODE: Bypassing cache to fetch fresh data")
 
             # 🚀 REQUEST DEDUPLICATION - Prevent double API calls
             processing_key = f"processing_{base_cache_key}"

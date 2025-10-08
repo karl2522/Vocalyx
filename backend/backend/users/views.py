@@ -27,6 +27,11 @@ from .google_token_service import google_token_service
 from .token_utils import token_encryption
 from django.core.cache import cache
 import hashlib
+from typing import List, Dict, Optional
+import openpyxl
+from openpyxl.styles import Border, Side, Font, Alignment
+from openpyxl.utils import get_column_letter
+from io import BytesIO
 
 
 logger = logging.getLogger(__name__)
@@ -1230,6 +1235,301 @@ def sheets_get_specific_sheet_data_service_account(request, sheet_id, sheet_name
         return Response({'error': str(e)}, status=500)
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def analyze_score_completeness(request, sheet_id):
+    """Analyze if all required score columns are filled for Midterm and Final sheets.
+
+    Required per sheet (22):
+      - Quizzes: Quiz 1..5
+      - Assignments: Assign 1..5
+      - Seatwork: Seat 1..5
+      - Laboratory Activities: Lab 1..5
+      - Exams: Midterm sheet -> PRELIM, MIDTERM; Final sheet -> PREFINAL, FINALS
+
+    Identity columns: 'Student ID' and 'Name' are used to determine valid student rows.
+    Zero is valid; blanks/whitespace are missing.
+    """
+    try:
+        access_token = request.headers.get('X-Google-Access-Token')
+        if not access_token:
+            return Response({'error': 'Google access token required in X-Google-Access-Token header'}, status=400)
+
+        sheet_name_param = request.data.get('sheet_name')  # Optional: 'Midterm' | 'Final'
+        fast_fail = bool(request.data.get('fastFail', False))
+        force = bool(request.data.get('force', False))
+        class_record_id = request.data.get('class_record_id')
+
+        # Prefer service account for Sheets reads to avoid user token 401s
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+        sa_sheets_service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+
+        # Optional: use class_record for caching
+        class_record = None
+        if class_record_id:
+            try:
+                from classrecord.models import ClassRecord
+                class_record = ClassRecord.objects.get(id=class_record_id, user=request.user)
+            except Exception:
+                class_record = None
+
+        # Skip Drive modified time caching if we cannot access via user token
+        modified_time = None
+
+        # Check cache if not forcing (only if model has cache fields)
+        has_cache_fields = all(
+            hasattr(class_record, attr)
+            for attr in ['grades_completeness', 'completeness_sheet_version', 'completeness_checked_at']
+        )
+        if not force and has_cache_fields:
+            cached_result = getattr(class_record, 'grades_completeness', None)
+            cached_version = getattr(class_record, 'completeness_sheet_version', None)
+            if cached_result and cached_version and cached_version.get('modifiedTime') == modified_time:
+                cached_result['usedCache'] = True
+                return Response(cached_result)
+
+        # Define required headers per sheet
+        common_quiz = [f"Quiz {i}" for i in range(1, 6)]
+        common_assign = [f"Assign {i}" for i in range(1, 6)]
+        common_seat = [f"Seat {i}" for i in range(1, 6)]
+        common_lab = [f"Lab {i}" for i in range(1, 6)]
+
+        midterm_required = common_quiz + common_assign + common_seat + common_lab + ["PRELIM", "MIDTERM"]
+        final_required = common_quiz + common_assign + common_seat + common_lab + ["PREFINAL", "FINALS"]
+
+        target_sheets: List[str] = []
+        if sheet_name_param in ("Midterm", "Final"):
+            target_sheets = [sheet_name_param]
+        else:
+            target_sheets = ["Midterm", "Final"]
+
+        def analyze_single(sheet_name: str, required_headers: List[str]) -> Dict:
+            data = sa_sheets_service.get_specific_sheet_data(sheet_id, sheet_name)
+            if not data.get('success'):
+                return {
+                    'sheetName': sheet_name,
+                    'ready': False,
+                    'error': data.get('error') or 'Failed to fetch sheet',
+                }
+            headers: List[str] = data.get('headers', [])
+            rows: List[List[str]] = data.get('tableData', [])
+            base_row_offset = 2  # default: header at 1 -> data starts at 2
+
+            # Robust header row detection: inspect first up to 5 rows and pick the one
+            # that matches identity fields and/or required headers best.
+            candidates: List[List[str]] = [headers] + rows[:4]
+            import re
+            def norm(s: str) -> str:
+                return (s or '').strip().upper()
+            def norm2(s: str) -> str:
+                return re.sub(r'[^A-Z0-9]', '', (s or '').upper())
+            identity_set = {norm('LASTNAME'), norm('FIRST NAME'), norm('MIDDLE NAME'), norm('STUDENT ID')}
+            req_set = {norm(r) for r in required_headers}
+
+            best_idx = 0
+            best_score = -1
+            for idx, row_vals in enumerate(candidates):
+                row_norm = {norm(h) for h in row_vals}
+                score = len(row_norm.intersection(identity_set)) + len(row_norm.intersection(req_set))
+                if score > best_score:
+                    best_score = score
+                    best_idx = idx
+            if best_idx != 0:
+                headers = candidates[best_idx]
+                # Data starts after this header row; base_row_offset = best_idx + 2 (1-based sheet rows)
+                base_row_offset = best_idx + 2
+                # Slice out the rows before the header row
+                rows = rows[best_idx:]
+
+            # Normalize headers for robust matching (case/punct/optional trailing 'S')
+            def norm2(s: str) -> str:
+                base = re.sub(r'[^A-Z0-9]', '', (s or '').upper())
+                return base
+
+            header_index: Dict[str, int] = {}
+            header_display: Dict[str, str] = {}
+            for idx, h in enumerate(headers):
+                n = norm2(h)
+                if n and n not in header_index:
+                    header_index[n] = idx
+                    header_display[n] = h
+                # allow optional trailing S removal (FINAL vs FINALS)
+                if n.endswith('S'):
+                    ns = n[:-1]
+                    if ns and ns not in header_index:
+                        header_index[ns] = idx
+                        header_display[ns] = h
+
+            required_norm = [norm2(h) for h in required_headers]
+            missing_headers = [h for h, hn in zip(required_headers, required_norm) if hn not in header_index]
+
+            # Fallback: scan top few rows (category/subheader rows) for missing header names like PRELIM/MIDTERM
+            if missing_headers:
+                scan_rows = candidates  # includes first header row and next few rows
+                for col_idx in range(0, max(len(r) for r in scan_rows) if scan_rows else 0):
+                    # collect normalized cell texts in this column for the first few rows
+                    col_texts = []
+                    for r in scan_rows:
+                        if col_idx < len(r):
+                            col_texts.append(r[col_idx])
+                        else:
+                            col_texts.append('')
+                    joined = ' '.join([str(x or '') for x in col_texts])
+                    njoined = norm2(joined)
+                    for req, reqn in zip(required_headers, required_norm):
+                        if req in missing_headers and (reqn in njoined or reqn == njoined):
+                            # map this column to the required header
+                            header_index[reqn] = col_idx
+                            # choose display name from any non-empty cell among the scan rows
+                            display = None
+                            for r in scan_rows:
+                                if col_idx < len(r) and str(r[col_idx]).strip():
+                                    display = r[col_idx]
+                                    break
+                            header_display[reqn] = display or req
+                # recompute missing after fallback
+                missing_headers = [h for h, hn in zip(required_headers, required_norm) if hn not in header_index]
+            if missing_headers:
+                return {
+                    'sheetName': sheet_name,
+                    'ready': False,
+                    'error': 'Required headers missing',
+                    'missingHeaders': missing_headers,
+                    'debug': {
+                        'headers': headers,
+                        'headerIndexKeys': list(header_index.keys())
+                    }
+                }
+
+            # Identity columns - require ALL to be present and non-empty
+            lastname_idx = header_index.get(norm2('LASTNAME'))
+            firstname_idx = header_index.get(norm2('FIRST NAME')) or header_index.get(norm2('FIRST NAME'))
+            middlename_idx = header_index.get(norm2('MIDDLE NAME'))
+            studentid_idx = header_index.get(norm2('STUDENT ID'))
+
+            identity_missing = [
+                col for col, idx in [
+                    ('LASTNAME', lastname_idx),
+                    ('FIRST NAME', firstname_idx),
+                    ('MIDDLE NAME', middlename_idx),
+                    ('STUDENT ID', studentid_idx)
+                ] if idx is None
+            ]
+            if identity_missing:
+                return {
+                    'sheetName': sheet_name,
+                    'ready': False,
+                    'error': 'Identity headers missing',
+                    'missingIdentityHeaders': identity_missing,
+                }
+
+            totals_required_cells = 0
+            totals_filled_cells = 0
+            missing_cells: List[Dict] = []
+
+            # Build list of indices for faster loop, keep display header from sheet
+            required_indices = []
+            for original_name, name_norm in zip(required_headers, required_norm):
+                idx = header_index[name_norm]
+                display_name = header_display.get(name_norm) or (headers[idx] if idx < len(headers) else original_name)
+                required_indices.append((original_name, idx, display_name))
+
+            for r_index, row in enumerate(rows, start=base_row_offset):  # align to actual sheet row
+                # Require all identity fields to exist
+                last_name = (row[lastname_idx].strip() if lastname_idx < len(row) and row[lastname_idx] is not None else '')
+                first_name = (row[firstname_idx].strip() if firstname_idx < len(row) and row[firstname_idx] is not None else '')
+                middle_name = (row[middlename_idx].strip() if middlename_idx < len(row) and row[middlename_idx] is not None else '')
+                student_id = (row[studentid_idx].strip() if studentid_idx < len(row) and row[studentid_idx] is not None else '')
+                if not (last_name and first_name and middle_name and student_id):
+                    continue
+
+                # Check required columns
+                for col_name, c_idx, display_name in required_indices:
+                    totals_required_cells += 1
+                    val = row[c_idx] if c_idx < len(row) else ''
+                    s = str(val).strip() if val is not None else ''
+                    if s == '':
+                        if fast_fail:
+                            return {
+                                'sheetName': sheet_name,
+                                'ready': False,
+                                'totals': {
+                                    'requiredCells': totals_required_cells,
+                                    'filledCells': totals_filled_cells,
+                                    'missingCells': (totals_required_cells - totals_filled_cells)
+                                },
+                                'missingCells': [
+                                    {
+                                        'rowIndex': r_index,
+                                        'studentId': student_id,
+                                        'studentName': f"{last_name}, {first_name} {middle_name}".strip(),
+                                        'header': col_name,
+                                        'displayHeader': display_name
+                                    }
+                                ]
+                            }
+                        else:
+                            missing_cells.append({
+                                'rowIndex': r_index,
+                                'studentId': student_id,
+                                'studentName': f"{last_name}, {first_name} {middle_name}".strip(),
+                                'header': col_name,
+                                'displayHeader': display_name
+                            })
+                    else:
+                        totals_filled_cells += 1
+
+            missing_count = len(missing_cells)
+            ready = missing_count == 0
+            categories_summary = [
+                {'name': 'Quizzes', 'requiredColumns': common_quiz},
+                {'name': 'Assignments', 'requiredColumns': common_assign},
+                {'name': 'Seatwork', 'requiredColumns': common_seat},
+                {'name': 'Laboratory Activities', 'requiredColumns': common_lab},
+            ]
+            return {
+                'sheetName': sheet_name,
+                'ready': ready,
+                'totals': {
+                    'requiredCells': totals_required_cells,
+                    'filledCells': totals_filled_cells,
+                    'missingCells': missing_count
+                },
+                'categories': categories_summary,
+                'missingCells': missing_cells
+            }
+
+        results = []
+        for sn in target_sheets:
+            req = midterm_required if sn == 'Midterm' else final_required
+            results.append(analyze_single(sn, req))
+
+        overall_ready = all(r.get('ready') for r in results)
+
+        response_payload = {
+            'success': True,
+            'overallReady': overall_ready,
+            'sheets': results,
+            'scope': target_sheets[0] if len(target_sheets) == 1 else 'Both',
+            'usedCache': False,
+            'checkedAt': timezone.now().isoformat(),
+            'sheetVersion': {'modifiedTime': modified_time}
+        }
+
+        # Cache result if model supports these fields
+        if has_cache_fields:
+            class_record.grades_completeness = response_payload
+            class_record.completeness_checked_at = timezone.now()
+            class_record.completeness_sheet_version = {'modifiedTime': modified_time}
+            class_record.save(update_fields=['grades_completeness', 'completeness_checked_at', 'completeness_sheet_version'])
+
+        return Response(response_payload)
+
+    except Exception as e:
+        logger.error(f"Analyze score completeness error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def sheets_list_all_sheets_service_account(request, sheet_id):
@@ -2153,4 +2453,1001 @@ def get_google_drive_token(request):
         
     except Exception as e:
         logger.error(f"Get Google Drive token error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+def final_grade_preview_logic(sheet_id, class_record_id, sa_sheets_service):
+    """Extracted preview logic for reuse in export"""
+    try:
+        # Define required columns per sheet
+        midterm_required = [
+            'QUIZ 1', 'QUIZ 2', 'QUIZ 3', 'QUIZ 4', 'QUIZ 5',
+            'ASSIGN 1', 'ASSIGN 2', 'ASSIGN 3', 'ASSIGN 4', 'ASSIGN 5',
+            'SEAT 1', 'SEAT 2', 'SEAT 3', 'SEAT 4', 'SEAT 5',
+            'LAB 1', 'LAB 2', 'LAB 3', 'LAB 4', 'LAB 5',
+            'PRELIM', 'MIDTERM'
+        ]
+        final_required = [
+            'QUIZ 1', 'QUIZ 2', 'QUIZ 3', 'QUIZ 4', 'QUIZ 5',
+            'ASSIGN 1', 'ASSIGN 2', 'ASSIGN 3', 'ASSIGN 4', 'ASSIGN 5',
+            'SEAT 1', 'SEAT 2', 'SEAT 3', 'SEAT 4', 'SEAT 5',
+            'LAB 1', 'LAB 2', 'LAB 3', 'LAB 4', 'LAB 5',
+            'PREFINAL', 'FINALS'
+        ]
+
+        def analyze_sheet_for_grades(sheet_name: str, required_headers: List[str], extract_map: Dict[str, List[str]]) -> Dict:
+            print(f"🔍 ANALYZING SHEET: {sheet_name}")
+            data = sa_sheets_service.get_specific_sheet_data(sheet_id, sheet_name)
+            if not data.get('success'):
+                print(f"❌ SHEET ERROR: {data.get('error')}")
+                return {'error': data.get('error'), 'students': [], 'missing_by_student': {}}
+
+            headers = data.get('headers', [])
+            main_headers = data.get('main_headers', [])  # Row 1 categories
+            sub_headers = data.get('sub_headers', [])    # Row 2 column names
+            rows = data.get('tableData', [])
+            base_row_offset = 2
+            
+            print(f"📋 HEADERS FOUND: {headers}")
+            print(f"📊 ROWS COUNT: {len(rows)}")
+
+            # Robust header detection
+            candidates = [headers] + rows[:4]
+            import re
+            def norm(s: str) -> str:
+                return (s or '').strip().upper()
+            def norm2(s: str) -> str:
+                return re.sub(r'[^A-Z0-9]', '', (s or '').upper())
+            
+            identity_set = {norm('LASTNAME'), norm('FIRST NAME'), norm('MIDDLE NAME'), norm('STUDENT ID')}
+            req_set = {norm(r) for r in required_headers}
+
+            best_idx = 0
+            best_score = -1
+            for idx, row_vals in enumerate(candidates):
+                row_norm = {norm(h) for h in row_vals}
+                score = len(row_norm.intersection(identity_set)) + len(row_norm.intersection(req_set))
+                if score > best_score:
+                    best_score = score
+                    best_idx = idx
+            
+            if best_idx != 0:
+                headers = candidates[best_idx]
+                base_row_offset = best_idx + 2
+                rows = rows[best_idx:]
+
+            # Build header index
+            header_index = {}
+            header_display = {}
+            for idx, h in enumerate(headers):
+                n = norm2(h)
+                if n and n not in header_index:
+                    header_index[n] = idx
+                    header_display[n] = h
+                if n.endswith('S'):
+                    ns = n[:-1]
+                    if ns and ns not in header_index:
+                        header_index[ns] = idx
+                        header_display[ns] = h
+
+            # Find identity columns
+            lastname_idx = header_index.get(norm2('LASTNAME'))
+            firstname_idx = header_index.get(norm2('FIRST NAME'))
+            middlename_idx = header_index.get(norm2('MIDDLE NAME'))
+            studentid_idx = header_index.get(norm2('STUDENT ID'))
+
+            if None in [lastname_idx, firstname_idx, middlename_idx, studentid_idx]:
+                return {'error': 'Identity headers missing', 'students': [], 'missing_by_student': {}}
+
+            # Find grade columns
+            grade_columns = {}
+            for req in required_headers:
+                req_norm = norm2(req)
+                if req_norm in header_index:
+                    grade_columns[req] = header_index[req_norm]
+
+            # Resolve extract columns once per sheet (map output_field -> column index)
+            # First try exact normalized match; if not found, try fuzzy contains match
+            extract_columns_index: Dict[str, Optional[int]] = {}
+            headers_norm_list = [(idx, norm2(h), h) for idx, h in enumerate(headers)]
+            main_headers_norm_list = [(idx, norm2(h), h) for idx, h in enumerate(main_headers)]
+            sub_headers_norm_list = [(idx, norm2(h), h) for idx, h in enumerate(sub_headers)]
+            for output_field, candidates in extract_map.items():
+                chosen_idx: Optional[int] = None
+                # exact match pass against MAIN headers first (these contain: Class Standing, PRELIM/PREFINAL, MIDTERM/FINALS, Term Grade)
+                for cand in candidates:
+                    cand_norm = norm2(cand)
+                    for idx_h, h_norm, _h in main_headers_norm_list:
+                        if cand_norm == h_norm and cand_norm:
+                            chosen_idx = idx_h
+                            print(f"✅ EXACT MATCH (MAIN): {output_field} -> {cand} (col {chosen_idx})")
+                            break
+                    if chosen_idx is not None:
+                        break
+                # exact match pass against combined headers
+                for cand in candidates:
+                    cand_norm = norm2(cand)
+                    if cand_norm in header_index:
+                        chosen_idx = header_index[cand_norm]
+                        print(f"✅ EXACT MATCH (COMBINED): {output_field} -> {cand} (col {chosen_idx})")
+                        break
+                # fuzzy contains pass
+                if chosen_idx is None:
+                    # try MAIN headers contains
+                    for cand in candidates:
+                        cand_norm = norm2(cand)
+                        if not cand_norm:
+                            continue
+                        for idx_h, h_norm, _h in main_headers_norm_list:
+                            if cand_norm in h_norm or h_norm in cand_norm:
+                                chosen_idx = idx_h
+                                print(f"✅ FUZZY MATCH (MAIN): {output_field} -> {cand} matches {_h} (col {chosen_idx})")
+                                break
+                        if chosen_idx is not None:
+                            break
+                if chosen_idx is None:
+                    for cand in candidates:
+                        cand_norm = norm2(cand)
+                        if not cand_norm:
+                            continue
+                        for idx_h, h_norm, _h in headers_norm_list:
+                            if cand_norm in h_norm or h_norm in cand_norm:
+                                chosen_idx = idx_h
+                                print(f"✅ FUZZY MATCH (COMBINED): {output_field} -> {cand} matches {_h} (col {chosen_idx})")
+                                break
+                        if chosen_idx is not None:
+                            break
+                if chosen_idx is None:
+                    print(f"❌ NO MATCH: {output_field} not found for candidates {candidates}")
+                extract_columns_index[output_field] = chosen_idx
+            
+            print(f"🎯 EXTRACT MAPPING: {extract_columns_index}")
+
+            students = []
+            missing_by_student = {}
+
+            for r_index, row in enumerate(rows, start=base_row_offset):
+                # Get identity (cast to string before strip to handle numeric cells)
+                last_name = (
+                    str(row[lastname_idx]).strip() if lastname_idx < len(row) and row[lastname_idx] is not None else ''
+                )
+                first_name = (
+                    str(row[firstname_idx]).strip() if firstname_idx < len(row) and row[firstname_idx] is not None else ''
+                )
+                middle_name = (
+                    str(row[middlename_idx]).strip() if middlename_idx < len(row) and row[middlename_idx] is not None else ''
+                )
+                student_id = (
+                    str(row[studentid_idx]).strip() if studentid_idx < len(row) and row[studentid_idx] is not None else ''
+                )
+                
+                if not (last_name and first_name and middle_name and student_id):
+                    continue
+
+                student_key = f"{student_id}_{last_name}_{first_name}"
+                student_data = {
+                    'studentId': student_id,
+                    'lastName': last_name,
+                    'firstName': first_name,
+                    'middleName': middle_name,
+                    'fullName': f"{last_name}, {first_name} {middle_name}".strip()
+                }
+
+                # Extract requested fields from this sheet
+                for out_field, col_idx in extract_columns_index.items():
+                    value = ''
+                    if col_idx is not None and col_idx < len(row):
+                        cell = row[col_idx]
+                        value = str(cell).strip() if cell is not None else ''
+                    student_data[out_field] = value
+
+                missing_cells = []
+                for col_name, col_idx in grade_columns.items():
+                    val = row[col_idx] if col_idx < len(row) else ''
+                    s = str(val).strip() if val is not None else ''
+                    if s == '':
+                        missing_cells.append({
+                            'column': col_name,
+                            'displayHeader': header_display.get(norm2(col_name), col_name),
+                            'rowIndex': r_index
+                        })
+
+                if missing_cells:
+                    missing_by_student[student_key] = missing_cells
+
+                students.append(student_data)
+
+            return {'students': students, 'missing_by_student': missing_by_student}
+
+        # Determine actual sheet names (handle case and naming variations)
+        resolved_midterm = 'Midterm'
+        resolved_final = 'Final'
+        try:
+            info = sa_sheets_service.get_all_sheets_data(sheet_id)
+            if info.get('success'):
+                titles = [s.get('sheet_name', '') for s in info.get('sheets', [])]
+                # Prefer exact matches ignoring case
+                for t in titles:
+                    if t and t.lower() == 'midterm':
+                        resolved_midterm = t
+                    if t and t.lower() == 'final':
+                        resolved_final = t
+                # If not exact, look for contains but avoid 'prefinal' for final
+                if resolved_midterm == 'Midterm':
+                    for t in titles:
+                        if t and 'midterm' in t.lower():
+                            resolved_midterm = t
+                            break
+                if resolved_final == 'Final':
+                    for t in titles:
+                        tl = t.lower()
+                        if t and ('final' in tl) and ('prefinal' not in tl):
+                            resolved_final = t
+                            break
+        except Exception:
+            # Fallback to defaults if resolution fails
+            pass
+
+        # Analyze both sheets
+        # Explicit mappings based on your sheet definitions (with common variants)
+        # MIDTERM TAB: CS1=Class Standing, PE=Prelim, ME=Midterm, midtermGrade=Term Grade
+        midterm_extract_map = {
+            'CS1': [
+                'Class Standing', 'CLASS STANDING', 'CLASSSTANDING', 'CS1', 'C S 1'
+            ],
+            'PE': [
+                'Prelim', 'PRELIM', 'PRELIM EXAM', 'PRELIMEXAM', 'PRE-LIM', 'PRE LIM'
+            ],
+            'ME': [
+                'Midterm', 'MIDTERM', 'MIDTERM EXAM', 'MIDTERMEXAM', 'MID TERM', 'MID-TERM'
+            ],
+            'midtermGrade': [
+                'Term Grade', 'TERM GRADE', 'TERMGRADE', 'MIDTERM GRADE', 'TERM GRADE (MIDTERM)', 'MIDTERM TERM GRADE'
+            ]
+        }
+        # FINAL TAB: CS2=Class Standing, PFE=Prefinal, FE=Finals, finalTermGrade=Term Grade
+        final_extract_map = {
+            'CS2': [
+                'Class Standing', 'CLASS STANDING', 'CLASSSTANDING', 'CS2', 'C S 2'
+            ],
+            'PFE': [
+                'Prefinal', 'PREFINAL', 'PRE-FINAL', 'PRE FINAL', 'PREFINAL EXAM', 'PREFINALEXAM', 'PRE-FINAL EXAM'
+            ],
+            'FE': [
+                'Finals', 'FINALS', 'FINAL', 'FINAL EXAM', 'FINALSEXAM', 'FINALS EXAM'
+            ],
+            'finalTermGrade': [
+                'Term Grade', 'TERM GRADE', 'TERMGRADE', 'FINAL TERM GRADE', 'TERM GRADE (FINAL)', 'FINALS GRADE'
+            ]
+        }
+
+        midterm_result = analyze_sheet_for_grades(resolved_midterm, midterm_required, midterm_extract_map)
+        final_result = analyze_sheet_for_grades(resolved_final, final_required, final_extract_map)
+
+        if midterm_result.get('error') or final_result.get('error'):
+            return {
+                'success': False,
+                'error': f"Midterm: {midterm_result.get('error', 'OK')}, Final: {final_result.get('error', 'OK')}"
+            }
+
+        # Combine results
+        all_students = {}
+        all_missing = {}
+
+        for student in midterm_result['students']:
+            key = f"{student['studentId']}_{student['lastName']}_{student['firstName']}"
+            all_students[key] = student
+            all_missing[key] = midterm_result['missing_by_student'].get(key, [])
+
+        for student in final_result['students']:
+            key = f"{student['studentId']}_{student['lastName']}_{student['firstName']}"
+            if key not in all_students:
+                all_students[key] = student
+            else:
+                # Merge final sheet extracted fields into existing student record
+                for field in ['CS2', 'PFE', 'FE', 'finalTermGrade']:
+                    if field in student:
+                        all_students[key][field] = student.get(field, '')
+            all_missing[key] = all_missing.get(key, []) + final_result['missing_by_student'].get(key, [])
+
+        # Compute FG from midterm and final term grades when numeric
+        def to_number(s: str):
+            try:
+                return float(s)
+            except Exception:
+                return None
+
+        for s in all_students.values():
+            mid = to_number(s.get('midtermGrade', ''))
+            fin = to_number(s.get('finalTermGrade', ''))
+            if mid is not None and fin is not None:
+                s['FG'] = round((mid + fin) / 2, 2)
+            else:
+                s['FG'] = ''
+
+        # Build response
+        response_data = {
+            'success': True,
+            'students': list(all_students.values()),
+            'missing_by_student': all_missing,
+            'summary': {
+                'total_students': len(all_students),
+                'with_missing': len([k for k, v in all_missing.items() if v]),
+                'complete': len([k for k, v in all_missing.items() if not v])
+            },
+            'usedCache': False,
+            'checkedAt': timezone.now().isoformat(),
+            'sheetVersion': {'modifiedTime': None}
+        }
+
+        return response_data
+
+    except Exception as e:
+        logger.error(f"Final grade preview logic error: {str(e)}")
+        return {'success': False, 'error': str(e)}
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def final_grade_preview(request, sheet_id):
+    """Generate final grade preview with missing score details"""
+    try:
+        access_token = request.headers.get('X-Google-Access-Token')
+        if not access_token:
+            return Response({'error': 'Google access token required'}, status=400)
+
+        class_record_id = request.data.get('class_record_id')
+        force = bool(request.data.get('force', False))
+
+        if not class_record_id:
+            return Response({'error': 'class_record_id is required'}, status=400)
+
+        # Get class record
+        try:
+            from classrecord.models import ClassRecord
+            class_record = ClassRecord.objects.get(id=class_record_id, user=request.user)
+        except ClassRecord.DoesNotExist:
+            return Response({'error': 'Class record not found'}, status=404)
+
+        # Initialize service-account based sheets service (avoid user-token 401s)
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+        sa_sheets_service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+
+        # Skip Drive modified time versioning when using SA (not needed for preview)
+        modified_time = None
+
+        # Check cache if not forcing (only if model has cache fields)
+        has_cache_fields = all(
+            hasattr(class_record, attr)
+            for attr in ['grades_completeness', 'completeness_sheet_version', 'completeness_checked_at']
+        )
+        if not force and has_cache_fields:
+            cached_result = getattr(class_record, 'grades_completeness', None)
+            cached_version = getattr(class_record, 'completeness_sheet_version', None)
+            if cached_result and cached_version and cached_version.get('modifiedTime') == modified_time:
+                cached_result['usedCache'] = True
+                return Response(cached_result)
+
+        # Define required columns per sheet
+        midterm_required = [
+            'QUIZ 1', 'QUIZ 2', 'QUIZ 3', 'QUIZ 4', 'QUIZ 5',
+            'ASSIGN 1', 'ASSIGN 2', 'ASSIGN 3', 'ASSIGN 4', 'ASSIGN 5',
+            'SEAT 1', 'SEAT 2', 'SEAT 3', 'SEAT 4', 'SEAT 5',
+            'LAB 1', 'LAB 2', 'LAB 3', 'LAB 4', 'LAB 5',
+            'PRELIM', 'MIDTERM'
+        ]
+        final_required = [
+            'QUIZ 1', 'QUIZ 2', 'QUIZ 3', 'QUIZ 4', 'QUIZ 5',
+            'ASSIGN 1', 'ASSIGN 2', 'ASSIGN 3', 'ASSIGN 4', 'ASSIGN 5',
+            'SEAT 1', 'SEAT 2', 'SEAT 3', 'SEAT 4', 'SEAT 5',
+            'LAB 1', 'LAB 2', 'LAB 3', 'LAB 4', 'LAB 5',
+            'PREFINAL', 'FINALS'
+        ]
+
+        def analyze_sheet_for_grades(sheet_name: str, required_headers: List[str], extract_map: Dict[str, List[str]]) -> Dict:
+            print(f"🔍 ANALYZING SHEET: {sheet_name}")
+            data = sa_sheets_service.get_specific_sheet_data(sheet_id, sheet_name)
+            if not data.get('success'):
+                print(f"❌ SHEET ERROR: {data.get('error')}")
+                return {'error': data.get('error'), 'students': [], 'missing_by_student': {}}
+
+            headers = data.get('headers', [])
+            main_headers = data.get('main_headers', [])  # Row 1 categories
+            sub_headers = data.get('sub_headers', [])    # Row 2 column names
+            rows = data.get('tableData', [])
+            base_row_offset = 2
+            
+            print(f"📋 HEADERS FOUND: {headers}")
+            print(f"📊 ROWS COUNT: {len(rows)}")
+
+            # Robust header detection
+            candidates = [headers] + rows[:4]
+            import re
+            def norm(s: str) -> str:
+                return (s or '').strip().upper()
+            def norm2(s: str) -> str:
+                return re.sub(r'[^A-Z0-9]', '', (s or '').upper())
+            
+            identity_set = {norm('LASTNAME'), norm('FIRST NAME'), norm('MIDDLE NAME'), norm('STUDENT ID')}
+            req_set = {norm(r) for r in required_headers}
+
+            best_idx = 0
+            best_score = -1
+            for idx, row_vals in enumerate(candidates):
+                row_norm = {norm(h) for h in row_vals}
+                score = len(row_norm.intersection(identity_set)) + len(row_norm.intersection(req_set))
+                if score > best_score:
+                    best_score = score
+                    best_idx = idx
+            
+            if best_idx != 0:
+                headers = candidates[best_idx]
+                base_row_offset = best_idx + 2
+                rows = rows[best_idx:]
+
+            # Build header index
+            header_index = {}
+            header_display = {}
+            for idx, h in enumerate(headers):
+                n = norm2(h)
+                if n and n not in header_index:
+                    header_index[n] = idx
+                    header_display[n] = h
+                if n.endswith('S'):
+                    ns = n[:-1]
+                    if ns and ns not in header_index:
+                        header_index[ns] = idx
+                        header_display[ns] = h
+
+            # Find identity columns
+            lastname_idx = header_index.get(norm2('LASTNAME'))
+            firstname_idx = header_index.get(norm2('FIRST NAME'))
+            middlename_idx = header_index.get(norm2('MIDDLE NAME'))
+            studentid_idx = header_index.get(norm2('STUDENT ID'))
+
+            if None in [lastname_idx, firstname_idx, middlename_idx, studentid_idx]:
+                return {'error': 'Identity headers missing', 'students': [], 'missing_by_student': {}}
+
+            # Find grade columns
+            grade_columns = {}
+            for req in required_headers:
+                req_norm = norm2(req)
+                if req_norm in header_index:
+                    grade_columns[req] = header_index[req_norm]
+
+            # Resolve extract columns once per sheet (map output_field -> column index)
+            # First try exact normalized match; if not found, try fuzzy contains match
+            extract_columns_index: Dict[str, Optional[int]] = {}
+            headers_norm_list = [(idx, norm2(h), h) for idx, h in enumerate(headers)]
+            main_headers_norm_list = [(idx, norm2(h), h) for idx, h in enumerate(main_headers)]
+            sub_headers_norm_list = [(idx, norm2(h), h) for idx, h in enumerate(sub_headers)]
+            for output_field, candidates in extract_map.items():
+                chosen_idx: Optional[int] = None
+                # exact match pass against MAIN headers first (these contain: Class Standing, PRELIM/PREFINAL, MIDTERM/FINALS, Term Grade)
+                for cand in candidates:
+                    cand_norm = norm2(cand)
+                    for idx_h, h_norm, _h in main_headers_norm_list:
+                        if cand_norm == h_norm and cand_norm:
+                            chosen_idx = idx_h
+                            print(f"✅ EXACT MATCH (MAIN): {output_field} -> {cand} (col {chosen_idx})")
+                            break
+                    if chosen_idx is not None:
+                        break
+                # exact match pass against combined headers
+                for cand in candidates:
+                    cand_norm = norm2(cand)
+                    if cand_norm in header_index:
+                        chosen_idx = header_index[cand_norm]
+                        print(f"✅ EXACT MATCH (COMBINED): {output_field} -> {cand} (col {chosen_idx})")
+                        break
+                # fuzzy contains pass
+                if chosen_idx is None:
+                    # try MAIN headers contains
+                    for cand in candidates:
+                        cand_norm = norm2(cand)
+                        if not cand_norm:
+                            continue
+                        for idx_h, h_norm, _h in main_headers_norm_list:
+                            if cand_norm in h_norm or h_norm in cand_norm:
+                                chosen_idx = idx_h
+                                print(f"✅ FUZZY MATCH (MAIN): {output_field} -> {cand} matches {_h} (col {chosen_idx})")
+                                break
+                        if chosen_idx is not None:
+                            break
+                if chosen_idx is None:
+                    for cand in candidates:
+                        cand_norm = norm2(cand)
+                        if not cand_norm:
+                            continue
+                        for idx_h, h_norm, _h in headers_norm_list:
+                            if cand_norm in h_norm or h_norm in cand_norm:
+                                chosen_idx = idx_h
+                                print(f"✅ FUZZY MATCH (COMBINED): {output_field} -> {cand} matches {_h} (col {chosen_idx})")
+                                break
+                        if chosen_idx is not None:
+                            break
+                if chosen_idx is None:
+                    print(f"❌ NO MATCH: {output_field} not found for candidates {candidates}")
+                extract_columns_index[output_field] = chosen_idx
+            
+            print(f"🎯 EXTRACT MAPPING: {extract_columns_index}")
+
+            students = []
+            missing_by_student = {}
+
+            for r_index, row in enumerate(rows, start=base_row_offset):
+                # Get identity (cast to string before strip to handle numeric cells)
+                last_name = (
+                    str(row[lastname_idx]).strip() if lastname_idx < len(row) and row[lastname_idx] is not None else ''
+                )
+                first_name = (
+                    str(row[firstname_idx]).strip() if firstname_idx < len(row) and row[firstname_idx] is not None else ''
+                )
+                middle_name = (
+                    str(row[middlename_idx]).strip() if middlename_idx < len(row) and row[middlename_idx] is not None else ''
+                )
+                student_id = (
+                    str(row[studentid_idx]).strip() if studentid_idx < len(row) and row[studentid_idx] is not None else ''
+                )
+                
+                if not (last_name and first_name and middle_name and student_id):
+                    continue
+
+                student_key = f"{student_id}_{last_name}_{first_name}"
+                student_data = {
+                    'studentId': student_id,
+                    'lastName': last_name,
+                    'firstName': first_name,
+                    'middleName': middle_name,
+                    'fullName': f"{last_name}, {first_name} {middle_name}".strip()
+                }
+
+                # Extract requested fields from this sheet
+                for out_field, col_idx in extract_columns_index.items():
+                    value = ''
+                    if col_idx is not None and col_idx < len(row):
+                        cell = row[col_idx]
+                        value = str(cell).strip() if cell is not None else ''
+                    student_data[out_field] = value
+
+                missing_cells = []
+                for col_name, col_idx in grade_columns.items():
+                    val = row[col_idx] if col_idx < len(row) else ''
+                    s = str(val).strip() if val is not None else ''
+                    if s == '':
+                        missing_cells.append({
+                            'column': col_name,
+                            'displayHeader': header_display.get(norm2(col_name), col_name),
+                            'rowIndex': r_index
+                        })
+
+                if missing_cells:
+                    missing_by_student[student_key] = missing_cells
+
+                students.append(student_data)
+
+            return {'students': students, 'missing_by_student': missing_by_student}
+
+        # Determine actual sheet names (handle case and naming variations)
+        resolved_midterm = 'Midterm'
+        resolved_final = 'Final'
+        try:
+            info = sa_sheets_service.get_all_sheets_data(sheet_id)
+            if info.get('success'):
+                titles = [s.get('sheet_name', '') for s in info.get('sheets', [])]
+                # Prefer exact matches ignoring case
+                for t in titles:
+                    if t and t.lower() == 'midterm':
+                        resolved_midterm = t
+                    if t and t.lower() == 'final':
+                        resolved_final = t
+                # If not exact, look for contains but avoid 'prefinal' for final
+                if resolved_midterm == 'Midterm':
+                    for t in titles:
+                        if t and 'midterm' in t.lower():
+                            resolved_midterm = t
+                            break
+                if resolved_final == 'Final':
+                    for t in titles:
+                        tl = t.lower()
+                        if t and ('final' in tl) and ('prefinal' not in tl):
+                            resolved_final = t
+                            break
+        except Exception:
+            # Fallback to defaults if resolution fails
+            pass
+
+        # Analyze both sheets
+        # Explicit mappings based on your sheet definitions (with common variants)
+        # MIDTERM TAB: CS1=Class Standing, PE=Prelim, ME=Midterm, midtermGrade=Term Grade
+        midterm_extract_map = {
+            'CS1': [
+                'Class Standing', 'CLASS STANDING', 'CLASSSTANDING', 'CS1', 'C S 1'
+            ],
+            'PE': [
+                'Prelim', 'PRELIM', 'PRELIM EXAM', 'PRELIMEXAM', 'PRE-LIM', 'PRE LIM'
+            ],
+            'ME': [
+                'Midterm', 'MIDTERM', 'MIDTERM EXAM', 'MIDTERMEXAM', 'MID TERM', 'MID-TERM'
+            ],
+            'midtermGrade': [
+                'Term Grade', 'TERM GRADE', 'TERMGRADE', 'MIDTERM GRADE', 'TERM GRADE (MIDTERM)', 'MIDTERM TERM GRADE'
+            ]
+        }
+        # FINAL TAB: CS2=Class Standing, PFE=Prefinal, FE=Finals, finalTermGrade=Term Grade
+        final_extract_map = {
+            'CS2': [
+                'Class Standing', 'CLASS STANDING', 'CLASSSTANDING', 'CS2', 'C S 2'
+            ],
+            'PFE': [
+                'Prefinal', 'PREFINAL', 'PRE-FINAL', 'PRE FINAL', 'PREFINAL EXAM', 'PREFINALEXAM', 'PRE-FINAL EXAM'
+            ],
+            'FE': [
+                'Finals', 'FINALS', 'FINAL', 'FINAL EXAM', 'FINALSEXAM', 'FINALS EXAM'
+            ],
+            'finalTermGrade': [
+                'Term Grade', 'TERM GRADE', 'TERMGRADE', 'FINAL TERM GRADE', 'TERM GRADE (FINAL)', 'FINALS GRADE'
+            ]
+        }
+
+        midterm_result = analyze_sheet_for_grades(resolved_midterm, midterm_required, midterm_extract_map)
+        final_result = analyze_sheet_for_grades(resolved_final, final_required, final_extract_map)
+
+        if midterm_result.get('error') or final_result.get('error'):
+            return Response({
+                'error': f"Midterm: {midterm_result.get('error', 'OK')}, Final: {final_result.get('error', 'OK')}"
+            }, status=400)
+
+        # Combine results
+        all_students = {}
+        all_missing = {}
+
+        for student in midterm_result['students']:
+            key = f"{student['studentId']}_{student['lastName']}_{student['firstName']}"
+            all_students[key] = student
+            all_missing[key] = midterm_result['missing_by_student'].get(key, [])
+
+        for student in final_result['students']:
+            key = f"{student['studentId']}_{student['lastName']}_{student['firstName']}"
+            if key not in all_students:
+                all_students[key] = student
+            else:
+                # Merge final sheet extracted fields into existing student record
+                for field in ['CS2', 'PFE', 'FE', 'finalTermGrade']:
+                    if field in student:
+                        all_students[key][field] = student.get(field, '')
+            all_missing[key] = all_missing.get(key, []) + final_result['missing_by_student'].get(key, [])
+
+        # Compute FG from midterm and final term grades when numeric
+        def to_number(s: str):
+            try:
+                return float(s)
+            except Exception:
+                return None
+
+        for s in all_students.values():
+            mid = to_number(s.get('midtermGrade', ''))
+            fin = to_number(s.get('finalTermGrade', ''))
+            if mid is not None and fin is not None:
+                s['FG'] = round((mid + fin) / 2, 2)
+            else:
+                s['FG'] = ''
+
+        # Build response
+        response_data = {
+            'success': True,
+            'students': list(all_students.values()),
+            'missing_by_student': all_missing,
+            'summary': {
+                'total_students': len(all_students),
+                'with_missing': len([k for k, v in all_missing.items() if v]),
+                'complete': len([k for k, v in all_missing.items() if not v])
+            },
+            'usedCache': False,
+            'checkedAt': timezone.now().isoformat(),
+            'sheetVersion': {'modifiedTime': modified_time}
+        }
+
+        # Cache result if model supports these fields
+        if has_cache_fields:
+            class_record.grades_completeness = response_data
+            class_record.completeness_checked_at = timezone.now()
+            class_record.completeness_sheet_version = {'modifiedTime': modified_time}
+            class_record.save(update_fields=['grades_completeness', 'completeness_checked_at', 'completeness_sheet_version'])
+
+        return Response(response_data)
+
+    except Exception as e:
+        logger.error(f"Final grade preview error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def mark_missing_scores(request, sheet_id):
+    """Mark missing scores as N/A or INC"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+
+        sheet_name = request.data.get('sheet_name')  # 'Midterm' or 'Final'
+        student_id = request.data.get('student_id')
+        column = request.data.get('column')
+        value = request.data.get('value')  # 'N/A' or 'INC'
+
+        if not all([sheet_name, student_id, column, value]):
+            return Response({'error': 'sheet_name, student_id, column, and value are required'}, status=400)
+
+        if value not in ['N/A', 'INC']:
+            return Response({'error': 'value must be N/A or INC'}, status=400)
+
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+        
+        # Find student row and update cell
+        result = service.update_cell_by_student_and_column(sheet_id, sheet_name, student_id, column, value)
+        
+        return Response(result)
+
+    except Exception as e:
+        logger.error(f"Mark missing scores error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def mark_missing_scores_batch(request, sheet_id):
+    """Mark multiple missing scores as N/A or INC"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+
+        updates = request.data.get('updates', [])
+        if not updates:
+            return Response({'error': 'updates array is required'}, status=400)
+
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+        
+        results = []
+        for update in updates:
+            sheet_name = update.get('sheet_name')
+            student_id = update.get('student_id')
+            column = update.get('column')
+            value = update.get('value')
+            
+            if not all([sheet_name, student_id, column, value]):
+                results.append({'error': 'Missing required fields', 'update': update})
+                continue
+                
+            if value not in ['N/A', 'INC']:
+                results.append({'error': 'Invalid value', 'update': update})
+                continue
+
+            result = service.update_cell_by_student_and_column(sheet_id, sheet_name, student_id, column, value)
+            results.append(result)
+        
+        return Response({
+            'success': True,
+            'results': results,
+            'total': len(updates),
+            'successful': len([r for r in results if r.get('success', False)])
+        })
+
+    except Exception as e:
+        logger.error(f"Mark missing scores batch error: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def final_grade_export(request, sheet_id):
+    """Export final grades to Excel using template"""
+    try:
+        access_token = request.headers.get('X-Google-Access-Token')
+        if not access_token:
+            return Response({'error': 'Google access token required'}, status=400)
+
+        class_record_id = request.data.get('class_record_id')
+        if not class_record_id:
+            return Response({'error': 'class_record_id is required'}, status=400)
+
+        # Get class record
+        try:
+            from classrecord.models import ClassRecord
+            class_record = ClassRecord.objects.get(id=class_record_id, user=request.user)
+        except ClassRecord.DoesNotExist:
+            return Response({'error': 'Class record not found'}, status=404)
+
+        # Get preview data using the same logic as the preview endpoint
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+        sa_sheets_service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+        
+        # Call the preview logic directly (reuse the same function)
+        preview_result = final_grade_preview_logic(sheet_id, class_record_id, sa_sheets_service)
+        
+        if not preview_result.get('success'):
+            return Response({'error': 'Failed to get preview data'}, status=400)
+
+        # Load template
+        template_path = settings.BASE_DIR / 'templates' / 'FinalGradesTemplate.xlsx'
+        if not template_path.exists():
+            return Response({'error': 'Template file not found'}, status=404)
+
+        workbook = openpyxl.load_workbook(template_path)
+        worksheet = workbook['Final Grades']
+
+        # Find the existing template table by looking for the header row
+        # Look for "No." or "Last Name" in the template to find the data start row
+        data_start_row = None
+        for row in range(1, 50):  # Search first 50 rows
+            for col in range(1, 20):  # Search first 20 columns
+                cell_value = worksheet.cell(row=row, column=col).value
+                if cell_value and str(cell_value).strip().lower() in ['no.', 'last name']:
+                    data_start_row = row
+                    break
+            if data_start_row:
+                break
+        
+        if not data_start_row:
+            # Fallback: assume data starts at row 20 (common for templates)
+            data_start_row = 20
+        
+        print(f"📊 Found template table starting at row: {data_start_row}")
+        
+        # Don't overwrite headers - just populate the data rows
+
+        # Write student data to the existing template table
+        students = preview_result.get('students', [])
+        for idx, student in enumerate(students, 1):
+            row = data_start_row + idx
+            
+            # Map data to template columns: No., Last Name, First Name, Middle Name, Student ID, CS1, PE, ME, MG, CS2, PFE, FE, FG
+            # Find the correct column positions by checking the header row
+            col_mapping = {}
+            for col in range(1, 20):  # Check first 20 columns
+                header_cell = worksheet.cell(row=data_start_row, column=col).value
+                if header_cell:
+                    header_text = str(header_cell).strip().lower()
+                    if header_text == 'no.':
+                        col_mapping['no'] = col
+                    elif header_text == 'last name':
+                        col_mapping['lastname'] = col
+                    elif header_text == 'first name':
+                        col_mapping['firstname'] = col
+                    elif header_text == 'middle name':
+                        col_mapping['middlename'] = col
+                    elif header_text == 'student id':
+                        col_mapping['studentid'] = col
+                    elif header_text == 'cs1':
+                        col_mapping['cs1'] = col
+                    elif header_text == 'pe':
+                        col_mapping['pe'] = col
+                    elif header_text == 'me':
+                        col_mapping['me'] = col
+                    elif header_text == 'mg':
+                        col_mapping['mg'] = col
+                    elif header_text == 'cs2':
+                        col_mapping['cs2'] = col
+                    elif header_text == 'pfe':
+                        col_mapping['pfe'] = col
+                    elif header_text == 'fe':
+                        col_mapping['fe'] = col
+                    elif header_text == 'fg':
+                        col_mapping['fg'] = col
+            
+            # Populate the cells based on the column mapping and apply borders
+            thin_border = Side(border_style="thin", color="000000")
+            full_border = Border(
+                left=thin_border,
+                right=thin_border,
+                top=thin_border,
+                bottom=thin_border
+            )
+            
+            if 'no' in col_mapping:
+                cell = worksheet.cell(row=row, column=col_mapping['no'])
+                cell.value = idx
+                cell.border = full_border
+            if 'lastname' in col_mapping:
+                cell = worksheet.cell(row=row, column=col_mapping['lastname'])
+                cell.value = student['lastName']
+                cell.border = full_border
+            if 'firstname' in col_mapping:
+                cell = worksheet.cell(row=row, column=col_mapping['firstname'])
+                cell.value = student['firstName']
+                cell.border = full_border
+            if 'middlename' in col_mapping:
+                cell = worksheet.cell(row=row, column=col_mapping['middlename'])
+                cell.value = student['middleName']
+                cell.border = full_border
+            if 'studentid' in col_mapping:
+                cell = worksheet.cell(row=row, column=col_mapping['studentid'])
+                cell.value = student['studentId']
+                cell.border = full_border
+            if 'cs1' in col_mapping:
+                cell = worksheet.cell(row=row, column=col_mapping['cs1'])
+                cell.value = student.get('CS1', '')
+                cell.border = full_border
+            if 'pe' in col_mapping:
+                cell = worksheet.cell(row=row, column=col_mapping['pe'])
+                cell.value = student.get('PE', '')
+                cell.border = full_border
+            if 'me' in col_mapping:
+                cell = worksheet.cell(row=row, column=col_mapping['me'])
+                cell.value = student.get('ME', '')
+                cell.border = full_border
+            if 'mg' in col_mapping:
+                cell = worksheet.cell(row=row, column=col_mapping['mg'])
+                cell.value = student.get('midtermGrade', '')
+                cell.border = full_border
+            if 'cs2' in col_mapping:
+                cell = worksheet.cell(row=row, column=col_mapping['cs2'])
+                cell.value = student.get('CS2', '')
+                cell.border = full_border
+            if 'pfe' in col_mapping:
+                cell = worksheet.cell(row=row, column=col_mapping['pfe'])
+                cell.value = student.get('PFE', '')
+                cell.border = full_border
+            if 'fe' in col_mapping:
+                cell = worksheet.cell(row=row, column=col_mapping['fe'])
+                cell.value = student.get('FE', '')
+                cell.border = full_border
+            if 'fg' in col_mapping:
+                cell = worksheet.cell(row=row, column=col_mapping['fg'])
+                cell.value = student.get('FG', '')
+                cell.border = full_border
+            
+            print(f"📝 Populated row {row} for student: {student['lastName']}, {student['firstName']}")
+
+        # Apply bottom borders to the last row to complete the table
+        if students:
+            last_row = data_start_row + len(students)
+            print(f"🔲 Applying bottom borders to last row: {last_row}")
+            
+            # Get the column mapping from the first student (all students use the same mapping)
+            col_mapping = {}
+            for col in range(1, 20):  # Check first 20 columns
+                header_cell = worksheet.cell(row=data_start_row, column=col).value
+                if header_cell:
+                    header_text = str(header_cell).strip().lower()
+                    if header_text in ['no.', 'last name', 'first name', 'middle name', 'student id', 'cs1', 'pe', 'me', 'mg', 'cs2', 'pfe', 'fe', 'fg']:
+                        col_mapping[header_text] = col
+            
+            # Apply bottom borders to all cells in the last row
+            for col in range(1, 20):  # Check all columns that might have data
+                cell = worksheet.cell(row=last_row, column=col)
+                if cell.value is not None or col in col_mapping.values():  # Only apply to cells with data or in our mapping
+                    # Get existing border and add bottom border
+                    existing_border = cell.border
+                    if existing_border:
+                        # Preserve existing borders and add bottom
+                        new_border = Border(
+                            left=existing_border.left,
+                            right=existing_border.right,
+                            top=existing_border.top,
+                            bottom=Side(border_style="thin", color="000000")  # Add bottom border
+                        )
+                    else:
+                        # Create new border with bottom
+                        new_border = Border(
+                            left=Side(border_style="thin", color="000000"),
+                            right=Side(border_style="thin", color="000000"),
+                            top=Side(border_style="thin", color="000000"),
+                            bottom=Side(border_style="thin", color="000000")
+                        )
+                    cell.border = new_border
+
+        # Save to BytesIO
+        output = BytesIO()
+        workbook.save(output)
+        output.seek(0)
+
+        # Return file
+        from django.http import HttpResponse
+        response = HttpResponse(
+            output.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename="FinalGrades_{class_record.name}_{timezone.now().strftime("%Y%m%d")}.xlsx"'
+        return response
+
+    except Exception as e:
+        logger.error(f"Final grade export error: {str(e)}")
         return Response({'error': str(e)}, status=500)
