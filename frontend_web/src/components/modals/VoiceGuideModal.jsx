@@ -1,4 +1,4 @@
-import { Download, Hash, Mic, Plus, Settings, Trash2, User, Users, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Download, Hash, Lightbulb, Megaphone, Mic, Plus, Settings, Target, Trash2, User, Users, Wrench, X, Zap } from 'lucide-react';
 import React from 'react';
 
 const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
@@ -16,8 +16,8 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
         {/* Modal Header */}
         <div className="flex items-center justify-between p-6 border-b border-slate-200 bg-slate-50">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Mic className="w-5 h-5 text-blue-600" />
+            <div className="w-10 h-10 bg-gradient-to-r from-[#333D79]/10 to-[#4A5491]/10 rounded-lg flex items-center justify-center border border-[#333D79]/20">
+              <Mic className="w-5 h-5 text-[#333D79]" />
             </div>
             <div>
               <h2 className="text-lg font-semibold text-slate-900">Voice Commands Guide</h2>
@@ -43,21 +43,30 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                 <div>
-                  <div className="font-medium text-blue-900 mb-2">🎯 Grade Entry (Single Entry)</div>
+                  <div className="font-medium text-blue-900 mb-2 flex items-center space-x-2">
+                    <Target className="w-4 h-4" />
+                    <span>Grade Entry (Single Entry)</span>
+                  </div>
                   <div className="text-blue-700 space-y-1">
                     <div>"[Column] [Student Name] [Score]" <span className="text-xs text-blue-600">(Best for numbered columns like Quiz 1, Lab 1)</span></div>
                     <div className="text-xs text-blue-600">Examples: "Quiz 1 Maria eighty-five", "Lab 2 John score ninety"</div>
                   </div>
                 </div>
                 <div>
-                  <div className="font-medium text-blue-900 mb-2">👥 Add Student</div>
+                  <div className="font-medium text-blue-900 mb-2 flex items-center space-x-2">
+                    <Users className="w-4 h-4" />
+                    <span>Add Student</span>
+                  </div>
                   <div className="text-blue-700 space-y-1">
                     <div>"Add student lastname [Last] firstname [First]"</div>
                     <div className="text-xs text-blue-600">Example: "Add student lastname Smith firstname John"</div>
                   </div>
                 </div>
                 <div>
-                  <div className="font-medium text-blue-900 mb-2">🗑️ Delete Student</div>
+                  <div className="font-medium text-blue-900 mb-2 flex items-center space-x-2">
+                    <Trash2 className="w-4 h-4" />
+                    <span>Delete Student</span>
+                  </div>
                   <div className="text-blue-700 space-y-1">
                     <div>"Delete student [Student Name]"</div>
                     <div className="text-xs text-blue-600">Example: "Delete student Maria"</div>
@@ -113,7 +122,10 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                     <div>"Delete student Maria"</div>
                     <div>"Remove student John"</div>
                     <div>"Delete student with id 22-2711-726"</div>
-                    <div className="text-xs text-red-600 mt-2 italic">⚠️ This will permanently remove the student and compact remaining rows</div>
+                    <div className="text-xs text-red-600 mt-2 italic flex items-center space-x-1">
+                      <AlertTriangle className="w-3 h-3" />
+                      <span>This will permanently remove the student and compact remaining rows</span>
+                    </div>
                   </div>
                 </div>
                 <div>
@@ -151,7 +163,10 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                   </div>
                 </div>
                 <div className="bg-amber-50 border border-amber-200 rounded p-3">
-                  <div className="font-medium text-amber-800 mb-1">⚡ Smart Features:</div>
+                  <div className="font-medium text-amber-800 mb-1 flex items-center space-x-2">
+                    <Zap className="w-4 h-4" />
+                    <span>Smart Features:</span>
+                  </div>
                   <ul className="text-xs text-amber-700 space-y-1">
                     <li>• Automatically compacts remaining students</li>
                     <li>• Preserves formula columns (like Totals)</li>
@@ -198,8 +213,8 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                   <div className="font-medium text-slate-700 mb-2">Row Range Commands:</div>
                   <div className="bg-emerald-50 rounded p-3 space-y-2 border border-emerald-200">
                     <div className="flex items-center space-x-2 mb-2">
-                      <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
-                      <span className="text-emerald-800 font-medium text-xs">✅ WORKING COMMANDS</span>
+                      <CheckCircle className="w-4 h-4 text-emerald-500" />
+                      <span className="text-emerald-800 font-medium text-xs">WORKING COMMANDS</span>
                     </div>
                     <div className="space-y-1 text-emerald-700">
                       <div className="bg-emerald-100 px-2 py-1 rounded font-medium">
@@ -237,7 +252,10 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                 </div>
                 
                 <div className="bg-blue-50 border border-blue-200 rounded p-3">
-                  <div className="font-medium text-blue-800 mb-1">💡 Pro Tip:</div>
+                  <div className="font-medium text-blue-800 mb-1 flex items-center space-x-2">
+                    <Lightbulb className="w-4 h-4" />
+                    <span>Pro Tip:</span>
+                  </div>
                   <div className="text-xs text-blue-700">
                     Row range commands work great for giving the same score to consecutive students!
                   </div>
@@ -315,7 +333,10 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
-                <div className="font-medium text-amber-900 mb-2">💡 Accuracy Tips</div>
+                <div className="font-medium text-amber-900 mb-2 flex items-center space-x-2">
+                  <Lightbulb className="w-4 h-4" />
+                  <span>Accuracy Tips</span>
+                </div>
                 <ul className="text-sm text-amber-800 space-y-1">
                   <li>• Speak clearly and at normal pace</li>
                   <li>• Use "twenty" instead of "20"</li>
@@ -324,7 +345,10 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                 </ul>
               </div>
               <div className="bg-green-50 rounded-lg p-4 border border-green-200">
-                <div className="font-medium text-green-900 mb-2">⚡ Efficiency Tips</div>
+                <div className="font-medium text-green-900 mb-2 flex items-center space-x-2">
+                  <Zap className="w-4 h-4" />
+                  <span>Efficiency Tips</span>
+                </div>
                 <ul className="text-sm text-green-800 space-y-1">
                   <li>• Use batch commands for multiple entries</li>
                   <li>• Use Student ID for exact matching</li>
@@ -333,7 +357,10 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                 </ul>
               </div>
               <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                <div className="font-medium text-blue-900 mb-2">🔧 Troubleshooting</div>
+                <div className="font-medium text-blue-900 mb-2 flex items-center space-x-2">
+                  <Wrench className="w-4 h-4" />
+                  <span>Troubleshooting</span>
+                </div>
                 <ul className="text-sm text-blue-800 space-y-1">
                   <li>• If duplicate students, select from options</li>
                   <li>• Use "undo" if wrong entry</li>
@@ -346,10 +373,16 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
 
           {/* Number Guidelines */}
           <div className="mt-6 bg-gradient-to-r from-slate-50 to-gray-50 rounded-lg p-4 border border-slate-200">
-            <h4 className="font-medium text-slate-900 mb-3">📢 Number Speaking Guidelines</h4>
+            <h4 className="font-medium text-slate-900 mb-3 flex items-center space-x-2">
+              <Megaphone className="w-5 h-5" />
+              <span>Number Speaking Guidelines</span>
+            </h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
               <div>
-                <div className="font-medium text-slate-700 mb-2">✅ Recommended:</div>
+                <div className="font-medium text-slate-700 mb-2 flex items-center space-x-2">
+                  <CheckCircle className="w-4 h-4 text-green-500" />
+                  <span>Recommended:</span>
+                </div>
                 <div className="text-slate-600 space-y-1">
                   <div>"eighty-five" (85)</div>
                   <div>"ninety-two" (92)</div>
@@ -358,7 +391,10 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                 </div>
               </div>
               <div>
-                <div className="font-medium text-slate-700 mb-2">⚠️ Alternative (may work):</div>
+                <div className="font-medium text-slate-700 mb-2 flex items-center space-x-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-500" />
+                  <span>Alternative (may work):</span>
+                </div>
                 <div className="text-slate-600 space-y-1">
                   <div>"85" (eight five)</div>
                   <div>"92" (nine two)</div>
@@ -377,7 +413,7 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
           </div>
           <button
             onClick={() => setShowVoiceGuide(false)}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+            className="px-6 py-2 bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white rounded-lg hover:from-[#2A3366] hover:to-[#3E4677] transition-all duration-200 font-medium shadow-lg hover:shadow-xl"
           >
             Got it!
           </button>
