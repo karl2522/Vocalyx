@@ -76,19 +76,6 @@ function GoogleSheetsManager() {
     window.open(sheet.webViewLink || googleSheetsService.getViewUrl(sheet.id), '_blank');
   };
 
-  const handleAnalyzeCompleteness = async (sheet, scope) => {
-    try {
-      const res = await googleSheetsService.analyzeScoreCompleteness(sheet.id, { sheetName: scope, fastFail: true });
-      if (res.success) {
-        const ready = res.overallReady;
-        showToast[ready ? 'success' : 'error'](ready ? 'Complete' : 'Incomplete');
-      } else {
-        showToast.error(res.error || 'Analysis failed');
-      }
-    } catch (e) {
-      showToast.error('Analysis error: ' + e.message);
-    }
-  };
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString();
@@ -172,12 +159,6 @@ function GoogleSheetsManager() {
                       <FaExternalLinkAlt className="mr-1" />
                       Open
                     </button>
-                  <button
-                    onClick={() => handleAnalyzeCompleteness(sheet)}
-                    className="inline-flex items-center px-3 py-1 text-sm bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors"
-                  >
-                    Check Completeness
-                  </button>
                   </div>
                 </div>
               ))}

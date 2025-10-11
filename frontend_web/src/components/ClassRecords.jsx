@@ -1,18 +1,20 @@
-import { useEffect, useState } from 'react';
+import { Lightbulb } from 'lucide-react';
+import PropTypes from 'prop-types';
+import { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
-    FiCalendar,
-    FiEdit3,
-    FiEye,
-    FiFileText,
-    FiGrid,
-    FiInfo,
-    FiList,
-    FiMic,
-    FiPlus,
-    FiTrash2,
-    FiUser,
-    FiX
+  FiCalendar,
+  FiEdit3,
+  FiEye,
+  FiFileText,
+  FiGrid,
+  FiInfo,
+  FiList,
+  FiMic,
+  FiPlus,
+  FiTrash2,
+  FiUser,
+  FiX
 } from 'react-icons/fi';
 import { RiSoundModuleLine } from 'react-icons/ri';
 import { Link } from 'react-router-dom';
@@ -82,7 +84,7 @@ const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, recordName, isDel
               <p className="text-gray-700 leading-relaxed mb-3">
                 You are about to permanently delete the class record{' '}
                 <span className="font-semibold text-gray-900 bg-gray-100 px-2 py-1 rounded">
-                  "{recordName}"
+                  &quot;{recordName}&quot;
                 </span>
               </p>
               
@@ -218,10 +220,22 @@ const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, recordName, isDel
   );
 };
 
+DeleteConfirmationModal.propTypes = {
+  isOpen: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
+  onConfirm: PropTypes.func.isRequired,
+  recordName: PropTypes.string.isRequired,
+  isDeleting: PropTypes.bool.isRequired,
+};
+
 // Skeleton Loader Component (keep existing)
 const Skeleton = ({ className }) => (
   <div className={`bg-gray-200 rounded-md ${className}`}></div>
 );
+
+Skeleton.propTypes = {
+  className: PropTypes.string,
+};
 
 
 
@@ -263,6 +277,10 @@ const RecordCardSkeleton = ({ viewMode }) => (
     </div>
   </div>
 );
+
+RecordCardSkeleton.propTypes = {
+  viewMode: PropTypes.string.isRequired,
+};
 
 // Pagination Component
 const Pagination = ({ currentPage, totalPages, onPageChange }) => {
@@ -346,21 +364,30 @@ const Pagination = ({ currentPage, totalPages, onPageChange }) => {
   );
 };
 
+Pagination.propTypes = {
+  currentPage: PropTypes.number.isRequired,
+  totalPages: PropTypes.number.isRequired,
+  onPageChange: PropTypes.func.isRequired,
+};
+
 const ClassRecords = () => {
   const [classRecords, setClassRecords] = useState([]);
-  const [remainingMap, setRemainingMap] = useState({});
+  const [remainingMap, setRemainingMap] = useState({}); // id -> { total, sheets }
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState('grid');
   const [isModalOpen, setIsModalOpen] = useState(false);
   
   // Global function to update remaining percentage for a specific class record
   useEffect(() => {
-    window.updateClassRecordRemaining = (classRecordId, remaining) => {
+    window.updateClassRecordRemaining = (classRecordId, payload) => {
+      const normalized = typeof payload === 'number' 
+        ? { total: payload, sheets: [] } 
+        : (payload || { total: 0, sheets: [] });
       setRemainingMap(prev => ({
         ...prev,
-        [classRecordId]: remaining
+        [classRecordId]: normalized
       }));
-      console.log('🔄 Updated card remaining for record', classRecordId, 'to', remaining);
+      console.log('🔄 Updated card remaining for record', classRecordId, 'to', normalized);
     };
     
     return () => {
@@ -376,53 +403,130 @@ const ClassRecords = () => {
   // 🔥 NEW: Navigation tip state
   const [showNavigationTip, setShowNavigationTip] = useState(true);
   
-  // Pagination states
+  // Pagination states (server-side)
   const [currentPage, setCurrentPage] = useState(1);
   const recordsPerPage = 9;
+  const [totalCount, setTotalCount] = useState(0);
 
-  useEffect(() => {
-    fetchClassRecords();
-  }, []);
+  
 
-  const fetchClassRecords = async () => {
+  const fetchClassRecords = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await classRecordService.getClassRecordsWithLiveCounts();
-      const records = response.data || [];
+      const response = await classRecordService.getClassRecordsWithLiveCounts({
+        page: currentPage,
+        page_size: recordsPerPage
+      });
+      const payload = response.data;
+      const records = Array.isArray(payload) ? payload : (payload?.results || []);
+      const count = Array.isArray(payload) ? payload.length : (payload?.count || 0);
       setClassRecords(records);
+      setTotalCount(count);
 
-      // Fetch remaining percentages for each record in parallel (best effort)
-      try {
-        const results = await Promise.all(records.map(async (rec) => {
+      // Build remaining map directly from API payload for first paint
+      const map = {};
+      for (const rec of records) {
+        const sheets = Array.isArray(rec.sheets) ? rec.sheets : [];
+        const sheetsSum = sheets.reduce((sum, s) => sum + (Number(s?.remaining) || 0), 0);
+        const total = sheetsSum > 0 ? sheetsSum : Math.max(0, Number(rec.remaining_total) || 0);
+        map[rec.id] = { total, sheets };
+      }
+      const needFallback = records.filter(r => (map[r.id]?.total ?? 0) <= 0);
+      let finalMap = { ...map };
+      if (needFallback.length > 0) {
+        // Only use mirrored percentages for efficiency
+        const enriched = await Promise.all(needFallback.map(async (rec) => {
           try {
-            // Prefer live sync from the first sheet if available to ensure correctness
-            if (rec.google_sheet_id) {
-              const sheetsList = await classRecordService.getSheetsList(rec.google_sheet_id);
-              const first = sheetsList?.data?.sheets?.[0];
-              if (first?.sheet_name) {
-                const sync = await classRecordService.syncCategoryPercentages(rec.id, first.sheet_name);
-                return [rec.id, Math.max(0, sync.data?.remaining ?? 0)];
+            const res = await classRecordService.getCategoryPercentages(rec.id);
+            const remaining = Math.max(0, res?.data?.remaining ?? 0);
+            return [rec.id, { total: remaining, sheets: [] }];
+          } catch (e) {
+            console.warn('category_percentages fetch failed', e);
+            return null;
+          }
+        })).catch((e) => {
+          console.warn('Fallback batch error', e);
+          return [];
+        });
+        for (const item of enriched) {
+          if (!item) continue;
+          const [id, value] = item;
+          if (id && value) finalMap[id] = value;
+        }
+      }
+
+      // If total is available but sheets breakdown is missing, compute breakdown for midterm/final
+      const needBreakdown = records.filter(r => (finalMap[r.id]?.total ?? 0) > 0 && (finalMap[r.id]?.sheets?.length ?? 0) === 0 && r.google_sheet_id);
+      if (needBreakdown.length > 0) {
+        const computeSheetsBreakdown = async (rec) => {
+          try {
+            const list = await classRecordService.getSheetsList(rec.google_sheet_id);
+            const all = list?.data?.sheets || [];
+            const targets = [];
+            const midterm = all.find(s => (s.sheet_name || '').toLowerCase().includes('midterm'));
+            const final = all.find(s => (s.sheet_name || '').toLowerCase().includes('final'));
+            if (midterm) targets.push(midterm);
+            if (final) targets.push(final);
+            if (targets.length === 0) targets.push(...all.slice(0, 2));
+
+            const idxFromLetter = (letter) => {
+              let total = 0; const up = letter.toUpperCase();
+              for (let i = 0; i < up.length; i++) { total = total * 26 + (up.charCodeAt(i) - 64); }
+              return total - 1;
+            };
+            const letters = ['K', 'Q', 'W', 'AC'];
+            const sheets = [];
+            for (const s of targets) {
+              try {
+                const resp = await classRecordService.getSpecificSheetData(rec.google_sheet_id, s.sheet_name);
+                const row = resp?.data?.main_headers || resp?.data?.headers || [];
+                if (row.length > 0) {
+                  let sum = 0;
+                  for (const l of letters) {
+                    const idx = idxFromLetter(l);
+                    const cell = row[idx];
+                    if (!cell) continue;
+                    let str = String(cell).trim();
+                    if (str.endsWith('%')) str = str.slice(0, -1).trim();
+                    const val = parseInt(parseFloat(str));
+                    if (Number.isFinite(val)) sum += Math.max(0, val);
+                  }
+                  const remaining = Math.max(0, 100 - sum);
+                  if (remaining > 0) sheets.push({ sheetName: s.sheet_name, remaining });
+                }
+              } catch (e) {
+                console.warn('sheet breakdown fetch failed', e);
               }
             }
-            // Fallback to summary without sheet name
-            const res = await classRecordService.getCategoryPercentagesSummary(rec.id);
-            return [rec.id, Math.max(0, res.data?.remaining ?? 0)];
+            return sheets;
           } catch (e) {
-            return [rec.id, 0];
+            console.warn('sheets list fetch failed', e);
+            return [];
           }
+        };
+
+        const breakdowns = await Promise.all(needBreakdown.map(async (rec) => {
+          const sheets = await computeSheetsBreakdown(rec);
+          return [rec.id, sheets];
         }));
-        const map = Object.fromEntries(results);
-        setRemainingMap(map);
-      } catch (e) {
-        // ignore
+        for (const [id, sheets] of breakdowns) {
+          if (!id) continue;
+          const prev = finalMap[id] || { total: 0, sheets: [] };
+          finalMap[id] = { total: prev.total, sheets };
+        }
       }
+
+      setRemainingMap(finalMap);
     } catch (error) {
       console.error('Error fetching class records:', error);
       showToast.error('Failed to fetch class records');
-    } finally {
-      setLoading(false);
     }
-  };
+    setLoading(false);
+  }, [currentPage, recordsPerPage]);
+
+  useEffect(() => {
+    fetchClassRecords();
+  }, [currentPage, fetchClassRecords]);
 
   const handleCreateRecord = async (formData) => {
     try {
@@ -519,12 +623,9 @@ const ClassRecords = () => {
     }
   };
 
-  // Pagination calculations
-  const totalPages = Math.ceil(classRecords.length / recordsPerPage);
-  const startIndex = (currentPage - 1) * recordsPerPage;
-  const endIndex = startIndex + recordsPerPage;
-  const currentRecords = classRecords.slice(startIndex, endIndex);
-  const showPagination = classRecords.length > recordsPerPage;
+  // Pagination calculations (server-side)
+  const totalPages = Math.ceil((totalCount || 0) / recordsPerPage) || 1;
+  const showPagination = (totalCount || 0) > recordsPerPage;
 
   const handlePageChange = (page) => {
     setCurrentPage(page);
@@ -655,7 +756,8 @@ const ClassRecords = () => {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                    💡 Sheet Navigation Guide
+                    <Lightbulb className="w-5 h-5 text-[#333D79]" />
+                    Sheet Navigation Guide
                     <span className="text-sm bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-medium">
                       Pro Tip
                     </span>
@@ -677,8 +779,8 @@ const ClassRecords = () => {
                   {/* Voice Commands */}
                   <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-3">
                     <div className="flex items-center gap-2 mb-2">
-                      <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-                        <FiMic className="w-3 h-3 text-white" />
+                      <div className="w-7 h-7 bg-green-500 rounded-md flex items-center justify-center shadow-sm">
+                        <FiMic className="w-4 h-4 text-white" />
                       </div>
                       <span className="font-semibold text-green-800 text-sm">For Voice Commands</span>
                     </div>
@@ -690,8 +792,8 @@ const ClassRecords = () => {
                   {/* Viewing Only */}
                   <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-lg p-3">
                     <div className="flex items-center gap-2 mb-2">
-                      <div className="w-6 h-6 bg-amber-500 rounded-full flex items-center justify-center">
-                        <FiEye className="w-3 h-3 text-white" />
+                      <div className="w-7 h-7 bg-amber-500 rounded-md flex items-center justify-center shadow-sm">
+                        <FiEye className="w-4 h-4 text-white" />
                       </div>
                       <span className="font-semibold text-amber-800 text-sm">For Viewing Only</span>
                     </div>
@@ -739,7 +841,7 @@ const ClassRecords = () => {
         ) : (
           <>
             <div className={`grid gap-4 ${viewMode === 'grid' ? 'md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1'}`}>
-              {currentRecords.map((record) => (
+              {classRecords.map((record) => (
               <Link
                 key={record.id}
                 to={`/class-records/${record.id}/excel`}
@@ -791,33 +893,53 @@ const ClassRecords = () => {
                 </div>
 
                 {/* Content */}
-                <div className={`${viewMode === 'list' ? 'flex-1' : ''}`}>
-                  <div className={`${viewMode === 'list' ? 'flex items-center justify-between' : ''}`}>
-                    <div className={`${viewMode === 'list' ? 'flex-1' : 'mb-3'} ${viewMode === 'grid' ? 'pr-14' : ''}`}>
-                      <h3 className={`font-semibold text-gray-900 mb-1.5 group-hover:text-[#333D79] transition-colors duration-300 ${viewMode === 'list' ? 'text-lg' : ''}`}>
-                        {record.name}
-                      </h3>
-                      {/* Badge moved below the students line per requirement */}
-                      
-                      {viewMode === 'list' && (
-                        <div className="flex items-center gap-6 text-sm text-gray-600">
-                          <span className="flex items-center gap-1">
-                            <FiUser className="h-4 w-4" />
-                            {record.teacher_name || 'Teacher'}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <FiCalendar className="h-4 w-4" />
-                            {new Date(record.created_at).toLocaleDateString()}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <RiSoundModuleLine className="h-4 w-4" />
-                            {record.student_count || 0} Students
-                          </span>
-                          <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full font-medium">
-                            {record.semester}
-                          </span>
-                        </div>
-                      )}
+                    <div className={`${viewMode === 'list' ? 'flex-1' : ''}`}>
+                      <div className={`${viewMode === 'list' ? 'flex items-center justify-between' : ''}`}>
+                        <div className={`${viewMode === 'list' ? 'flex-1' : 'mb-3'} ${viewMode === 'grid' ? 'pr-14' : ''}`}>
+                          <div className="flex items-center gap-3 mb-1.5">
+                            <h3 className={`font-semibold text-gray-900 group-hover:text-[#333D79] transition-colors duration-300 ${viewMode === 'list' ? 'text-lg' : ''}`}>
+                              {record.name}
+                            </h3>
+                            {viewMode === 'list' && (
+                              <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full font-medium">
+                                {record.semester}
+                              </span>
+                            )}
+                          </div>
+                          
+                          {viewMode === 'list' && (
+                            <div className="flex items-center gap-6 text-sm text-gray-600">
+                              <span className="flex items-center gap-1">
+                                <FiUser className="h-4 w-4" />
+                                {record.teacher_name || 'Teacher'}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <FiCalendar className="h-4 w-4" />
+                                {new Date(record.created_at).toLocaleDateString()}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <RiSoundModuleLine className="h-4 w-4" />
+                                {record.student_count || 0} Students
+                              </span>
+                              {(() => {
+                                const info = remainingMap[record.id];
+                                const total = info?.total ?? 0;
+                                const sheets = info?.sheets ?? [];
+                                if (total <= 0) return null;
+                                let breakdown = '';
+                                if (sheets.length === 1) {
+                                  breakdown = ` – ${sheets[0].sheetName}`; // avoid repeating percentage
+                                } else if (sheets.length > 1) {
+                                  breakdown = ` – ${sheets.map(s => `${s.sheetName} ${s.remaining}%`).join(', ')}`;
+                                }
+                                return (
+                                  <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 font-medium">
+                                    Class Standing: {total}% unallocated{breakdown}
+                                  </span>
+                                );
+                              })()}
+                            </div>
+                          )}
                       
                       {viewMode === 'grid' && (
                         <div className="space-y-1.5 text-sm text-gray-600">
@@ -833,11 +955,23 @@ const ClassRecords = () => {
                             <RiSoundModuleLine className="h-4 w-4" />
                             <span>Students: {record.student_count || 0}</span>
                           </div>
-                          {remainingMap[record.id] > 0 && (
-                            <div className="mt-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 inline-flex w-fit items-center gap-1">
-                              You still have {remainingMap[record.id]}% unallocated
-                            </div>
-                          )}
+                          {(() => {
+                            const info = remainingMap[record.id];
+                            const total = info?.total ?? 0;
+                            const sheets = info?.sheets ?? [];
+                            if (total <= 0) return null;
+                            let breakdown = '';
+                            if (sheets.length === 1) {
+                              breakdown = ` – ${sheets[0].sheetName}`;
+                            } else if (sheets.length > 1) {
+                              breakdown = ` – ${sheets.map(s => `${s.sheetName} ${s.remaining}%`).join(', ')}`;
+                            }
+                            return (
+                              <div className="mt-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 inline-flex w-fit items-center gap-1">
+                                Class Standing: {total}% unallocated{breakdown}
+                              </div>
+                            );
+                          })()}
                         </div>
                       )}
                     </div>
