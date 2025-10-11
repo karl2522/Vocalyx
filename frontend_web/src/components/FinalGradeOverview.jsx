@@ -1,4 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import PropTypes from 'prop-types';
+import { useCallback, useEffect, useState } from 'react';
+import { enhancedClassRecordService as classRecordService } from '../services/api';
 import googleSheetsService from '../services/googleSheetsService';
 import { showToast } from '../utils/toast';
 
@@ -11,19 +13,13 @@ const FinalGradeOverview = ({
   const [loading, setLoading] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
   const [previewData, setPreviewData] = useState(null);
-  const [selectedStudents, setSelectedStudents] = useState(new Set());
-  const [filter, setFilter] = useState('all'); // all, missing, complete
-  const [sheetFilter, setSheetFilter] = useState('both'); // both, midterm, final
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [markingLoading, setMarkingLoading] = useState(false);
+  const [classStandingRemaining, setClassStandingRemaining] = useState(0);
+  const [currentSheetName, setCurrentSheetName] = useState('');
+  const [problematicSheets, setProblematicSheets] = useState([]);
 
-  useEffect(() => {
-    if (isOpen && classRecord?.id && sheetId) {
-      loadPreviewData();
-    }
-  }, [isOpen, classRecord?.id, sheetId]);
-
-  const loadPreviewData = async () => {
+  const loadPreviewData = useCallback(async () => {
     try {
       setLoading(true);
       const result = await googleSheetsService.getFinalGradePreview(sheetId, {
@@ -42,19 +38,106 @@ const FinalGradeOverview = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [sheetId, classRecord.id]);
+
+  const loadClassStandingPercentage = useCallback(async () => {
+    try {
+      // Get all sheets from the class record
+      const sheetsList = await classRecordService.getSheetsList(classRecord.google_sheet_id);
+      const sheets = sheetsList?.data?.sheets || [];
+      
+      // Filter for Midterm and Final sheets
+      const midtermSheet = sheets.find(sheet => sheet.sheet_name?.toLowerCase().includes('midterm'));
+      const finalSheet = sheets.find(sheet => sheet.sheet_name?.toLowerCase().includes('final'));
+      
+      const sheetsToCheck = [];
+      if (midtermSheet) sheetsToCheck.push(midtermSheet);
+      if (finalSheet) sheetsToCheck.push(finalSheet);
+      
+      if (sheetsToCheck.length === 0) {
+        // Fallback to first sheet if no Midterm/Final found
+        const firstSheet = sheets[0];
+        if (firstSheet) sheetsToCheck.push(firstSheet);
+      }
+      
+      const problematicSheets = [];
+      let totalRemaining = 0;
+      
+      // Helper function to calculate percentage for a sheet
+      const calculateSheetPercentage = async (sheet) => {
+        try {
+          const sheetData = await classRecordService.getSpecificSheetData(classRecord.google_sheet_id, sheet.sheet_name);
+          const headersRow = sheetData?.data?.main_headers || sheetData?.data?.headers || [];
+          
+          // Calculate manually from header row (same logic as ClassRecordExcel)
+          const idxFromLetter = (letter) => {
+            let total = 0;
+            const up = letter.toUpperCase();
+            for (let i = 0; i < up.length; i++) {
+              total = total * 26 + (up.charCodeAt(i) - 64);
+            }
+            return total - 1; // zero-based
+          };
+          
+          const letters = ['K', 'Q', 'W', 'AC'];
+          let total = 0;
+          
+          letters.forEach(letter => {
+            const idx = idxFromLetter(letter);
+            const cell = headersRow[idx];
+            if (cell) {
+              let s = String(cell).trim();
+              if (s.endsWith('%')) s = s.slice(0, -1).trim();
+              const val = parseInt(parseFloat(s));
+              if (Number.isFinite(val)) {
+                total += Math.max(0, val);
+              }
+            }
+          });
+          
+          const remaining = Math.max(0, 100 - total);
+          return { sheetName: sheet.sheet_name, remaining, total };
+        } catch (error) {
+          console.warn(`Failed to calculate percentage for sheet ${sheet.sheet_name}:`, error);
+          return { sheetName: sheet.sheet_name, remaining: 0, total: 0 };
+        }
+      };
+      
+      // Check all sheets
+      for (const sheet of sheetsToCheck) {
+        const result = await calculateSheetPercentage(sheet);
+        if (result.remaining > 0) {
+          problematicSheets.push(result);
+          totalRemaining += result.remaining;
+        }
+      }
+      
+      setProblematicSheets(problematicSheets);
+      setClassStandingRemaining(totalRemaining);
+      
+      // Set the first problematic sheet name for display
+      if (problematicSheets.length > 0) {
+        setCurrentSheetName(problematicSheets[0].sheetName);
+      } else if (sheetsToCheck.length > 0) {
+        setCurrentSheetName(sheetsToCheck[0].sheet_name);
+      }
+      
+    } catch (error) {
+      console.warn('Failed to load class standing percentage:', error);
+      // Don't show error toast for this as it's not critical for the main functionality
+    }
+  }, [classRecord.google_sheet_id]);
+
+  useEffect(() => {
+    if (isOpen && classRecord?.id && sheetId) {
+      loadPreviewData();
+      loadClassStandingPercentage();
+    }
+  }, [isOpen, classRecord?.id, sheetId, loadPreviewData, loadClassStandingPercentage]);
 
   const getFilteredStudents = () => {
     if (!previewData?.students) return [];
-    
-    return previewData.students.filter(student => {
-      const studentKey = `${student.studentId}_${student.lastName}_${student.firstName}`;
-      const hasMissing = previewData.missing_by_student[studentKey]?.length > 0;
-      
-      if (filter === 'missing') return hasMissing;
-      if (filter === 'complete') return !hasMissing;
-      return true;
-    });
+    return previewData.students;11
   };
 
   const getMissingForStudent = (student) => {
@@ -68,7 +151,6 @@ const FinalGradeOverview = ({
       
       // Determine which sheet this column belongs to
       const midtermColumns = ['QUIZ 1', 'QUIZ 2', 'QUIZ 3', 'QUIZ 4', 'QUIZ 5', 'ASSIGN 1', 'ASSIGN 2', 'ASSIGN 3', 'ASSIGN 4', 'ASSIGN 5', 'SEAT 1', 'SEAT 2', 'SEAT 3', 'SEAT 4', 'SEAT 5', 'LAB 1', 'LAB 2', 'LAB 3', 'LAB 4', 'LAB 5', 'PRELIM', 'MIDTERM'];
-      const finalColumns = ['QUIZ 1', 'QUIZ 2', 'QUIZ 3', 'QUIZ 4', 'QUIZ 5', 'ASSIGN 1', 'ASSIGN 2', 'ASSIGN 3', 'ASSIGN 4', 'ASSIGN 5', 'SEAT 1', 'SEAT 2', 'SEAT 3', 'SEAT 4', 'SEAT 5', 'LAB 1', 'LAB 2', 'LAB 3', 'LAB 4', 'LAB 5', 'PREFINAL', 'FINALS'];
       
       const sheetName = midtermColumns.includes(column) ? 'Midterm' : 'Final';
       
@@ -121,6 +203,12 @@ const FinalGradeOverview = ({
   };
 
   const handleExport = async () => {
+    // Check if class standing percentage is complete
+    if (classStandingRemaining > 0) {
+      showToast.error(`Cannot export final grades. Class standing percentage is incomplete (${classStandingRemaining}% unallocated).`);
+      return;
+    }
+
     try {
       setExportLoading(true);
       await googleSheetsService.exportFinalGrades(sheetId, {
@@ -136,11 +224,18 @@ const FinalGradeOverview = ({
 
   const filteredStudents = getFilteredStudents();
 
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-7xl h-[90vh] flex flex-col">
+    <div 
+      className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-white rounded-lg shadow-xl w-full max-w-7xl h-[90vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div>
@@ -154,9 +249,13 @@ const FinalGradeOverview = ({
           <div className="flex items-center space-x-3">
             <button
               onClick={handleExport}
-              disabled={exportLoading}
-              className="px-4 py-2 text-white rounded-lg hover:opacity-90 disabled:opacity-50 flex items-center space-x-2 transition-colors"
-              style={{ backgroundColor: '#333D79' }}
+              disabled={exportLoading || classStandingRemaining > 0}
+              className={`px-4 py-2 text-white rounded-lg flex items-center space-x-2 transition-colors ${
+                classStandingRemaining > 0 
+                  ? 'bg-gray-400 cursor-not-allowed' 
+                  : 'hover:opacity-90 disabled:opacity-50'
+              }`}
+              style={classStandingRemaining === 0 ? { backgroundColor: '#333D79' } : {}}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -172,42 +271,41 @@ const FinalGradeOverview = ({
           </div>
         </div>
 
-        {/* Filters */}
-        <div className="p-4 border-b border-gray-200 bg-gray-50">
-          <div className="flex items-center space-x-6">
-            <div>
-              <label className="text-sm font-medium text-gray-700">Show:</label>
-              <select
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-                className="ml-2 px-3 py-1 border border-gray-300 rounded-md text-sm"
-              >
-                <option value="all">All Students</option>
-                <option value="missing">With Missing Scores</option>
-                <option value="complete">Complete Only</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-700">Sheet:</label>
-              <select
-                value={sheetFilter}
-                onChange={(e) => setSheetFilter(e.target.value)}
-                className="ml-2 px-3 py-1 border border-gray-300 rounded-md text-sm"
-              >
-                <option value="both">Both Sheets</option>
-                <option value="midterm">Midterm Only</option>
-                <option value="final">Final Only</option>
-              </select>
-            </div>
-            {previewData && (
-              <div className="text-sm text-gray-600">
-                <span className="font-medium">{previewData.summary?.total_students || 0}</span> total, 
-                <span className="font-medium text-red-600 ml-1">{previewData.summary?.with_missing || 0}</span> with missing, 
-                <span className="font-medium text-green-600 ml-1">{previewData.summary?.complete || 0}</span> complete
+        {/* Class Standing Warning */}
+        {classStandingRemaining > 0 && (
+          <div className="p-4 bg-yellow-50 border-b border-yellow-200">
+            <div className="flex items-start">
+              <svg className="w-5 h-5 text-yellow-600 mr-3 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-yellow-800">
+                  Class Standing Percentage Incomplete
+                </p>
+                <div className="text-sm text-yellow-700 mt-1">
+                  {problematicSheets.length === 1 ? (
+                    <p>
+                      You still have {classStandingRemaining}% unallocated in the <span className="font-semibold">{currentSheetName}</span> sheet. Final grades cannot be exported until class standing totals 100%.
+                    </p>
+                  ) : (
+                    <div>
+                      <p className="mb-2">You have unallocated percentages in multiple sheets:</p>
+                      <ul className="list-disc list-inside space-y-1 ml-2">
+                        {problematicSheets.map((sheet, index) => (
+                          <li key={index}>
+                            <span className="font-semibold">{sheet.sheetName}</span>: {sheet.remaining}% unallocated
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="mt-2">Final grades cannot be exported until all sheets have 100% class standing.</p>
+                    </div>
+                  )}
+                </div>
               </div>
-            )}
+            </div>
           </div>
-        </div>
+        )}
+
 
         {/* Content */}
         <div className="flex-1 overflow-hidden">
@@ -417,6 +515,17 @@ const FinalGradeOverview = ({
       )}
     </div>
   );
+};
+
+FinalGradeOverview.propTypes = {
+  isOpen: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
+  classRecord: PropTypes.shape({
+    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+    name: PropTypes.string.isRequired,
+    google_sheet_id: PropTypes.string.isRequired,
+  }).isRequired,
+  sheetId: PropTypes.string.isRequired,
 };
 
 export default FinalGradeOverview;

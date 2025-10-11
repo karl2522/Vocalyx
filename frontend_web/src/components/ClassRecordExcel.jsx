@@ -5,9 +5,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useNavigate, useParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
+import { useAuth } from '../auth/AuthContext';
 import { classRecordService } from '../services/api';
 import googleDriveService from '../services/googleDriveService';
-import googleSheetsService from '../services/googleSheetsService';
 import { speakText, stopSpeaking } from '../utils/speechSynthesis';
 import { showToast } from '../utils/toast';
 import useVoiceRecognition from '../utils/useVoiceRecognition';
@@ -33,6 +33,7 @@ import VoiceGuideModal from './modals/VoiceGuideModal';
 const ClassRecordExcel = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [classRecord, setClassRecord] = useState(null);
   const [loading, setLoading] = useState(true);
   const [headers, setHeaders] = useState([]);
@@ -92,32 +93,19 @@ const ClassRecordExcel = () => {
   const [currentSheet, setCurrentSheet] = useState(null);
   const [loadingSheets, setLoadingSheets] = useState(false);
   const [showSheetSelector, setShowSheetSelector] = useState(false);
+  const [showNavigationTooltip, setShowNavigationTooltip] = useState(true);
 
   const [overrideConfirmation, setOverrideConfirmation] = useState(null);
 
   // CLASS STANDING percentages state
   const [classStandingRemaining, setClassStandingRemaining] = useState(0);
-  const classStandingToastRef = useRef(null);
+  const [problematicSheets, setProblematicSheets] = useState([]);
+  const lastToastKeyRef = useRef(null);
+  const classStandingToastIdRef = useRef(null);
   
   // Smart polling state for percentage change detection
   const [lastPercentageHash, setLastPercentageHash] = useState(null);
 
-  // Sheet Navigation Tooltip state
-  const [showNavigationTooltip, setShowNavigationTooltip] = useState(false);
-
-  // Click outside handler for tooltips
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (showNavigationTooltip && !event.target.closest('.navigation-tooltip-container')) {
-        setShowNavigationTooltip(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showNavigationTooltip]);
 
   // Helper: sync remaining from backend mirror based on current sheet
   const syncRemaining = useCallback(async () => {
@@ -193,100 +181,212 @@ const ClassRecordExcel = () => {
     return percentageValues.join('|');
   }, []);
 
-  // Smart polling: Check for percentage changes before syncing
-  const checkForPercentageChanges = useCallback(async () => {
+  // Check both Midterm and Final sheets for percentage changes
+  const checkAllSheetsForPercentageChanges = useCallback(async () => {
     try {
-      if (!classRecord?.google_sheet_id || !currentSheet?.sheet_name) return;
-      
-      // Get the specific percentage range (K1:AC6) to check for changes
-      const response = await classRecordService.getSpecificSheetData(
-        classRecord.google_sheet_id, 
-        currentSheet.sheet_name
-      );
-      
-      if (response.data?.main_headers) {
-        const currentHash = generatePercentageHash(response.data.main_headers);
-        
-        // Only sync if percentage values actually changed
-        if (currentHash && currentHash !== lastPercentageHash) {
-          console.log('🔄 Percentage values changed, syncing...');
-          console.log('🔄 Old hash:', lastPercentageHash);
-          console.log('🔄 New hash:', currentHash);
-          
-          // Force sync with cache bypass and manual calculation
-          try {
-            // First try the backend sync
-            const res = await classRecordService.syncCategoryPercentages(id, currentSheet.sheet_name, { force: true });
-            const data = res.data || {};
-            console.log('🔄 Backend sync result:', data);
-            
-            // Always calculate manually from current sheet data for accuracy
-            if (currentHash) {
-              console.log('🔄 Calculating manually from hash:', currentHash);
-              const hashParts = currentHash.split('|');
-              let total = 0;
-              hashParts.forEach(part => {
-                const match = part.match(/:(\d+)$/);
-                if (match) {
-                  total += parseInt(match[1]);
-                }
-              });
-              const remaining = Math.max(0, 100 - total);
-              console.log('🔄 Manual calculation - total:', total, 'remaining:', remaining);
-              console.log('🔄 Backend said remaining:', data.remaining, 'but we calculated:', remaining);
-              setClassStandingRemaining(remaining);
-              
-              // Update the card's remaining percentage as well
-              if (window.updateClassRecordRemaining) {
-                window.updateClassRecordRemaining(classRecord.id, remaining);
-              }
-            } else {
-              setClassStandingRemaining(Math.max(0, data.remaining || 0));
-            }
-          } catch (e) {
-            console.warn('⚠️ Force sync failed, trying regular sync:', e);
-            await syncRemaining();
-          }
-          
-          setLastPercentageHash(currentHash);
-        } else if (currentHash && currentHash === lastPercentageHash) {
-          console.log('✅ No percentage changes detected');
-        } else {
-          console.log('🔍 Hash comparison:', { current: currentHash, last: lastPercentageHash });
-        }
-      } else {
-        console.log('⚠️ No main_headers found in response:', response.data);
+      // Don't check percentages if user is not authenticated
+      if (!user) {
+        console.log('🔔 User not authenticated, skipping percentage check');
+        return;
       }
+      
+      if (!classRecord?.google_sheet_id) return;
+      
+      // Get all sheets from the class record
+      const sheetsList = await classRecordService.getSheetsList(classRecord.google_sheet_id);
+      const sheets = sheetsList?.data?.sheets || [];
+      
+      // Filter for Midterm and Final sheets
+      const midtermSheet = sheets.find(sheet => sheet.sheet_name?.toLowerCase().includes('midterm'));
+      const finalSheet = sheets.find(sheet => sheet.sheet_name?.toLowerCase().includes('final'));
+      
+      const sheetsToCheck = [];
+      if (midtermSheet) sheetsToCheck.push(midtermSheet);
+      if (finalSheet) sheetsToCheck.push(finalSheet);
+      
+      if (sheetsToCheck.length === 0) {
+        // Fallback to first sheet if no Midterm/Final found
+        const firstSheet = sheets[0];
+        if (firstSheet) sheetsToCheck.push(firstSheet);
+      }
+      
+      const problematicSheets = [];
+      let totalRemaining = 0;
+      
+      // Helper function to calculate percentage for a sheet
+      const calculateSheetPercentage = async (sheet) => {
+        try {
+          const response = await classRecordService.getSpecificSheetData(classRecord.google_sheet_id, sheet.sheet_name);
+          const headersRow = response?.data?.main_headers || response?.data?.headers || [];
+          
+          if (headersRow.length > 0) {
+            const currentHash = generatePercentageHash(headersRow);
+            
+            // Check if this sheet has changes (for current sheet only)
+            if (sheet.sheet_name === currentSheet?.sheet_name && currentHash && currentHash !== lastPercentageHash) {
+              console.log('🔄 Percentage values changed, syncing...');
+              console.log('🔄 Old hash:', lastPercentageHash);
+              console.log('🔄 New hash:', currentHash);
+              
+              // Force sync with cache bypass and manual calculation
+              try {
+                const res = await classRecordService.syncCategoryPercentages(id, sheet.sheet_name, { force: true });
+                const data = res.data || {};
+                console.log('🔄 Backend sync result:', data);
+                
+                if (currentHash) {
+                  console.log('🔄 Calculating manually from hash:', currentHash);
+                  const hashParts = currentHash.split('|');
+                  let total = 0;
+                  hashParts.forEach(part => {
+                    const match = part.match(/:(\d+)$/);
+                    if (match) {
+                      total += parseInt(match[1]);
+                    }
+                  });
+                  const remaining = Math.max(0, 100 - total);
+                  console.log('🔄 Manual calculation - total:', total, 'remaining:', remaining);
+                  console.log('🔄 Backend said remaining:', data.remaining, 'but we calculated:', remaining);
+                  
+                  setLastPercentageHash(currentHash);
+                  return { sheetName: sheet.sheet_name, remaining, total };
+                }
+              } catch (e) {
+                console.warn('⚠️ Force sync failed, trying regular sync:', e);
+              }
+            }
+            
+            // Calculate manually from header row (same logic as before)
+            const idxFromLetter = (letter) => {
+              let total = 0;
+              const up = letter.toUpperCase();
+              for (let i = 0; i < up.length; i++) {
+                total = total * 26 + (up.charCodeAt(i) - 64);
+              }
+              return total - 1; // zero-based
+            };
+            
+            const letters = ['K', 'Q', 'W', 'AC'];
+            let total = 0;
+            
+            letters.forEach(letter => {
+              const idx = idxFromLetter(letter);
+              const cell = headersRow[idx];
+              if (cell) {
+                let s = String(cell).trim();
+                if (s.endsWith('%')) s = s.slice(0, -1).trim();
+                const val = parseInt(parseFloat(s));
+                if (Number.isFinite(val)) {
+                  total += Math.max(0, val);
+                }
+              }
+            });
+            
+            const remaining = Math.max(0, 100 - total);
+            return { sheetName: sheet.sheet_name, remaining, total };
+          }
+        } catch (error) {
+          console.warn(`Failed to calculate percentage for sheet ${sheet.sheet_name}:`, error);
+          return { sheetName: sheet.sheet_name, remaining: 0, total: 0 };
+        }
+      };
+      
+      // Check all sheets
+      for (const sheet of sheetsToCheck) {
+        const result = await calculateSheetPercentage(sheet);
+        if (result && result.remaining > 0) {
+          problematicSheets.push(result);
+          totalRemaining += result.remaining;
+        }
+      }
+      
+      setProblematicSheets(problematicSheets);
+      setClassStandingRemaining(totalRemaining);
+      
+      // Update the dashboard card with total and per-sheet details
+      if (window.updateClassRecordRemaining) {
+        window.updateClassRecordRemaining(classRecord.id, {
+          total: totalRemaining,
+          sheets: problematicSheets
+        });
+      }
+      
     } catch (error) {
       console.warn('⚠️ Error checking percentage changes, falling back to sync:', error);
       // Fallback to regular sync if change detection fails
       await syncRemaining();
     }
-  }, [classRecord?.google_sheet_id, currentSheet?.sheet_name, lastPercentageHash, generatePercentageHash, syncRemaining]);
+  }, [classRecord?.google_sheet_id, classRecord?.id, currentSheet?.sheet_name, lastPercentageHash, generatePercentageHash, syncRemaining, id, user]);
 
-  // Show sticky toast whenever remaining > 0 on this view
+  // Smart polling: Check for percentage changes before syncing (legacy function for current sheet only)
+  const checkForPercentageChanges = useCallback(async () => {
+    // Use the new function that checks all sheets
+    await checkAllSheetsForPercentageChanges();
+  }, [checkAllSheetsForPercentageChanges]);
+
+  // No ref sync needed; we use state directly for simplicity
+
+  // Single sticky toast: updates in-place, no stacking, only reappears when values change
   useEffect(() => {
-    console.log('🔔 Toast effect triggered, remaining:', classStandingRemaining);
-    if (classStandingRemaining > 0) {
-      // Persistent toast (no auto-close)
-      if (classStandingToastRef.current) {
-        showToast.dismiss(classStandingToastRef.current);
-        classStandingToastRef.current = null;
+    // Require auth
+    if (!user) {
+      if (classStandingToastIdRef.current) {
+        toast.dismiss(classStandingToastIdRef.current);
+        classStandingToastIdRef.current = null;
       }
-      console.log('🔔 Showing toast for remaining:', classStandingRemaining);
-      classStandingToastRef.current = showToast.info(
-        `You still have ${classStandingRemaining}% unallocated.`,
+      lastToastKeyRef.current = null;
+      return;
+    }
+
+    // If nothing missing, ensure toast is closed
+    if (classStandingRemaining <= 0) {
+      if (classStandingToastIdRef.current) {
+        toast.dismiss(classStandingToastIdRef.current);
+        classStandingToastIdRef.current = null;
+      }
+      lastToastKeyRef.current = null;
+      return;
+    }
+
+    // Build message from problematic sheets
+    let message;
+    if (problematicSheets.length === 1) {
+      message = `Unallocated: ${classStandingRemaining}% — ${problematicSheets[0].sheetName}`;
+    } else if (problematicSheets.length > 1) {
+      const sheetList = problematicSheets
+        .map(s => `${s.sheetName} ${s.remaining}%`)
+        .join(', ');
+      message = `Unallocated: ${classStandingRemaining}% — ${sheetList}`;
+    } else {
+      message = `Unallocated: ${classStandingRemaining}%`;
+    }
+
+    // Create a stable key based on current values
+    const key = JSON.stringify(problematicSheets.map(s => ({ n: s.sheetName, r: s.remaining })));
+
+    // If values are unchanged, do nothing
+    if (lastToastKeyRef.current === key) return;
+
+    // Values changed: reappear by dismissing current and creating a new one (no stacking)
+    if (classStandingToastIdRef.current) {
+      toast.dismiss(classStandingToastIdRef.current);
+      classStandingToastIdRef.current = null;
+    }
+
+    // slight delay to let dismissal animate before showing new
+    setTimeout(() => {
+      classStandingToastIdRef.current = showToast.info(
+        message,
         'Class Standing total is below 100%',
         { duration: Infinity }
       );
-    } else {
-      console.log('🔔 Hiding toast, remaining is 0');
-      if (classStandingToastRef.current) {
-        showToast.dismiss(classStandingToastRef.current);
-        classStandingToastRef.current = null;
-      }
-    }
-  }, [classStandingRemaining]);
+    }, 50);
+
+    lastToastKeyRef.current = key;
+  }, [user, classStandingRemaining, problematicSheets]);
+
+  // No-op: kept for backward compatibility with existing calls
+  const resetToastDismissal = useCallback(() => {}, []);
 
   // Drive file picker state
   const [showDriveFilePicker, setShowDriveFilePicker] = useState(false);
@@ -567,11 +667,9 @@ const ClassRecordExcel = () => {
             // Load data from the first sheet
             await loadSheetData(response.data.google_sheet_id, firstSheet.sheet_name);
 
-            // Sync CLASS STANDING percentages from sheet into backend mirror
+            // Sync CLASS STANDING percentages from all sheets into backend mirror
             try {
-              const syncRes = await classRecordService.syncCategoryPercentages(id, firstSheet.sheet_name);
-              const data = syncRes.data || {};
-              setClassStandingRemaining(Math.max(0, data.remaining || 0));
+              await checkAllSheetsForPercentageChanges();
             } catch (e) {
               console.warn('⚠️ Failed to sync category percentages:', e);
             }
@@ -634,9 +732,10 @@ const ClassRecordExcel = () => {
     return { valid: true };
   };
 
-  const loadSheetData = async (sheetId, sheetName) => {
+  const loadSheetData = async (sheetId, sheetName, silent = false) => {
     try {
-      console.log(`📊 LOAD SHEET: Loading data from sheet: "${sheetName}"`);
+      console.log(`📊 LOAD SHEET: Loading data from sheet: "${sheetName}" (silent: ${silent})`);
+      console.trace('📊 LOAD SHEET: Call stack'); // Add call stack trace
       
       const sheetsResponse = await classRecordService.getSpecificSheetData(sheetId, sheetName);
       console.log(`📊 LOAD SHEET: API response success: ${sheetsResponse.data?.success}`);
@@ -692,7 +791,9 @@ const ClassRecordExcel = () => {
         }
         
         console.log(`✅ LOAD SHEET: Sheet "${sheetName}" data loaded successfully!`);
-        toast.success(`Switched to sheet: ${sheetName}`);
+        if (!silent) {
+          toast.success(`Switched to sheet: ${sheetName}`);
+        }
 
         // After loading sheet data, refresh mirrored CLASS STANDING percentages
         await syncRemaining();
@@ -1347,17 +1448,12 @@ const confirmDeleteStudent = async () => {
 
       // 🔥 CRITICAL: Add delay before refreshing data
       setTimeout(async () => {
-        // Refresh the data with fresh fetch
-        await loadSheetData(classRecord.google_sheet_id, currentSheet?.sheet_name);
-        
         // 🔥 FORCE UPDATE: Clear any cached data
         setTableData([]);
         setHeaders([]);
         
-        // Load fresh data again
-        setTimeout(async () => {
-          await loadSheetData(classRecord.google_sheet_id, currentSheet?.sheet_name);
-        }, 500);
+        // Load fresh data once
+        await loadSheetData(classRecord.google_sheet_id, currentSheet?.sheet_name);
       }, 1000);
       
       setDeleteStudentModal({ isOpen: false, studentName: '', studentData: null });
@@ -1669,7 +1765,20 @@ const handleStudentIdGradeEntry = async (data) => {
     }
     
     // Update the grade
-    await updateStudentGradeByPosition(studentRowIndex, targetColumnIndex, data.value);
+    const updateResponse = await classRecordService.updateGoogleSheetsCellSpecific(
+      classRecord.google_sheet_id,
+      studentRowIndex,
+      data.column,
+      data.value,
+      currentSheet?.sheet_name
+    );
+    
+    if (!updateResponse.data?.success) {
+      throw new Error(updateResponse.data?.error || 'Failed to update cell');
+    }
+    
+    // Reset toast dismissal flag since user made changes
+    resetToastDismissal();
     
     toast.success(`✅ Updated ${studentName} (ID: ${data.studentId}) - ${data.column}: ${data.value}`);
     
@@ -1713,6 +1822,9 @@ const handleUpdateMaxScore = async (data) => {
 
         if (response.data?.success) {
             const sheetUsed = response.data.sheet_name || activeSheetName || 'spreadsheet';
+            
+            // Reset toast dismissal flag since user made changes
+            resetToastDismissal();
             
             toast.success(`✅ ${data.column} max score updated to ${data.maxScore} in ${sheetUsed}`);
             if (voiceEnabled) {
@@ -2026,6 +2138,10 @@ const handleBatchStudentListCommand = async (data) => {
       
       if (response.ok) {
         setTableData(updatedData);
+        
+        // Reset toast dismissal flag since user made changes
+        resetToastDismissal();
+        
         toast.success(`✅ Updated ${updatedCount} students in ${foundColumn}`);
         
         if (voiceEnabled) {
@@ -3075,6 +3191,9 @@ const handleAutoNumberStudents = async () => {
         if (response.data?.success) {
             addRecentStudent(studentName);
             
+            // Reset toast dismissal flag since user made changes
+            resetToastDismissal();
+            
             toast.success(`✅ ${studentName} - ${data.column}: ${data.value}`);
             if (voiceEnabled) {
                 speakText(`Updated ${data.column} to ${data.value} for ${studentName}`);
@@ -3537,6 +3656,10 @@ const executeBatchEntries = async () => {
       }
 
       const sheetInfo = currentSheet ? ` in ${currentSheet.sheet_name}` : '';
+      
+      // Reset toast dismissal flag since user made changes
+      resetToastDismissal();
+      
       toast.success(`✅ Batch saved: ${validEntries.length} students updated${sheetInfo}`);
       if (voiceEnabled) {
         speakText(`Batch complete. ${validEntries.length} students updated${sheetInfo}.`);
@@ -4224,41 +4347,6 @@ const handleExportToPDF = async () => {
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
-  const handleCheckCompleteness = async () => {
-    try {
-      if (!classRecord?.google_sheet_id) {
-        showToast.error('No Google Sheet is linked to this class record.');
-        return;
-      }
-      const res = await googleSheetsService.analyzeScoreCompleteness(
-        classRecord.google_sheet_id,
-        { fastFail: false, classRecordId: classRecord?.id, force: true }
-      );
-      if (res.success) {
-        const ready = !!res.overallReady;
-        if (ready) {
-          showToast.success('Complete');
-        } else {
-          // Build a concise summary: per sheet first few missing cells
-          const parts = [];
-          (res.sheets || []).forEach(sheet => {
-            if (!sheet.ready) {
-              const mc = sheet.missingCells || [];
-              const examples = mc.slice(0, 3).map(m => `${m.header} (row ${m.rowIndex})`).join(', ');
-              const more = mc.length > 3 ? `, +${mc.length - 3} more` : '';
-              parts.push(`${sheet.sheetName}: ${examples || 'missing values'}${more}`);
-            }
-          });
-          const msg = parts.length ? `Incomplete — ${parts.join(' | ')}` : 'Incomplete';
-          showToast.error(msg);
-        }
-      } else {
-        showToast.error(res.error || 'Analysis failed');
-      }
-    } catch (e) {
-      showToast.error('Analysis error: ' + e.message);
-    }
-  };
 
   if (loading) {
     return (
@@ -4328,6 +4416,37 @@ const handleExportToPDF = async () => {
                     <ChevronDown className={`w-4 h-4 transition-transform ${showSheetSelector ? 'rotate-180' : ''}`} />
                   </button>
                   
+                  {/* Professional Tooltip pointing to sheet selector */}
+                  {showNavigationTooltip && (
+                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 z-50 animate-fade-in">
+                      <div className="bg-white rounded-lg shadow-xl border border-slate-200 p-3 w-64">
+                        {/* Tooltip arrow pointing up to button */}
+                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1">
+                          <div className="w-3 h-3 bg-white border-l border-t border-slate-200 transform rotate-45"></div>
+                        </div>
+                        
+                        {/* Tooltip content */}
+                        <div className="flex items-start space-x-3">
+                          <div className="w-6 h-6 flex items-center justify-center flex-shrink-0">
+                            <FileSpreadsheet className="w-4 h-4 text-[#333D79]" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-slate-900 mb-2">Switch Between Sheets</p>
+                            <p className="text-xs text-slate-600 leading-relaxed mb-3">
+                              Click this button to switch between different grade sheets
+                            </p>
+                            <button
+                              onClick={() => setShowNavigationTooltip(false)}
+                              className="px-4 py-1.5 bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white text-xs rounded-md hover:from-[#2A3366] hover:to-[#3E4677] transition-all duration-200 font-medium shadow-sm hover:shadow-md"
+                            >
+                              Got it!
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
                   {showSheetSelector && (
                     <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-xl border border-slate-200 py-2 z-50 max-h-60 overflow-y-auto">
                       <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
@@ -4366,88 +4485,6 @@ const handleExportToPDF = async () => {
                 </div>
               )}
 
-              {/* 🔥 NEW: Navigation Help Tooltip */}
-              {availableSheets.length > 1 && (
-                <div className="relative navigation-tooltip-container">
-                  <button
-                    onClick={() => setShowNavigationTooltip(!showNavigationTooltip)}
-                    className="flex items-center justify-center w-8 h-8 bg-gradient-to-r from-amber-400 to-orange-500 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-110 animate-bounce"
-                    title="Navigation Help"
-                  >
-                    <HelpCircle className="w-4 h-4" />
-                  </button>
-                  
-                  {showNavigationTooltip && (
-                    <div className="absolute right-0 mt-2 w-80 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white rounded-2xl shadow-2xl border border-slate-700 p-0 z-50 overflow-hidden">
-                      {/* Header */}
-                      <div className="bg-gradient-to-r from-indigo-500 to-purple-600 px-4 py-3 flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                          <span className="font-semibold text-sm">Sheet Navigation Guide</span>
-                        </div>
-                        <button
-                          onClick={() => setShowNavigationTooltip(false)}
-                          className="text-white/80 hover:text-white transition-colors"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                      
-                      {/* Content */}
-                      <div className="p-4 space-y-4">
-                        {/* Top Navigation (Voice-enabled) */}
-                        <div className="bg-gradient-to-r from-green-500/20 to-emerald-500/20 rounded-lg p-3 border border-green-500/30 transform transition-all duration-300 hover:scale-105">
-                          <div className="flex items-center space-x-2 mb-2">
-                            <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
-                            <span className="font-semibold text-green-400 text-sm">USE THIS ↑ (Top Navigation)</span>
-                          </div>
-                          <p className="text-xs text-slate-300 leading-relaxed">
-                            <span className="text-green-300 font-medium">✅ For Voice Commands:</span> Use the sheet selector above to switch sheets. This fetches sheet data and enables voice recognition features.
-                          </p>
-                          <div className="flex items-center space-x-1 mt-2">
-                            <Mic className="w-3 h-3 text-green-400" />
-                            <span className="text-xs text-green-300">Voice-enabled</span>
-                          </div>
-                        </div>
-                        
-                        {/* Bottom Navigation (View-only) */}
-                        <div className="bg-gradient-to-r from-amber-500/20 to-orange-500/20 rounded-lg p-3 border border-amber-500/30 transform transition-all duration-300 hover:scale-105">
-                          <div className="flex items-center space-x-2 mb-2">
-                            <div className="w-3 h-3 bg-amber-400 rounded-full"></div>
-                            <span className="font-semibold text-amber-400 text-sm">For Viewing Only ↓ (Bottom Navigation)</span>
-                          </div>
-                          <p className="text-xs text-slate-300 leading-relaxed">
-                            <span className="text-amber-300 font-medium">👁️ For Browsing:</span> Use the sheet tabs at the bottom of the embedded spreadsheet for quick viewing only.
-                          </p>
-                          <div className="flex items-center space-x-1 mt-2">
-                            <MicOff className="w-3 h-3 text-amber-400" />
-                            <span className="text-xs text-amber-300">No voice features</span>
-                          </div>
-                        </div>
-                        
-                        {/* Pro Tip */}
-                        <div className="bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-lg p-3 border border-purple-500/30 transform transition-all duration-300 hover:scale-105">
-                          <div className="flex items-center space-x-2 mb-2">
-                            <div className="w-3 h-3 bg-purple-400 rounded-full animate-pulse"></div>
-                            <span className="font-semibold text-purple-400 text-sm">💡 Pro Tip</span>
-                          </div>
-                          <p className="text-xs text-slate-300 leading-relaxed">
-                            Always use the top navigation when you plan to use voice commands for grading or data entry!
-                          </p>
-                        </div>
-                      </div>
-                      
-                      {/* Footer */}
-                      <div className="bg-slate-800/50 px-4 py-2 border-t border-slate-700">
-                        <div className="flex items-center space-x-2 text-xs text-slate-400">
-                          <div className="w-1 h-1 bg-blue-400 rounded-full animate-pulse"></div>
-                          <span>This guide helps you choose the right navigation method</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
 
               {/* Tools Dropdown */}
               <div className="relative" onClick={(e) => e.stopPropagation()}>
@@ -4517,17 +4554,6 @@ const handleExportToPDF = async () => {
                       <span>Auto-Number Students</span>
                     </button>
 
-                    <button
-                      onClick={() => {
-                        handleCheckCompleteness();
-                        closeAllDropdowns();
-                      }}
-                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
-                    >
-                      <span className="w-4 h-4 text-green-600 text-center font-bold">✔</span>
-                      <span>Check Completeness</span>
-                    </button>
-                    
                     <button
                       onClick={() => {
                         setShowFinalGradeOverview(true);

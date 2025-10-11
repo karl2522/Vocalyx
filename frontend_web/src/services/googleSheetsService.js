@@ -144,27 +144,6 @@ class GoogleSheetsService {
     return `https://docs.google.com/spreadsheets/d/${sheetId}/edit`;
   }
 
-  /**
-   * Analyze score completeness for Midterm/Final
-   */
-  async analyzeScoreCompleteness(sheetId, { sheetName, fastFail, classRecordId, force } = {}) {
-    const body = {};
-    if (sheetName) body.sheet_name = sheetName;
-    if (fastFail !== undefined) body.fastFail = !!fastFail;
-    if (classRecordId) body.class_record_id = classRecordId;
-    if (force !== undefined) body.force = !!force;
-
-    const response = await fetch(`${this.baseURL}/sheets/${sheetId}/analyze-score-completeness/`, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify(body)
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-    return await response.json();
-  }
 
   /**
    * Get final grade preview with missing score details
