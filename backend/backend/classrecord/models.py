@@ -34,6 +34,8 @@ class ClassRecord(models.Model):
     imported_file_name = models.CharField(max_length=255, blank=True)
     is_excel_imported = models.BooleanField(default=False)
     excel_last_modified = models.DateTimeField(null=True, blank=True)
+    # Final grade overrides per student_id: { "22-xxxx": "INC" | "N/A" }
+    final_grade_overrides = models.JSONField(default=dict, blank=True)
 
     def __str__(self):
         return f"{self.name} - {self.semester}"

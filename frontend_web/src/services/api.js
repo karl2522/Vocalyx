@@ -240,6 +240,14 @@ export const classRecordService = {
         }
         return api.patch(`/class-records/${id}/`, recordData, config);
     },
+
+    // Set or clear a student's Final Grade override (INC/N/A)
+    setFinalGradeOverride: (classRecordId, studentId, value, extras = {}) =>
+        api.post(`/class-records/${classRecordId}/set-final-grade-override/`, {
+            student_id: studentId,
+            value,
+            ...extras
+        }),
     
     // Delete a class record
     deleteClassRecord: (id) => {
@@ -368,7 +376,11 @@ export const classRecordService = {
     autoNumberGoogleSheetsStudents: (sheetId) => 
         api.post(`/sheets/${sheetId}/auto-number-students/`),
 
-    getClassRecordsWithLiveCounts: () => api.get('/class-records/live-counts/'),
+    getClassRecordsWithLiveCounts: (params = {}) => {
+        const query = new URLSearchParams(params).toString();
+        const url = `/class-records/live-counts/${query ? `?${query}` : ''}`;
+        return api.get(url);
+    },
 
     // Get mirrored CLASS STANDING percentages summary for dashboard card
     getCategoryPercentagesSummary: (classRecordId) =>
@@ -378,8 +390,14 @@ export const classRecordService = {
         return api.get(`/sheets/service-account/${sheetId}/all-sheets-data/`);
     },
 
-    getSpecificSheetData: (sheetId, sheetName) => {
-        return api.get(`/sheets/service-account/${sheetId}/sheet/${encodeURIComponent(sheetName)}/data/`);
+    getSpecificSheetData: (sheetId, sheetName, options = {}) => {
+        const params = new URLSearchParams();
+        if (options.force_refresh) {
+            params.append('force_refresh', 'true');
+        }
+        const queryString = params.toString();
+        const url = `/sheets/service-account/${sheetId}/sheet/${encodeURIComponent(sheetName)}/data/${queryString ? '?' + queryString : ''}`;
+        return api.get(url);
     },
 
     getSheetsList: (sheetId) => {
