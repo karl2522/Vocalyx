@@ -3641,34 +3641,60 @@ const executeBatchEntries = async () => {
       window.batchModeFinishing = true;
       setIsProcessingBatch(true);
       
-      // Process each valid entry
-      for (const entry of validEntries) {
-        // 🔥 NEW: Use sheet-specific update if we have a current sheet
-        if (currentSheet) {
-          await classRecordService.updateGoogleSheetsCellSpecific(
-            classRecord.google_sheet_id,
-            entry.rowIndex,
-            currentBatchColumn,
-            entry.score,
-            currentSheet.sheet_name
-          );
-        } else {
-          // Fall back to original method
-          await classRecordService.updateGoogleSheetsCell(
-            classRecord.google_sheet_id,
-            entry.rowIndex,
-            currentBatchColumn,
-            entry.score
-          );
+      console.log('🔥 BATCH EXECUTION: Starting batch update for', validEntries.length, 'entries');
+      
+      // 🔥 PERFORMANCE FIX: Use batch update instead of individual API calls
+      // Prepare all updates in the correct format for batch API
+      const updates = validEntries.map(entry => {
+        // Calculate column index from headers
+        const columnIndex = headers.indexOf(currentBatchColumn);
+        if (columnIndex === -1) {
+          throw new Error(`Column "${currentBatchColumn}" not found in headers`);
         }
+        
+        // Convert column index to letter (A, B, C, etc.)
+        const columnLetter = String.fromCharCode(65 + columnIndex);
+        
+        // Calculate actual sheet row (skip 3 header rows, convert to 1-based)
+        const sheetRow = entry.rowIndex + 4; // +3 for headers, +1 for 1-based indexing
+        
+        // Build cell range
+        const sheetPrefix = currentSheet?.sheet_name ? `'${currentSheet.sheet_name}'!` : '';
+        const range = `${sheetPrefix}${columnLetter}${sheetRow}`;
+        
+        console.log(`🔥 BATCH: Preparing update - ${range} = ${entry.score}`);
+        
+        return {
+          range: range,
+          values: [[entry.score]]
+        };
+      });
+      
+      console.log('🔥 BATCH EXECUTION: Prepared', updates.length, 'updates for batch API');
+      
+      // Execute single batch update
+      const batchData = {
+        updates: updates,
+        sheet_name: currentSheet?.sheet_name
+      };
+      
+      const response = await classRecordService.updateMultipleCells(
+        classRecord.google_sheet_id,
+        batchData
+      );
+      
+      if (!response.data?.success) {
+        throw new Error(response.data?.error || 'Batch update failed');
       }
+      
+      console.log('🔥 BATCH EXECUTION: ✅ Success! Updated', response.data.updated_cells, 'cells in', response.data.updated_ranges, 'ranges');
 
       const sheetInfo = currentSheet ? ` in ${currentSheet.sheet_name}` : '';
       
       // Reset toast dismissal flag since user made changes
       resetToastDismissal();
       
-      toast.success(`✅ Batch saved: ${validEntries.length} students updated${sheetInfo}`);
+      toast.success(`✅ Batch saved: ${validEntries.length} students updated${sheetInfo} (${response.data.updated_cells} cells)`);
       if (voiceEnabled) {
         speakText(`Batch complete. ${validEntries.length} students updated${sheetInfo}.`);
       }
@@ -3683,7 +3709,7 @@ const executeBatchEntries = async () => {
       
     } catch (error) {
       console.error('Batch execution error:', error);
-      toast.error('Failed to save batch entries');
+      toast.error(`Failed to save batch entries: ${error.message}`);
     } finally {
       setIsProcessingBatch(false);
     }
