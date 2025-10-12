@@ -1224,11 +1224,31 @@ def sheets_get_specific_sheet_data_service_account(request, sheet_id, sheet_name
     """Get data from a specific sheet by name using service account"""
     try:
         from utils.google_service_account_sheets import GoogleServiceAccountSheets
+        
+        # Check if force refresh is requested (bypass cache)
+        force_refresh = request.GET.get('force_refresh', 'false').lower() == 'true'
+        
+        # Cache headers-only payload for faster card computations
+        cache_key = f"sa_sheet_data_hdr_{sheet_id}_{sheet_name}"
+        
+        # Only use cache if force refresh is not requested
+        if not force_refresh:
+            cached = cache.get(cache_key)
+            if cached:
+                return Response(cached)
 
         service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
         result = service.get_specific_sheet_data(sheet_id, sheet_name)
 
-        return Response(result)
+        small = {
+            'success': result.get('success', True),
+            'headers': result.get('headers') or result.get('main_headers') or [],
+            'main_headers': result.get('main_headers') or result.get('headers') or [],
+            'sheet_name': sheet_name,
+        }
+
+        cache.set(cache_key, small, 30)   # 30 seconds - optimized for 2-3 second change detection
+        return Response(small)
 
     except Exception as e:
         logger.error(f"Get specific sheet data error: {str(e)}")
@@ -1244,10 +1264,15 @@ def sheets_list_all_sheets_service_account(request, sheet_id):
     """List all sheets in a Google Spreadsheet using service account"""
     try:
         from utils.google_service_account_sheets import GoogleServiceAccountSheets
+        cache_key = f"sa_sheets_list_{sheet_id}"
+        cached = cache.get(cache_key)
+        if cached:
+            return Response(cached)
 
         service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
         result = service.get_sheets_list(sheet_id)
 
+        cache.set(cache_key, result, 600)  # 10 minutes
         return Response(result)
 
     except Exception as e:
@@ -2164,7 +2189,7 @@ def get_google_drive_token(request):
         return Response({'error': str(e)}, status=500)
 
 
-def final_grade_preview_logic(sheet_id, class_record_id, sa_sheets_service):
+def final_grade_preview_logic(sheet_id, class_record_id, sa_sheets_service, user=None):
     """Extracted preview logic for reuse in export"""
     try:
         # Define required columns per sheet
@@ -2357,7 +2382,8 @@ def final_grade_preview_logic(sheet_id, class_record_id, sa_sheets_service):
                         missing_cells.append({
                             'column': col_name,
                             'displayHeader': header_display.get(norm2(col_name), col_name),
-                            'rowIndex': r_index
+                            'rowIndex': r_index,
+                            'sheetName': sheet_name
                         })
 
                 if missing_cells:
@@ -2426,6 +2452,9 @@ def final_grade_preview_logic(sheet_id, class_record_id, sa_sheets_service):
             ],
             'finalTermGrade': [
                 'Term Grade', 'TERM GRADE', 'TERMGRADE', 'FINAL TERM GRADE', 'TERM GRADE (FINAL)', 'FINALS GRADE'
+            ],
+            'FGOverride': [
+                'FG', 'Final Grade', 'FINAL GRADE'
             ]
         }
 
@@ -2465,13 +2494,51 @@ def final_grade_preview_logic(sheet_id, class_record_id, sa_sheets_service):
             except Exception:
                 return None
 
+        # Load overrides if available (don't depend on request context)
+        try:
+            from classrecord.models import ClassRecord
+            if user is not None:
+                cr = ClassRecord.objects.get(id=class_record_id, user=user)
+            else:
+                cr = ClassRecord.objects.get(id=class_record_id)
+            overrides = dict(getattr(cr, 'final_grade_overrides', {}) or {})
+        except Exception:
+            overrides = {}
+
         for s in all_students.values():
-            mid = to_number(s.get('midtermGrade', ''))
-            fin = to_number(s.get('finalTermGrade', ''))
+            mid_raw = str(s.get('midtermGrade', '')).strip()
+            fin_raw = str(s.get('finalTermGrade', '')).strip()
+            mid = to_number(mid_raw)
+            fin = to_number(fin_raw)
             if mid is not None and fin is not None:
                 s['FG'] = round((mid + fin) / 2, 2)
             else:
                 s['FG'] = ''
+
+            # If term grades carry status strings, propagate to FG
+            mid_status = mid_raw.upper()
+            fin_status = fin_raw.upper()
+            if mid_status in ['INC', 'N/A'] or fin_status in ['INC', 'N/A']:
+                # Prefer INC over N/A if both appear
+                if 'INC' in [mid_status, fin_status]:
+                    s['FG'] = 'INC'
+                else:
+                    s['FG'] = 'N/A'
+
+            # Override FG if explicit FGOverride present (INC/N/A)
+            fg_override = str(s.get('FGOverride', '')).strip().upper()
+            if fg_override in ['INC', 'N/A']:
+                s['FG'] = fg_override
+
+            # Apply DB override by composite preview key first, then by id
+            sid = str(s.get('studentId', '')).strip()
+            lname = str(s.get('lastName', '')).strip()
+            fname = str(s.get('firstName', '')).strip()
+            composite_key = f"{sid}_{lname}_{fname}" if sid and lname and fname else None
+            if composite_key and overrides.get(composite_key, '').upper() in ['INC', 'N/A']:
+                s['FG'] = overrides[composite_key].upper()
+            elif sid and overrides.get(sid, '').upper() in ['INC', 'N/A']:
+                s['FG'] = overrides[sid].upper()
 
         # Build response
         response_data = {
@@ -2516,6 +2583,12 @@ def final_grade_preview(request, sheet_id):
             class_record = ClassRecord.objects.get(id=class_record_id, user=request.user)
         except ClassRecord.DoesNotExist:
             return Response({'error': 'Class record not found'}, status=404)
+
+        # Delegate to shared logic that applies FG overrides and consistent parsing
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+        sa_sheets_service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+        result = final_grade_preview_logic(sheet_id, class_record_id, sa_sheets_service, user=request.user)
+        return Response(result)
 
         # Initialize service-account based sheets service (avoid user-token 401s)
         from utils.google_service_account_sheets import GoogleServiceAccountSheets
@@ -2726,7 +2799,8 @@ def final_grade_preview(request, sheet_id):
                         missing_cells.append({
                             'column': col_name,
                             'displayHeader': header_display.get(norm2(col_name), col_name),
-                            'rowIndex': r_index
+                            'rowIndex': r_index,
+                            'sheetName': sheet_name
                         })
 
                 if missing_cells:
@@ -2837,7 +2911,9 @@ def final_grade_preview(request, sheet_id):
             mid = to_number(s.get('midtermGrade', ''))
             fin = to_number(s.get('finalTermGrade', ''))
             if mid is not None and fin is not None:
-                s['FG'] = round((mid + fin) / 2, 2)
+                computed_fg = (mid + fin) / 2
+                print(f"🔍 FG EXPORT COMPUTATION: {s.get('lastName')}, {s.get('firstName')} - mid: {mid}, fin: {fin}, FG: {computed_fg}")
+                s['FG'] = computed_fg
             else:
                 s['FG'] = ''
 
@@ -3099,8 +3175,17 @@ def final_grade_export(request, sheet_id):
                 cell.border = full_border
             if 'fg' in col_mapping:
                 cell = worksheet.cell(row=row, column=col_mapping['fg'])
-                cell.value = student.get('FG', '')
+                fg_val = student.get('FG', '')
+                cell.value = fg_val
                 cell.border = full_border
+                # Render INC/N/A in red and right-aligned
+                try:
+                    from openpyxl.styles import Font, Alignment
+                    if isinstance(fg_val, str) and fg_val.upper() in ['INC', 'N/A']:
+                        cell.font = Font(color='FF0000')
+                        cell.alignment = Alignment(horizontal='right')
+                except Exception:
+                    pass
             
             print(f"📝 Populated row {row} for student: {student['lastName']}, {student['firstName']}")
 

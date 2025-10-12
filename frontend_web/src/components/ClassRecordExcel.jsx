@@ -118,7 +118,7 @@ const ClassRecordExcel = () => {
       // Fallback: read via service account and compute from header row (row 1)
       try {
         if (!classRecord?.google_sheet_id || !currentSheet?.sheet_name) return;
-        const sa = await classRecordService.getSpecificSheetData(classRecord.google_sheet_id, currentSheet.sheet_name);
+        const sa = await classRecordService.getSpecificSheetData(classRecord.google_sheet_id, currentSheet.sheet_name, { force_refresh: true });
         const headersRow = sa?.data?.headers || [];
         const idxFromLetter = (letter) => {
           let total = 0;
@@ -216,7 +216,7 @@ const ClassRecordExcel = () => {
       // Helper function to calculate percentage for a sheet
       const calculateSheetPercentage = async (sheet) => {
         try {
-          const response = await classRecordService.getSpecificSheetData(classRecord.google_sheet_id, sheet.sheet_name);
+          const response = await classRecordService.getSpecificSheetData(classRecord.google_sheet_id, sheet.sheet_name, { force_refresh: true });
           const headersRow = response?.data?.main_headers || response?.data?.headers || [];
           
           if (headersRow.length > 0) {
@@ -304,12 +304,20 @@ const ClassRecordExcel = () => {
       setClassStandingRemaining(totalRemaining);
       
       // Update the dashboard card with total and per-sheet details
+      const breakdownPayload = {
+        total: totalRemaining,
+        sheets: problematicSheets
+      };
       if (window.updateClassRecordRemaining) {
-        window.updateClassRecordRemaining(classRecord.id, {
-          total: totalRemaining,
-          sheets: problematicSheets
-        });
+        window.updateClassRecordRemaining(classRecord.id, breakdownPayload);
       }
+      try {
+        // Persist so the list page can show detailed badges after navigating back
+        localStorage.setItem(`cr_breakdown_${classRecord.id}`, JSON.stringify({
+          ...breakdownPayload,
+          updatedAt: Date.now()
+        }));
+      } catch {}
       
     } catch (error) {
       console.warn('⚠️ Error checking percentage changes, falling back to sync:', error);
@@ -800,7 +808,7 @@ const ClassRecordExcel = () => {
         
         // Initialize percentage hash for change detection
         try {
-          const response = await classRecordService.getSpecificSheetData(classRecord.google_sheet_id, sheetName);
+          const response = await classRecordService.getSpecificSheetData(classRecord.google_sheet_id, sheetName, { force_refresh: true });
           console.log('🔍 Hash initialization response:', response.data);
           if (response.data?.main_headers) {
             const initialHash = generatePercentageHash(response.data.main_headers);

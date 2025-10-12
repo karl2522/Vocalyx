@@ -20,7 +20,8 @@ class ClassRecordSerializer(serializers.ModelSerializer):
             'custom_columns',
             'last_modified',
             'google_sheet_id',
-            'google_sheet_url'
+            'google_sheet_url',
+            'final_grade_overrides'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'last_modified', 'student_count']
 
