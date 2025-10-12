@@ -1231,24 +1231,39 @@ def sheets_get_specific_sheet_data_service_account(request, sheet_id, sheet_name
         # Cache headers-only payload for faster card computations
         cache_key = f"sa_sheet_data_hdr_{sheet_id}_{sheet_name}"
         
-        # Only use cache if force refresh is not requested
+        # 🔥 FIX: Check cache for complete response, not just headers
+        cache_key_complete = f"sa_sheet_data_complete_{sheet_id}_{sheet_name}"
         if not force_refresh:
-            cached = cache.get(cache_key)
+            cached = cache.get(cache_key_complete)
             if cached:
                 return Response(cached)
 
         service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
         result = service.get_specific_sheet_data(sheet_id, sheet_name)
 
-        small = {
+        # 🔥 FIX: Return complete data including tableData for batch grading functionality
+        complete_response = {
+            'success': result.get('success', True),
+            'headers': result.get('headers') or result.get('main_headers') or [],
+            'main_headers': result.get('main_headers') or result.get('headers') or [],
+            'sub_headers': result.get('sub_headers', []),
+            'max_scores': result.get('max_scores', []),
+            'tableData': result.get('tableData', []),  # 🔥 CRITICAL: Include tableData
+            'sheet_name': sheet_name,
+        }
+
+        # Cache the complete response for better performance
+        cache.set(cache_key_complete, complete_response, 30)   # 30 seconds
+        
+        # Also cache headers-only version for card computations if needed
+        headers_only_cache = {
             'success': result.get('success', True),
             'headers': result.get('headers') or result.get('main_headers') or [],
             'main_headers': result.get('main_headers') or result.get('headers') or [],
             'sheet_name': sheet_name,
         }
-
-        cache.set(cache_key, small, 30)   # 30 seconds - optimized for 2-3 second change detection
-        return Response(small)
+        cache.set(cache_key, headers_only_cache, 30)
+        return Response(complete_response)
 
     except Exception as e:
         logger.error(f"Get specific sheet data error: {str(e)}")

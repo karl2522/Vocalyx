@@ -72,18 +72,41 @@ const BatchGradingModal = ({
   try {
     let sheetsResponse;
     if (currentSheet) {
+      console.log('🔥 DEBUG: Using getSpecificSheetData for sheet:', currentSheet.sheet_name);
       sheetsResponse = await classRecordService.getSpecificSheetData(
         classRecord.google_sheet_id, 
-        currentSheet.sheet_name
+        currentSheet.sheet_name,
+        { force_refresh: true }  // 🔥 FIX: Force refresh to bypass cache
       );
     } else {
+      console.log('🔥 DEBUG: Using getGoogleSheetsDataServiceAccount for default sheet');
       sheetsResponse = await classRecordService.getGoogleSheetsDataServiceAccount(
         classRecord.google_sheet_id
       );
     }
     
+    // 🔥 DEBUG: Log the complete API response
+    console.log('🔥 DEBUG: Complete API Response:', sheetsResponse);
+    console.log('🔥 DEBUG: Response data:', sheetsResponse.data);
+    console.log('🔥 DEBUG: Success status:', sheetsResponse.data?.success);
+    console.log('🔥 DEBUG: Headers:', sheetsResponse.data?.headers);
+    console.log('🔥 DEBUG: TableData type:', typeof sheetsResponse.data?.tableData);
+    console.log('🔥 DEBUG: TableData value:', sheetsResponse.data?.tableData);
+    console.log('🔥 DEBUG: Is tableData array?', Array.isArray(sheetsResponse.data?.tableData));
+    
     if (!sheetsResponse.data?.success) {
       throw new Error('Could not load student data');
+    }
+
+    // 🔥 FIX: Add proper validation for tableData and headers
+    if (!sheetsResponse.data.tableData || !Array.isArray(sheetsResponse.data.tableData)) {
+      console.error('🔥 CACHING: ❌ tableData is missing or not an array:', sheetsResponse.data.tableData);
+      throw new Error('Student data is not available in the expected format');
+    }
+
+    if (!sheetsResponse.data.headers || !Array.isArray(sheetsResponse.data.headers)) {
+      console.error('🔥 CACHING: ❌ headers is missing or not an array:', sheetsResponse.data.headers);
+      throw new Error('Column headers are not available');
     }
 
     const convertedTableData = sheetsResponse.data.tableData.map(row => {
@@ -98,7 +121,7 @@ const BatchGradingModal = ({
     console.log('🔥 CACHING: ✅ Sheet data cached for batch session');
     console.log('🔥 CACHING: 📊 Cached', convertedTableData.length, 'student records');
     
-    toast.success(`Column set to: ${header}. Data cached! Start speaking! ⚡`);
+    toast.success(`Column set to: ${header}. Ready to record! 🎤`);
     
     setTimeout(() => {
       console.log('🔥 COLUMN SELECT: 🎤 Checking if should start listening...');
