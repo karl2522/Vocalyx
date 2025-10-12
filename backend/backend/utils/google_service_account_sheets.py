@@ -1157,6 +1157,79 @@ class GoogleServiceAccountSheets:
                 'error': f'Failed to get sheets list: {str(e)}'
             }
 
+    def update_cell_by_student_and_column(self, sheet_id: str, sheet_name: str, student_id: str, column_name: str, value: str) -> dict:
+        """
+        Find a student's row by Student ID and update the specified column with the provided value.
+
+        Args:
+            sheet_id: Spreadsheet ID
+            sheet_name: Tab name (e.g., 'Midterm' or 'Final')
+            student_id: Exact Student ID string to match
+            column_name: Header name (must match one of the sub headers)
+            value: Value to set (e.g., 'INC' or 'N/A')
+
+        Returns: dict with success and details
+        """
+        try:
+            data = self.get_specific_sheet_data(sheet_id, sheet_name)
+            if not data.get('success'):
+                return data
+
+            headers = data.get('headers', [])
+            table = data.get('tableData', [])
+
+            # Locate Student ID column
+            student_id_idx = None
+            for idx, h in enumerate(headers):
+                if isinstance(h, str) and 'STUDENT' in h.upper() and 'ID' in h.upper():
+                    student_id_idx = idx
+                    break
+            if student_id_idx is None:
+                return {'success': False, 'error': 'Student ID column not found'}
+
+            # Locate Final Grade column index using MAIN HEADERS (Row 1)
+            def norm(s: str) -> str:
+                return ''.join(str(s or '').strip().upper().split())
+            main_headers = data.get('main_headers', [])
+            target_col_idx = None
+            for idx, mh in enumerate(main_headers):
+                if norm(mh) == norm('Final Grade'):
+                    target_col_idx = idx
+                    break
+            if target_col_idx is None:
+                return {'success': False, 'error': 'Final Grade column not found in main headers'}
+
+            # Find row index by exact student id match
+            row_index = None
+            for i, row in enumerate(table):
+                sid = ''
+                if student_id_idx < len(row) and row[student_id_idx] is not None:
+                    sid = str(row[student_id_idx]).strip()
+                if sid == str(student_id).strip():
+                    row_index = i
+                    break
+
+            if row_index is None:
+                return {'success': False, 'error': f'Student ID {student_id} not found'}
+
+            # Issue the update using the existing primitive (0-based row index)
+            # Convert index to letter and write directly
+            column_letter = chr(65 + target_col_idx)
+            sheet_row = row_index + 4
+            cell_range = f"'{sheet_name}'!{column_letter}{sheet_row}"
+            body = { 'values': [[str(value)]] }
+            result = self.sheets_service.spreadsheets().values().update(
+                spreadsheetId=sheet_id,
+                range=cell_range,
+                valueInputOption='USER_ENTERED',
+                body=body
+            ).execute()
+            upd = { 'success': True, 'updated_cells': result.get('updatedCells', 0), 'cell_range': cell_range }
+            return upd
+        except Exception as e:
+            logger.error(f"update_cell_by_student_and_column error: {str(e)}")
+            return {'success': False, 'error': str(e)}
+
     def update_cell_in_sheet(self, sheet_id: str, row_index: int, column_name: str, value: str,
                              sheet_name: str = None) -> dict:
         """

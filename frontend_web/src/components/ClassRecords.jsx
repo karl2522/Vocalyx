@@ -1,6 +1,5 @@
 import { Lightbulb } from 'lucide-react';
-import PropTypes from 'prop-types';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
   FiCalendar,
@@ -84,7 +83,7 @@ const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, recordName, isDel
               <p className="text-gray-700 leading-relaxed mb-3">
                 You are about to permanently delete the class record{' '}
                 <span className="font-semibold text-gray-900 bg-gray-100 px-2 py-1 rounded">
-                  &quot;{recordName}&quot;
+                  "{recordName}"
                 </span>
               </p>
               
@@ -220,22 +219,10 @@ const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, recordName, isDel
   );
 };
 
-DeleteConfirmationModal.propTypes = {
-  isOpen: PropTypes.bool.isRequired,
-  onClose: PropTypes.func.isRequired,
-  onConfirm: PropTypes.func.isRequired,
-  recordName: PropTypes.string.isRequired,
-  isDeleting: PropTypes.bool.isRequired,
-};
-
 // Skeleton Loader Component (keep existing)
 const Skeleton = ({ className }) => (
   <div className={`bg-gray-200 rounded-md ${className}`}></div>
 );
-
-Skeleton.propTypes = {
-  className: PropTypes.string,
-};
 
 
 
@@ -277,10 +264,6 @@ const RecordCardSkeleton = ({ viewMode }) => (
     </div>
   </div>
 );
-
-RecordCardSkeleton.propTypes = {
-  viewMode: PropTypes.string.isRequired,
-};
 
 // Pagination Component
 const Pagination = ({ currentPage, totalPages, onPageChange }) => {
@@ -364,12 +347,6 @@ const Pagination = ({ currentPage, totalPages, onPageChange }) => {
   );
 };
 
-Pagination.propTypes = {
-  currentPage: PropTypes.number.isRequired,
-  totalPages: PropTypes.number.isRequired,
-  onPageChange: PropTypes.func.isRequired,
-};
-
 const ClassRecords = () => {
   const [classRecords, setClassRecords] = useState([]);
   const [remainingMap, setRemainingMap] = useState({}); // id -> { total, sheets }
@@ -403,130 +380,78 @@ const ClassRecords = () => {
   // 🔥 NEW: Navigation tip state
   const [showNavigationTip, setShowNavigationTip] = useState(true);
   
-  // Pagination states (server-side)
+  // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const recordsPerPage = 9;
-  const [totalCount, setTotalCount] = useState(0);
-
-  
-
-  const fetchClassRecords = useCallback(async () => {
-    try {
-      setLoading(true);
-      const response = await classRecordService.getClassRecordsWithLiveCounts({
-        page: currentPage,
-        page_size: recordsPerPage
-      });
-      const payload = response.data;
-      const records = Array.isArray(payload) ? payload : (payload?.results || []);
-      const count = Array.isArray(payload) ? payload.length : (payload?.count || 0);
-      setClassRecords(records);
-      setTotalCount(count);
-
-      // Build remaining map directly from API payload for first paint
-      const map = {};
-      for (const rec of records) {
-        const sheets = Array.isArray(rec.sheets) ? rec.sheets : [];
-        const sheetsSum = sheets.reduce((sum, s) => sum + (Number(s?.remaining) || 0), 0);
-        const total = sheetsSum > 0 ? sheetsSum : Math.max(0, Number(rec.remaining_total) || 0);
-        map[rec.id] = { total, sheets };
-      }
-      const needFallback = records.filter(r => (map[r.id]?.total ?? 0) <= 0);
-      let finalMap = { ...map };
-      if (needFallback.length > 0) {
-        // Only use mirrored percentages for efficiency
-        const enriched = await Promise.all(needFallback.map(async (rec) => {
-          try {
-            const res = await classRecordService.getCategoryPercentages(rec.id);
-            const remaining = Math.max(0, res?.data?.remaining ?? 0);
-            return [rec.id, { total: remaining, sheets: [] }];
-          } catch (e) {
-            console.warn('category_percentages fetch failed', e);
-            return null;
-          }
-        })).catch((e) => {
-          console.warn('Fallback batch error', e);
-          return [];
-        });
-        for (const item of enriched) {
-          if (!item) continue;
-          const [id, value] = item;
-          if (id && value) finalMap[id] = value;
-        }
-      }
-
-      // If total is available but sheets breakdown is missing, compute breakdown for midterm/final
-      const needBreakdown = records.filter(r => (finalMap[r.id]?.total ?? 0) > 0 && (finalMap[r.id]?.sheets?.length ?? 0) === 0 && r.google_sheet_id);
-      if (needBreakdown.length > 0) {
-        const computeSheetsBreakdown = async (rec) => {
-          try {
-            const list = await classRecordService.getSheetsList(rec.google_sheet_id);
-            const all = list?.data?.sheets || [];
-            const targets = [];
-            const midterm = all.find(s => (s.sheet_name || '').toLowerCase().includes('midterm'));
-            const final = all.find(s => (s.sheet_name || '').toLowerCase().includes('final'));
-            if (midterm) targets.push(midterm);
-            if (final) targets.push(final);
-            if (targets.length === 0) targets.push(...all.slice(0, 2));
-
-            const idxFromLetter = (letter) => {
-              let total = 0; const up = letter.toUpperCase();
-              for (let i = 0; i < up.length; i++) { total = total * 26 + (up.charCodeAt(i) - 64); }
-              return total - 1;
-            };
-            const letters = ['K', 'Q', 'W', 'AC'];
-            const sheets = [];
-            for (const s of targets) {
-              try {
-                const resp = await classRecordService.getSpecificSheetData(rec.google_sheet_id, s.sheet_name);
-                const row = resp?.data?.main_headers || resp?.data?.headers || [];
-                if (row.length > 0) {
-                  let sum = 0;
-                  for (const l of letters) {
-                    const idx = idxFromLetter(l);
-                    const cell = row[idx];
-                    if (!cell) continue;
-                    let str = String(cell).trim();
-                    if (str.endsWith('%')) str = str.slice(0, -1).trim();
-                    const val = parseInt(parseFloat(str));
-                    if (Number.isFinite(val)) sum += Math.max(0, val);
-                  }
-                  const remaining = Math.max(0, 100 - sum);
-                  if (remaining > 0) sheets.push({ sheetName: s.sheet_name, remaining });
-                }
-              } catch (e) {
-                console.warn('sheet breakdown fetch failed', e);
-              }
-            }
-            return sheets;
-          } catch (e) {
-            console.warn('sheets list fetch failed', e);
-            return [];
-          }
-        };
-
-        const breakdowns = await Promise.all(needBreakdown.map(async (rec) => {
-          const sheets = await computeSheetsBreakdown(rec);
-          return [rec.id, sheets];
-        }));
-        for (const [id, sheets] of breakdowns) {
-          if (!id) continue;
-          const prev = finalMap[id] || { total: 0, sheets: [] };
-          finalMap[id] = { total: prev.total, sheets };
-        }
-      }
-
-      setRemainingMap(finalMap);
-    } catch (error) {
-      console.error('Error fetching class records:', error);
-      showToast.error('Failed to fetch class records');
-    }
-    setLoading(false);
-  }, [currentPage, recordsPerPage]);
 
   useEffect(() => {
     fetchClassRecords();
-  }, [currentPage, fetchClassRecords]);
+  }, []);
+
+  const fetchClassRecords = async () => {
+    try {
+      setLoading(true);
+      const response = await classRecordService.getClassRecordsWithLiveCounts();
+      const records = response.data || [];
+      setClassRecords(records);
+
+      // Build remaining map directly from API payload; fallback to DB summary when missing
+      try {
+        const initialMap = {};
+        for (const rec of records) {
+          const sheets = Array.isArray(rec.sheets) ? rec.sheets : [];
+          const sheetsSum = sheets.reduce((sum, s) => sum + (Number(s?.remaining) || 0), 0);
+          const total = sheets.length > 0 ? sheetsSum : Math.max(0, Number(rec.remaining_total) || 0);
+          // Prefer recent local breakdown persisted from record view
+          let local = null;
+          try {
+            const raw = localStorage.getItem(`cr_breakdown_${rec.id}`);
+            if (raw) local = JSON.parse(raw);
+          } catch {}
+          if (local && Array.isArray(local.sheets) && local.sheets.length > 0) {
+            initialMap[rec.id] = { total: Number(local.total) || total, sheets: local.sheets };
+          } else {
+            initialMap[rec.id] = { total, sheets };
+          }
+        }
+
+        // Fallback: fetch DB-mirrored breakdown for records with no total/breakdown
+        const needFallback = records.filter(r => {
+          const info = initialMap[r.id];
+          const hasTotal = (info?.total ?? 0) > 0;
+          const hasSheets = (info?.sheets?.length ?? 0) > 0;
+          return !hasTotal || !hasSheets;
+        });
+        if (needFallback.length === 0) {
+          setRemainingMap(initialMap);
+        } else {
+          const results = await Promise.all(needFallback.map(async (rec) => {
+            try {
+              const res = await classRecordService.getCategoryPercentages(rec.id);
+              const remaining = Math.max(0, res?.data?.remaining ?? 0);
+              const sheets = Array.isArray(res?.data?.sheets) ? res.data.sheets : [];
+              const totalFinal = sheets.length > 0
+                ? sheets.reduce((sum, s) => sum + (Number(s.remaining) || 0), 0)
+                : remaining;
+              return [rec.id, { total: totalFinal, sheets }];
+            } catch (e) {
+              console.warn(`⚠️ category_percentages failed for record ${rec.id}:`, e);
+              return [rec.id, { total: 0, sheets: [] }];
+            }
+          }));
+          const map = { ...initialMap, ...Object.fromEntries(results) };
+          setRemainingMap(map);
+        }
+      } catch (e) {
+        console.error('❌ Error computing remaining map:', e);
+      }
+    } catch (error) {
+      console.error('Error fetching class records:', error);
+      showToast.error('Failed to fetch class records');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleCreateRecord = async (formData) => {
     try {
@@ -623,9 +548,12 @@ const ClassRecords = () => {
     }
   };
 
-  // Pagination calculations (server-side)
-  const totalPages = Math.ceil((totalCount || 0) / recordsPerPage) || 1;
-  const showPagination = (totalCount || 0) > recordsPerPage;
+  // Pagination calculations
+  const totalPages = Math.ceil(classRecords.length / recordsPerPage);
+  const startIndex = (currentPage - 1) * recordsPerPage;
+  const endIndex = startIndex + recordsPerPage;
+  const currentRecords = classRecords.slice(startIndex, endIndex);
+  const showPagination = classRecords.length > recordsPerPage;
 
   const handlePageChange = (page) => {
     setCurrentPage(page);
@@ -841,7 +769,7 @@ const ClassRecords = () => {
         ) : (
           <>
             <div className={`grid gap-4 ${viewMode === 'grid' ? 'md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1'}`}>
-              {classRecords.map((record) => (
+              {currentRecords.map((record) => (
               <Link
                 key={record.id}
                 to={`/class-records/${record.id}/excel`}

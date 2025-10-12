@@ -42,91 +42,25 @@ const FinalGradeOverview = ({
 
   const loadClassStandingPercentage = useCallback(async () => {
     try {
-      // Get all sheets from the class record
-      const sheetsList = await classRecordService.getSheetsList(classRecord.google_sheet_id);
-      const sheets = sheetsList?.data?.sheets || [];
-      
-      // Filter for Midterm and Final sheets
-      const midtermSheet = sheets.find(sheet => sheet.sheet_name?.toLowerCase().includes('midterm'));
-      const finalSheet = sheets.find(sheet => sheet.sheet_name?.toLowerCase().includes('final'));
-      
-      const sheetsToCheck = [];
-      if (midtermSheet) sheetsToCheck.push(midtermSheet);
-      if (finalSheet) sheetsToCheck.push(finalSheet);
-      
-      if (sheetsToCheck.length === 0) {
-        // Fallback to first sheet if no Midterm/Final found
-        const firstSheet = sheets[0];
-        if (firstSheet) sheetsToCheck.push(firstSheet);
+      // Use backend mirror (DB) for instant per-sheet remaining without Google calls
+      const res = await classRecordService.getCategoryPercentages(classRecord.id);
+      const sheets = Array.isArray(res?.data?.sheets) ? res.data.sheets : [];
+      const total = Number.isFinite(res?.data?.remaining) ? Number(res.data.remaining) : (
+        sheets.reduce((sum, s) => sum + (Number(s.remaining) || 0), 0)
+      );
+
+      setProblematicSheets(sheets);
+      setClassStandingRemaining(Math.max(0, total));
+
+      if (sheets.length > 0) {
+        setCurrentSheetName(sheets[0].sheetName);
+      } else {
+        setCurrentSheetName('');
       }
-      
-      const problematicSheets = [];
-      let totalRemaining = 0;
-      
-      // Helper function to calculate percentage for a sheet
-      const calculateSheetPercentage = async (sheet) => {
-        try {
-          const sheetData = await classRecordService.getSpecificSheetData(classRecord.google_sheet_id, sheet.sheet_name);
-          const headersRow = sheetData?.data?.main_headers || sheetData?.data?.headers || [];
-          
-          // Calculate manually from header row (same logic as ClassRecordExcel)
-          const idxFromLetter = (letter) => {
-            let total = 0;
-            const up = letter.toUpperCase();
-            for (let i = 0; i < up.length; i++) {
-              total = total * 26 + (up.charCodeAt(i) - 64);
-            }
-            return total - 1; // zero-based
-          };
-          
-          const letters = ['K', 'Q', 'W', 'AC'];
-          let total = 0;
-          
-          letters.forEach(letter => {
-            const idx = idxFromLetter(letter);
-            const cell = headersRow[idx];
-            if (cell) {
-              let s = String(cell).trim();
-              if (s.endsWith('%')) s = s.slice(0, -1).trim();
-              const val = parseInt(parseFloat(s));
-              if (Number.isFinite(val)) {
-                total += Math.max(0, val);
-              }
-            }
-          });
-          
-          const remaining = Math.max(0, 100 - total);
-          return { sheetName: sheet.sheet_name, remaining, total };
-        } catch (error) {
-          console.warn(`Failed to calculate percentage for sheet ${sheet.sheet_name}:`, error);
-          return { sheetName: sheet.sheet_name, remaining: 0, total: 0 };
-        }
-      };
-      
-      // Check all sheets
-      for (const sheet of sheetsToCheck) {
-        const result = await calculateSheetPercentage(sheet);
-        if (result.remaining > 0) {
-          problematicSheets.push(result);
-          totalRemaining += result.remaining;
-        }
-      }
-      
-      setProblematicSheets(problematicSheets);
-      setClassStandingRemaining(totalRemaining);
-      
-      // Set the first problematic sheet name for display
-      if (problematicSheets.length > 0) {
-        setCurrentSheetName(problematicSheets[0].sheetName);
-      } else if (sheetsToCheck.length > 0) {
-        setCurrentSheetName(sheetsToCheck[0].sheet_name);
-      }
-      
     } catch (error) {
       console.warn('Failed to load class standing percentage:', error);
-      // Don't show error toast for this as it's not critical for the main functionality
     }
-  }, [classRecord.google_sheet_id]);
+  }, [classRecord.id]);
 
   useEffect(() => {
     if (isOpen && classRecord?.id && sheetId) {
@@ -149,21 +83,30 @@ const FinalGradeOverview = ({
     try {
       setMarkingLoading(true);
       
-      // Determine which sheet this column belongs to
-      const midtermColumns = ['QUIZ 1', 'QUIZ 2', 'QUIZ 3', 'QUIZ 4', 'QUIZ 5', 'ASSIGN 1', 'ASSIGN 2', 'ASSIGN 3', 'ASSIGN 4', 'ASSIGN 5', 'SEAT 1', 'SEAT 2', 'SEAT 3', 'SEAT 4', 'SEAT 5', 'LAB 1', 'LAB 2', 'LAB 3', 'LAB 4', 'LAB 5', 'PRELIM', 'MIDTERM'];
-      
-      const sheetName = midtermColumns.includes(column) ? 'Midterm' : 'Final';
-      
-      await googleSheetsService.markMissingScores(sheetId, {
-        sheetName,
-        studentId: student.studentId,
-        column,
-        value
+      // Persist override in backend (DB), not in Sheets
+      await classRecordService.setFinalGradeOverride(
+        classRecord.id,
+        student.studentId,
+        value,
+        {
+          student_key: `${student.studentId}_${student.lastName}_${student.firstName}`,
+          first_name: student.firstName,
+          last_name: student.lastName,
+        }
+      );
+
+      showToast.success(`Marked Final Grade as ${value} for ${student.fullName}`);
+
+      // Optimistically update UI immediately
+      setPreviewData(prev => {
+        if (!prev?.students) return prev;
+        const updated = { ...prev, students: prev.students.map(s => (
+          s.studentId === student.studentId ? { ...s, FG: value } : s
+        )) };
+        return updated;
       });
 
-      showToast.success(`Marked ${column} as ${value} for ${student.fullName}`);
-      
-      // Reload data to reflect changes
+      // Reload data to confirm
       await loadPreviewData();
     } catch (error) {
       showToast.error('Failed to mark missing score: ' + error.message);
@@ -175,28 +118,68 @@ const FinalGradeOverview = ({
   const handleMarkAllMissing = async (student, value) => {
     try {
       setMarkingLoading(true);
+
+      // Apply FG override to Final Term Grade column
+      await classRecordService.setFinalGradeOverride(
+        classRecord.id,
+        student.studentId,
+        value,
+        {
+          student_key: `${student.studentId}_${student.lastName}_${student.firstName}`,
+          first_name: student.firstName,
+          last_name: student.lastName,
+        }
+      );
       
-      const missing = getMissingForStudent(student);
-      const updates = missing.map(missingItem => {
-        const midtermColumns = ['QUIZ 1', 'QUIZ 2', 'QUIZ 3', 'QUIZ 4', 'QUIZ 5', 'ASSIGN 1', 'ASSIGN 2', 'ASSIGN 3', 'ASSIGN 4', 'ASSIGN 5', 'SEAT 1', 'SEAT 2', 'SEAT 3', 'SEAT 4', 'SEAT 5', 'LAB 1', 'LAB 2', 'LAB 3', 'LAB 4', 'LAB 5', 'PRELIM', 'MIDTERM'];
-        const sheetName = midtermColumns.includes(missingItem.column) ? 'Midterm' : 'Final';
-        
-        return {
-          sheet_name: sheetName,
-          student_id: student.studentId,
-          column: missingItem.column,
-          value: value
-        };
+      showToast.success(`Marked Final Grade as ${value} for ${student.fullName}`);
+
+      setPreviewData(prev => {
+        if (!prev?.students) return prev;
+        const updated = { ...prev, students: prev.students.map(s => (
+          s.studentId === student.studentId ? { ...s, FG: value } : s
+        )) };
+        return updated;
       });
 
-      await googleSheetsService.markMissingScoresBatch(sheetId, updates);
-      
-      showToast.success(`Marked all missing scores as ${value} for ${student.fullName}`);
-      
-      // Reload data to reflect changes
       await loadPreviewData();
     } catch (error) {
       showToast.error('Failed to mark missing scores: ' + error.message);
+    } finally {
+      setMarkingLoading(false);
+    }
+  };
+
+  const handleClearFinalGradeOverride = async (student) => {
+    try {
+      setMarkingLoading(true);
+      await classRecordService.setFinalGradeOverride(
+        classRecord.id,
+        student.studentId,
+        '',
+        {
+          student_key: `${student.studentId}_${student.lastName}_${student.firstName}`,
+          first_name: student.firstName,
+          last_name: student.lastName,
+        }
+      );
+
+      // Optimistically restore computed FG from term grades
+      setPreviewData(prev => {
+        if (!prev?.students) return prev;
+        const updated = { ...prev, students: prev.students.map(s => {
+          if (s.studentId !== student.studentId || s.lastName !== student.lastName || s.firstName !== student.firstName) return s;
+          const mid = parseFloat(s.midtermGrade);
+          const fin = parseFloat(s.finalTermGrade);
+          const computed = (Number.isFinite(mid) && Number.isFinite(fin)) ? Math.round(((mid + fin) / 2) * 100) / 100 : '';
+          return { ...s, FG: computed };
+        }) };
+        return updated;
+      });
+
+      await loadPreviewData();
+      showToast.success(`Removed final grade mark for ${student.fullName}`);
+    } catch (error) {
+      showToast.error('Failed to remove mark: ' + (error?.message || 'Unknown error'));
     } finally {
       setMarkingLoading(false);
     }
@@ -410,21 +393,41 @@ const FinalGradeOverview = ({
                         <td className="px-4 py-4 whitespace-nowrap text-center text-sm text-gray-900">
                           {student.FE || '-'}
                         </td>
-                        <td className="px-4 py-4 whitespace-nowrap text-center text-sm text-gray-900">
-                          {student.FG !== '' && student.FG !== undefined ? student.FG : '-'}
+                        <td className="px-4 py-4 whitespace-nowrap text-center text-sm">
+                          {(['INC','N/A'].includes(String(student.FG).toUpperCase())) ? (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800">
+                              {String(student.FG).toUpperCase()}
+                            </span>
+                          ) : (
+                            <span className="text-gray-900">{(student.FG !== '' && student.FG !== undefined) ? student.FG : '-'}</span>
+                          )}
                         </td>
                         
                         <td className="px-4 py-4 whitespace-nowrap text-center text-sm">
-                          {hasMissing ? (
-                            <button
-                              onClick={() => setSelectedStudent(student)}
-                              className="text-blue-600 hover:text-blue-800 font-medium"
-                            >
-                              Manage Missing
-                            </button>
-                          ) : (
-                            <span className="text-green-600 font-medium">✓ Complete</span>
-                          )}
+                          <div className="flex items-center justify-center gap-3">
+                            {(['INC','N/A'].includes(String(student.FG).toUpperCase())) ? (
+                              <button
+                                onClick={() => handleClearFinalGradeOverride(student)}
+                                disabled={markingLoading}
+                                className="text-red-600 hover:text-red-800 font-medium"
+                              >
+                                Remove Mark
+                              </button>
+                            ) : (
+                              <>
+                                {hasMissing ? (
+                                  <button
+                                    onClick={() => setSelectedStudent(student)}
+                                    className="text-blue-600 hover:text-blue-800 font-medium"
+                                  >
+                                    Manage Missing
+                                  </button>
+                                ) : (
+                                  <span className="text-green-600 font-medium">✓ Complete</span>
+                                )}
+                              </>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -438,66 +441,90 @@ const FinalGradeOverview = ({
 
       {/* Missing Scores Detail Modal */}
       {selectedStudent && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-60 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl">
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 z-60 flex items-center justify-center p-4"
+          onClick={(e) => {
+            // Close only the inner popup, not the parent modal
+            e.stopPropagation();
+            setSelectedStudent(null);
+          }}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl w-full max-w-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="p-6 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">
-                Manage Missing Scores - {selectedStudent.fullName}
+                Manage Missing Scores
               </h3>
-              <p className="text-sm text-gray-600 mt-1">
-                Student ID: {selectedStudent.studentId}
-              </p>
             </div>
             
             <div className="p-6">
-              <div className="space-y-4">
-                {getMissingForStudent(selectedStudent).map((missing, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <span className="font-medium text-gray-900">{missing.displayHeader || missing.column}</span>
-                      <span className="text-sm text-gray-500 ml-2">(Row {missing.rowIndex})</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <select
-                        onChange={(e) => {
-                          if (e.target.value) {
-                            handleMarkMissing(selectedStudent, missing.column, e.target.value);
-                          }
-                        }}
-                        disabled={markingLoading}
-                        className="px-3 py-1 border border-gray-300 rounded-md text-sm"
-                        defaultValue=""
-                      >
-                        <option value="">Select action...</option>
-                        <option value="N/A">Mark as N/A</option>
-                        <option value="INC">Mark as INC</option>
-                      </select>
-                    </div>
-                  </div>
-                ))}
+              {/* Info note */}
+              <div className="mb-4 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                <p className="text-xs text-amber-800">
+                  Assigning INC or N/A to this student will be reflected in the final grade.
+                </p>
               </div>
-              
-              <div className="mt-6 pt-4 border-t border-gray-200">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm text-gray-600">
-                    Quick actions for all missing scores:
+
+              {/* Single action card */}
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div>
+                  <div className="font-medium text-gray-900">{selectedStudent.fullName}</div>
+                  <div className="text-xs text-gray-500">Student ID: {selectedStudent.studentId}</div>
+                  <div className="mt-2">
+                    <span className="text-sm font-medium text-gray-600">Missing:</span>
+                    <div className="mt-1">
+                      {(() => {
+                        const missing = getMissingForStudent(selectedStudent);
+                        const groupedBySheet = {};
+                        
+                        // Group missing items by sheet
+                        missing.forEach(item => {
+                          const sheetName = item.sheetName || 'Unknown';
+                          if (!groupedBySheet[sheetName]) {
+                            groupedBySheet[sheetName] = [];
+                          }
+                          groupedBySheet[sheetName].push(item.displayHeader || item.column);
+                        });
+                        
+                        return Object.entries(groupedBySheet).map(([sheet, items], index) => (
+                          <div key={sheet} className="flex flex-wrap items-center gap-1">
+                            <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-semibold bg-blue-100 text-blue-800">
+                              {sheet}
+                            </span>
+                            <span className="text-sm text-gray-500">-</span>
+                            <div className="flex flex-wrap gap-1">
+                              {items.map((item, itemIndex) => (
+                                <span key={itemIndex} className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-red-100 text-red-700">
+                                  {item}
+                                </span>
+                              ))}
+                            </div>
+                            {index < Object.entries(groupedBySheet).length - 1 && (
+                              <span className="mx-2"></span>
+                            )}
+                          </div>
+                        ));
+                      })()}
+                    </div>
                   </div>
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={() => handleMarkAllMissing(selectedStudent, 'N/A')}
-                      disabled={markingLoading}
-                      className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 text-sm"
-                    >
-                      Mark All as N/A
-                    </button>
-                    <button
-                      onClick={() => handleMarkAllMissing(selectedStudent, 'INC')}
-                      disabled={markingLoading}
-                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 text-sm"
-                    >
-                      Mark All as INC
-                    </button>
-                  </div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <select
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        handleMarkMissing(selectedStudent, 'Final Grade', e.target.value);
+                      }
+                    }}
+                    disabled={markingLoading}
+                    className="px-3 py-1 border border-gray-300 rounded-md text-sm"
+                    defaultValue=""
+                  >
+                    <option value="">Select action...</option>
+                    <option value="N/A">Mark as N/A</option>
+                    <option value="INC">Mark as INC</option>
+                  </select>
                 </div>
               </div>
             </div>

@@ -5,6 +5,7 @@ from django.shortcuts import get_object_or_404
 from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 from django.conf import settings
+from django.core.cache import cache
 from .models import ClassRecord, Student, GradeCategory, Grade, CategoryPercentage
 from .serializers import (
     ClassRecordSerializer,
@@ -208,6 +209,110 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
         print(f"✅ ClassRecord '{instance.id}' has been deleted from the database.")
         print("--- Exiting perform_destroy ---")
 
+    @action(detail=False, methods=['get'], url_path='live-counts')
+    def live_counts(self, request):
+        """Return a paginated, lightweight list of class records with pre-mirrored
+        unallocated percentages, without making Google API calls.
+
+        Response shape (paginated): { count, next, previous, results: [...] }
+        Each result includes: id, name, semester, teacher_name, created_at,
+        student_count, google_sheet_id, remaining_total, sheets (optional breakdown).
+        """
+        try:
+            user_id = request.user.id
+            page = int(request.query_params.get('page', '1') or '1')
+            page_size = int(request.query_params.get('page_size', '12') or '12')
+            search = (request.query_params.get('search') or '').strip()
+            ordering = request.query_params.get('ordering') or '-created_at'
+
+            cache_key = f"live_counts_v1_user{user_id}_p{page}_s{page_size}_q{search}_o{ordering}"
+            cached = cache.get(cache_key)
+            if cached:
+                return Response(cached)
+
+            qs = self.get_queryset().only('id', 'name', 'semester', 'teacher_name', 'created_at', 'google_sheet_id', 'spreadsheet_data', 'imported_excel_data', 'is_excel_imported')
+
+            if search:
+                from django.db.models import Q
+                qs = qs.filter(Q(name__icontains=search) | Q(semester__icontains=search) | Q(teacher_name__icontains=search))
+
+            # Ordering
+            allowed = {'created_at', 'name', 'semester'}
+            desc = ordering.startswith('-')
+            field = ordering[1:] if desc else ordering
+            if field not in allowed:
+                ordering = '-created_at'
+            qs = qs.order_by(ordering)
+
+            # Count before pagination
+            total_count = qs.count()
+
+            # Pagination
+            start = (page - 1) * page_size
+            end = start + page_size
+            page_qs = list(qs[start:end])
+
+            # Fetch CategoryPercentage in bulk for these records
+            record_ids = [cr.id for cr in page_qs]
+            cp = CategoryPercentage.objects.filter(
+                class_record_id__in=record_ids,
+                group=CategoryPercentage.CLASS_STANDING,
+            ).values('class_record_id', 'sheet_name', 'category_name', 'percentage')
+
+            # Aggregate per record per sheet
+            from collections import defaultdict
+            per_record_sheet_sum = defaultdict(lambda: defaultdict(int))
+            for row in cp:
+                per_record_sheet_sum[row['class_record_id']][row['sheet_name']] += int(row['percentage'] or 0)
+
+            # Choose a sheet to display breakdown; and compute unallocated = 100 - sum
+            results = []
+            for cr in page_qs:
+                sheets = []
+                best_sheet_name = None
+                best_remaining = 0
+                sheet_map = per_record_sheet_sum.get(cr.id, {})
+                for s_name, total in sheet_map.items():
+                    remaining = max(0, 100 - int(total))
+                    if remaining > 0:
+                        sheets.append({'sheetName': s_name, 'remaining': remaining})
+                        # track the highest remaining to show as primary
+                        if remaining > best_remaining:
+                            best_remaining = remaining
+                            best_sheet_name = s_name
+
+                # remaining_total: prefer the highest remaining sheet; else 0
+                remaining_total = best_remaining if sheets else 0
+
+                # Compute student_count quickly based on JSON presence
+                # Uses existing property semantics; call the property which handles both modes
+                student_count = cr.student_count
+
+                results.append({
+                    'id': cr.id,
+                    'name': cr.name,
+                    'semester': cr.semester,
+                    'teacher_name': cr.teacher_name,
+                    'created_at': cr.created_at,
+                    'student_count': student_count,
+                    'google_sheet_id': cr.google_sheet_id,
+                    'remaining_total': remaining_total,
+                    'sheets': sheets,
+                })
+
+            payload = {
+                'count': total_count,
+                'next': None if end >= total_count else f"?page={page+1}&page_size={page_size}",
+                'previous': None if page <= 1 else f"?page={page-1}&page_size={page_size}",
+                'results': results,
+            }
+
+            # Short cache (per user/page) for fast list rendering
+            cache.set(cache_key, payload, 45)
+            return Response(payload)
+        except Exception as e:
+            return Response({'error': str(e)}, status=400)
+
     @action(detail=True, methods=['post'])
     def sync_percentages_from_sheet(self, request, pk=None):
         """ULTRA-OPTIMIZED with enhanced Django caching - NO Redis needed!
@@ -226,6 +331,11 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
         
         start_time = time.time()
         
+        # Initialize variables outside try block to avoid UnboundLocalError in except block
+        class_record = None
+        sheet_name = None
+        user_id = None
+        
         try:
             class_record = self.get_object()
             access_token = request.headers.get('X-Google-Access-Token')
@@ -239,13 +349,14 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
 
             # 🚀 ENHANCED CACHING STRATEGY - Multiple cache layers
             base_cache_key = f"percentages_v3_{class_record.google_sheet_id}_{sheet_name}_{user_id}"
+            fast_cache_key = f"fast_{base_cache_key}"
+            standard_cache_key = f"std_{base_cache_key}"
             
             # Check if force parameter is set to bypass cache
             force = bool(request.data.get('force', False))
             
             if not force:
                 # Layer 1: Fast cache (2 minutes) - for immediate repeated requests
-                fast_cache_key = f"fast_{base_cache_key}"
                 fast_cached = cache.get(fast_cache_key)
                 if fast_cached:
                     fast_cached.update({
@@ -257,7 +368,6 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
                     return Response(fast_cached)
 
                 # Layer 2: Standard cache (10 minutes) - for regular use
-                standard_cache_key = f"std_{base_cache_key}"
                 standard_cached = cache.get(standard_cache_key)
                 if standard_cached:
                     # Refresh fast cache from standard cache
@@ -462,17 +572,18 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
             print(f"❌ Sync failed in {response_time}s: {str(e)}")
             
             # 🚀 EMERGENCY FALLBACK - Try to return last known good data
-            emergency_cache_key = f"emergency_percentages_v3_{class_record.google_sheet_id}_{sheet_name}_{request.user.id}"
-            emergency_data = cache.get(emergency_cache_key)
-            if emergency_data:
-                emergency_data.update({
-                    'cached': True,
-                    'cache_type': 'emergency',
-                    'response_time': response_time,
-                    'note': 'Returned cached data due to API error'
-                })
-                print(f"🆘 EMERGENCY CACHE: Returned fallback data")
-                return Response(emergency_data)
+            if class_record and sheet_name and user_id:
+                emergency_cache_key = f"emergency_percentages_v3_{class_record.google_sheet_id}_{sheet_name}_{user_id}"
+                emergency_data = cache.get(emergency_cache_key)
+                if emergency_data:
+                    emergency_data.update({
+                        'cached': True,
+                        'cache_type': 'emergency',
+                        'response_time': response_time,
+                        'note': 'Returned cached data due to API error'
+                    })
+                    print(f"🆘 EMERGENCY CACHE: Returned fallback data")
+                    return Response(emergency_data)
             
             return Response({
                 'error': str(e),
@@ -495,20 +606,36 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
                 if latest:
                     sheet_name = latest.sheet_name
 
-            qs = CategoryPercentage.objects.filter(
+            base_qs = CategoryPercentage.objects.filter(
                 class_record=class_record,
                 group=CategoryPercentage.CLASS_STANDING,
             )
+
+            # Aggregate sheets breakdown from DB only (no Google calls)
+            from collections import defaultdict
+            sheet_totals = defaultdict(int)
+            for row in base_qs.values('sheet_name', 'percentage'):
+                sheet_totals[row['sheet_name']] += int(row['percentage'] or 0)
+            sheets = []
+            for s_name, s_total in sheet_totals.items():
+                remaining = max(0, 100 - int(s_total))
+                if remaining > 0:
+                    sheets.append({'sheetName': s_name, 'remaining': remaining})
+
+            # If a sheet was requested, include detailed data for that sheet
+            qs = base_qs
             if sheet_name:
                 qs = qs.filter(sheet_name=sheet_name)
             data = {cp.category_name: int(cp.percentage) for cp in qs}
             total = sum(data.values())
+
             return Response({
                 'status': 'success',
                 'data': data,
                 'total': total,
                 'remaining': max(0, 100 - total),
                 'sheet_name': sheet_name,
+                'sheets': sheets,
             })
         except Exception as e:
             return Response({'error': str(e)}, status=400)
@@ -696,6 +823,52 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
                 'status': 'error',
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['post'], url_path='set-final-grade-override')
+    def set_final_grade_override(self, request, pk=None):
+        """Set or clear a final grade override for a student.
+
+        Body: { student_id: str, student_key?: str, first_name?: str, last_name?: str, value: 'INC' | 'N/A' | '' }
+        - student_key is optional composite key used by preview: "<id>_<LASTNAME>_<FIRSTNAME>"
+        - If value is empty/null, the override is cleared.
+        """
+        try:
+            class_record = self.get_object()
+            student_id = str(request.data.get('student_id', '')).strip()
+            value = (str(request.data.get('value') or '').strip().upper())
+            provided_key = str(request.data.get('student_key') or '').strip()
+            first_name = str(request.data.get('first_name') or '').strip()
+            last_name = str(request.data.get('last_name') or '').strip()
+
+            if not student_id:
+                return Response({'error': 'student_id is required'}, status=400)
+
+            overrides = dict(class_record.final_grade_overrides or {})
+
+            # Helper: remove all variants for this student_id
+            def purge_variants():
+                # Remove plain id
+                overrides.pop(student_id, None)
+                # Remove any composite variants that start with id_
+                to_del = [k for k in overrides.keys() if k.startswith(f"{student_id}_")]
+                for k in to_del:
+                    overrides.pop(k, None)
+
+            if value in ('INC', 'N/A'):
+                # Normalize: always store a single composite key if names are available; else plain id
+                purge_variants()
+                key = provided_key or (f"{student_id}_{last_name}_{first_name}" if last_name and first_name else student_id)
+                overrides[key] = value
+            else:
+                # clear all variants
+                purge_variants()
+
+            class_record.final_grade_overrides = overrides
+            class_record.save(update_fields=['final_grade_overrides'])
+
+            return Response({'success': True, 'overrides': overrides})
+        except Exception as e:
+            return Response({'success': False, 'error': str(e)}, status=500)
 
     @action(detail=True, methods=['post'])
     def save_columns(self, request, pk=None):
