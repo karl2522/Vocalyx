@@ -1,5 +1,5 @@
 const BACKEND_URL = import.meta.env.PROD 
-  ? 'https://vocalyx-backend-64846917574.asia-southeast1.run.app' 
+  ? 'https://vocalyx-c61a072bf25a.herokuapp.com' 
   : 'http://127.0.0.1:8000';
 
 import googleDriveService from './googleDriveService';
@@ -155,19 +155,19 @@ class GoogleSheetsService {
         await googleDriveService.ensureGoogleAccessToken();
       }
 
-      let response = await googleDriveService.requestWithAuth(
-        `${this.baseURL}/sheets/${sheetId}/final-grade-preview/`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            class_record_id: classRecordId,
-            force: force
-          })
-        }
-      );
+      // 🔥 FIXED: Use fetch with this.getHeaders() to include X-Google-Access-Token
+      const response = await fetch(`${this.baseURL}/sheets/${sheetId}/final-grade-preview/`, {
+        method: 'POST',
+        headers: this.getHeaders(), // 🔥 This includes both Authorization and X-Google-Access-Token
+        body: JSON.stringify({
+          class_record_id: classRecordId,
+          force: force
+        })
+      });
 
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Final grade preview error:', errorText);
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
