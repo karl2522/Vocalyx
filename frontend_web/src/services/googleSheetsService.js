@@ -6,7 +6,7 @@ import googleDriveService from './googleDriveService';
 
 class GoogleSheetsService {
   constructor() {
-    this.baseURL = `${BACKEND_URL}/api`;
+    this.baseURL = BACKEND_URL; // 🔥 FIXED: Remove the extra /api
   }
 
   /**
