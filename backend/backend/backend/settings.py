@@ -15,6 +15,7 @@ import os
 from datetime import timedelta
 import dj_database_url
 import firebase_admin
+import json
 
 from celery.schedules import crontab
 from dotenv import load_dotenv
@@ -41,29 +42,37 @@ ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*', '10.0.165.206', '192.168.1.10', 
 # Firebase configuration - support both file and environment variable
 FIREBASE_SERVICE_ACCOUNT_PATH = os.path.join(BASE_DIR.parent, 'firebase-service-account.json')
 
-# Initialize Firebase Admin SDK
+# Initialize Firebase Admin SDK with better error handling
 if not firebase_admin._apps:
+    firebase_initialized = False
     try:
-        # First, try to use environment variable (for Heroku)
+        # First, try to use environment variable (for Cloud Run/Heroku)
         firebase_credentials_json = os.getenv('FIREBASE_SERVICE_ACCOUNT_KEY')
         if firebase_credentials_json:
-            import json
+            # Clean up JSON string
+            firebase_credentials_json = firebase_credentials_json.strip()
+            if firebase_credentials_json.startswith("'") and firebase_credentials_json.endswith("'"):
+                firebase_credentials_json = firebase_credentials_json[1:-1]
+            
             firebase_config = json.loads(firebase_credentials_json)
             cred = credentials.Certificate(firebase_config)
             firebase_admin.initialize_app(cred)
+            firebase_initialized = True
             print("✅ Firebase Admin SDK initialized from environment variable")
         # Fall back to service account file (for local development)
         elif os.path.exists(FIREBASE_SERVICE_ACCOUNT_PATH):
             cred = credentials.Certificate(FIREBASE_SERVICE_ACCOUNT_PATH)
             firebase_admin.initialize_app(cred)
+            firebase_initialized = True
             print("✅ Firebase Admin SDK initialized from service account file")
-        else:
-            print(f"⚠️ Firebase service account not found. Checked:")
-            print(f"   - Environment variable: FIREBASE_SERVICE_ACCOUNT_KEY")
-            print(f"   - File path: {FIREBASE_SERVICE_ACCOUNT_PATH}")
-            print("Firebase authentication features will be disabled")
     except Exception as e:
         print(f"❌ Warning: Failed to initialize Firebase Admin SDK: {e}")
+        firebase_initialized = False
+    
+    if not firebase_initialized:
+        print(f"⚠️ Firebase service account not found. Checked:")
+        print(f"   - Environment variable: FIREBASE_SERVICE_ACCOUNT_KEY")
+        print(f"   - File path: {FIREBASE_SERVICE_ACCOUNT_PATH}")
         print("Firebase authentication features will be disabled")
 
 
@@ -141,7 +150,6 @@ SPECTACULAR_SETTINGS = {
 
 
 #JWT Settings
-from datetime import timedelta
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
@@ -206,20 +214,6 @@ CORS_ALLOW_HEADERS = [
 CORS_ALLOW_PRIVATE_NETWORK = True
 CORS_PREFLIGHT_MAX_AGE = 86400
 CORS_EXPOSE_HEADERS = []
-
-# Force CORS headers on all responses, including error responses
-CORS_ALLOW_HEADERS = [
-    'accept',
-    'accept-encoding',
-    'authorization',
-    'content-type',
-    'dnt',
-    'origin',
-    'user-agent',
-    'x-csrftoken',
-    'x-requested-with',
-    'x-google-access-token',
-]
 
 # Additional settings to ensure CORS on error responses
 CORS_URLS_REGEX = r'^/api/.*$'
@@ -389,20 +383,19 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'users.CustomUser'
 
 # Google Sheets Template Configuration
-import json
-
-# Google Sheets Template Configuration
 GOOGLE_SHEETS_TEMPLATE_ID = os.getenv('GOOGLE_SHEETS_TEMPLATE_ID', '1h-dR0ergnvgqxXsS6nLFb7lAthuoJ5MVKya4NbYHT2c')
 
 # Google API Key for public sheet access (fallback when user auth fails)
 GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 
-# Load Google Service Account Credentials from JSON file or environment variable
+# Load Google Service Account Credentials - improved error handling
 GOOGLE_SERVICE_ACCOUNT_CREDENTIALS = {}
 SERVICE_ACCOUNT_FILE = os.path.join(BASE_DIR.parent, 'vocalyx2-service-account.json')
 
-# Try to load from environment variable first (for Heroku)
+# Try to load from environment variable first (for Cloud Run/Heroku)
 google_service_account_json = os.getenv('GOOGLE_SERVICE_ACCOUNT_CREDENTIALS')
+google_service_loaded = False
+
 if google_service_account_json:
     try:
         # Clean up the JSON string - remove any extra escaping
@@ -412,35 +405,53 @@ if google_service_account_json:
         
         GOOGLE_SERVICE_ACCOUNT_CREDENTIALS = json.loads(google_service_account_json)
         
+        # Verify the required fields are present
+        required_fields = ['type', 'project_id', 'private_key_id', 'private_key', 'client_email']
+        missing_fields = [field for field in required_fields if field not in GOOGLE_SERVICE_ACCOUNT_CREDENTIALS]
+        
+        if missing_fields:
+            raise ValueError(f"Missing required fields: {missing_fields}")
+            
         # Verify the private key format
         private_key = GOOGLE_SERVICE_ACCOUNT_CREDENTIALS.get('private_key', '')
         if '-----BEGIN PRIVATE KEY-----' not in private_key:
             raise ValueError("Invalid private key format")
             
+        google_service_loaded = True
         print("✅ Google Service Account credentials loaded from environment variable")
+        
     except (json.JSONDecodeError, ValueError) as e:
         print(f"❌ Error parsing Google Service Account credentials from environment: {e}")
         print("🔧 Falling back to file or disabling Google Sheets features")
         GOOGLE_SERVICE_ACCOUNT_CREDENTIALS = {}
-# Fall back to file (for local development)
-elif os.path.exists(SERVICE_ACCOUNT_FILE):
-    with open(SERVICE_ACCOUNT_FILE, 'r') as f:
-        GOOGLE_SERVICE_ACCOUNT_CREDENTIALS = json.load(f)
-    print(f"✅ Google Service Account credentials loaded from {SERVICE_ACCOUNT_FILE}")
-else:
+
+# Fall back to file (for local development) if env loading failed
+if not google_service_loaded:
+    if os.path.exists(SERVICE_ACCOUNT_FILE):
+        try:
+            with open(SERVICE_ACCOUNT_FILE, 'r') as f:
+                GOOGLE_SERVICE_ACCOUNT_CREDENTIALS = json.load(f)
+            google_service_loaded = True
+            print(f"✅ Google Service Account credentials loaded from {SERVICE_ACCOUNT_FILE}")
+        except Exception as e:
+            print(f"❌ Error loading service account file: {e}")
+    
+    # Also check in current directory as fallback
+    if not google_service_loaded:
+        current_service_file = os.path.join(BASE_DIR, 'vocalyx2-service-account.json')
+        if os.path.exists(current_service_file):
+            try:
+                with open(current_service_file, 'r') as f:
+                    GOOGLE_SERVICE_ACCOUNT_CREDENTIALS = json.load(f)
+                google_service_loaded = True
+                print(f"✅ Google Service Account credentials loaded from {current_service_file}")
+            except Exception as e:
+                print(f"❌ Error loading service account file from current directory: {e}")
+
+# Final fallback message if nothing worked
+if not google_service_loaded:
     print(f"❌ Warning: Google Service Account credentials not found")
     print(f"   - Environment variable: GOOGLE_SERVICE_ACCOUNT_CREDENTIALS")
     print(f"   - File path: {SERVICE_ACCOUNT_FILE}")
-    print("Google Sheets features will be disabled")
-    print(f"❌ Warning: Service account file not found at {SERVICE_ACCOUNT_FILE}")
-    print(f"📁 Checking current directory: {BASE_DIR}")
-    print(f"📁 Checking parent directory: {BASE_DIR.parent}")
-    # Also check in current directory
-    current_service_file = os.path.join(BASE_DIR, 'vocalyx2-service-account.json')
-    if os.path.exists(current_service_file):
-        with open(current_service_file, 'r') as f:
-            GOOGLE_SERVICE_ACCOUNT_CREDENTIALS = json.load(f)
-        print(f"✅ Google Service Account credentials loaded from {current_service_file}")
-    else:
-        print(f"❌ Service account file also not found at {current_service_file}")
-        print("🔧 Google Sheets integration will be disabled")
+    print(f"   - Current directory: {os.path.join(BASE_DIR, 'vocalyx2-service-account.json')}")
+    print("🔧 Google Sheets integration will be disabled")
