@@ -161,47 +161,62 @@ class GoogleSheetsService {
         throw new Error('Google access token missing');
       }
 
-      // 🔥 DEBUG: Show actual token values for debugging
-      const authToken = localStorage.getItem('authToken');
-      showToast.info(`🔍 Token Debug:\nAuth Token: ${authToken ? `${authToken.substring(0, 20)}...` : 'MISSING'}\nGoogle Token: ${googleToken ? `${googleToken.substring(0, 20)}...` : 'MISSING'}`);
-
       const headers = this.getHeaders();
       const requestBody = {
         class_record_id: classRecordId,
         force: force
       };
 
-      // 🔥 MANUAL HEADERS: Let's manually build headers to be 100% sure
-      const manualHeaders = {
-        'Content-Type': 'application/json',
+      // 🔥 TOAST DEBUG: Show what we're sending (including actual token length for verification)
+      const debugInfo = {
+        url: `${this.baseURL}/sheets/${sheetId}/final-grade-preview/`,
+        headers: {
+          'Authorization': headers['Authorization'] ? 'Bearer [TOKEN]' : 'MISSING',
+          'X-Google-Access-Token': headers['X-Google-Access-Token'] ? `[TOKEN-${headers['X-Google-Access-Token'].length}chars]` : 'MISSING',
+          'Content-Type': headers['Content-Type']
+        },
+        body: requestBody
       };
       
-      if (authToken) {
-        manualHeaders['Authorization'] = `Bearer ${authToken}`;
-      }
-      
-      if (googleToken) {
-        manualHeaders['X-Google-Access-Token'] = googleToken;
-      }
+      showToast.info(`🔍 Request Debug:\nURL: ${debugInfo.url}\nAuth: ${debugInfo.headers.Authorization}\nGoogle Token: ${debugInfo.headers['X-Google-Access-Token']}\nBody: ${JSON.stringify(requestBody)}`);
 
-      // 🔥 DEBUG: Compare manual vs getHeaders()
-      showToast.info(`🔍 Headers Comparison:\nManual X-Google: ${manualHeaders['X-Google-Access-Token'] ? 'YES' : 'NO'}\ngetHeaders X-Google: ${headers['X-Google-Access-Token'] ? 'YES' : 'NO'}\nSame? ${manualHeaders['X-Google-Access-Token'] === headers['X-Google-Access-Token']}`);
+      console.log('🔍 Final Grade Preview Request:', debugInfo);
 
-      console.log('🔍 Final Grade Preview Request with manual headers:', {
-        url: `${this.baseURL}/sheets/${sheetId}/final-grade-preview/`,
-        headers: manualHeaders,
-        body: requestBody
-      });
-
-      // 🔥 USE MANUAL HEADERS instead of this.getHeaders()
       const response = await fetch(`${this.baseURL}/sheets/${sheetId}/final-grade-preview/`, {
         method: 'POST',
-        headers: manualHeaders,
+        headers: headers,
         body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) {
         const errorText = await response.text();
+        
+        // 🔥 If token expired, try to refresh once
+        if (response.status === 400 && errorText.includes('Google access token')) {
+          showToast.info('Google token expired. Refreshing...');
+          
+          // Clear old token and get fresh one
+          localStorage.removeItem('googleAccessToken');
+          await googleDriveService.ensureGoogleAccessToken();
+          
+          // Retry with fresh token
+          const freshHeaders = this.getHeaders();
+          const retryResponse = await fetch(`${this.baseURL}/sheets/${sheetId}/final-grade-preview/`, {
+            method: 'POST',
+            headers: freshHeaders,
+            body: JSON.stringify(requestBody)
+          });
+          
+          if (!retryResponse.ok) {
+            const retryErrorText = await retryResponse.text();
+            showToast.error(`🔥 API Error ${retryResponse.status} (After Refresh):\n${retryErrorText}`);
+            throw new Error(`HTTP ${retryResponse.status}: ${retryResponse.statusText}`);
+          }
+          
+          showToast.success('Token refreshed successfully!');
+          return await retryResponse.json();
+        }
+        
         showToast.error(`🔥 API Error ${response.status}:\n${errorText}`);
         console.error('🔥 Final grade preview error:', errorText);
         console.error('🔥 Response status:', response.status);
