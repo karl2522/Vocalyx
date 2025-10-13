@@ -3,6 +3,7 @@ const BACKEND_URL = import.meta.env.PROD
   : 'http://127.0.0.1:8000';
 
 import googleDriveService from './googleDriveService';
+import { showToast } from '../utils/toast';
 
 class GoogleSheetsService {
   constructor() {
@@ -150,29 +151,66 @@ class GoogleSheetsService {
    */
   async getFinalGradePreview(sheetId, { classRecordId, force = false } = {}) {
     try {
-      // Ensure we have a fresh Google access token before calling
-      if (!localStorage.getItem('googleAccessToken')) {
-        await googleDriveService.ensureGoogleAccessToken();
+      // 🔥 FIXED: Force refresh Google token before making the request
+      await googleDriveService.ensureGoogleAccessToken();
+      
+      // Double-check we have a valid token
+      const googleToken = localStorage.getItem('googleAccessToken');
+      if (!googleToken) {
+        showToast.error('Google access token missing. Please reconnect your Google account.');
+        throw new Error('Google access token missing');
       }
 
-      // 🔥 FIXED: Use fetch with this.getHeaders() to include X-Google-Access-Token
+      // 🔥 DEBUG: Show actual token values for debugging
+      const authToken = localStorage.getItem('authToken');
+      showToast.info(`🔍 Token Debug:\nAuth Token: ${authToken ? `${authToken.substring(0, 20)}...` : 'MISSING'}\nGoogle Token: ${googleToken ? `${googleToken.substring(0, 20)}...` : 'MISSING'}`);
+
+      const headers = this.getHeaders();
+      const requestBody = {
+        class_record_id: classRecordId,
+        force: force
+      };
+
+      // 🔥 MANUAL HEADERS: Let's manually build headers to be 100% sure
+      const manualHeaders = {
+        'Content-Type': 'application/json',
+      };
+      
+      if (authToken) {
+        manualHeaders['Authorization'] = `Bearer ${authToken}`;
+      }
+      
+      if (googleToken) {
+        manualHeaders['X-Google-Access-Token'] = googleToken;
+      }
+
+      // 🔥 DEBUG: Compare manual vs getHeaders()
+      showToast.info(`🔍 Headers Comparison:\nManual X-Google: ${manualHeaders['X-Google-Access-Token'] ? 'YES' : 'NO'}\ngetHeaders X-Google: ${headers['X-Google-Access-Token'] ? 'YES' : 'NO'}\nSame? ${manualHeaders['X-Google-Access-Token'] === headers['X-Google-Access-Token']}`);
+
+      console.log('🔍 Final Grade Preview Request with manual headers:', {
+        url: `${this.baseURL}/sheets/${sheetId}/final-grade-preview/`,
+        headers: manualHeaders,
+        body: requestBody
+      });
+
+      // 🔥 USE MANUAL HEADERS instead of this.getHeaders()
       const response = await fetch(`${this.baseURL}/sheets/${sheetId}/final-grade-preview/`, {
         method: 'POST',
-        headers: this.getHeaders(), // 🔥 This includes both Authorization and X-Google-Access-Token
-        body: JSON.stringify({
-          class_record_id: classRecordId,
-          force: force
-        })
+        headers: manualHeaders,
+        body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Final grade preview error:', errorText);
+        showToast.error(`🔥 API Error ${response.status}:\n${errorText}`);
+        console.error('🔥 Final grade preview error:', errorText);
+        console.error('🔥 Response status:', response.status);
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
       return await response.json();
     } catch (error) {
+      showToast.error('Failed to get final grade preview: ' + error.message);
       console.error('Failed to get final grade preview:', error);
       throw error;
     }
