@@ -21,10 +21,13 @@ RUN apt-get update \
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy project
+# Copy the entire backend directory
 COPY backend/ .
 
-# Collect static files (remove the extra WORKDIR change)
+# Change to the nested backend directory where manage.py is located
+WORKDIR /app/backend
+
+# Collect static files
 RUN python manage.py collectstatic --noinput
 
 # Expose port
