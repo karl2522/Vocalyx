@@ -1,5 +1,5 @@
 const BACKEND_URL = import.meta.env.PROD 
-  ? 'https://vocalyx-c61a072bf25a.herokuapp.com' 
+  ? 'https://vocalyx-backend-64846917574.asia-southeast1.run.app/api'
   : 'http://127.0.0.1:8000';
 
 import googleDriveService from './googleDriveService';
