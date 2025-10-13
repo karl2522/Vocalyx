@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const API_URL = import.meta.env.PROD 
-  ? 'https://vocalyx-c61a072bf25a.herokuapp.com/api'
+  ? 'https://vocalyx-backend-64846917574.asia-southeast1.run.app/api'
   : 'http://127.0.0.1:8000/api';
 
 console.log('🔍 API Environment Detection:', {
