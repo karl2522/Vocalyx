@@ -36,7 +36,7 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-fallback-secret-key-for-de
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*', '10.0.165.206', '192.168.1.10', '.herokuapp.com', "192.168.254.101"]
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*', '10.0.165.206', '192.168.1.10', '.herokuapp.com', "192.168.254.101", '.run.app', '.googleapis.com']
 
 # Firebase configuration - support both file and environment variable
 FIREBASE_SERVICE_ACCOUNT_PATH = os.path.join(BASE_DIR.parent, 'firebase-service-account.json')
@@ -90,9 +90,9 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',  # CORS must be at the top
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'backend.cors_middleware.CustomCorsMiddleware',  # Custom CORS middleware for error responses
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
