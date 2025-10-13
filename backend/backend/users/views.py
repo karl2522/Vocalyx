@@ -2582,10 +2582,6 @@ def final_grade_preview_logic(sheet_id, class_record_id, sa_sheets_service, user
 def final_grade_preview(request, sheet_id):
     """Generate final grade preview with missing score details"""
     try:
-        access_token = request.headers.get('X-Google-Access-Token')
-        if not access_token:
-            return Response({'error': 'Google access token required'}, status=400)
-
         class_record_id = request.data.get('class_record_id')
         force = bool(request.data.get('force', False))
 
