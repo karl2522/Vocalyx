@@ -30,6 +30,9 @@ api.interceptors.request.use(
         if (googleToken) {
             config.headers['X-Google-Access-Token'] = googleToken;
         }
+        
+        // Test header to see if custom headers reach Django
+        config.headers['X-Test-Header'] = 'test-value-123';
 
         // 🔥 CRITICAL DEBUG: Check what's actually in localStorage
         if (config.url && config.url.includes('/class-records/') && config.method === 'post') {

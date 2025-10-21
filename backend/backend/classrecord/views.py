@@ -40,6 +40,10 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
         for header_name, header_value in self.request.headers.items():
             print(f"   {header_name}: {header_value}")
         
+        # Test if custom headers reach Django
+        test_header = self.request.headers.get('X-Test-Header')
+        print(f"🔍 TEST HEADER: {test_header}")
+        
         try:
             # Save the class record initially without Google Sheet details
             # Ensure google_sheet_url is explicitly set to None to avoid constraint issues
