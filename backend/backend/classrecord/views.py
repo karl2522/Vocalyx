@@ -40,6 +40,12 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
         for header_name, header_value in self.request.headers.items():
             print(f"   {header_name}: {header_value}")
         
+        # 🔥 DEBUG: Log ALL META headers
+        print("🔍 ALL REQUEST META (looking for Google token):")
+        for key, value in self.request.META.items():
+            if 'HTTP_' in key:
+                print(f"   {key}: {value}")
+        
         try:
             # Save the class record initially without Google Sheet details
             class_record = serializer.save(
@@ -50,32 +56,33 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
             
             print(f"✅ ClassRecord created successfully: {class_record.id}")
 
-            # 🔥 NEW FIX: Check ALL possible header variations
-            access_token = (
-                self.request.headers.get('X-Google-Access-Token') or  # Original case
-                self.request.headers.get('x-google-access-token') or  # Lowercase
-                self.request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN') or  # META format
-                self.request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN'.lower())  # META lowercase
-            )
+            # 🔥 SUPER DEBUG: Check every possible variation
+            variations = [
+                ('headers X-Google-Access-Token', self.request.headers.get('X-Google-Access-Token')),
+                ('headers x-google-access-token', self.request.headers.get('x-google-access-token')),
+                ('META HTTP_X_GOOGLE_ACCESS_TOKEN', self.request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN')),
+                ('META http_x_google_access_token', self.request.META.get('http_x_google_access_token')),
+            ]
             
-            # 🔥 DEBUG: Check ALL variations
-            print(f"🔍 DEBUG: Checking ALL token variations:")
-            print(f"   headers.get('X-Google-Access-Token'): {self.request.headers.get('X-Google-Access-Token')}")
-            print(f"   headers.get('x-google-access-token'): {self.request.headers.get('x-google-access-token')}")
-            print(f"   META.get('HTTP_X_GOOGLE_ACCESS_TOKEN'): {self.request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN')}")
-            print(f"   META.get lowercase: {self.request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN'.lower())}")
+            access_token = None
+            print("🔍 DEBUG: Checking ALL token variations:")
+            for name, value in variations:
+                print(f"   {name}: {value[:20] + '...' if value else 'None'}")
+                if value and not access_token:
+                    access_token = value
             
-            # 🔥 BRUTE FORCE: Search all META keys for google token
+            # 🔥 SEARCH ALL META for any Google-related header
+            print("🔍 Searching ALL META for Google token:")
             for key, value in self.request.META.items():
-                if 'google' in key.lower() and 'token' in key.lower():
-                    print(f"   Found Google token in META['{key}']: {value[:50]}..." if value else "None")
-                    if value and not access_token:
+                if ('google' in key.lower() or 'access' in key.lower()) and value:
+                    print(f"   Found possible token in {key}: {value[:20] + '...'}")
+                    if not access_token:
                         access_token = value
             
-            print(f"   Final token: {access_token[:50] + '...' if access_token else 'None'}")
+            print(f"🔍 Final access_token: {access_token[:20] + '...' if access_token else 'None'}")
             
             if not access_token:
-                print("❌ No Google access token found in request headers. Skipping Google Sheets creation.")
+                print("❌ No Google access token found anywhere. Skipping Google Sheets creation.")
                 return
 
             print(f"✅ Google access token found: {access_token[:50]}...")
@@ -86,8 +93,10 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
             
             print(f"🔍 Template ID: {template_id}")
             print(f"🔍 User email: {self.request.user.email}")
+            print(f"🔍 Using user's Google access token for Google Drive operations")
             
             if template_id:
+                # Step 1: Copy the template using the user's access token
                 print(f"🔄 Copying template sheet to user's Google Drive: {template_id}")
                 copy_result = user_sheets_service.copy_template_sheet(
                     template_file_id=template_id,
@@ -100,23 +109,52 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
                     copied_file_info = copy_result['file']
                     copied_sheet_id = copied_file_info['id']
                     
-                    print(f"✅ Sheet copied successfully: {copied_sheet_id}")
+                    print(f"✅ Sheet copied successfully to user's Drive: {copied_sheet_id}")
+                    print(f"✅ File is now owned by user: {self.request.user.email}")
                     
-                    # Update the class record
-                    class_record.google_sheet_id = copied_sheet_id
-                    class_record.google_sheet_url = copied_file_info.get('webViewLink')
-                    class_record.save()
+                    # Step 2: Make the sheet publicly editable for iframe embedding
+                    print(f"🔄 Making sheet publicly editable for embedding...")
+                    public_result = user_sheets_service.update_sheet_permissions(
+                        file_id=copied_sheet_id, 
+                        make_editable=True
+                    )
                     
-                    print(f"✅ Google Sheet created successfully!")
+                    print(f"🔍 Public result: {public_result}")
+                    
+                    if public_result['success']:
+                        # Update the class record with the new sheet information
+                        class_record.google_sheet_id = copied_sheet_id
+                        class_record.google_sheet_url = copied_file_info.get('webViewLink')
+                        class_record.save()
+                        
+                        print(f"✅ Google Sheet created in user's Drive and made publicly editable successfully!")
+                        print(f"   Sheet ID: {copied_sheet_id}")
+                        print(f"   View URL: {copied_file_info.get('webViewLink')}")
+                        print(f"   Embed URL: {copied_file_info.get('embedLink')}")
+                        print(f"   File owner: User ({self.request.user.email})")
+                        print(f"   Permissions: Anyone with link can edit")
+                    else:
+                        print(f"⚠️ Sheet created in user's Drive but failed to make publicly editable: {public_result.get('error', 'Unknown error')}")
+                        print(f"   Details: {public_result.get('details', 'No details provided')}")
+                        print(f"   Sheet may be view-only in embedded mode but user has full access")
+                        
+                        # Still save with user access
+                        class_record.google_sheet_id = copied_sheet_id
+                        class_record.google_sheet_url = copied_file_info.get('webViewLink')
+                        class_record.save()
                 else:
-                    print(f"❌ Failed to copy template: {copy_result.get('error')}")
+                    print(f"❌ Failed to copy Google Sheet template to user's Drive: {copy_result.get('error', 'Unknown error')}")
+                    print(f"   Details: {copy_result.get('details', 'No details provided')}")
+                    print(f"   Make sure the template is accessible to the user or publicly readable")
             else:
-                print("❌ No template ID configured.")
+                print("❌ No Google Sheets template ID configured in settings.")
                 
         except Exception as e:
-            print(f"❌ Error: {str(e)}")
+            print(f"❌ Error during Google Sheets user operation: {str(e)}")
             import traceback
-            print(f"   Traceback: {traceback.format_exc()}")
+            print(f"   Full traceback: {traceback.format_exc()}")
+            # Don't re-raise - allow ClassRecord creation to succeed even if Google Sheets fails
+            print("📝 ClassRecord created successfully, but Google Sheets integration failed.")
 
     def perform_update(self, serializer):
         """Update the record; if name or semester changes, rename the Drive file accordingly."""
