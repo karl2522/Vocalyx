@@ -1267,6 +1267,70 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
             'google_token': request.headers.get('X-Google-Access-Token'),
             'test_header': request.headers.get('X-Test-Header')
         })
+    
+    @action(detail=False, methods=['post'])
+    def test_headers_post(self, request):
+        """Test endpoint for POST requests to verify header transmission"""
+        print("🔍 TEST HEADERS POST ENDPOINT CALLED")
+        print("🔍 ALL REQUEST HEADERS:")
+        for header_name, header_value in request.headers.items():
+            print(f"   {header_name}: {header_value}")
+        
+        print("🔍 RAW META HEADERS:")
+        for key, value in request.META.items():
+            if key.startswith('HTTP_'):
+                print(f"   {key}: {value}")
+        
+        print("🔍 REQUEST DATA:", request.data)
+        
+        return Response({
+            'message': 'Headers test endpoint (POST)',
+            'headers_received': dict(request.headers),
+            'meta_headers': {k: v for k, v in request.META.items() if k.startswith('HTTP_')},
+            'google_token': request.headers.get('X-Google-Access-Token'),
+            'test_header': request.headers.get('X-Test-Header'),
+            'request_data': request.data
+        })
+    
+    @action(detail=False, methods=['post'])
+    def debug_frontend_interceptor(self, request):
+        """Debug endpoint to test if frontend API interceptor is working"""
+        print("🔥 DEBUG FRONTEND INTERCEPTOR ENDPOINT CALLED")
+        print("🔥 REQUEST METHOD:", request.method)
+        print("🔥 REQUEST URL:", request.get_full_path())
+        print("🔥 ALL HEADERS:")
+        for header_name, header_value in request.headers.items():
+            print(f"   {header_name}: {header_value}")
+        
+        print("🔥 META HEADERS:")
+        for key, value in request.META.items():
+            if key.startswith('HTTP_'):
+                print(f"   {key}: {value}")
+        
+        print("🔥 REQUEST DATA:", request.data)
+        
+        # Check for the specific headers we expect from the interceptor
+        auth_header = request.headers.get('Authorization')
+        google_token = request.headers.get('X-Google-Access-Token')
+        test_header = request.headers.get('X-Test-Header')
+        
+        print(f"🔥 AUTH HEADER: {'PRESENT' if auth_header else 'MISSING'}")
+        print(f"🔥 GOOGLE TOKEN: {'PRESENT' if google_token else 'MISSING'}")
+        print(f"🔥 TEST HEADER: {'PRESENT' if test_header else 'MISSING'}")
+        
+        if google_token:
+            print(f"🔥 GOOGLE TOKEN LENGTH: {len(google_token)}")
+            print(f"🔥 GOOGLE TOKEN STARTS WITH: {google_token[:20]}...")
+        
+        return Response({
+            'message': 'Frontend interceptor debug',
+            'auth_header_present': bool(auth_header),
+            'google_token_present': bool(google_token),
+            'test_header_present': bool(test_header),
+            'google_token_length': len(google_token) if google_token else 0,
+            'all_headers': dict(request.headers),
+            'request_data': request.data
+        })
 
 
 class StudentViewSet(viewsets.ModelViewSet):
