@@ -44,36 +44,8 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
         test_header = self.request.headers.get('X-Test-Header')
         print(f"🔍 TEST HEADER: {test_header}")
         
-        # 🔥 NEW: Check META headers (raw HTTP headers)
-        print("🔍 RAW META HEADERS:")
-        for key, value in self.request.META.items():
-            if key.startswith('HTTP_'):
-                print(f"   {key}: {value}")
-        
-        # 🔥 NEW: Check specific header variations
-        google_token_variations = [
-            self.request.headers.get('X-Google-Access-Token'),
-            self.request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN'),
-            self.request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN'.lower()),
-        ]
-        print(f"🔍 GOOGLE TOKEN VARIATIONS: {google_token_variations}")
-        
-        test_header_variations = [
-            self.request.headers.get('X-Test-Header'),
-            self.request.META.get('HTTP_X_TEST_HEADER'),
-            self.request.META.get('HTTP_X_TEST_HEADER'.lower()),
-        ]
-        print(f"🔍 TEST HEADER VARIATIONS: {test_header_variations}")
-        
-        # 🔥 NEW: Check interceptor debug headers
-        interceptor_debug = self.request.headers.get('X-Interceptor-Debug')
-        localStorage_debug = self.request.headers.get('X-LocalStorage-Debug')
-        print(f"🔍 INTERCEPTOR DEBUG: {interceptor_debug}")
-        print(f"🔍 LOCALSTORAGE DEBUG: {localStorage_debug}")
-        
         try:
             # Save the class record initially without Google Sheet details
-            # Ensure google_sheet_url is explicitly set to None to avoid constraint issues
             class_record = serializer.save(
                 user=self.request.user,
                 google_sheet_id=None,
@@ -82,14 +54,23 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
             
             print(f"✅ ClassRecord created successfully: {class_record.id}")
 
-            # Check for user's Google access token
-            access_token = self.request.headers.get('X-Google-Access-Token')
-            print(f"🔍 DEBUG: X-Google-Access-Token value: {access_token[:50] + '...' if access_token and len(access_token) > 50 else access_token}")
+            # 🔥 FIX: Check for BOTH case variations (HTTP/2 converts to lowercase)
+            access_token = (
+                self.request.headers.get('X-Google-Access-Token') or  # Original case
+                self.request.headers.get('x-google-access-token')     # Lowercase (HTTP/2)
+            )
+            
+            print(f"🔍 DEBUG: Checking token variations:")
+            print(f"   X-Google-Access-Token: {self.request.headers.get('X-Google-Access-Token')}")
+            print(f"   x-google-access-token: {self.request.headers.get('x-google-access-token')}")
+            print(f"   Final token: {access_token[:50] + '...' if access_token else 'None'}")
             
             if not access_token:
                 print("❌ No Google access token found in request headers. Skipping Google Sheets creation.")
                 print("   Please ensure the frontend sends the user's Google access token in the X-Google-Access-Token header.")
                 return
+
+            print(f"✅ Google access token found: {access_token[:50]}...")
 
             # Initialize Google Sheets service with user's access token
             user_sheets_service = GoogleSheetsService(access_token)
@@ -100,7 +81,7 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
             print(f"🔍 Using user's Google access token for Google Drive operations")
             
             if template_id:
-                # Step 1: Copy the template using the user's access token (will be owned by user)
+                # Step 1: Copy the template using the user's access token
                 print(f"🔄 Copying template sheet to user's Google Drive: {template_id}")
                 copy_result = user_sheets_service.copy_template_sheet(
                     template_file_id=template_id,
