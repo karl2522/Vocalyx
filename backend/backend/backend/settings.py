@@ -100,7 +100,6 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',  # CORS must be at the top
     'whitenoise.middleware.WhiteNoiseMiddleware',
-    'backend.cors_middleware.CustomCorsMiddleware',  # Custom CORS middleware for error responses
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
