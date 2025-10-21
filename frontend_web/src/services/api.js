@@ -36,6 +36,7 @@ api.interceptors.request.use(
         
         // 🔥 ALWAYS add debug header to see if interceptor runs
         config.headers['X-Interceptor-Debug'] = 'interceptor-is-working';
+        config.headers['X-Timestamp'] = Date.now().toString();
         
         // 🔥 ALWAYS add localStorage debug info to headers
         config.headers['X-LocalStorage-Debug'] = JSON.stringify({
@@ -45,31 +46,15 @@ api.interceptors.request.use(
             googleTokenLength: localStorage.getItem('googleAccessToken')?.length || 0
         });
 
-        // 🔥 CRITICAL DEBUG: Check what's actually in localStorage
+        // 🔥 SIMPLE DEBUG: Just log to console (no showToast dependency)
         if (config.url && config.url.includes('/class-records/') && config.method === 'post') {
-            showToast.error(`🔥 AUTH TOKEN DEBUG:\nauthToken: ${localStorage.getItem('authToken') ? 'EXISTS' : 'NULL'}\naccess_token: ${localStorage.getItem('access_token') ? 'EXISTS' : 'NULL'}\nFinal token: ${token ? 'EXISTS' : 'NULL'}`);
-        }
-
-        // 🔥 TOAST DEBUG: Show request details for class-records AFTER adding headers
-        if (config.url && config.url.includes('/class-records/') && config.method === 'post') {
-            const finalHeaders = { ...config.headers };
-            
-            showToast.info(`🔍 FINAL REQUEST HEADERS:\nURL: ${config.url}\nMethod: ${config.method?.toUpperCase()}\nAuthorization: ${finalHeaders.Authorization ? 'Present' : 'Missing'}\nX-Google-Access-Token: ${finalHeaders['X-Google-Access-Token'] ? 'Present' : 'Missing'}\nGoogle Token Length: ${finalHeaders['X-Google-Access-Token'] ? finalHeaders['X-Google-Access-Token'].length : 0}`);
-            
-            // 🔥 CRITICAL DEBUG: Log actual header names and values
-            console.log('🔥 FINAL HEADERS BEING SENT:', finalHeaders);
-            
-            // 🔥 NEW: Log localStorage values
-            console.log('🔥 LOCALSTORAGE DEBUG:', {
-                authToken: localStorage.getItem('authToken') ? 'EXISTS' : 'NULL',
-                access_token: localStorage.getItem('access_token') ? 'EXISTS' : 'NULL',
-                googleAccessToken: localStorage.getItem('googleAccessToken') ? 'EXISTS' : 'NULL',
-                googleTokenLength: localStorage.getItem('googleAccessToken')?.length || 0
+            console.log('🔥 INTERCEPTOR RUNNING - Class Record POST Request');
+            console.log('🔥 Headers being added:', {
+                'X-Test-Header': config.headers['X-Test-Header'],
+                'X-Interceptor-Debug': config.headers['X-Interceptor-Debug'],
+                'X-Google-Access-Token': config.headers['X-Google-Access-Token'] ? 'PRESENT' : 'MISSING',
+                'Authorization': config.headers.Authorization ? 'PRESENT' : 'MISSING'
             });
-        }
-
-        if (!token && config.url && config.url.includes('/class-records/') && config.method === 'post') {
-            showToast.error('🔥 CRITICAL: No auth token found - request will fail!');
         }
         
         return config;
