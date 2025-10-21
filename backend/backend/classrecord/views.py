@@ -35,6 +35,12 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         print("🔍 DEBUG: Entering perform_create method.")
         
+        # 🔥 DEBUG: Log ALL headers received
+        print("🔍 DEBUG: Request headers received:")
+        for header_name, header_value in self.request.headers.items():
+            if 'token' in header_name.lower() or 'auth' in header_name.lower():
+                print(f"   {header_name}: {header_value[:50]}..." if len(str(header_value)) > 50 else f"   {header_name}: {header_value}")
+        
         try:
             # Save the class record initially without Google Sheet details
             # Ensure google_sheet_url is explicitly set to None to avoid constraint issues
@@ -48,6 +54,8 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
 
             # Check for user's Google access token
             access_token = self.request.headers.get('X-Google-Access-Token')
+            print(f"🔍 DEBUG: X-Google-Access-Token value: {access_token[:50] + '...' if access_token and len(access_token) > 50 else access_token}")
+            
             if not access_token:
                 print("❌ No Google access token found in request headers. Skipping Google Sheets creation.")
                 print("   Please ensure the frontend sends the user's Google access token in the X-Google-Access-Token header.")

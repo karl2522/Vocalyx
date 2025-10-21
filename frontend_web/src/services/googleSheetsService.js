@@ -177,8 +177,6 @@ class GoogleSheetsService {
         },
         body: requestBody
       };
-      
-      showToast.info(`🔍 Request Debug:\nURL: ${debugInfo.url}\nAuth: ${debugInfo.headers.Authorization}\nGoogle Token: ${debugInfo.headers['X-Google-Access-Token']}\nBody: ${JSON.stringify(requestBody)}`);
 
       console.log('🔍 Final Grade Preview Request:', debugInfo);
 

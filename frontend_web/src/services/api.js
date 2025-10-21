@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { showToast } from '../utils/toast';
 
 const API_URL = import.meta.env.PROD 
   ? 'https://vocalyx-backend-64846917574.asia-southeast1.run.app/api'
@@ -18,13 +19,31 @@ const api = axios.create({
 
 api.interceptors.request.use(
     (config) => {
-        // Try to get token from both possible storage keys for backward compatibility
         const token = localStorage.getItem('authToken') || localStorage.getItem('access_token');
-        
+        const googleToken = localStorage.getItem('googleAccessToken');
 
-        
+        // 🔥 TOAST DEBUG: Show request details for class-records
+        if (config.url && config.url.includes('/class-records/') && config.method === 'post') {
+            const finalHeaders = { ...config.headers };
+            
+            showToast.info(`🔍 FINAL REQUEST HEADERS:\nURL: ${config.url}\nMethod: ${config.method?.toUpperCase()}\nAuthorization: ${finalHeaders.Authorization ? 'Present' : 'Missing'}\nX-Google-Access-Token: ${finalHeaders['X-Google-Access-Token'] ? 'Present' : 'Missing'}\nGoogle Token Length: ${finalHeaders['X-Google-Access-Token'] ? finalHeaders['X-Google-Access-Token'].length : 0}`);
+            
+            // 🔥 CRITICAL DEBUG: Log actual header names and values
+            console.log('🔥 FINAL HEADERS BEING SENT:', finalHeaders);
+        }
+
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
+        }
+        
+        // 🔥 FIX: Add Google token to headers if available
+        if (googleToken) {
+            config.headers['X-Google-Access-Token'] = googleToken;
+            if (config.url && config.url.includes('/class-records/') && config.method === 'post') {
+                showToast.success(`✅ Google token (${googleToken.length} chars) added to request headers in interceptor`);
+            }
+        } else if (config.url && config.url.includes('/class-records/') && config.method === 'post') {
+            showToast.error('❌ No Google token found in interceptor for createClassRecord');
         }
         
         return config;
@@ -217,12 +236,21 @@ export const classRecordService = {
     // Create a new class record
     createClassRecord: (recordData) => {
         const googleAccessToken = localStorage.getItem('googleAccessToken');
-        const config = {};
+        
+        // 🔥 TOAST DEBUG: Show token status for createClassRecord
+        const tokenStatus = googleAccessToken ? `${googleAccessToken.substring(0, 20)}...` : 'MISSING';
+        showToast.info(`🔍 CreateClassRecord Debug:\nGoogle Token: ${tokenStatus}\nToken Length: ${googleAccessToken ? googleAccessToken.length : 0} chars`);
+        
+        const config = {
+            headers: {}
+        };
         if (googleAccessToken) {
-            config.headers = {
-                'X-Google-Access-Token': googleAccessToken
-            };
+            config.headers['X-Google-Access-Token'] = googleAccessToken;
+            showToast.success('✅ Added X-Google-Access-Token header to createClassRecord request');
+        } else {
+            showToast.error('❌ No googleAccessToken found in localStorage for createClassRecord');
         }
+        
         return api.post('/class-records/', recordData, config);
     },
     
