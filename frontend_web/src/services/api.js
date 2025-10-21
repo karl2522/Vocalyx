@@ -19,6 +19,9 @@ const api = axios.create({
 
 api.interceptors.request.use(
     (config) => {
+        // 🔥 CRITICAL: Always add test header to EVERY request
+        config.headers['X-Test-Header'] = 'test-value-123';
+        
         const token = localStorage.getItem('authToken') || localStorage.getItem('access_token');
         const googleToken = localStorage.getItem('googleAccessToken');
 
@@ -31,8 +34,16 @@ api.interceptors.request.use(
             config.headers['X-Google-Access-Token'] = googleToken;
         }
         
-        // Test header to see if custom headers reach Django
-        config.headers['X-Test-Header'] = 'test-value-123';
+        // 🔥 ALWAYS add debug header to see if interceptor runs
+        config.headers['X-Interceptor-Debug'] = 'interceptor-is-working';
+        
+        // 🔥 ALWAYS add localStorage debug info to headers
+        config.headers['X-LocalStorage-Debug'] = JSON.stringify({
+            authToken: localStorage.getItem('authToken') ? 'EXISTS' : 'NULL',
+            access_token: localStorage.getItem('access_token') ? 'EXISTS' : 'NULL',
+            googleAccessToken: localStorage.getItem('googleAccessToken') ? 'EXISTS' : 'NULL',
+            googleTokenLength: localStorage.getItem('googleAccessToken')?.length || 0
+        });
 
         // 🔥 CRITICAL DEBUG: Check what's actually in localStorage
         if (config.url && config.url.includes('/class-records/') && config.method === 'post') {

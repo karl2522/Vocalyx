@@ -65,6 +65,12 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
         ]
         print(f"🔍 TEST HEADER VARIATIONS: {test_header_variations}")
         
+        # 🔥 NEW: Check interceptor debug headers
+        interceptor_debug = self.request.headers.get('X-Interceptor-Debug')
+        localStorage_debug = self.request.headers.get('X-LocalStorage-Debug')
+        print(f"🔍 INTERCEPTOR DEBUG: {interceptor_debug}")
+        print(f"🔍 LOCALSTORAGE DEBUG: {localStorage_debug}")
+        
         try:
             # Save the class record initially without Google Sheet details
             # Ensure google_sheet_url is explicitly set to None to avoid constraint issues
