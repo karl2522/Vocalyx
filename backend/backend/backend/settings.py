@@ -37,7 +37,7 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-fallback-secret-key-for-de
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*', '10.0.165.206', '192.168.1.10', '.herokuapp.com', "192.168.254.101", '.run.app', '.googleapis.com']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*', '10.0.165.206', '192.168.1.10', '.herokuapp.com', "192.168.254.101", '.run.app', '.googleapis.com', 'https://vocalyx-backend-64846917574.asia-southeast1.run.app']
 
 # Firebase configuration - support both file and environment variable
 FIREBASE_SERVICE_ACCOUNT_PATH = os.path.join(BASE_DIR.parent, 'firebase-service-account.json')
@@ -184,7 +184,8 @@ CORS_ALLOWED_ORIGINS = [
     "http://10.0.165.206",
     "https://vocalyx-frontend.vercel.app",
     "http://192.168.254.101:8000",
-    "http://192.168.254.101"
+    "http://192.168.254.101",
+    "https://vocalyx-backend-64846917574.asia-southeast1.run.app"
 ]
 
 CORS_ALLOW_METHODS = [
