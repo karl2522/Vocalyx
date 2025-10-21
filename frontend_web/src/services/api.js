@@ -22,7 +22,21 @@ api.interceptors.request.use(
         const token = localStorage.getItem('authToken') || localStorage.getItem('access_token');
         const googleToken = localStorage.getItem('googleAccessToken');
 
-        // 🔥 TOAST DEBUG: Show request details for class-records
+        // 🔥 ADD HEADERS FIRST!
+        if (token) {
+            config.headers.Authorization = `Bearer ${token}`;
+        }
+        
+        if (googleToken) {
+            config.headers['X-Google-Access-Token'] = googleToken;
+        }
+
+        // 🔥 CRITICAL DEBUG: Check what's actually in localStorage
+        if (config.url && config.url.includes('/class-records/') && config.method === 'post') {
+            showToast.error(`🔥 AUTH TOKEN DEBUG:\nauthToken: ${localStorage.getItem('authToken') ? 'EXISTS' : 'NULL'}\naccess_token: ${localStorage.getItem('access_token') ? 'EXISTS' : 'NULL'}\nFinal token: ${token ? 'EXISTS' : 'NULL'}`);
+        }
+
+        // 🔥 TOAST DEBUG: Show request details for class-records AFTER adding headers
         if (config.url && config.url.includes('/class-records/') && config.method === 'post') {
             const finalHeaders = { ...config.headers };
             
@@ -32,18 +46,8 @@ api.interceptors.request.use(
             console.log('🔥 FINAL HEADERS BEING SENT:', finalHeaders);
         }
 
-        if (token) {
-            config.headers.Authorization = `Bearer ${token}`;
-        }
-        
-        // 🔥 FIX: Add Google token to headers if available
-        if (googleToken) {
-            config.headers['X-Google-Access-Token'] = googleToken;
-            if (config.url && config.url.includes('/class-records/') && config.method === 'post') {
-                showToast.success(`✅ Google token (${googleToken.length} chars) added to request headers in interceptor`);
-            }
-        } else if (config.url && config.url.includes('/class-records/') && config.method === 'post') {
-            showToast.error('❌ No Google token found in interceptor for createClassRecord');
+        if (!token && config.url && config.url.includes('/class-records/') && config.method === 'post') {
+            showToast.error('🔥 CRITICAL: No auth token found - request will fail!');
         }
         
         return config;
