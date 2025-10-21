@@ -36,10 +36,9 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
         print("🔍 DEBUG: Entering perform_create method.")
         
         # 🔥 DEBUG: Log ALL headers received
-        print("🔍 DEBUG: Request headers received:")
+        print("🔍 ALL REQUEST HEADERS:")
         for header_name, header_value in self.request.headers.items():
-            if 'token' in header_name.lower() or 'auth' in header_name.lower():
-                print(f"   {header_name}: {header_value[:50]}..." if len(str(header_value)) > 50 else f"   {header_name}: {header_value}")
+            print(f"   {header_name}: {header_value}")
         
         try:
             # Save the class record initially without Google Sheet details
