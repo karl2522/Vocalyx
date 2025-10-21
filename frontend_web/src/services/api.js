@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { showToast } from '../utils/toast';
 
 const API_URL = import.meta.env.PROD 
   ? 'https://vocalyx-backend-64846917574.asia-southeast1.run.app/api'
@@ -18,19 +19,30 @@ const api = axios.create({
 
 api.interceptors.request.use(
     (config) => {
+        // 🔥 FORCE DEBUG: Always check Google token
+        const googleToken = localStorage.getItem('googleAccessToken');
+        
+        console.log('🔥 INTERCEPTOR: Google token check:');
+        console.log('   Raw token from localStorage:', googleToken ? googleToken.substring(0, 30) + '...' : 'NULL');
+        console.log('   Token length:', googleToken ? googleToken.length : 0);
+        console.log('   Token type:', typeof googleToken);
+        
         // 🔥 CRITICAL: Always add test header to EVERY request
         config.headers['X-Test-Header'] = 'test-value-123';
         
         const token = localStorage.getItem('authToken') || localStorage.getItem('access_token');
-        const googleToken = localStorage.getItem('googleAccessToken');
 
         // 🔥 ADD HEADERS FIRST!
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
         }
         
-        if (googleToken) {
-            config.headers['X-Google-Access-Token'] = googleToken;
+        // 🔥 ALWAYS add the header if token exists
+        if (googleToken && googleToken.trim()) {
+            config.headers['X-Google-Access-Token'] = googleToken.trim();
+            console.log('✅ ADDED Google token to headers');
+        } else {
+            console.log('❌ Google token is missing or empty');
         }
         
         // 🔥 ALWAYS add debug header to see if interceptor runs
@@ -45,9 +57,18 @@ api.interceptors.request.use(
             googleTokenLength: localStorage.getItem('googleAccessToken')?.length || 0
         });
 
-        // 🔥 SIMPLE DEBUG: Just log to console (no showToast dependency)
+        // 🔥 SIMPLE DEBUG: Add debug info directly to headers for class-records POST
         if (config.url && config.url.includes('/class-records/') && config.method === 'post') {
-            console.log('🔥 INTERCEPTOR RUNNING - Class Record POST Request');
+            config.headers['X-Debug-Google-Token-Status'] = googleToken ? 'EXISTS' : 'MISSING';
+            config.headers['X-Debug-Google-Token-Length'] = googleToken?.length || 0;
+            config.headers['X-Debug-Header-Added'] = config.headers['X-Google-Access-Token'] ? 'YES' : 'NO';
+        }
+
+        // 🔥 FORCE DEBUG: Log for ALL requests to /class-records/
+        if (config.url && config.url.includes('/class-records/')) {
+            console.log('🔥 INTERCEPTOR RUNNING - Class Records Request');
+            console.log('🔥 Method:', config.method);
+            console.log('🔥 URL:', config.url);
             console.log('🔥 Headers being added:', {
                 'X-Test-Header': config.headers['X-Test-Header'],
                 'X-Interceptor-Debug': config.headers['X-Interceptor-Debug'],
