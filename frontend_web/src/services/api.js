@@ -1,5 +1,4 @@
 import axios from 'axios';
-import { showToast } from '../utils/toast';
 
 const API_URL = import.meta.env.PROD 
   ? 'https://vocalyx-backend-64846917574.asia-southeast1.run.app/api'
@@ -246,23 +245,9 @@ export const classRecordService = {
     
     // Create a new class record
     createClassRecord: (recordData) => {
-        const googleAccessToken = localStorage.getItem('googleAccessToken');
-        
-        // 🔥 TOAST DEBUG: Show token status for createClassRecord
-        const tokenStatus = googleAccessToken ? `${googleAccessToken.substring(0, 20)}...` : 'MISSING';
-        showToast.info(`🔍 CreateClassRecord Debug:\nGoogle Token: ${tokenStatus}\nToken Length: ${googleAccessToken ? googleAccessToken.length : 0} chars`);
-        
-        const config = {
-            headers: {}
-        };
-        if (googleAccessToken) {
-            config.headers['X-Google-Access-Token'] = googleAccessToken;
-            showToast.success('✅ Added X-Google-Access-Token header to createClassRecord request');
-        } else {
-            showToast.error('❌ No googleAccessToken found in localStorage for createClassRecord');
-        }
-        
-        return api.post('/class-records/', recordData, config);
+        // 🔥 SIMPLIFIED: Let the interceptor handle headers automatically
+        console.log('🔥 CreateClassRecord called - interceptor should add headers automatically');
+        return api.post('/class-records/', recordData);
     },
     
     // Get a specific class record by ID
@@ -270,14 +255,8 @@ export const classRecordService = {
     
     // Update a class record (send Google access token if available for Drive rename)
     updateClassRecord: (id, recordData) => {
-        const googleAccessToken = localStorage.getItem('googleAccessToken');
-        const config = {};
-        if (googleAccessToken) {
-            config.headers = {
-                'X-Google-Access-Token': googleAccessToken
-            };
-        }
-        return api.patch(`/class-records/${id}/`, recordData, config);
+        // 🔥 SIMPLIFIED: Let the interceptor handle headers automatically
+        return api.patch(`/class-records/${id}/`, recordData);
     },
 
     // Set or clear a student's Final Grade override (INC/N/A)
@@ -290,14 +269,8 @@ export const classRecordService = {
     
     // Delete a class record
     deleteClassRecord: (id) => {
-        const googleAccessToken = localStorage.getItem('googleAccessToken');
-        const config = {};
-        if (googleAccessToken) {
-            config.headers = {
-                'X-Google-Access-Token': googleAccessToken
-            };
-        }
-        return api.delete(`/class-records/${id}/`, config);
+        // 🔥 SIMPLIFIED: Let the interceptor handle headers automatically
+        return api.delete(`/class-records/${id}/`);
     },
     
     // Get students for a specific class record
