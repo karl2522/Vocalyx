@@ -47,6 +47,14 @@ api.interceptors.request.use(
             
             // 🔥 CRITICAL DEBUG: Log actual header names and values
             console.log('🔥 FINAL HEADERS BEING SENT:', finalHeaders);
+            
+            // 🔥 NEW: Log localStorage values
+            console.log('🔥 LOCALSTORAGE DEBUG:', {
+                authToken: localStorage.getItem('authToken') ? 'EXISTS' : 'NULL',
+                access_token: localStorage.getItem('access_token') ? 'EXISTS' : 'NULL',
+                googleAccessToken: localStorage.getItem('googleAccessToken') ? 'EXISTS' : 'NULL',
+                googleTokenLength: localStorage.getItem('googleAccessToken')?.length || 0
+            });
         }
 
         if (!token && config.url && config.url.includes('/class-records/') && config.method === 'post') {
@@ -415,6 +423,12 @@ export const classRecordService = {
         const query = new URLSearchParams(params).toString();
         const url = `/class-records/live-counts/${query ? `?${query}` : ''}`;
         return api.get(url);
+    },
+
+    // 🔥 NEW: Test headers endpoint
+    testHeaders: () => {
+        console.log('🔥 TESTING HEADERS ENDPOINT');
+        return api.get('/class-records/test_headers/');
     },
 
     // Get mirrored CLASS STANDING percentages summary for dashboard card

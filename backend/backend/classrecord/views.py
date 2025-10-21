@@ -44,6 +44,27 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
         test_header = self.request.headers.get('X-Test-Header')
         print(f"🔍 TEST HEADER: {test_header}")
         
+        # 🔥 NEW: Check META headers (raw HTTP headers)
+        print("🔍 RAW META HEADERS:")
+        for key, value in self.request.META.items():
+            if key.startswith('HTTP_'):
+                print(f"   {key}: {value}")
+        
+        # 🔥 NEW: Check specific header variations
+        google_token_variations = [
+            self.request.headers.get('X-Google-Access-Token'),
+            self.request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN'),
+            self.request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN'.lower()),
+        ]
+        print(f"🔍 GOOGLE TOKEN VARIATIONS: {google_token_variations}")
+        
+        test_header_variations = [
+            self.request.headers.get('X-Test-Header'),
+            self.request.META.get('HTTP_X_TEST_HEADER'),
+            self.request.META.get('HTTP_X_TEST_HEADER'.lower()),
+        ]
+        print(f"🔍 TEST HEADER VARIATIONS: {test_header_variations}")
+        
         try:
             # Save the class record initially without Google Sheet details
             # Ensure google_sheet_url is explicitly set to None to avoid constraint issues
@@ -1225,6 +1246,27 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
                 'status': 'error',
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['get'])
+    def test_headers(self, request):
+        """Test endpoint to verify header transmission"""
+        print("🔍 TEST HEADERS ENDPOINT CALLED")
+        print("🔍 ALL REQUEST HEADERS:")
+        for header_name, header_value in request.headers.items():
+            print(f"   {header_name}: {header_value}")
+        
+        print("🔍 RAW META HEADERS:")
+        for key, value in request.META.items():
+            if key.startswith('HTTP_'):
+                print(f"   {key}: {value}")
+        
+        return Response({
+            'message': 'Headers test endpoint',
+            'headers_received': dict(request.headers),
+            'meta_headers': {k: v for k, v in request.META.items() if k.startswith('HTTP_')},
+            'google_token': request.headers.get('X-Google-Access-Token'),
+            'test_header': request.headers.get('X-Test-Header')
+        })
 
 
 class StudentViewSet(viewsets.ModelViewSet):
