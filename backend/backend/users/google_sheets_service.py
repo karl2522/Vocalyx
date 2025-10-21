@@ -49,6 +49,7 @@ class GoogleSheetsService:
                 copy_url,
                 headers=self.headers,
                 json=copy_data,
+                params={'supportsAllDrives': 'true'},
                 timeout=15
             )
 
