@@ -12,6 +12,6 @@ class CustomCorsMiddleware:
                 response['Access-Control-Allow-Origin'] = origin
                 response['Access-Control-Allow-Credentials'] = 'true'
                 response['Access-Control-Allow-Methods'] = 'DELETE, GET, OPTIONS, PATCH, POST, PUT'
-                response['Access-Control-Allow-Headers'] = 'accept, accept-encoding, authorization, content-type, dnt, origin, user-agent, x-csrftoken, x-requested-with, x-google-access-token'
+                response['Access-Control-Allow-Headers'] = 'accept, accept-encoding, authorization, content-type, dnt, origin, user-agent, x-csrftoken, x-requested-with, x-google-access-token, x-test-header'
         
         return response 
