@@ -208,6 +208,10 @@ CORS_ALLOW_HEADERS = [
     'x-csrftoken',
     'x-requested-with',
     'x-google-access-token',
+    'x-interceptor-debug',      # ← ADD THIS
+    'x-timestamp',              # ← ADD THIS
+    'x-localstorage-debug',     # ← ADD THIS
+    'x-test-header',            # ← ADD THIS
 ]
 
 # Additional CORS settings
