@@ -2,8 +2,8 @@ const BACKEND_URL = import.meta.env.PROD
   ? 'https://vocalyx-backend-64846917574.asia-southeast1.run.app/api'
   : 'http://127.0.0.1:8000';
 
-import googleDriveService from './googleDriveService';
 import { showToast } from '../utils/toast';
+import googleDriveService from './googleDriveService';
 
 class GoogleSheetsService {
   constructor() {
@@ -26,7 +26,7 @@ class GoogleSheetsService {
     }
     
     if (googleAccessToken) {
-      headers['X-Google-Access-Token'] = googleAccessToken;
+      headers['X-Access-Token'] = googleAccessToken;
     }
     
     return headers;
@@ -157,7 +157,7 @@ class GoogleSheetsService {
       // Double-check we have a valid token
       const googleToken = localStorage.getItem('googleAccessToken');
       if (!googleToken) {
-        showToast.error('Google access token missing. Please reconnect your Google account.');
+        console.error('Google access token missing. Please reconnect your Google account.');
         throw new Error('Google access token missing');
       }
 
@@ -167,18 +167,15 @@ class GoogleSheetsService {
         force: force
       };
 
-      // 🔥 TOAST DEBUG: Show what we're sending (including actual token length for verification)
-      const debugInfo = {
+      console.log('🔍 Final Grade Preview Request:', {
         url: `${this.baseURL}/sheets/${sheetId}/final-grade-preview/`,
         headers: {
           'Authorization': headers['Authorization'] ? 'Bearer [TOKEN]' : 'MISSING',
-          'X-Google-Access-Token': headers['X-Google-Access-Token'] ? `[TOKEN-${headers['X-Google-Access-Token'].length}chars]` : 'MISSING',
+          'X-Access-Token': headers['X-Access-Token'] ? `[TOKEN-${headers['X-Access-Token'].length}chars]` : 'MISSING',
           'Content-Type': headers['Content-Type']
         },
         body: requestBody
-      };
-
-      console.log('🔍 Final Grade Preview Request:', debugInfo);
+      });
 
       const response = await fetch(`${this.baseURL}/sheets/${sheetId}/final-grade-preview/`, {
         method: 'POST',
@@ -191,7 +188,7 @@ class GoogleSheetsService {
         
         // 🔥 If token expired, try to refresh once
         if (response.status === 400 && errorText.includes('Google access token')) {
-          showToast.info('Google token expired. Refreshing...');
+          console.log('Google token expired. Refreshing...');
           
           // Clear old token and get fresh one
           localStorage.removeItem('googleAccessToken');
@@ -211,7 +208,7 @@ class GoogleSheetsService {
             throw new Error(`HTTP ${retryResponse.status}: ${retryResponse.statusText}`);
           }
           
-          showToast.success('Token refreshed successfully!');
+          console.log('Token refreshed successfully!');
           return await retryResponse.json();
         }
         

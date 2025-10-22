@@ -25,7 +25,7 @@ class GoogleDriveService {
     }
     
     if (googleAccessToken) {
-      headers['X-Google-Access-Token'] = googleAccessToken;
+      headers['X-Access-Token'] = googleAccessToken;
     }
     
     return headers;

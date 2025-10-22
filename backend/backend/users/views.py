@@ -811,7 +811,20 @@ def drive_list_files(request):
         user = request.user
         
         # Try to get access token from header first (for backward compatibility)
-        access_token = request.headers.get('X-Google-Access-Token')
+        access_token = (
+            request.headers.get('X-Access-Token') or
+            request.headers.get('x-access-token') or
+            request.META.get('HTTP_X_ACCESS_TOKEN') or
+            request.headers.get('X-Google-Access-Token') or
+            request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN')
+        )
+        access_token = (
+            request.headers.get('X-Access-Token') or
+            request.headers.get('x-access-token') or
+            request.META.get('HTTP_X_ACCESS_TOKEN') or
+            request.headers.get('X-Google-Access-Token') or
+            request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN')
+        )
         
         if not access_token:
             # Use stored token if no token provided
@@ -846,9 +859,15 @@ def drive_list_files(request):
 def drive_upload_file(request):
     """Upload a file to user's Google Drive"""
     try:
-        access_token = request.headers.get('X-Google-Access-Token')
+        access_token = (
+            request.headers.get('X-Access-Token') or
+            request.headers.get('x-access-token') or
+            request.META.get('HTTP_X_ACCESS_TOKEN') or
+            request.headers.get('X-Google-Access-Token') or
+            request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN')
+        )
         if not access_token:
-            return Response({'error': 'Google access token required in X-Google-Access-Token header'}, status=400)
+            return Response({'error': 'Google access token required in X-Access-Token header'}, status=400)
         
         # Check if file is provided
         if 'file' not in request.FILES:
@@ -880,9 +899,15 @@ def drive_upload_file(request):
 def drive_create_folder(request):
     """Create a folder in user's Google Drive"""
     try:
-        access_token = request.headers.get('X-Google-Access-Token')
+        access_token = (
+            request.headers.get('X-Access-Token') or
+            request.headers.get('x-access-token') or
+            request.META.get('HTTP_X_ACCESS_TOKEN') or
+            request.headers.get('X-Google-Access-Token') or
+            request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN')
+        )
         if not access_token:
-            return Response({'error': 'Google access token required in X-Google-Access-Token header'}, status=400)
+            return Response({'error': 'Google access token required in X-Access-Token header'}, status=400)
         
         folder_name = request.data.get('folder_name')
         if not folder_name:
@@ -908,9 +933,15 @@ def drive_create_folder(request):
 def drive_download_file(request, file_id):
     """Download a file from user's Google Drive"""
     try:
-        access_token = request.headers.get('X-Google-Access-Token')
+        access_token = (
+            request.headers.get('X-Access-Token') or
+            request.headers.get('x-access-token') or
+            request.META.get('HTTP_X_ACCESS_TOKEN') or
+            request.headers.get('X-Google-Access-Token') or
+            request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN')
+        )
         if not access_token:
-            return Response({'error': 'Google access token required in X-Google-Access-Token header'}, status=400)
+            return Response({'error': 'Google access token required in X-Access-Token header'}, status=400)
         
         drive_service = GoogleDriveService(access_token)
         result = drive_service.get_file_content(file_id)
@@ -938,9 +969,15 @@ def drive_download_file(request, file_id):
 def sheets_copy_template(request):
     """Copy a template Google Sheet to user's Drive"""
     try:
-        access_token = request.headers.get('X-Google-Access-Token')
+        access_token = (
+            request.headers.get('X-Access-Token') or
+            request.headers.get('x-access-token') or
+            request.META.get('HTTP_X_ACCESS_TOKEN') or
+            request.headers.get('X-Google-Access-Token') or
+            request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN')
+        )
         if not access_token:
-            return Response({'error': 'Google access token required in X-Google-Access-Token header'}, status=400)
+            return Response({'error': 'Google access token required in X-Access-Token header'}, status=400)
         
         template_id = request.data.get('template_id')
         sheet_name = request.data.get('name')
@@ -966,9 +1003,15 @@ def sheets_copy_template(request):
 def sheets_get_info(request, sheet_id):
     """Get information about a specific sheet"""
     try:
-        access_token = request.headers.get('X-Google-Access-Token')
+        access_token = (
+            request.headers.get('X-Access-Token') or
+            request.headers.get('x-access-token') or
+            request.META.get('HTTP_X_ACCESS_TOKEN') or
+            request.headers.get('X-Google-Access-Token') or
+            request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN')
+        )
         if not access_token:
-            return Response({'error': 'Google access token required in X-Google-Access-Token header'}, status=400)
+            return Response({'error': 'Google access token required in X-Access-Token header'}, status=400)
         
         sheets_service = GoogleSheetsService(access_token)
         result = sheets_service.get_sheet_info(sheet_id)
@@ -993,7 +1036,7 @@ def sheets_list_user_sheets(request):
             request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN')
         )
         if not access_token:
-            return Response({'error': 'Google access token required in X-Google-Access-Token header'}, status=400)
+            return Response({'error': 'Google access token required in X-Access-Token header'}, status=400)
         
         sheets_service = GoogleSheetsService(access_token)
         result = sheets_service.get_user_sheets()
@@ -1017,7 +1060,7 @@ def sheets_update_permissions(request, sheet_id):
             request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN')
         )
         if not access_token:
-            return Response({'error': 'Google access token required in X-Google-Access-Token header'}, status=400)
+            return Response({'error': 'Google access token required in X-Access-Token header'}, status=400)
         
         make_public = request.data.get('make_public_readable', False)
         make_editable = request.data.get('make_editable', False)
@@ -1054,7 +1097,7 @@ def sheets_get_data(request, sheet_id):
             request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN')
         )
         if not access_token:
-            return Response({'error': 'Google access token required in X-Google-Access-Token header'}, status=400)
+            return Response({'error': 'Google access token required in X-Access-Token header'}, status=400)
 
         sheets_service = GoogleSheetsService(access_token)
         result = sheets_service.get_sheet_data(sheet_id)
@@ -3061,9 +3104,15 @@ def mark_missing_scores_batch(request, sheet_id):
 def final_grade_export(request, sheet_id):
     """Export final grades to Excel using template"""
     try:
-        access_token = request.headers.get('X-Google-Access-Token')
+        access_token = (
+            request.headers.get('X-Access-Token') or
+            request.headers.get('x-access-token') or
+            request.META.get('HTTP_X_ACCESS_TOKEN') or
+            request.headers.get('X-Google-Access-Token') or
+            request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN')
+        )
         if not access_token:
-            return Response({'error': 'Google access token required'}, status=400)
+            return Response({'error': 'Google access token required in X-Access-Token header'}, status=400)
 
         class_record_id = request.data.get('class_record_id')
         if not class_record_id:

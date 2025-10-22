@@ -44,41 +44,6 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         print("🔍 DEBUG: Entering perform_create method.")
         
-        # 🔥 DEBUG: Log ALL headers received
-        print("🔍 ALL REQUEST HEADERS:")
-        for header_name, header_value in self.request.headers.items():
-            print(f"   {header_name}: {header_value}")
-        
-        # Test if custom headers reach Django
-        test_header = self.request.headers.get('X-Test-Header')
-        print(f"🔍 TEST HEADER: {test_header}")
-        
-        # 🔥 NEW: Check META headers (raw HTTP headers)
-        print("🔍 RAW META HEADERS:")
-        for key, value in self.request.META.items():
-            if key.startswith('HTTP_'):
-                print(f"   {key}: {value}")
-        
-        # 🔥 NEW: Check specific header variations
-        google_token_variations = [
-            self.request.headers.get('X-Access-Token') or self.request.headers.get('x-access-token'),
-            self.request.META.get('HTTP_X_ACCESS_TOKEN'),
-            self.request.headers.get('X-Google-Access-Token'),
-        ]
-        print(f"🔍 GOOGLE TOKEN VARIATIONS: {google_token_variations}")
-        
-        test_header_variations = [
-            self.request.headers.get('X-Test-Header'),
-            self.request.META.get('HTTP_X_TEST_HEADER'),
-            self.request.META.get('HTTP_X_TEST_HEADER'.lower()),
-        ]
-        print(f"🔍 TEST HEADER VARIATIONS: {test_header_variations}")
-        
-        # 🔥 NEW: Check interceptor debug headers
-        interceptor_debug = self.request.headers.get('X-Interceptor-Debug')
-        localStorage_debug = self.request.headers.get('X-LocalStorage-Debug')
-        print(f"🔍 INTERCEPTOR DEBUG: {interceptor_debug}")
-        print(f"🔍 LOCALSTORAGE DEBUG: {localStorage_debug}")
         
         try:
             # Save the class record initially without Google Sheet details
@@ -978,7 +943,7 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
             access_token = self._get_access_token(request)
             template_id = getattr(settings, 'GOOGLE_SHEETS_TEMPLATE_ID', None)
             if not access_token:
-                return Response({'error': 'Missing X-Google-Access-Token. Please connect Google and retry.'}, status=400)
+                return Response({'error': 'Missing X-Access-Token. Please connect Google and retry.'}, status=400)
             if not template_id:
                 return Response({'error': 'Template not configured. Please set GOOGLE_SHEETS_TEMPLATE_ID on the server.'}, status=400)
 
@@ -1022,7 +987,7 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
 
             # Attempt to create Google Sheet same as perform_create does (optional, best effort)
             try:
-                access_token = request.headers.get('X-Google-Access-Token')
+                access_token = self._get_access_token(request)
                 template_id = getattr(settings, 'GOOGLE_SHEETS_TEMPLATE_ID', None)
                 if access_token and template_id:
                     user_sheets_service = GoogleSheetsService(access_token)
@@ -1063,7 +1028,7 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
             if not file_id or not file_name:
                 return Response({'error': 'fileId and fileName are required'}, status=400)
             if not access_token:
-                return Response({'error': 'Missing X-Google-Access-Token'}, status=400)
+                return Response({'error': 'Missing X-Access-Token'}, status=400)
 
             drive = GoogleDriveService(access_token)
             download = drive.get_file_content(file_id)
@@ -1085,7 +1050,7 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
             mapping = request.data.get('mapping')
             name = (request.data.get('name') or '').strip()
             semester = (request.data.get('semester') or '').strip()
-            access_token = request.headers.get('X-Google-Access-Token')
+            access_token = self._get_access_token(request)
             if not semester:
                 semester = '1st Semester'
 
@@ -1094,7 +1059,7 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
             if not mapping:
                 return Response({'error': 'Mapping is required'}, status=400)
             if not access_token:
-                return Response({'error': 'Missing X-Google-Access-Token'}, status=400)
+                return Response({'error': 'Missing X-Access-Token'}, status=400)
             template_id = getattr(settings, 'GOOGLE_SHEETS_TEMPLATE_ID', None)
             if not template_id:
                 return Response({'error': 'Template not configured. Please set GOOGLE_SHEETS_TEMPLATE_ID on the server.'}, status=400)
@@ -1280,7 +1245,6 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
             'headers_received': dict(request.headers),
             'meta_headers': {k: v for k, v in request.META.items() if k.startswith('HTTP_')},
             'google_token': (request.headers.get('X-Access-Token') or request.headers.get('x-access-token') or request.headers.get('X-Google-Access-Token')),
-            'test_header': request.headers.get('X-Test-Header')
         })
     
     @action(detail=False, methods=['post'])
@@ -1303,7 +1267,6 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
             'headers_received': dict(request.headers),
             'meta_headers': {k: v for k, v in request.META.items() if k.startswith('HTTP_')},
             'google_token': (request.headers.get('X-Access-Token') or request.headers.get('x-access-token') or request.headers.get('X-Google-Access-Token')),
-            'test_header': request.headers.get('X-Test-Header'),
             'request_data': request.data
         })
     

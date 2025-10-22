@@ -2,18 +2,18 @@ import { Lightbulb } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
-  FiCalendar,
-  FiEdit3,
-  FiEye,
-  FiFileText,
-  FiGrid,
-  FiInfo,
-  FiList,
-  FiMic,
-  FiPlus,
-  FiTrash2,
-  FiUser,
-  FiX
+    FiCalendar,
+    FiEdit3,
+    FiEye,
+    FiFileText,
+    FiGrid,
+    FiInfo,
+    FiList,
+    FiMic,
+    FiPlus,
+    FiTrash2,
+    FiUser,
+    FiX
 } from 'react-icons/fi';
 import { RiSoundModuleLine } from 'react-icons/ri';
 import { Link } from 'react-router-dom';
@@ -353,7 +353,7 @@ const ClassRecords = () => {
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState('grid');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [testResults, setTestResults] = useState(null);
+  
   
   // Global function to update remaining percentage for a specific class record
   useEffect(() => {
@@ -454,31 +454,7 @@ const ClassRecords = () => {
     }
   };
 
-  const testInterceptor = async () => {
-    console.log('🔥 TESTING INTERCEPTOR');
-    setTestResults('Testing...');
-    
-    try {
-      // Test 1: Direct API call to see if interceptor runs
-      const response = await classRecordService.getClassRecords();
-      console.log('✅ Test request completed', response.status);
-      
-      // Test 2: Check what's in localStorage
-      const googleToken = localStorage.getItem('googleAccessToken');
-      const authToken = localStorage.getItem('authToken');
-      
-      setTestResults(`
-        Test completed!
-        Auth token: ${authToken ? 'EXISTS' : 'MISSING'}
-        Google token: ${googleToken ? 'EXISTS' : 'MISSING'}
-        Response status: ${response.status}
-      `);
-      
-    } catch (error) {
-      console.error('❌ Test failed:', error);
-      setTestResults(`Test failed: ${error.message}`);
-    }
-  };
+  
 
   const handleCreateRecord = async (formData) => {
     try {
@@ -695,13 +671,6 @@ const ClassRecords = () => {
               <FiPlus size={18} />
               <span>New Record</span>
             </button>
-
-                             <button
-                  onClick={testInterceptor}
-                  className="flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-all shadow-md"
-                >
-                  🔍 Test
-            </button>
           </div>
         </div>
 
@@ -774,12 +743,7 @@ const ClassRecords = () => {
           </div>
         )}
 
-        {/* ADD TEST RESULTS DISPLAY */}
-        {testResults && (
-          <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm">
-            <pre>{testResults}</pre>
-          </div>
-        )}
+        
 
         {/* Records List/Grid */}
         {classRecords.length === 0 ? (

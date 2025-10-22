@@ -293,7 +293,7 @@ export const classRecordService = {
         const googleAccessToken = localStorage.getItem('googleAccessToken');
         const config = { headers: {} };
         if (googleAccessToken) {
-            config.headers['X-Google-Access-Token'] = googleAccessToken;
+            config.headers['X-Access-Token'] = googleAccessToken;
         }
         const body = { sheet_name: sheetName };
         if (options.force) {
@@ -327,7 +327,7 @@ export const classRecordService = {
         const config = {};
         if (googleAccessToken) {
             config.headers = {
-                'X-Google-Access-Token': googleAccessToken
+                'X-Access-Token': googleAccessToken
             };
         }
         return api.get(`/sheets/data/${sheetId}/`, config);
@@ -612,7 +612,7 @@ export const classRecordService = {
         const googleAccessToken = localStorage.getItem('googleAccessToken');
         const config = {};
         if (googleAccessToken) {
-            config.headers = { 'X-Google-Access-Token': googleAccessToken };
+            config.headers = { 'X-Access-Token': googleAccessToken };
         }
         return api.post('/class-records/import/preview-drive/', { fileId, fileName }, config);
     },
@@ -621,7 +621,7 @@ export const classRecordService = {
         const googleAccessToken = localStorage.getItem('googleAccessToken');
         const config = {};
         if (googleAccessToken) {
-            config.headers = { 'X-Google-Access-Token': googleAccessToken };
+            config.headers = { 'X-Access-Token': googleAccessToken };
         }
         return api.post('/class-records/import/drive/', { fileId, fileName, mapping, name, semester }, config);
     },
