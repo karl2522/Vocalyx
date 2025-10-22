@@ -209,12 +209,23 @@ CORS_ALLOW_HEADERS = [
     'x-requested-with',
     'x-access-token',
     'x-google-access-token',
+    'x-interceptor-debug',
+    'x-timestamp',
+    'x-localstorage-debug',
+    'x-test-header',
+    'x-debug-google-token-status',     # ← ADD THIS
+    'x-debug-google-token-length',     # ← ADD THIS  
+    'x-debug-header-added',            # ← ADD THIS
+    'x-raw-google-token-debug',  # ← ADD THIS
+    'x-user-google-token',    # ← ADD
+    'x-sheets-token',         # ← ADD
+    'x-access-token',  # ← ADD THIS for the new simple header
+    'x-debug-body-added',  # ← ADD THIS ONE!
 ]
 
 # Additional CORS settings
 CORS_ALLOW_PRIVATE_NETWORK = True
 CORS_PREFLIGHT_MAX_AGE = 86400
-CORS_EXPOSE_HEADERS = []
 
 # Additional settings to ensure CORS on error responses
 CORS_URLS_REGEX = r'^/api/.*$'
@@ -222,6 +233,14 @@ CORS_URLS_REGEX = r'^/api/.*$'
 # Ensure CORS headers are sent on error responses too
 CORS_ORIGIN_ALLOW_ALL = True  # Deprecated setting but sometimes needed
 CORS_ALLOW_ALL_ORIGINS = True  # Ensure this is enabled
+CORS_REPLACE_HTTPS_REFERER = True
+
+CORS_EXPOSE_HEADERS = [
+    'Content-Type',
+    'Access-Control-Allow-Origin',
+    'Access-Control-Allow-Methods',
+    'Access-Control-Allow-Headers',
+]
 
 CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^https://.*\.firebaseapp\.com$",

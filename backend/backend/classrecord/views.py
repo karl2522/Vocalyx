@@ -92,7 +92,7 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
             print(f"✅ ClassRecord created successfully: {class_record.id}")
 
             # Check for user's Google access token
-            access_token = self._get_access_token(self.request)
+            access_token = self.request.headers.get('X-Google-Access-Token')
             print(f"🔍 DEBUG: X-Google-Access-Token value: {access_token[:50] + '...' if access_token and len(access_token) > 50 else access_token}")
             
             if not access_token:
@@ -125,40 +125,31 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
                     print(f"✅ Sheet copied successfully to user's Drive: {copied_sheet_id}")
                     print(f"✅ File is now owned by user: {self.request.user.email}")
                     
-                    # Step 2: Make the sheet publicly readable for iframe embedding
-                    print(f"🔄 Making sheet publicly readable for embedding...")
+                    # Step 2: Make the sheet publicly editable for iframe embedding
+                    print(f"🔄 Making sheet publicly editable for embedding...")
                     public_result = user_sheets_service.update_sheet_permissions(
-                        file_id=copied_sheet_id,
-                        make_public_readable=True,
-                        make_editable=False
+                        file_id=copied_sheet_id, 
+                        make_editable=True
                     )
                     
                     print(f"🔍 Public result: {public_result}")
                     
-                    if public_result.get('success'):
+                    if public_result['success']:
                         # Update the class record with the new sheet information
                         class_record.google_sheet_id = copied_sheet_id
                         class_record.google_sheet_url = copied_file_info.get('webViewLink')
                         class_record.save()
                         
-                        print(f"✅ Google Sheet created and made publicly readable for embed!")
+                        print(f"✅ Google Sheet created in user's Drive and made publicly editable successfully!")
                         print(f"   Sheet ID: {copied_sheet_id}")
                         print(f"   View URL: {copied_file_info.get('webViewLink')}")
                         print(f"   Embed URL: {copied_file_info.get('embedLink')}")
                         print(f"   File owner: User ({self.request.user.email})")
-                        print(f"   Permissions: Anyone with link can view; granting user editor access...")
-                        try:
-                            grant_result = user_sheets_service.add_user_editor(
-                                file_id=copied_sheet_id,
-                                user_email=self.request.user.email
-                            )
-                            print(f"🔍 Grant user editor result: {grant_result}")
-                        except Exception as ge:
-                            print(f"⚠️ Failed to grant user editor: {ge}")
+                        print(f"   Permissions: Anyone with link can edit")
                     else:
-                        print(f"⚠️ Sheet created in user's Drive but failed to make publicly readable: {public_result.get('error', 'Unknown error')}")
+                        print(f"⚠️ Sheet created in user's Drive but failed to make publicly editable: {public_result.get('error', 'Unknown error')}")
                         print(f"   Details: {public_result.get('details', 'No details provided')}")
-                        print(f"   Sheet may be view-only in embedded mode; user has full access in first-party tab")
+                        print(f"   Sheet may be view-only in embedded mode but user has full access")
                         
                         # Still save with user access
                         class_record.google_sheet_id = copied_sheet_id
