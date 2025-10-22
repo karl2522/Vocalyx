@@ -3147,15 +3147,21 @@ def final_grade_export(request, sheet_id):
         try:
             from openpyxl.drawing.image import Image as XLImage
             logo_path = settings.BASE_DIR / 'static' / 'cit-logo.png'
+            print(f"🔍 Logo path: {logo_path}")
+            print(f"🔍 Logo exists: {logo_path.exists()}")
+            
             if logo_path.exists():
+                print("✅ Logo file found, attempting to insert...")
                 img = XLImage(str(logo_path))
                 # Adjust size to desired dimensions
                 img.width = 135
                 img.height = 130
+                print(f"🔍 Image size set: {img.width}x{img.height}")
 
                 # Use simple cell positioning with pixel offsets
                 # Position at G2 and apply small offsets
                 worksheet.add_image(img, 'G2')
+                print("✅ Logo added to worksheet at G2")
 
                 # Apply pixel offsets after adding image
                 try:
@@ -3163,9 +3169,13 @@ def final_grade_export(request, sheet_id):
                     if hasattr(img, 'anchor') and hasattr(img.anchor, '_from'):
                         img.anchor._from.colOff = int(-5 * emu_per_px)  # horizontal offset (move left 5px)
                         img.anchor._from.rowOff = int(0 * emu_per_px)  # vertical offset (no change)
-                except Exception:
-                    pass
-        except Exception:
+                        print("✅ Pixel offsets applied")
+                except Exception as e:
+                    print(f"❌ Error applying offsets: {e}")
+            else:
+                print("❌ Logo file not found!")
+        except Exception as e:
+            print(f"❌ Logo insertion error: {e}")
             # If image insertion fails for any reason, continue with export without logo
             pass
 
