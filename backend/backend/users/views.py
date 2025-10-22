@@ -985,7 +985,13 @@ def sheets_get_info(request, sheet_id):
 def sheets_list_user_sheets(request):
     """List user's Google Sheets"""
     try:
-        access_token = request.headers.get('X-Google-Access-Token')
+        # Prefer 'x-access-token', fallback to legacy variants
+        access_token = (
+            request.headers.get('x-access-token') or
+            request.META.get('HTTP_X_ACCESS_TOKEN') or
+            request.headers.get('X-Google-Access-Token') or
+            request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN')
+        )
         if not access_token:
             return Response({'error': 'Google access token required in X-Google-Access-Token header'}, status=400)
         
@@ -1004,15 +1010,30 @@ def sheets_list_user_sheets(request):
 def sheets_update_permissions(request, sheet_id):
     """Update sheet permissions"""
     try:
-        access_token = request.headers.get('X-Google-Access-Token')
+        access_token = (
+            request.headers.get('x-access-token') or
+            request.META.get('HTTP_X_ACCESS_TOKEN') or
+            request.headers.get('X-Google-Access-Token') or
+            request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN')
+        )
         if not access_token:
             return Response({'error': 'Google access token required in X-Google-Access-Token header'}, status=400)
         
         make_public = request.data.get('make_public_readable', False)
         make_editable = request.data.get('make_editable', False)
+        grant_user_editor = request.data.get('grant_user_editor', False)
         
         sheets_service = GoogleSheetsService(access_token)
+        # First, update public visibility as requested
         result = sheets_service.update_sheet_permissions(sheet_id, make_public, make_editable)
+
+        # Optionally grant explicit editor to the current user (safer than 'anyone: writer')
+        if grant_user_editor and request.user and getattr(request.user, 'email', None):
+            try:
+                grant_result = sheets_service.add_user_editor(sheet_id, request.user.email)
+                result = { **result, 'grant_user_editor': grant_result }
+            except Exception as e:
+                result = { **result, 'grant_user_editor': {'success': False, 'error': str(e)} }
         
         return Response(result)
         
@@ -1026,7 +1047,12 @@ def sheets_update_permissions(request, sheet_id):
 def sheets_get_data(request, sheet_id):
     """Get data from a Google Sheet"""
     try:
-        access_token = request.headers.get('X-Google-Access-Token')
+        access_token = (
+            request.headers.get('x-access-token') or
+            request.META.get('HTTP_X_ACCESS_TOKEN') or
+            request.headers.get('X-Google-Access-Token') or
+            request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN')
+        )
         if not access_token:
             return Response({'error': 'Google access token required in X-Google-Access-Token header'}, status=400)
 
