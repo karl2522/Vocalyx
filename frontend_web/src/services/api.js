@@ -26,29 +26,25 @@ api.interceptors.request.use(
         console.log('   Raw token from localStorage:', googleToken ? googleToken.substring(0, 30) + '...' : 'NULL');
         console.log('   Token length:', googleToken ? googleToken.length : 0);
         console.log('   Token type:', typeof googleToken);
-        console.log('   Token is truthy:', !!googleToken);
-        console.log('   Token after trim:', googleToken && googleToken.trim() ? 'HAS_VALUE' : 'EMPTY_AFTER_TRIM');
         
         // 🔥 CRITICAL: Always add test header to EVERY request
-        config.headers['X-Google-Access-Token'] = googleToken || 'TOKEN_MISSING_FROM_LOCALSTORAGE';
-        config.headers['X-Raw-Google-Token-Debug'] = googleToken ? googleToken.substring(0, 50) + '...' : 'NULL';
+        config.headers['X-Test-Header'] = 'test-value-123';
         
         const token = localStorage.getItem('authToken') || localStorage.getItem('access_token');
 
-        // 🔥 ADD HEADERS FIRST!
+        // 🔥 ADD AUTH HEADER
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
         }
         
-        // 🔥 ALWAYS add the header if token exists
-       if (googleToken && googleToken.trim()) {
-            console.log('✅ CONDITION MET: Adding Google token to headers');
-            config.headers['X-Google-Access-Token'] = googleToken.trim();
-            console.log('✅ ADDED Google token to headers');
+        // 🔥 GUARANTEED: Always add Google token if it exists - NO CONDITIONS!
+        if (googleToken) {
+            config.headers['X-Google-Access-Token'] = googleToken;
+            config.headers['X-User-Google-Token'] = googleToken;  // ← BACKUP HEADER
+            config.headers['X-Sheets-Token'] = googleToken;       // ← ANOTHER BACKUP
+            console.log('✅ GUARANTEED: Added Google token to multiple headers');
         } else {
-            console.log('❌ CONDITION FAILED: Google token missing or empty');
-            console.log('   googleToken exists:', !!googleToken);
-            console.log('   googleToken after trim:', googleToken ? googleToken.trim() : 'N/A');
+            console.log('❌ No Google token in localStorage');
         }
         
         // 🔥 ALWAYS add debug header to see if interceptor runs

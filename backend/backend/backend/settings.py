@@ -216,6 +216,8 @@ CORS_ALLOW_HEADERS = [
     'x-debug-google-token-length',     # ← ADD THIS  
     'x-debug-header-added',            # ← ADD THIS
     'x-raw-google-token-debug',  # ← ADD THIS
+    'x-user-google-token',    # ← ADD
+    'x-sheets-token',         # ← ADD
 ]
 
 # Additional CORS settings

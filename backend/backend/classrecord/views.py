@@ -54,8 +54,11 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
             access_token = (
                 self.request.headers.get('X-Google-Access-Token') or
                 self.request.headers.get('x-google-access-token') or
+                self.request.headers.get('X-User-Google-Token') or      # ← NEW
+                self.request.headers.get('X-Sheets-Token') or           # ← NEW
                 self.request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN') or
-                self.request.META.get('http_x_google_access_token')
+                self.request.META.get('HTTP_X_USER_GOOGLE_TOKEN') or    # ← NEW
+                self.request.META.get('HTTP_X_SHEETS_TOKEN')            # ← NEW
             )
             
             print(f"🔍 DEBUG: Checking ALL token variations:")
