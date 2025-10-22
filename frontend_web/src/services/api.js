@@ -37,12 +37,19 @@ api.interceptors.request.use(
             config.headers.Authorization = `Bearer ${token}`;
         }
         
-        // 🔥 GUARANTEED: Always add Google token if it exists - NO CONDITIONS!
+        // 🔥 FOCUS: ONLY use X-Google-Access-Token (no bypass)
         if (googleToken) {
             config.headers['X-Google-Access-Token'] = googleToken;
-            config.headers['X-User-Google-Token'] = googleToken;  // ← BACKUP HEADER
-            config.headers['X-Sheets-Token'] = googleToken;       // ← ANOTHER BACKUP
-            console.log('✅ GUARANTEED: Added Google token to multiple headers');
+            
+            // 🔥 ALSO: Add to request body for POST requests as additional method
+            if (config.method === 'post' && config.url && config.url.includes('/class-records/')) {
+                if (typeof config.data === 'object') {
+                    config.data.google_access_token = googleToken;
+                    console.log('✅ Added Google token to request body as backup');
+                }
+            }
+            
+            console.log('✅ Added Google token to X-Google-Access-Token header');
         } else {
             console.log('❌ No Google token in localStorage');
         }
@@ -51,19 +58,12 @@ api.interceptors.request.use(
         config.headers['X-Interceptor-Debug'] = 'interceptor-is-working';
         config.headers['X-Timestamp'] = Date.now().toString();
         
-        // 🔥 ALWAYS add localStorage debug info to headers
-        config.headers['X-LocalStorage-Debug'] = JSON.stringify({
-            authToken: localStorage.getItem('authToken') ? 'EXISTS' : 'NULL',
-            access_token: localStorage.getItem('access_token') ? 'EXISTS' : 'NULL',
-            googleAccessToken: localStorage.getItem('googleAccessToken') ? 'EXISTS' : 'NULL',
-            googleTokenLength: localStorage.getItem('googleAccessToken')?.length || 0
-        });
-
-        // 🔥 SIMPLE DEBUG: Add debug info directly to headers for class-records POST
+        // 🔥 DEBUG: Add debug info for class-records POST
         if (config.url && config.url.includes('/class-records/') && config.method === 'post') {
             config.headers['X-Debug-Google-Token-Status'] = googleToken ? 'EXISTS' : 'MISSING';
             config.headers['X-Debug-Google-Token-Length'] = googleToken?.length || 0;
             config.headers['X-Debug-Header-Added'] = config.headers['X-Google-Access-Token'] ? 'YES' : 'NO';
+            config.headers['X-Debug-Body-Added'] = (config.data && config.data.google_access_token) ? 'YES' : 'NO';
         }
 
         // 🔥 FORCE DEBUG: Log for ALL requests to /class-records/
@@ -77,6 +77,7 @@ api.interceptors.request.use(
                 'X-Google-Access-Token': config.headers['X-Google-Access-Token'] ? 'PRESENT' : 'MISSING',
                 'Authorization': config.headers.Authorization ? 'PRESENT' : 'MISSING'
             });
+            console.log('🔥 Body data:', config.data);
         }
         
         return config;

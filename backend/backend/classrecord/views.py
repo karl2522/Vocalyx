@@ -40,6 +40,10 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
         for header_name, header_value in self.request.headers.items():
             print(f"   {header_name}: {header_value}")
         
+        # 🔥 DEBUG: Log request body
+        print("🔍 REQUEST BODY DATA:")
+        print(f"   Body: {self.request.data}")
+        
         try:
             # Save the class record initially without Google Sheet details
             class_record = serializer.save(
@@ -50,26 +54,26 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
             
             print(f"✅ ClassRecord created successfully: {class_record.id}")
 
-            # 🔥 FIXED: Check ALL possible header variations (but ONLY for actual tokens)
+            # 🔥 FOCUS: Check X-Google-Access-Token ONLY (no bypass)
             access_token = (
-                self.request.headers.get('X-Access-Token') or  # ← New simple name
-                self.request.headers.get('X-User-Google-Token') or
-                self.request.headers.get('X-Sheets-Token') or
-                self.request.META.get('HTTP_X_ACCESS_TOKEN')
+                self.request.headers.get('X-Google-Access-Token') or
+                self.request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN') or
+                # 🔥 Backup: Check request body if header is blocked
+                self.request.data.get('google_access_token')
             )
             
-            print(f"🔍 DEBUG: Checking ALL token variations:")
+            print(f"🔍 DEBUG: Checking X-Google-Access-Token sources:")
             print(f"   headers.get('X-Google-Access-Token'): {self.request.headers.get('X-Google-Access-Token')[:20] + '...' if self.request.headers.get('X-Google-Access-Token') else 'None'}")
-            print(f"   headers.get('x-google-access-token'): {self.request.headers.get('x-google-access-token')[:20] + '...' if self.request.headers.get('x-google-access-token') else 'None'}")
             print(f"   META.get('HTTP_X_GOOGLE_ACCESS_TOKEN'): {self.request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN')[:20] + '...' if self.request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN') else 'None'}")
+            print(f"   body.get('google_access_token'): {self.request.data.get('google_access_token')[:20] + '...' if self.request.data.get('google_access_token') else 'None'}")
             
             print(f"🔍 Final access_token: {access_token[:20] + '...' if access_token else 'None'}")
             
             if not access_token:
-                print("❌ No Google access token found anywhere. Skipping Google Sheets creation.")
+                print("❌ No X-Google-Access-Token found in headers OR body. Skipping Google Sheets creation.")
                 return
 
-            print(f"✅ Google access token found: {access_token[:50]}...")
+            print(f"✅ X-Google-Access-Token found: {access_token[:50]}...")
 
             # Initialize Google Sheets service with user's access token
             user_sheets_service = GoogleSheetsService(access_token)
