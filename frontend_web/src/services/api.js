@@ -18,42 +18,14 @@ const api = axios.create({
 
 api.interceptors.request.use(
     (config) => {
-        // 🔥 CRITICAL: Always add test header to EVERY request
-        config.headers['X-Test-Header'] = 'test-value-123';
-        
         const token = localStorage.getItem('authToken') || localStorage.getItem('access_token');
         const googleToken = localStorage.getItem('googleAccessToken');
 
-        // 🔥 ADD HEADERS FIRST!
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
         }
-        
         if (googleToken) {
-            config.headers['X-Google-Access-Token'] = googleToken;
-        }
-        
-        // 🔥 ALWAYS add debug header to see if interceptor runs
-        config.headers['X-Interceptor-Debug'] = 'interceptor-is-working';
-        config.headers['X-Timestamp'] = Date.now().toString();
-        
-        // 🔥 ALWAYS add localStorage debug info to headers
-        config.headers['X-LocalStorage-Debug'] = JSON.stringify({
-            authToken: localStorage.getItem('authToken') ? 'EXISTS' : 'NULL',
-            access_token: localStorage.getItem('access_token') ? 'EXISTS' : 'NULL',
-            googleAccessToken: localStorage.getItem('googleAccessToken') ? 'EXISTS' : 'NULL',
-            googleTokenLength: localStorage.getItem('googleAccessToken')?.length || 0
-        });
-
-        // 🔥 SIMPLE DEBUG: Just log to console (no showToast dependency)
-        if (config.url && config.url.includes('/class-records/') && config.method === 'post') {
-            console.log('🔥 INTERCEPTOR RUNNING - Class Record POST Request');
-            console.log('🔥 Headers being added:', {
-                'X-Test-Header': config.headers['X-Test-Header'],
-                'X-Interceptor-Debug': config.headers['X-Interceptor-Debug'],
-                'X-Google-Access-Token': config.headers['X-Google-Access-Token'] ? 'PRESENT' : 'MISSING',
-                'Authorization': config.headers.Authorization ? 'PRESENT' : 'MISSING'
-            });
+            config.headers['X-Access-Token'] = googleToken;
         }
 
         return config;
