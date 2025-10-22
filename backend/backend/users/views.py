@@ -3143,6 +3143,32 @@ def final_grade_export(request, sheet_id):
         workbook = openpyxl.load_workbook(template_path)
         worksheet = workbook['Final Grades']
 
+        # Ensure logo is present: place programmatically at desired anchor
+        try:
+            from openpyxl.drawing.image import Image as XLImage
+            logo_path = settings.BASE_DIR / 'static' / 'cit-logo.png'
+            if logo_path.exists():
+                img = XLImage(str(logo_path))
+                # Adjust size to desired dimensions
+                img.width = 135
+                img.height = 130
+
+                # Use simple cell positioning with pixel offsets
+                # Position at G2 and apply small offsets
+                worksheet.add_image(img, 'G2')
+
+                # Apply pixel offsets after adding image
+                try:
+                    emu_per_px = 9525
+                    if hasattr(img, 'anchor') and hasattr(img.anchor, '_from'):
+                        img.anchor._from.colOff = int(-5 * emu_per_px)  # horizontal offset (move left 5px)
+                        img.anchor._from.rowOff = int(0 * emu_per_px)  # vertical offset (no change)
+                except Exception:
+                    pass
+        except Exception:
+            # If image insertion fails for any reason, continue with export without logo
+            pass
+
         # Find the existing template table by looking for the header row
         # Look for "No." or "Last Name" in the template to find the data start row
         data_start_row = None
