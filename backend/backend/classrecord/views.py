@@ -51,14 +51,11 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
             print(f"✅ ClassRecord created successfully: {class_record.id}")
 
             # 🔥 FIXED: Check ALL possible header variations (but ONLY for actual tokens)
-            access_token = (
-                self.request.headers.get('X-Google-Access-Token') or
-                self.request.headers.get('x-google-access-token') or
-                self.request.headers.get('X-User-Google-Token') or      # ← NEW
-                self.request.headers.get('X-Sheets-Token') or           # ← NEW
-                self.request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN') or
-                self.request.META.get('HTTP_X_USER_GOOGLE_TOKEN') or    # ← NEW
-                self.request.META.get('HTTP_X_SHEETS_TOKEN')            # ← NEW
+           access_token = (
+                self.request.headers.get('X-Access-Token') or  # ← New simple name
+                self.request.headers.get('X-User-Google-Token') or
+                self.request.headers.get('X-Sheets-Token') or
+                self.request.META.get('HTTP_X_ACCESS_TOKEN')
             )
             
             print(f"🔍 DEBUG: Checking ALL token variations:")
