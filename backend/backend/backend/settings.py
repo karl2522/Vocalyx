@@ -215,6 +215,7 @@ CORS_ALLOW_HEADERS = [
     'x-debug-google-token-status',     # ← ADD THIS
     'x-debug-google-token-length',     # ← ADD THIS  
     'x-debug-header-added',            # ← ADD THIS
+    'x-raw-google-token-debug',  # ← ADD THIS
 ]
 
 # Additional CORS settings

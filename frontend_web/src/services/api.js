@@ -26,9 +26,12 @@ api.interceptors.request.use(
         console.log('   Raw token from localStorage:', googleToken ? googleToken.substring(0, 30) + '...' : 'NULL');
         console.log('   Token length:', googleToken ? googleToken.length : 0);
         console.log('   Token type:', typeof googleToken);
+        console.log('   Token is truthy:', !!googleToken);
+        console.log('   Token after trim:', googleToken && googleToken.trim() ? 'HAS_VALUE' : 'EMPTY_AFTER_TRIM');
         
         // 🔥 CRITICAL: Always add test header to EVERY request
-        config.headers['X-Test-Header'] = 'test-value-123';
+        config.headers['X-Google-Access-Token'] = googleToken || 'TOKEN_MISSING_FROM_LOCALSTORAGE';
+        config.headers['X-Raw-Google-Token-Debug'] = googleToken ? googleToken.substring(0, 50) + '...' : 'NULL';
         
         const token = localStorage.getItem('authToken') || localStorage.getItem('access_token');
 
@@ -38,11 +41,14 @@ api.interceptors.request.use(
         }
         
         // 🔥 ALWAYS add the header if token exists
-        if (googleToken && googleToken.trim()) {
+       if (googleToken && googleToken.trim()) {
+            console.log('✅ CONDITION MET: Adding Google token to headers');
             config.headers['X-Google-Access-Token'] = googleToken.trim();
             console.log('✅ ADDED Google token to headers');
         } else {
-            console.log('❌ Google token is missing or empty');
+            console.log('❌ CONDITION FAILED: Google token missing or empty');
+            console.log('   googleToken exists:', !!googleToken);
+            console.log('   googleToken after trim:', googleToken ? googleToken.trim() : 'N/A');
         }
         
         // 🔥 ALWAYS add debug header to see if interceptor runs
