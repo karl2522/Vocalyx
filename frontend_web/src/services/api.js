@@ -37,9 +37,9 @@ api.interceptors.request.use(
             config.headers.Authorization = `Bearer ${token}`;
         }
         
-        // 🔥 FOCUS: ONLY use X-Google-Access-Token (no bypass)
+        // 🔥 TEST: Use X-Access-Token instead of X-Google-Access-Token
         if (googleToken) {
-            config.headers['X-Google-Access-Token'] = googleToken;
+            config.headers['X-Access-Token'] = googleToken;  // ← CHANGED HERE
             
             // 🔥 ALSO: Add to request body for POST requests as additional method
             if (config.method === 'post' && config.url && config.url.includes('/class-records/')) {
@@ -49,7 +49,7 @@ api.interceptors.request.use(
                 }
             }
             
-            console.log('✅ Added Google token to X-Google-Access-Token header');
+            console.log('✅ Added Google token to X-Access-Token header');
         } else {
             console.log('❌ No Google token in localStorage');
         }
@@ -62,7 +62,7 @@ api.interceptors.request.use(
         if (config.url && config.url.includes('/class-records/') && config.method === 'post') {
             config.headers['X-Debug-Google-Token-Status'] = googleToken ? 'EXISTS' : 'MISSING';
             config.headers['X-Debug-Google-Token-Length'] = googleToken?.length || 0;
-            config.headers['X-Debug-Header-Added'] = config.headers['X-Google-Access-Token'] ? 'YES' : 'NO';
+            config.headers['X-Debug-Header-Added'] = config.headers['X-Access-Token'] ? 'YES' : 'NO';  // ← CHANGED
             config.headers['X-Debug-Body-Added'] = (config.data && config.data.google_access_token) ? 'YES' : 'NO';
         }
 
@@ -74,7 +74,7 @@ api.interceptors.request.use(
             console.log('🔥 Headers being added:', {
                 'X-Test-Header': config.headers['X-Test-Header'],
                 'X-Interceptor-Debug': config.headers['X-Interceptor-Debug'],
-                'X-Google-Access-Token': config.headers['X-Google-Access-Token'] ? 'PRESENT' : 'MISSING',
+                'X-Access-Token': config.headers['X-Access-Token'] ? 'PRESENT' : 'MISSING',  // ← CHANGED
                 'Authorization': config.headers.Authorization ? 'PRESENT' : 'MISSING'
             });
             console.log('🔥 Body data:', config.data);
