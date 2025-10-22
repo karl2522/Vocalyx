@@ -51,7 +51,7 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
             print(f"✅ ClassRecord created successfully: {class_record.id}")
 
             # 🔥 FIXED: Check ALL possible header variations (but ONLY for actual tokens)
-           access_token = (
+            access_token = (
                 self.request.headers.get('X-Access-Token') or  # ← New simple name
                 self.request.headers.get('X-User-Google-Token') or
                 self.request.headers.get('X-Sheets-Token') or
