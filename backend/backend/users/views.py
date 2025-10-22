@@ -3074,17 +3074,20 @@ def final_grade_export(request, sheet_id):
             logo_path = settings.BASE_DIR / 'static' / 'cit-logo.png'
             if logo_path.exists():
                 img = XLImage(str(logo_path))
-                # Adjust size as needed to match template proportions
-                img.width = 120
-                img.height = 120
-                # Anchor to the top-left of the chosen cell (e.g., centered header area)
-                worksheet.add_image(img, 'G4')
-                # Optional fine-tuning via pixel offsets relative to the anchor cell
+                # Adjust size to desired dimensions
+                img.width = 135
+                img.height = 130
+                
+                # Use simple cell positioning with pixel offsets
+                # Position at G2 and apply small offsets
+                worksheet.add_image(img, 'G2')
+                
+                # Apply pixel offsets after adding image
                 try:
                     emu_per_px = 9525
                     if hasattr(img, 'anchor') and hasattr(img.anchor, '_from'):
-                        img.anchor._from.colOff = int(0 * emu_per_px)   # horizontal offset in px
-                        img.anchor._from.rowOff = int(-10 * emu_per_px)  # vertical offset in px
+                        img.anchor._from.colOff = int(-5 * emu_per_px)   # horizontal offset (move left 5px)
+                        img.anchor._from.rowOff = int(0 * emu_per_px)   # vertical offset (no change)
                 except Exception:
                     pass
         except Exception:
