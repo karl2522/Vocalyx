@@ -3313,15 +3313,24 @@ def final_grade_export(request, sheet_id):
                         )
                     cell.border = new_border
 
-        # Save to BytesIO
-        output = BytesIO()
-        workbook.save(output)
-        output.seek(0)
+        # Save to temporary file first to preserve images (openpyxl limitation with BytesIO)
+        import tempfile
+        import os
+        
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
+            workbook.save(tmp_file.name)
+            
+            # Read the file back to preserve images
+            with open(tmp_file.name, 'rb') as f:
+                file_data = f.read()
+            
+            # Clean up temporary file
+            os.unlink(tmp_file.name)
 
         # Return file
         from django.http import HttpResponse
         response = HttpResponse(
-            output.getvalue(),
+            file_data,
             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
         response['Content-Disposition'] = f'attachment; filename="FinalGrades_{class_record.name}_{timezone.now().strftime("%Y%m%d")}.xlsx"'
