@@ -1,12 +1,13 @@
 const BACKEND_URL = import.meta.env.PROD 
-  ? 'https://vocalyx-c61a072bf25a.herokuapp.com' 
+  ? 'https://vocalyx-backend-64846917574.asia-southeast1.run.app/api'
   : 'http://127.0.0.1:8000';
 
+import { showToast } from '../utils/toast';
 import googleDriveService from './googleDriveService';
 
 class GoogleSheetsService {
   constructor() {
-    this.baseURL = `${BACKEND_URL}/api`;
+    this.baseURL = BACKEND_URL; // 🔥 FIXED: Remove the extra /api
   }
 
   /**
@@ -25,7 +26,7 @@ class GoogleSheetsService {
     }
     
     if (googleAccessToken) {
-      headers['X-Google-Access-Token'] = googleAccessToken;
+      headers['X-Access-Token'] = googleAccessToken;
     }
     
     return headers;
@@ -150,29 +151,76 @@ class GoogleSheetsService {
    */
   async getFinalGradePreview(sheetId, { classRecordId, force = false } = {}) {
     try {
-      // Ensure we have a fresh Google access token before calling
-      if (!localStorage.getItem('googleAccessToken')) {
-        await googleDriveService.ensureGoogleAccessToken();
+      // 🔥 FIXED: Force refresh Google token before making the request
+      await googleDriveService.ensureGoogleAccessToken();
+      
+      // Double-check we have a valid token
+      const googleToken = localStorage.getItem('googleAccessToken');
+      if (!googleToken) {
+        console.error('Google access token missing. Please reconnect your Google account.');
+        throw new Error('Google access token missing');
       }
 
-      let response = await googleDriveService.requestWithAuth(
-        `${this.baseURL}/sheets/${sheetId}/final-grade-preview/`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            class_record_id: classRecordId,
-            force: force
-          })
-        }
-      );
+      const headers = this.getHeaders();
+      const requestBody = {
+        class_record_id: classRecordId,
+        force: force
+      };
+
+      console.log('🔍 Final Grade Preview Request:', {
+        url: `${this.baseURL}/sheets/${sheetId}/final-grade-preview/`,
+        headers: {
+          'Authorization': headers['Authorization'] ? 'Bearer [TOKEN]' : 'MISSING',
+          'X-Access-Token': headers['X-Access-Token'] ? `[TOKEN-${headers['X-Access-Token'].length}chars]` : 'MISSING',
+          'Content-Type': headers['Content-Type']
+        },
+        body: requestBody
+      });
+
+      const response = await fetch(`${this.baseURL}/sheets/${sheetId}/final-grade-preview/`, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(requestBody)
+      });
 
       if (!response.ok) {
+        const errorText = await response.text();
+        
+        // 🔥 If token expired, try to refresh once
+        if (response.status === 400 && errorText.includes('Google access token')) {
+          console.log('Google token expired. Refreshing...');
+          
+          // Clear old token and get fresh one
+          localStorage.removeItem('googleAccessToken');
+          await googleDriveService.ensureGoogleAccessToken();
+          
+          // Retry with fresh token
+          const freshHeaders = this.getHeaders();
+          const retryResponse = await fetch(`${this.baseURL}/sheets/${sheetId}/final-grade-preview/`, {
+            method: 'POST',
+            headers: freshHeaders,
+            body: JSON.stringify(requestBody)
+          });
+          
+          if (!retryResponse.ok) {
+            const retryErrorText = await retryResponse.text();
+            showToast.error(`🔥 API Error ${retryResponse.status} (After Refresh):\n${retryErrorText}`);
+            throw new Error(`HTTP ${retryResponse.status}: ${retryResponse.statusText}`);
+          }
+          
+          console.log('Token refreshed successfully!');
+          return await retryResponse.json();
+        }
+        
+        showToast.error(`🔥 API Error ${response.status}:\n${errorText}`);
+        console.error('🔥 Final grade preview error:', errorText);
+        console.error('🔥 Response status:', response.status);
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
       return await response.json();
     } catch (error) {
+      showToast.error('Failed to get final grade preview: ' + error.message);
       console.error('Failed to get final grade preview:', error);
       throw error;
     }

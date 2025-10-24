@@ -29,11 +29,21 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     parser_classes = [JSONParser, FormParser, MultiPartParser]
 
+    def _get_access_token(self, request):
+        """Prefer 'x-access-token', fallback to legacy header and META variants."""
+        return (
+            request.headers.get('x-access-token') or
+            request.META.get('HTTP_X_ACCESS_TOKEN') or
+            request.headers.get('X-Google-Access-Token') or
+            request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN')
+        )
+
     def get_queryset(self):
         return ClassRecord.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
         print("🔍 DEBUG: Entering perform_create method.")
+        
         
         try:
             # Save the class record initially without Google Sheet details
@@ -47,10 +57,12 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
             print(f"✅ ClassRecord created successfully: {class_record.id}")
 
             # Check for user's Google access token
-            access_token = self.request.headers.get('X-Google-Access-Token')
+            access_token = self._get_access_token(self.request)
+            print(f"🔍 DEBUG: Access token (X-Access-Token preferred) value: {access_token[:50] + '...' if access_token and len(access_token) > 50 else access_token}")
+            
             if not access_token:
                 print("❌ No Google access token found in request headers. Skipping Google Sheets creation.")
-                print("   Please ensure the frontend sends the user's Google access token in the X-Google-Access-Token header.")
+                print("   Please ensure the frontend sends the user's Google access token in the X-Access-Token header.")
                 return
 
             # Initialize Google Sheets service with user's access token
@@ -136,9 +148,9 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
             display_new = f"{class_record.name} - {class_record.semester}".strip()
 
             if class_record.google_sheet_id and display_old != display_new:
-                access_token = self.request.headers.get('X-Google-Access-Token')
+                access_token = self._get_access_token(self.request)
                 if not access_token:
-                    print("⚠️ Update: No X-Google-Access-Token provided; skipping Google Drive rename.")
+                    print("⚠️ Update: No X-Access-Token provided; skipping Google Drive rename.")
                     return
 
                 drive_service = GoogleDriveService(access_token)
@@ -170,16 +182,16 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
                 return
 
             # Check for access token
-            access_token = self.request.headers.get('X-Google-Access-Token')
+            access_token = self._get_access_token(self.request)
             if not access_token:
-                print("❌ CRITICAL: No 'X-Google-Access-Token' found in request headers.")
+                print("❌ CRITICAL: No 'X-Access-Token' found in request headers.")
                 print("   The frontend must send this header for Google Drive deletion to work.")
                 print("   Skipping Drive deletion, but proceeding with database deletion.")
                 instance.delete()
                 print(f"ClassRecord with ID: {instance.id} deleted successfully from database.")
                 return
             
-            print(f"✅ Found 'X-Google-Access-Token'. Proceeding with Google Drive deletion.")
+            print(f"✅ Found 'X-Access-Token'. Proceeding with Google Drive deletion.")
             
             # Attempt to delete from Google Drive
             print(f"🗑️ Initializing GoogleDriveService to delete file: {instance.google_sheet_id}")
@@ -338,7 +350,7 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
         
         try:
             class_record = self.get_object()
-            access_token = request.headers.get('X-Google-Access-Token')
+            access_token = self._get_access_token(request)
             sheet_name = request.data.get('sheet_name') or request.query_params.get('sheet_name')
             user_id = request.user.id
 
@@ -928,10 +940,10 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
                 semester = '1st Semester'
 
             # Enforce Google Sheet creation prerequisites
-            access_token = request.headers.get('X-Google-Access-Token')
+            access_token = self._get_access_token(request)
             template_id = getattr(settings, 'GOOGLE_SHEETS_TEMPLATE_ID', None)
             if not access_token:
-                return Response({'error': 'Missing X-Google-Access-Token. Please connect Google and retry.'}, status=400)
+                return Response({'error': 'Missing X-Access-Token. Please connect Google and retry.'}, status=400)
             if not template_id:
                 return Response({'error': 'Template not configured. Please set GOOGLE_SHEETS_TEMPLATE_ID on the server.'}, status=400)
 
@@ -975,7 +987,7 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
 
             # Attempt to create Google Sheet same as perform_create does (optional, best effort)
             try:
-                access_token = request.headers.get('X-Google-Access-Token')
+                access_token = self._get_access_token(request)
                 template_id = getattr(settings, 'GOOGLE_SHEETS_TEMPLATE_ID', None)
                 if access_token and template_id:
                     user_sheets_service = GoogleSheetsService(access_token)
@@ -1012,11 +1024,11 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
         try:
             file_id = request.data.get('fileId')
             file_name = request.data.get('fileName')
-            access_token = request.headers.get('X-Google-Access-Token')
+            access_token = self._get_access_token(request)
             if not file_id or not file_name:
                 return Response({'error': 'fileId and fileName are required'}, status=400)
             if not access_token:
-                return Response({'error': 'Missing X-Google-Access-Token'}, status=400)
+                return Response({'error': 'Missing X-Access-Token'}, status=400)
 
             drive = GoogleDriveService(access_token)
             download = drive.get_file_content(file_id)
@@ -1038,7 +1050,7 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
             mapping = request.data.get('mapping')
             name = (request.data.get('name') or '').strip()
             semester = (request.data.get('semester') or '').strip()
-            access_token = request.headers.get('X-Google-Access-Token')
+            access_token = self._get_access_token(request)
             if not semester:
                 semester = '1st Semester'
 
@@ -1047,7 +1059,7 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
             if not mapping:
                 return Response({'error': 'Mapping is required'}, status=400)
             if not access_token:
-                return Response({'error': 'Missing X-Google-Access-Token'}, status=400)
+                return Response({'error': 'Missing X-Access-Token'}, status=400)
             template_id = getattr(settings, 'GOOGLE_SHEETS_TEMPLATE_ID', None)
             if not template_id:
                 return Response({'error': 'Template not configured. Please set GOOGLE_SHEETS_TEMPLATE_ID on the server.'}, status=400)
@@ -1214,6 +1226,89 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
                 'status': 'error',
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['get'])
+    def test_headers(self, request):
+        """Test endpoint to verify header transmission"""
+        print("🔍 TEST HEADERS ENDPOINT CALLED")
+        print("🔍 ALL REQUEST HEADERS:")
+        for header_name, header_value in request.headers.items():
+            print(f"   {header_name}: {header_value}")
+        
+        print("🔍 RAW META HEADERS:")
+        for key, value in request.META.items():
+            if key.startswith('HTTP_'):
+                print(f"   {key}: {value}")
+        
+        return Response({
+            'message': 'Headers test endpoint',
+            'headers_received': dict(request.headers),
+            'meta_headers': {k: v for k, v in request.META.items() if k.startswith('HTTP_')},
+            'google_token': (request.headers.get('X-Access-Token') or request.headers.get('x-access-token') or request.headers.get('X-Google-Access-Token')),
+        })
+    
+    @action(detail=False, methods=['post'])
+    def test_headers_post(self, request):
+        """Test endpoint for POST requests to verify header transmission"""
+        print("🔍 TEST HEADERS POST ENDPOINT CALLED")
+        print("🔍 ALL REQUEST HEADERS:")
+        for header_name, header_value in request.headers.items():
+            print(f"   {header_name}: {header_value}")
+        
+        print("🔍 RAW META HEADERS:")
+        for key, value in request.META.items():
+            if key.startswith('HTTP_'):
+                print(f"   {key}: {value}")
+        
+        print("🔍 REQUEST DATA:", request.data)
+        
+        return Response({
+            'message': 'Headers test endpoint (POST)',
+            'headers_received': dict(request.headers),
+            'meta_headers': {k: v for k, v in request.META.items() if k.startswith('HTTP_')},
+            'google_token': (request.headers.get('X-Access-Token') or request.headers.get('x-access-token') or request.headers.get('X-Google-Access-Token')),
+            'request_data': request.data
+        })
+    
+    @action(detail=False, methods=['post'])
+    def debug_frontend_interceptor(self, request):
+        """Debug endpoint to test if frontend API interceptor is working"""
+        print("🔥 DEBUG FRONTEND INTERCEPTOR ENDPOINT CALLED")
+        print("🔥 REQUEST METHOD:", request.method)
+        print("🔥 REQUEST URL:", request.get_full_path())
+        print("🔥 ALL HEADERS:")
+        for header_name, header_value in request.headers.items():
+            print(f"   {header_name}: {header_value}")
+        
+        print("🔥 META HEADERS:")
+        for key, value in request.META.items():
+            if key.startswith('HTTP_'):
+                print(f"   {key}: {value}")
+        
+        print("🔥 REQUEST DATA:", request.data)
+        
+        # Check for the specific headers we expect from the interceptor
+        auth_header = request.headers.get('Authorization')
+        google_token = (request.headers.get('X-Access-Token') or request.headers.get('x-access-token') or request.headers.get('X-Google-Access-Token'))
+        test_header = request.headers.get('X-Test-Header')
+        
+        print(f"🔥 AUTH HEADER: {'PRESENT' if auth_header else 'MISSING'}")
+        print(f"🔥 GOOGLE TOKEN: {'PRESENT' if google_token else 'MISSING'}")
+        print(f"🔥 TEST HEADER: {'PRESENT' if test_header else 'MISSING'}")
+        
+        if google_token:
+            print(f"🔥 GOOGLE TOKEN LENGTH: {len(google_token)}")
+            print(f"🔥 GOOGLE TOKEN STARTS WITH: {google_token[:20]}...")
+        
+        return Response({
+            'message': 'Frontend interceptor debug',
+            'auth_header_present': bool(auth_header),
+            'google_token_present': bool(google_token),
+            'test_header_present': bool(test_header),
+            'google_token_length': len(google_token) if google_token else 0,
+            'all_headers': dict(request.headers),
+            'request_data': request.data
+        })
 
 
 class StudentViewSet(viewsets.ModelViewSet):

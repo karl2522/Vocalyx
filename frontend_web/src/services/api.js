@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const API_URL = import.meta.env.PROD 
-  ? 'https://vocalyx-c61a072bf25a.herokuapp.com/api'
+  ? 'https://vocalyx-backend-64846917574.asia-southeast1.run.app/api'
   : 'http://127.0.0.1:8000/api';
 
 console.log('🔍 API Environment Detection:', {
@@ -18,15 +18,16 @@ const api = axios.create({
 
 api.interceptors.request.use(
     (config) => {
-        // Try to get token from both possible storage keys for backward compatibility
         const token = localStorage.getItem('authToken') || localStorage.getItem('access_token');
-        
+        const googleToken = localStorage.getItem('googleAccessToken');
 
-        
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
         }
-        
+        if (googleToken) {
+            config.headers['X-Access-Token'] = googleToken;
+        }
+
         return config;
     },
     (error) => {
@@ -216,14 +217,9 @@ export const classRecordService = {
     
     // Create a new class record
     createClassRecord: (recordData) => {
-        const googleAccessToken = localStorage.getItem('googleAccessToken');
-        const config = {};
-        if (googleAccessToken) {
-            config.headers = {
-                'X-Google-Access-Token': googleAccessToken
-            };
-        }
-        return api.post('/class-records/', recordData, config);
+        // 🔥 SIMPLIFIED: Let the interceptor handle headers automatically
+        console.log('🔥 CreateClassRecord called - interceptor should add headers automatically');
+        return api.post('/class-records/', recordData);
     },
     
     // Get a specific class record by ID
@@ -231,14 +227,8 @@ export const classRecordService = {
     
     // Update a class record (send Google access token if available for Drive rename)
     updateClassRecord: (id, recordData) => {
-        const googleAccessToken = localStorage.getItem('googleAccessToken');
-        const config = {};
-        if (googleAccessToken) {
-            config.headers = {
-                'X-Google-Access-Token': googleAccessToken
-            };
-        }
-        return api.patch(`/class-records/${id}/`, recordData, config);
+        // 🔥 SIMPLIFIED: Let the interceptor handle headers automatically
+        return api.patch(`/class-records/${id}/`, recordData);
     },
 
     // Set or clear a student's Final Grade override (INC/N/A)
@@ -251,14 +241,8 @@ export const classRecordService = {
     
     // Delete a class record
     deleteClassRecord: (id) => {
-        const googleAccessToken = localStorage.getItem('googleAccessToken');
-        const config = {};
-        if (googleAccessToken) {
-            config.headers = {
-                'X-Google-Access-Token': googleAccessToken
-            };
-        }
-        return api.delete(`/class-records/${id}/`, config);
+        // 🔥 SIMPLIFIED: Let the interceptor handle headers automatically
+        return api.delete(`/class-records/${id}/`);
     },
     
     // Get students for a specific class record
@@ -309,7 +293,7 @@ export const classRecordService = {
         const googleAccessToken = localStorage.getItem('googleAccessToken');
         const config = { headers: {} };
         if (googleAccessToken) {
-            config.headers['X-Google-Access-Token'] = googleAccessToken;
+            config.headers['X-Access-Token'] = googleAccessToken;
         }
         const body = { sheet_name: sheetName };
         if (options.force) {
@@ -343,7 +327,7 @@ export const classRecordService = {
         const config = {};
         if (googleAccessToken) {
             config.headers = {
-                'X-Google-Access-Token': googleAccessToken
+                'X-Access-Token': googleAccessToken
             };
         }
         return api.get(`/sheets/data/${sheetId}/`, config);
@@ -380,6 +364,12 @@ export const classRecordService = {
         const query = new URLSearchParams(params).toString();
         const url = `/class-records/live-counts/${query ? `?${query}` : ''}`;
         return api.get(url);
+    },
+
+    // 🔥 NEW: Test headers endpoint
+    testHeaders: () => {
+        console.log('🔥 TESTING HEADERS ENDPOINT');
+        return api.get('/class-records/test_headers/');
     },
 
     // Get mirrored CLASS STANDING percentages summary for dashboard card
@@ -622,7 +612,7 @@ export const classRecordService = {
         const googleAccessToken = localStorage.getItem('googleAccessToken');
         const config = {};
         if (googleAccessToken) {
-            config.headers = { 'X-Google-Access-Token': googleAccessToken };
+            config.headers = { 'X-Access-Token': googleAccessToken };
         }
         return api.post('/class-records/import/preview-drive/', { fileId, fileName }, config);
     },
@@ -631,7 +621,7 @@ export const classRecordService = {
         const googleAccessToken = localStorage.getItem('googleAccessToken');
         const config = {};
         if (googleAccessToken) {
-            config.headers = { 'X-Google-Access-Token': googleAccessToken };
+            config.headers = { 'X-Access-Token': googleAccessToken };
         }
         return api.post('/class-records/import/drive/', { fileId, fileName, mapping, name, semester }, config);
     },

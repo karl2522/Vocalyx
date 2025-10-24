@@ -70,7 +70,7 @@ class RegisterView(APIView):
                 user.email_verification_token = verification_token
                 user.save()
 
-                verification_url = f"https://vocalyx-c61a072bf25a.herokuapp.com/api/verify-email/{verification_token}/"
+                verification_url = f"https://vocalyx-backend-64846917574.asia-southeast1.run.app/api/verify-email/{verification_token}/"
 
                 html_message = render_to_string('email/verification_email.html', {
                     'user': user,
@@ -257,7 +257,7 @@ def resend_verification_email(request):
         user.save()
         
         # Create verification URL
-        verification_url = f"https://vocalyx-c61a072bf25a.herokuapp.com/api/verify-email/{verification_token}/"
+        verification_url = f"https://vocalyx-backend-64846917574.asia-southeast1.run.app/api/verify-email/{verification_token}/"
         
         # Render email template
         html_message = render_to_string('email/verification_email.html', {
@@ -811,7 +811,20 @@ def drive_list_files(request):
         user = request.user
         
         # Try to get access token from header first (for backward compatibility)
-        access_token = request.headers.get('X-Google-Access-Token')
+        access_token = (
+            request.headers.get('X-Access-Token') or
+            request.headers.get('x-access-token') or
+            request.META.get('HTTP_X_ACCESS_TOKEN') or
+            request.headers.get('X-Google-Access-Token') or
+            request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN')
+        )
+        access_token = (
+            request.headers.get('X-Access-Token') or
+            request.headers.get('x-access-token') or
+            request.META.get('HTTP_X_ACCESS_TOKEN') or
+            request.headers.get('X-Google-Access-Token') or
+            request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN')
+        )
         
         if not access_token:
             # Use stored token if no token provided
@@ -846,9 +859,15 @@ def drive_list_files(request):
 def drive_upload_file(request):
     """Upload a file to user's Google Drive"""
     try:
-        access_token = request.headers.get('X-Google-Access-Token')
+        access_token = (
+            request.headers.get('X-Access-Token') or
+            request.headers.get('x-access-token') or
+            request.META.get('HTTP_X_ACCESS_TOKEN') or
+            request.headers.get('X-Google-Access-Token') or
+            request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN')
+        )
         if not access_token:
-            return Response({'error': 'Google access token required in X-Google-Access-Token header'}, status=400)
+            return Response({'error': 'Google access token required in X-Access-Token header'}, status=400)
         
         # Check if file is provided
         if 'file' not in request.FILES:
@@ -880,9 +899,15 @@ def drive_upload_file(request):
 def drive_create_folder(request):
     """Create a folder in user's Google Drive"""
     try:
-        access_token = request.headers.get('X-Google-Access-Token')
+        access_token = (
+            request.headers.get('X-Access-Token') or
+            request.headers.get('x-access-token') or
+            request.META.get('HTTP_X_ACCESS_TOKEN') or
+            request.headers.get('X-Google-Access-Token') or
+            request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN')
+        )
         if not access_token:
-            return Response({'error': 'Google access token required in X-Google-Access-Token header'}, status=400)
+            return Response({'error': 'Google access token required in X-Access-Token header'}, status=400)
         
         folder_name = request.data.get('folder_name')
         if not folder_name:
@@ -908,9 +933,15 @@ def drive_create_folder(request):
 def drive_download_file(request, file_id):
     """Download a file from user's Google Drive"""
     try:
-        access_token = request.headers.get('X-Google-Access-Token')
+        access_token = (
+            request.headers.get('X-Access-Token') or
+            request.headers.get('x-access-token') or
+            request.META.get('HTTP_X_ACCESS_TOKEN') or
+            request.headers.get('X-Google-Access-Token') or
+            request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN')
+        )
         if not access_token:
-            return Response({'error': 'Google access token required in X-Google-Access-Token header'}, status=400)
+            return Response({'error': 'Google access token required in X-Access-Token header'}, status=400)
         
         drive_service = GoogleDriveService(access_token)
         result = drive_service.get_file_content(file_id)
@@ -938,9 +969,15 @@ def drive_download_file(request, file_id):
 def sheets_copy_template(request):
     """Copy a template Google Sheet to user's Drive"""
     try:
-        access_token = request.headers.get('X-Google-Access-Token')
+        access_token = (
+            request.headers.get('X-Access-Token') or
+            request.headers.get('x-access-token') or
+            request.META.get('HTTP_X_ACCESS_TOKEN') or
+            request.headers.get('X-Google-Access-Token') or
+            request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN')
+        )
         if not access_token:
-            return Response({'error': 'Google access token required in X-Google-Access-Token header'}, status=400)
+            return Response({'error': 'Google access token required in X-Access-Token header'}, status=400)
         
         template_id = request.data.get('template_id')
         sheet_name = request.data.get('name')
@@ -966,9 +1003,15 @@ def sheets_copy_template(request):
 def sheets_get_info(request, sheet_id):
     """Get information about a specific sheet"""
     try:
-        access_token = request.headers.get('X-Google-Access-Token')
+        access_token = (
+            request.headers.get('X-Access-Token') or
+            request.headers.get('x-access-token') or
+            request.META.get('HTTP_X_ACCESS_TOKEN') or
+            request.headers.get('X-Google-Access-Token') or
+            request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN')
+        )
         if not access_token:
-            return Response({'error': 'Google access token required in X-Google-Access-Token header'}, status=400)
+            return Response({'error': 'Google access token required in X-Access-Token header'}, status=400)
         
         sheets_service = GoogleSheetsService(access_token)
         result = sheets_service.get_sheet_info(sheet_id)
@@ -985,9 +1028,15 @@ def sheets_get_info(request, sheet_id):
 def sheets_list_user_sheets(request):
     """List user's Google Sheets"""
     try:
-        access_token = request.headers.get('X-Google-Access-Token')
+        # Prefer 'x-access-token', fallback to legacy variants
+        access_token = (
+            request.headers.get('x-access-token') or
+            request.META.get('HTTP_X_ACCESS_TOKEN') or
+            request.headers.get('X-Google-Access-Token') or
+            request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN')
+        )
         if not access_token:
-            return Response({'error': 'Google access token required in X-Google-Access-Token header'}, status=400)
+            return Response({'error': 'Google access token required in X-Access-Token header'}, status=400)
         
         sheets_service = GoogleSheetsService(access_token)
         result = sheets_service.get_user_sheets()
@@ -1004,15 +1053,30 @@ def sheets_list_user_sheets(request):
 def sheets_update_permissions(request, sheet_id):
     """Update sheet permissions"""
     try:
-        access_token = request.headers.get('X-Google-Access-Token')
+        access_token = (
+            request.headers.get('x-access-token') or
+            request.META.get('HTTP_X_ACCESS_TOKEN') or
+            request.headers.get('X-Google-Access-Token') or
+            request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN')
+        )
         if not access_token:
-            return Response({'error': 'Google access token required in X-Google-Access-Token header'}, status=400)
+            return Response({'error': 'Google access token required in X-Access-Token header'}, status=400)
         
         make_public = request.data.get('make_public_readable', False)
         make_editable = request.data.get('make_editable', False)
+        grant_user_editor = request.data.get('grant_user_editor', False)
         
         sheets_service = GoogleSheetsService(access_token)
+        # First, update public visibility as requested
         result = sheets_service.update_sheet_permissions(sheet_id, make_public, make_editable)
+
+        # Optionally grant explicit editor to the current user (safer than 'anyone: writer')
+        if grant_user_editor and request.user and getattr(request.user, 'email', None):
+            try:
+                grant_result = sheets_service.add_user_editor(sheet_id, request.user.email)
+                result = { **result, 'grant_user_editor': grant_result }
+            except Exception as e:
+                result = { **result, 'grant_user_editor': {'success': False, 'error': str(e)} }
         
         return Response(result)
         
@@ -1026,9 +1090,14 @@ def sheets_update_permissions(request, sheet_id):
 def sheets_get_data(request, sheet_id):
     """Get data from a Google Sheet"""
     try:
-        access_token = request.headers.get('X-Google-Access-Token')
+        access_token = (
+            request.headers.get('x-access-token') or
+            request.META.get('HTTP_X_ACCESS_TOKEN') or
+            request.headers.get('X-Google-Access-Token') or
+            request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN')
+        )
         if not access_token:
-            return Response({'error': 'Google access token required in X-Google-Access-Token header'}, status=400)
+            return Response({'error': 'Google access token required in X-Access-Token header'}, status=400)
 
         sheets_service = GoogleSheetsService(access_token)
         result = sheets_service.get_sheet_data(sheet_id)
@@ -2582,10 +2651,6 @@ def final_grade_preview_logic(sheet_id, class_record_id, sa_sheets_service, user
 def final_grade_preview(request, sheet_id):
     """Generate final grade preview with missing score details"""
     try:
-        access_token = request.headers.get('X-Google-Access-Token')
-        if not access_token:
-            return Response({'error': 'Google access token required'}, status=400)
-
         class_record_id = request.data.get('class_record_id')
         force = bool(request.data.get('force', False))
 
@@ -3039,9 +3104,15 @@ def mark_missing_scores_batch(request, sheet_id):
 def final_grade_export(request, sheet_id):
     """Export final grades to Excel using template"""
     try:
-        access_token = request.headers.get('X-Google-Access-Token')
+        access_token = (
+            request.headers.get('X-Access-Token') or
+            request.headers.get('x-access-token') or
+            request.META.get('HTTP_X_ACCESS_TOKEN') or
+            request.headers.get('X-Google-Access-Token') or
+            request.META.get('HTTP_X_GOOGLE_ACCESS_TOKEN')
+        )
         if not access_token:
-            return Response({'error': 'Google access token required'}, status=400)
+            return Response({'error': 'Google access token required in X-Access-Token header'}, status=400)
 
         class_record_id = request.data.get('class_record_id')
         if not class_record_id:
@@ -3071,6 +3142,42 @@ def final_grade_export(request, sheet_id):
 
         workbook = openpyxl.load_workbook(template_path)
         worksheet = workbook['Final Grades']
+
+        # Ensure logo is present: place programmatically at desired anchor
+        try:
+            from openpyxl.drawing.image import Image as XLImage
+            logo_path = settings.BASE_DIR / 'static' / 'cit-logo.png'
+            print(f"🔍 Logo path: {logo_path}")
+            print(f"🔍 Logo exists: {logo_path.exists()}")
+            
+            if logo_path.exists():
+                print("✅ Logo file found, attempting to insert...")
+                img = XLImage(str(logo_path))
+                # Adjust size to desired dimensions
+                img.width = 135
+                img.height = 130
+                print(f"🔍 Image size set: {img.width}x{img.height}")
+
+                # Use simple cell positioning with pixel offsets
+                # Position at G2 and apply small offsets
+                worksheet.add_image(img, 'G2')
+                print("✅ Logo added to worksheet at G2")
+
+                # Apply pixel offsets after adding image
+                try:
+                    emu_per_px = 9525
+                    if hasattr(img, 'anchor') and hasattr(img.anchor, '_from'):
+                        img.anchor._from.colOff = int(-5 * emu_per_px)  # horizontal offset (move left 5px)
+                        img.anchor._from.rowOff = int(0 * emu_per_px)  # vertical offset (no change)
+                        print("✅ Pixel offsets applied")
+                except Exception as e:
+                    print(f"❌ Error applying offsets: {e}")
+            else:
+                print("❌ Logo file not found!")
+        except Exception as e:
+            print(f"❌ Logo insertion error: {e}")
+            # If image insertion fails for any reason, continue with export without logo
+            pass
 
         # Find the existing template table by looking for the header row
         # Look for "No." or "Last Name" in the template to find the data start row
@@ -3242,15 +3349,24 @@ def final_grade_export(request, sheet_id):
                         )
                     cell.border = new_border
 
-        # Save to BytesIO
-        output = BytesIO()
-        workbook.save(output)
-        output.seek(0)
+        # Save to temporary file first to preserve images (openpyxl limitation with BytesIO)
+        import tempfile
+        import os
+        
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
+            workbook.save(tmp_file.name)
+            
+            # Read the file back to preserve images
+            with open(tmp_file.name, 'rb') as f:
+                file_data = f.read()
+            
+            # Clean up temporary file
+            os.unlink(tmp_file.name)
 
         # Return file
         from django.http import HttpResponse
         response = HttpResponse(
-            output.getvalue(),
+            file_data,
             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
         response['Content-Disposition'] = f'attachment; filename="FinalGrades_{class_record.name}_{timezone.now().strftime("%Y%m%d")}.xlsx"'

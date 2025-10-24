@@ -49,6 +49,7 @@ class GoogleSheetsService:
                 copy_url,
                 headers=self.headers,
                 json=copy_data,
+                params={'supportsAllDrives': 'true'},
                 timeout=15
             )
 
@@ -334,6 +335,7 @@ class GoogleSheetsService:
                     permissions_url,
                     headers=self.headers,
                     json=permission_data,
+                    params={'supportsAllDrives': 'true'},
                     timeout=10
                 )
 
@@ -357,6 +359,49 @@ class GoogleSheetsService:
 
         except requests.exceptions.RequestException as e:
             logger.error(f"Update permissions failed: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Request failed: {str(e)}'
+            }
+
+    def add_user_editor(self, file_id: str, user_email: str) -> Dict:
+        """
+        Grant editor permission to a specific user on the file.
+
+        Args:
+            file_id: Drive file id
+            user_email: User email to grant editor access
+
+        Returns:
+            Dict containing success status
+        """
+        try:
+            permissions_url = f"{self.DRIVE_API_BASE_URL}/files/{file_id}/permissions"
+
+            permission_data = {
+                "role": "writer",
+                "type": "user",
+                "emailAddress": user_email
+            }
+
+            response = requests.post(
+                permissions_url,
+                headers=self.headers,
+                json=permission_data,
+                params={'supportsAllDrives': 'true'},
+                timeout=10
+            )
+
+            if response.status_code in (200, 201):
+                return { 'success': True, 'message': 'User granted editor access' }
+            else:
+                return {
+                    'success': False,
+                    'error': f'Failed to grant user editor: {response.status_code}',
+                    'details': response.text
+                }
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Add user editor failed: {str(e)}")
             return {
                 'success': False,
                 'error': f'Request failed: {str(e)}'

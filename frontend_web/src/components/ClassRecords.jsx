@@ -2,18 +2,18 @@ import { Lightbulb } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
-  FiCalendar,
-  FiEdit3,
-  FiEye,
-  FiFileText,
-  FiGrid,
-  FiInfo,
-  FiList,
-  FiMic,
-  FiPlus,
-  FiTrash2,
-  FiUser,
-  FiX
+    FiCalendar,
+    FiEdit3,
+    FiEye,
+    FiFileText,
+    FiGrid,
+    FiInfo,
+    FiList,
+    FiMic,
+    FiPlus,
+    FiTrash2,
+    FiUser,
+    FiX
 } from 'react-icons/fi';
 import { RiSoundModuleLine } from 'react-icons/ri';
 import { Link } from 'react-router-dom';
@@ -354,6 +354,7 @@ const ClassRecords = () => {
   const [viewMode, setViewMode] = useState('grid');
   const [isModalOpen, setIsModalOpen] = useState(false);
   
+  
   // Global function to update remaining percentage for a specific class record
   useEffect(() => {
     window.updateClassRecordRemaining = (classRecordId, payload) => {
@@ -452,6 +453,8 @@ const ClassRecords = () => {
       setLoading(false);
     }
   };
+
+  
 
   const handleCreateRecord = async (formData) => {
     try {
@@ -740,9 +743,7 @@ const ClassRecords = () => {
           </div>
         )}
 
-
-
-
+        
 
         {/* Records List/Grid */}
         {classRecords.length === 0 ? (
