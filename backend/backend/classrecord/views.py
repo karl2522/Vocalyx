@@ -43,6 +43,7 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         print("🔍 DEBUG: Entering perform_create method.")
+        print(f"🔍 DEBUG: Serializer data: {serializer.validated_data}")
         
         
         try:
@@ -76,9 +77,27 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
             if template_id:
                 # Step 1: Copy the template using the user's access token (will be owned by user)
                 print(f"🔄 Copying template sheet to user's Google Drive: {template_id}")
+                # Format: CourseCode (CourseName) Section - Semester
+                name_parts = class_record.name.split(' - ')
+                course_code = name_parts[0] if name_parts else ''
+                course_name = name_parts[1] if len(name_parts) > 1 else ''
+                
+                print(f"🔍 Class record name: {class_record.name}")
+                print(f"🔍 Section name: {class_record.section_name}")
+                print(f"🔍 Semester: {class_record.semester}")
+                
+                formatted_name = course_code
+                if course_name:
+                    formatted_name += f" ({course_name})"
+                if class_record.section_name:
+                    formatted_name += f" {class_record.section_name}"
+                
+                sheet_title = f"{formatted_name} - {class_record.semester}".strip()
+                print(f"🔍 Generated sheet title: {sheet_title}")
+                
                 copy_result = user_sheets_service.copy_template_sheet(
                     template_file_id=template_id,
-                    new_name=f"{class_record.name} - {class_record.semester}"
+                    new_name=sheet_title
                 )
                 
                 print(f"🔍 Copy result: {copy_result}")
@@ -144,8 +163,27 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
 
         try:
             # Only attempt Drive rename if we actually have a sheet and the display name changed
-            display_old = f"{old_name} - {old_semester}".strip()
-            display_new = f"{class_record.name} - {class_record.semester}".strip()
+            # Format old name
+            old_name_parts = old_name.split(' - ')
+            old_course_code = old_name_parts[0] if old_name_parts else ''
+            old_course_name = old_name_parts[1] if len(old_name_parts) > 1 else ''
+            old_formatted_name = old_course_code
+            if old_course_name:
+                old_formatted_name += f" ({old_course_name})"
+            if instance.section_name:
+                old_formatted_name += f" {instance.section_name}"
+            display_old = f"{old_formatted_name} - {old_semester}".strip()
+            
+            # Format new name
+            new_name_parts = class_record.name.split(' - ')
+            new_course_code = new_name_parts[0] if new_name_parts else ''
+            new_course_name = new_name_parts[1] if len(new_name_parts) > 1 else ''
+            new_formatted_name = new_course_code
+            if new_course_name:
+                new_formatted_name += f" ({new_course_name})"
+            if class_record.section_name:
+                new_formatted_name += f" {class_record.section_name}"
+            display_new = f"{new_formatted_name} - {class_record.semester}".strip()
 
             if class_record.google_sheet_id and display_old != display_new:
                 access_token = self._get_access_token(self.request)
@@ -991,9 +1029,26 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
                 template_id = getattr(settings, 'GOOGLE_SHEETS_TEMPLATE_ID', None)
                 if access_token and template_id:
                     user_sheets_service = GoogleSheetsService(access_token)
+                    # Format: CourseCode (CourseName) Section - Semester
+                    name_parts = class_record.name.split(' - ')
+                    course_code = name_parts[0] if name_parts else ''
+                    course_name = name_parts[1] if len(name_parts) > 1 else ''
+                    
+                    print(f"🔍 [Excel Import 1] Class record name: {class_record.name}")
+                    print(f"🔍 [Excel Import 1] Section name: {class_record.section_name}")
+                    print(f"🔍 [Excel Import 1] Semester: {class_record.semester}")
+                    
+                    formatted_name = course_code
+                    if course_name:
+                        formatted_name += f" ({course_name})"
+                    if class_record.section_name:
+                        formatted_name += f" {class_record.section_name}"
+                    
+                    sheet_title = f"{formatted_name} - {class_record.semester}".strip()
+                    
                     copy_result = user_sheets_service.copy_template_sheet(
                         template_file_id=template_id,
-                        new_name=f"{class_record.name} - {class_record.semester}"
+                        new_name=sheet_title
                     )
                     if copy_result.get('success'):
                         copied_file_info = copy_result['file']
@@ -1110,9 +1165,22 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
                 template_id = getattr(settings, 'GOOGLE_SHEETS_TEMPLATE_ID', None)
                 if access_token and template_id:
                     user_sheets_service = GoogleSheetsService(access_token)
+                    # Format: CourseCode (CourseName) Section - Semester
+                    name_parts = class_record.name.split(' - ')
+                    course_code = name_parts[0] if name_parts else ''
+                    course_name = name_parts[1] if len(name_parts) > 1 else ''
+                    
+                    formatted_name = course_code
+                    if course_name:
+                        formatted_name += f" ({course_name})"
+                    if class_record.section_name:
+                        formatted_name += f" {class_record.section_name}"
+                    
+                    sheet_title = f"{formatted_name} - {class_record.semester}".strip()
+                    
                     copy_result = user_sheets_service.copy_template_sheet(
                         template_file_id=template_id,
-                        new_name=f"{class_record.name} - {class_record.semester}"
+                        new_name=sheet_title
                     )
                     if copy_result.get('success'):
                         copied_file_info = copy_result['file']

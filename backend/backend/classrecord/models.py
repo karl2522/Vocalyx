@@ -14,7 +14,7 @@ class ClassRecord(models.Model):
     name = models.CharField(max_length=200)
     semester = models.CharField(max_length=20, choices=SEMESTER_CHOICES)
     teacher_name = models.CharField(max_length=100, blank=True)
-    description = models.TextField(blank=True)  # Added description field
+    section_name = models.CharField(max_length=100, blank=True)  # Section name field
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
