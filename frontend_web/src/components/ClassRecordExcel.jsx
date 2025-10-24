@@ -4411,6 +4411,7 @@ const handleExportToPDF = async () => {
                 <div>
                   <h1 className="text-xl font-semibold text-slate-900">{classRecord?.name}</h1>
                   <div className="flex items-center space-x-3 text-sm text-slate-500">
+                    <span>{classRecord?.section_name}</span>
                     <span>{classRecord?.semester}</span>
                     <span>{classRecord?.teacher_name}</span>
 
