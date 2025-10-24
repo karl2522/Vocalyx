@@ -15,7 +15,7 @@ const REDIRECT_URI = import.meta.env.PROD
   : 'http://localhost:5173';
 const BACKEND_URL = import.meta.env.PROD 
   ? 'https://vocalyx-backend-64846917574.asia-southeast1.run.app' 
-  : 'http://127.0.0.1:8000';
+  : 'https://vocalyx-backend-64846917574.asia-southeast1.run.app';
 
 console.log('🔍 Environment Detection:', {
   'import.meta.env.PROD': import.meta.env.PROD,

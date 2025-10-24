@@ -73,7 +73,7 @@ VITE_FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
 VITE_FIREBASE_APP_ID=your_firebase_app_id
 
 # Backend URLs
-VITE_BACKEND_URL_DEV=http://127.0.0.1:8000
+VITE_BACKEND_URL_DEV=https://vocalyx-backend-64846917574.asia-southeast1.run.app
 VITE_BACKEND_URL_PROD=https://your-backend-domain.com
 ```
 
