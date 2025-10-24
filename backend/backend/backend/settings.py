@@ -237,6 +237,7 @@ CORS_REPLACE_HTTPS_REFERER = True
 
 CORS_EXPOSE_HEADERS = [
     'Content-Type',
+    'Content-Disposition',
     'Access-Control-Allow-Origin',
     'Access-Control-Allow-Methods',
     'Access-Control-Allow-Headers',

@@ -3143,6 +3143,51 @@ def final_grade_export(request, sheet_id):
         workbook = openpyxl.load_workbook(template_path)
         worksheet = workbook['Final Grades']
 
+        # 🔥 NEW: Populate dynamic header fields
+        print("🔍 Populating dynamic header fields...")
+        
+        # Parse class record name to extract subject code and descriptive title
+        class_record_name = class_record.name
+        if ' - ' in class_record_name:
+            subject_code, descriptive_title = class_record_name.split(' - ', 1)
+        else:
+            subject_code = class_record_name
+            descriptive_title = ""
+        
+        print(f"🔍 Subject Code: {subject_code}")
+        print(f"🔍 Descriptive Title: {descriptive_title}")
+        print(f"🔍 Section: {class_record.section_name}")
+        print(f"🔍 Instructor: {class_record.teacher_name}")
+        print(f"🔍 Semester: {class_record.semester}")
+        
+        # Populate the specific cells with dynamic data and preserve Verdana font
+        from openpyxl.styles import Font
+        
+        # Set Verdana font for all dynamic cells
+        verdana_font = Font(name='Verdana')
+        
+        # Subject Code (D21)
+        worksheet['D21'] = subject_code
+        worksheet['D21'].font = verdana_font
+        
+        # Section (D22)
+        worksheet['D22'] = class_record.section_name or ""
+        worksheet['D22'].font = verdana_font
+        
+        # Descriptive Title (L21)
+        worksheet['L21'] = descriptive_title
+        worksheet['L21'].font = verdana_font
+        
+        # Instructor (L22)
+        worksheet['L22'] = class_record.teacher_name or ""
+        worksheet['L22'].font = verdana_font
+        
+        # Semester (F17-G17-H17-I17 merged - just populate F17 since it's merged)
+        worksheet['F17'] = class_record.semester
+        worksheet['F17'].font = verdana_font
+        
+        print("✅ Dynamic header fields populated successfully")
+
         # Ensure logo is present: place programmatically at desired anchor
         try:
             from openpyxl.drawing.image import Image as XLImage
@@ -3247,67 +3292,84 @@ def final_grade_export(request, sheet_id):
                 bottom=thin_border
             )
             
+            # Apply Verdana font to all student data cells
+            verdana_font = Font(name='Verdana')
+            
             if 'no' in col_mapping:
                 cell = worksheet.cell(row=row, column=col_mapping['no'])
                 cell.value = idx
                 cell.border = full_border
+                cell.font = verdana_font
             if 'lastname' in col_mapping:
                 cell = worksheet.cell(row=row, column=col_mapping['lastname'])
                 cell.value = student['lastName']
                 cell.border = full_border
+                cell.font = verdana_font
             if 'firstname' in col_mapping:
                 cell = worksheet.cell(row=row, column=col_mapping['firstname'])
                 cell.value = student['firstName']
                 cell.border = full_border
+                cell.font = verdana_font
             if 'middlename' in col_mapping:
                 cell = worksheet.cell(row=row, column=col_mapping['middlename'])
                 cell.value = student['middleName']
                 cell.border = full_border
+                cell.font = verdana_font
             if 'studentid' in col_mapping:
                 cell = worksheet.cell(row=row, column=col_mapping['studentid'])
                 cell.value = student['studentId']
                 cell.border = full_border
+                cell.font = verdana_font
             if 'cs1' in col_mapping:
                 cell = worksheet.cell(row=row, column=col_mapping['cs1'])
                 cell.value = student.get('CS1', '')
                 cell.border = full_border
+                cell.font = verdana_font
             if 'pe' in col_mapping:
                 cell = worksheet.cell(row=row, column=col_mapping['pe'])
                 cell.value = student.get('PE', '')
                 cell.border = full_border
+                cell.font = verdana_font
             if 'me' in col_mapping:
                 cell = worksheet.cell(row=row, column=col_mapping['me'])
                 cell.value = student.get('ME', '')
                 cell.border = full_border
+                cell.font = verdana_font
             if 'mg' in col_mapping:
                 cell = worksheet.cell(row=row, column=col_mapping['mg'])
                 cell.value = student.get('midtermGrade', '')
                 cell.border = full_border
+                cell.font = verdana_font
             if 'cs2' in col_mapping:
                 cell = worksheet.cell(row=row, column=col_mapping['cs2'])
                 cell.value = student.get('CS2', '')
                 cell.border = full_border
+                cell.font = verdana_font
             if 'pfe' in col_mapping:
                 cell = worksheet.cell(row=row, column=col_mapping['pfe'])
                 cell.value = student.get('PFE', '')
                 cell.border = full_border
+                cell.font = verdana_font
             if 'fe' in col_mapping:
                 cell = worksheet.cell(row=row, column=col_mapping['fe'])
                 cell.value = student.get('FE', '')
                 cell.border = full_border
+                cell.font = verdana_font
             if 'fg' in col_mapping:
                 cell = worksheet.cell(row=row, column=col_mapping['fg'])
                 fg_val = student.get('FG', '')
                 cell.value = fg_val
                 cell.border = full_border
-                # Render INC/N/A in red and right-aligned
+                # Render INC/N/A in red and right-aligned, but keep Verdana font
                 try:
                     from openpyxl.styles import Font, Alignment
                     if isinstance(fg_val, str) and fg_val.upper() in ['INC', 'N/A']:
-                        cell.font = Font(color='FF0000')
+                        cell.font = Font(name='Verdana', color='FF0000')
                         cell.alignment = Alignment(horizontal='right')
+                    else:
+                        cell.font = verdana_font
                 except Exception:
-                    pass
+                    cell.font = verdana_font
             
             print(f"📝 Populated row {row} for student: {student['lastName']}, {student['firstName']}")
 
@@ -3352,16 +3414,39 @@ def final_grade_export(request, sheet_id):
         # Save to temporary file first to preserve images (openpyxl limitation with BytesIO)
         import tempfile
         import os
+        import time
+        import uuid
         
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
-            workbook.save(tmp_file.name)
+        # Create unique temporary file to avoid conflicts
+        temp_filename = f"final_grades_{uuid.uuid4().hex}_{int(time.time())}.xlsx"
+        temp_path = os.path.join(tempfile.gettempdir(), temp_filename)
+        
+        try:
+            # Save workbook to temporary file
+            workbook.save(temp_path)
             
             # Read the file back to preserve images
-            with open(tmp_file.name, 'rb') as f:
+            with open(temp_path, 'rb') as f:
                 file_data = f.read()
             
-            # Clean up temporary file
-            os.unlink(tmp_file.name)
+        finally:
+            # Clean up temporary file with error handling
+            try:
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)
+            except (OSError, PermissionError) as e:
+                # Log the error but don't fail the request
+                logger.warning(f"Could not delete temporary file {temp_path}: {e}")
+                # Try to delete after a short delay
+                import threading
+                def delayed_delete():
+                    time.sleep(1)
+                    try:
+                        if os.path.exists(temp_path):
+                            os.unlink(temp_path)
+                    except:
+                        pass
+                threading.Thread(target=delayed_delete, daemon=True).start()
 
         # Return file
         from django.http import HttpResponse
@@ -3369,7 +3454,39 @@ def final_grade_export(request, sheet_id):
             file_data,
             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
-        response['Content-Disposition'] = f'attachment; filename="FinalGrades_{class_record.name}_{timezone.now().strftime("%Y%m%d")}.xlsx"'
+        # Generate filename using the same format as Google Drive naming
+        # Format: CourseCode (CourseName) Section - Semester
+        print(f"🔍 [Filename] Class record name: {class_record.name}")
+        print(f"🔍 [Filename] Section name: {class_record.section_name}")
+        print(f"🔍 [Filename] Semester: {class_record.semester}")
+        
+        name_parts = class_record.name.split(' - ')
+        course_code = name_parts[0] if name_parts else ''
+        course_name = name_parts[1] if len(name_parts) > 1 else ''
+        
+        print(f"🔍 [Filename] Course code: {course_code}")
+        print(f"🔍 [Filename] Course name: {course_name}")
+        
+        formatted_name = course_code
+        if course_name:
+            formatted_name += f" ({course_name})"
+        if class_record.section_name:
+            formatted_name += f" {class_record.section_name}"
+        
+        print(f"🔍 [Filename] Formatted name: {formatted_name}")
+        
+        filename = f"FinalGrades - {formatted_name} - {class_record.semester}.xlsx"
+        print(f"🔍 Generated filename: {filename}")
+        
+        # URL encode the filename for proper browser handling
+        import urllib.parse
+        encoded_filename = urllib.parse.quote(filename)
+        
+        # Use both standard and RFC 5987 format for maximum browser compatibility
+        content_disposition = f'attachment; filename="{filename}"; filename*=UTF-8\'\'{encoded_filename}'
+        response['Content-Disposition'] = content_disposition
+        print(f"🔍 [Backend] Content-Disposition header: {content_disposition}")
+        print(f"🔍 [Backend] Response headers: {dict(response.items())}")
         return response
 
     except Exception as e:

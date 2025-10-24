@@ -13,6 +13,7 @@ import {
     FiPlus,
     FiTrash2,
     FiUser,
+    FiUsers,
     FiX
 } from 'react-icons/fi';
 import { RiSoundModuleLine } from 'react-icons/ri';
@@ -843,6 +844,10 @@ const ClassRecords = () => {
                                 {record.teacher_name || 'Teacher'}
                               </span>
                               <span className="flex items-center gap-1">
+                                <FiUsers className="h-4 w-4" />
+                                {record.section_name || 'Section'}
+                              </span>
+                              <span className="flex items-center gap-1">
                                 <FiCalendar className="h-4 w-4" />
                                 {new Date(record.created_at).toLocaleDateString()}
                               </span>
@@ -875,6 +880,10 @@ const ClassRecords = () => {
                           <div className="flex items-center gap-2">
                             <FiUser className="h-4 w-4" />
                             <span>Teacher: {record.teacher_name || 'N/A'}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <FiUsers className="h-4 w-4" />
+                            <span>Section: {record.section_name|| 'N/A'}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <FiCalendar className="h-4 w-4" />
