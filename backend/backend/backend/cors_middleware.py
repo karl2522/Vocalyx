@@ -24,7 +24,8 @@ class CustomCorsMiddleware:
                 response['Access-Control-Allow-Credentials'] = 'true'
                 response['Access-Control-Allow-Methods'] = 'DELETE, GET, OPTIONS, PATCH, POST, PUT'
                 response[
-                    'Access-Control-Allow-Headers'] = 'accept, accept-encoding, authorization, content-type, dnt, origin, user-agent, x-csrftoken, x-requested-with, x-google-access-token'
+                    'Access-Control-Allow-Headers'] = 'accept, accept-encoding, authorization, content-type, dnt, origin, user-agent, x-csrftoken, x-requested-with, x-google-access-token, x-access-token'
+                response['Access-Control-Expose-Headers'] = 'Content-Disposition, Content-Type'
                 response['Access-Control-Max-Age'] = '86400'  # Cache preflight for 24 hours
 
             # 🔥 RETURN IMMEDIATELY - don't process through Django auth
@@ -49,6 +50,7 @@ class CustomCorsMiddleware:
                 response['Access-Control-Allow-Credentials'] = 'true'
                 response['Access-Control-Allow-Methods'] = 'DELETE, GET, OPTIONS, PATCH, POST, PUT'
                 response[
-                    'Access-Control-Allow-Headers'] = 'accept, accept-encoding, authorization, content-type, dnt, origin, user-agent, x-csrftoken, x-requested-with, x-google-access-token'
+                    'Access-Control-Allow-Headers'] = 'accept, accept-encoding, authorization, content-type, dnt, origin, user-agent, x-csrftoken, x-requested-with, x-google-access-token, x-access-token'
+                response['Access-Control-Expose-Headers'] = 'Content-Disposition, Content-Type'
 
         return response

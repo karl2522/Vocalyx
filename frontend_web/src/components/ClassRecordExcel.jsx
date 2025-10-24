@@ -2387,9 +2387,7 @@ const handleDriveFileSelect = async (driveFile) => {
       setImportProgress({ status: 'downloading', message: 'Downloading file from Drive...', entity: importType });
     
     // Download file from Drive
-    const response = await fetch(`${import.meta.env.PROD 
-      ? 'https://vocalyx-backend-64846917574.asia-southeast1.run.app' 
-      : 'http://127.0.0.1:8000'}/api/drive/download/${driveFile.id}/`, {
+    const response = await fetch(`http://127.0.0.1:8000/api/drive/download/${driveFile.id}/`, {
       headers: googleDriveService.getHeaders()
     });
     
@@ -4411,6 +4409,7 @@ const handleExportToPDF = async () => {
                 <div>
                   <h1 className="text-xl font-semibold text-slate-900">{classRecord?.name}</h1>
                   <div className="flex items-center space-x-3 text-sm text-slate-500">
+                    <span>{classRecord?.section_name}</span>
                     <span>{classRecord?.semester}</span>
                     <span>{classRecord?.teacher_name}</span>
 

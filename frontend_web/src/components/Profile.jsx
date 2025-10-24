@@ -11,9 +11,7 @@ import { getPendingActionsCount } from '../utils/notificationUtils';
 import { showToast } from '../utils/toast';
 
 // Backend URL configuration
-const BACKEND_URL = import.meta.env.PROD 
-  ? 'https://vocalyx-backend-64846917574.asia-southeast1.run.app' 
-  : 'http://127.0.0.1:8000';
+const BACKEND_URL = 'http://127.0.0.1:8000';
 
 // Custom animation styles
 const profileStyles = `

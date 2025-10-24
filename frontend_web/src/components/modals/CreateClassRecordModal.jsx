@@ -1,4 +1,4 @@
-import { AlertTriangle, BookOpen, Calendar, CheckCircle, FileText, Upload, User, X } from 'lucide-react';
+import { AlertTriangle, BookOpen, Calendar, CheckCircle, Upload, User, Users, X } from 'lucide-react';
 import PropTypes from 'prop-types';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -11,7 +11,7 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
     name: '',
     semester: '',
     teacher_name: '',
-    description: ''
+    section_name: ''
   });
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
@@ -85,7 +85,7 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
         name: editData.name || '',
         semester: editData.semester || '',
         teacher_name: editData.teacher_name || '',
-        description: editData.description || ''
+        section_name: editData.section_name || ''
       });
     } else {
       // Reset for new records
@@ -93,7 +93,7 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
         name: '',
         semester: '',
         teacher_name: '',
-        description: ''
+        section_name: ''
       });
     }
     // Clear errors when modal opens/closes
@@ -132,6 +132,14 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
       newErrors.semester = 'Semester is required';
     }
     
+    if (!formData.teacher_name.trim()) {
+      newErrors.teacher_name = 'Teacher Name is required';
+    }
+    
+    if (!formData.section_name.trim()) {
+      newErrors.section_name = 'Section Name is required';
+    }
+    
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -147,7 +155,7 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
     try {
       await onSubmit(formData);
       // Reset form after successful submission
-      setFormData({ name: '', semester: '', teacher_name: '', description: '' });
+      setFormData({ name: '', semester: '', teacher_name: '', section_name: '' });
       setErrors({});
       setDuplicateInfo(null);
       onClose();
@@ -160,7 +168,7 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
   };
 
   const handleClose = () => {
-    setFormData({ name: '', semester: '', teacher_name: '', description: '' });
+    setFormData({ name: '', semester: '', teacher_name: '', section_name: '' });
     setErrors({});
     setDuplicateInfo(null);
     // no-op: removed importFile state
@@ -177,7 +185,7 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
   };
 
   // 🔥 NEW: Check if form can be submitted
-  const manualValid = !loading && !errors.name && !errors.semester && formData.name.trim() && formData.semester.trim() && duplicateInfo?.type !== 'exact';
+  const manualValid = !loading && !errors.name && !errors.semester && !errors.teacher_name && !errors.section_name && formData.name.trim() && formData.semester.trim() && formData.teacher_name.trim() && formData.section_name.trim() && duplicateInfo?.type !== 'exact';
   const canSubmit = manualValid;
 
   const handleFileChange = async (e) => {
@@ -338,7 +346,7 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
                   name="name"
                   value={formData.name}
                   onChange={handleInputChange}
-                  placeholder="e.g., Mathematics 101, Physics Lab"
+                  placeholder="e.g., IT411 - Capstone & Research 2"
                   className={`w-full px-3 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#333D79] focus:border-[#333D79] focus:outline-none transition-all duration-200 text-gray-900 bg-gray-50 ${
                     errors.name ? 'border-red-500 bg-red-50' : 
                     duplicateInfo?.type === 'exact' ? 'border-red-500 bg-red-50' :
@@ -383,10 +391,34 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
               )}
               </div>
 
+              {/* 🔥 NEW: Section Name Field */}
+              <div>
+              <label htmlFor="section_name" className="block text-sm font-medium text-gray-700 mb-2">
+                Section Name <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  id="section_name"
+                  name="section_name"
+                  value={formData.section_name}
+                  onChange={handleInputChange}
+                  placeholder="e.g., Section A, Class 1, Group 1"
+                  className={`w-full px-3 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#333D79] focus:border-[#333D79] focus:outline-none transition-all duration-200 text-gray-900 bg-gray-50 ${
+                    errors.section_name ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                  }`}
+                />
+                <Users className="absolute right-3 top-3 w-5 h-5 text-gray-400" />
+              </div>
+              {errors.section_name && (
+                <p className="mt-1 text-sm text-red-600">{errors.section_name}</p>
+              )}
+              </div>
+
               {/* 🔥 NEW: Teacher Name Field */}
               <div>
               <label htmlFor="teacher_name" className="block text-sm font-medium text-gray-700 mb-2">
-                Teacher Name
+                Teacher Name <span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <input
@@ -397,6 +429,7 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
                   onChange={handleInputChange}
                   placeholder="e.g., Dr. Smith, Prof. Johnson"
                   className={`w-full px-3 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#333D79] focus:border-[#333D79] focus:outline-none transition-all duration-200 text-gray-900 bg-gray-50 ${
+                    errors.teacher_name ? 'border-red-500 bg-red-50' :
                     duplicateInfo?.type === 'exact' ? 'border-red-500 bg-red-50' :
                     duplicateInfo?.type === 'similar' ? 'border-yellow-500 bg-yellow-50' :
                     'border-gray-300'
@@ -404,6 +437,9 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
                 />
                 <User className="absolute right-3 top-3 w-5 h-5 text-gray-400" />
               </div>
+              {errors.teacher_name && (
+                <p className="mt-1 text-sm text-red-600">{errors.teacher_name}</p>
+              )}
               </div>
 
               {/* 🔥 NEW: Duplicate Detection Alert (compact) */}
@@ -421,31 +457,32 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
               </div>
               )}
 
-              {/* 🔥 NEW: Description Field */}
-              <div>
-              <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
-                Description
-              </label>
-              <div className="relative">
-                <textarea
-                  id="description"
-                  name="description"
-                  value={formData.description}
-                  onChange={handleInputChange}
-                  placeholder="Optional description for this class record..."
-                  rows="2"
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#333D79] focus:border-[#333D79] focus:outline-none transition-all duration-200 text-gray-900 bg-gray-50 resize-none"
-                />
-                <FileText className="absolute right-3 top-3 w-5 h-5 text-gray-400" />
-              </div>
-              </div>
-
-              {/* Drive rename note when editing */}
-              {isEditing && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 text-sm text-blue-800">
-                Changes to <span className="font-medium">Class Record Name</span> or <span className="font-medium">Semester</span> will also rename the linked Google Sheet in your Drive to: <code className="bg-blue-100 px-1 py-0.5 rounded">{`${formData.name || editData?.name || ''} - ${formData.semester || editData?.semester || ''}`.trim()}</code>.
-              </div>
-              )}
+               {/* Drive rename note when editing */}
+               {isEditing && (
+               <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 text-sm text-blue-800 mt-4">
+                 Changes to <span className="font-medium">Class Record Name</span>, <span className="font-medium">Section Name</span>, or <span className="font-medium">Semester</span> will also rename the linked Google Sheet in your Drive to: <code className="bg-blue-100 px-1 py-0.5 rounded">{(() => {
+                   const name = formData.name || editData?.name || '';
+                   const section = formData.section_name || editData?.section_name || '';
+                   const semester = formData.semester || editData?.semester || '';
+                   
+                   // Format: CourseCode (CourseName) Section - Semester
+                   // Split name by ' - ' to separate course code and course name
+                   const nameParts = name.split(' - ');
+                   const courseCode = nameParts[0] || '';
+                   const courseName = nameParts[1] || '';
+                   
+                   let formattedName = courseCode;
+                   if (courseName) {
+                     formattedName += ` (${courseName})`;
+                   }
+                   if (section) {
+                     formattedName += ` ${section}`;
+                   }
+                   
+                   return `${formattedName} - ${semester}`.trim();
+                 })()}</code>.
+               </div>
+               )}
             </div>
 
             {/* Import UI */}

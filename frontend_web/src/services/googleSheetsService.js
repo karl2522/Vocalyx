@@ -1,13 +1,11 @@
-const BACKEND_URL = import.meta.env.PROD 
-  ? 'https://vocalyx-backend-64846917574.asia-southeast1.run.app/api'
-  : 'http://127.0.0.1:8000';
+const BACKEND_URL = 'http://127.0.0.1:8000';
 
 import { showToast } from '../utils/toast';
 import googleDriveService from './googleDriveService';
 
 class GoogleSheetsService {
   constructor() {
-    this.baseURL = BACKEND_URL; // 🔥 FIXED: Remove the extra /api
+    this.baseURL = `${BACKEND_URL}/api`; // 🔥 FIXED: Add the /api prefix
   }
 
   /**
@@ -296,10 +294,61 @@ class GoogleSheetsService {
 
       // Handle file download
       const blob = await response.blob();
+      
+      // Extract filename from Content-Disposition header
+      const contentDisposition = response.headers.get('Content-Disposition');
+      console.log('🔍 Content-Disposition header:', contentDisposition);
+      console.log('🔍 All response headers:', [...response.headers.entries()]);
+      
+      let filename = `FinalGrades_${new Date().toISOString().split('T')[0]}.xlsx`; // fallback
+      
+      if (contentDisposition) {
+        console.log('🔍 Parsing Content-Disposition:', contentDisposition);
+        
+        // Try multiple parsing approaches
+        let extractedFilename = null;
+        
+        // Method 1: Standard filename="..." format
+        const standardMatch = contentDisposition.match(/filename="([^"]+)"/);
+        if (standardMatch) {
+          extractedFilename = standardMatch[1];
+          console.log('🔍 Method 1 (standard) found:', extractedFilename);
+        }
+        
+        // Method 2: filename*=UTF-8''... format
+        if (!extractedFilename) {
+          const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/);
+          if (utf8Match) {
+            extractedFilename = decodeURIComponent(utf8Match[1]);
+            console.log('🔍 Method 2 (UTF-8) found:', extractedFilename);
+          }
+        }
+        
+        // Method 3: Simple filename=... format
+        if (!extractedFilename) {
+          const simpleMatch = contentDisposition.match(/filename=([^;]+)/);
+          if (simpleMatch) {
+            extractedFilename = simpleMatch[1].replace(/['"]/g, '');
+            console.log('🔍 Method 3 (simple) found:', extractedFilename);
+          }
+        }
+        
+        if (extractedFilename) {
+          filename = extractedFilename;
+          console.log('🔍 Final extracted filename:', filename);
+        } else {
+          console.log('🔍 No filename found in Content-Disposition');
+        }
+      } else {
+        console.log('🔍 No Content-Disposition header found');
+      }
+      
+      console.log('🔍 Final filename to use:', filename);
+      
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `FinalGrades_${new Date().toISOString().split('T')[0]}.xlsx`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
