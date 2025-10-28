@@ -1384,7 +1384,7 @@ class StudentViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return Student.objects.filter(class_record__teacher=self.request.user)
+        return Student.objects.filter(class_record__user=self.request.user)
 
 
 class GradeCategoryViewSet(viewsets.ModelViewSet):
@@ -1392,7 +1392,7 @@ class GradeCategoryViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return GradeCategory.objects.filter(class_record__teacher=self.request.user)
+        return GradeCategory.objects.filter(class_record__user=self.request.user)
 
 
 class GradeViewSet(viewsets.ModelViewSet):
@@ -1400,7 +1400,7 @@ class GradeViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return Grade.objects.filter(student__class_record__teacher=self.request.user)
+        return Grade.objects.filter(student__class_record__user=self.request.user)
 
 
 class CategoryPercentageViewSet(viewsets.ModelViewSet):

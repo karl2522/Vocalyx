@@ -1,0 +1,11 @@
+# Ignore all test result files
+*.html
+*.csv
+*.json
+*.txt
+*.log
+
+# But keep this directory and README
+!.gitignore
+!README.md
+
