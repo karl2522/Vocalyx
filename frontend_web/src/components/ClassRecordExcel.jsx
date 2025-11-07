@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { ArrowLeft, BarChart3, ChevronDown, Edit, FileSpreadsheet, HelpCircle, Mic, MicOff, MoreVertical, Plus, Trash2, Upload, Users, X } from 'lucide-react';
+import { ArrowLeft, BarChart3, ChevronDown, Edit, FileSpreadsheet, HelpCircle, Mic, MicOff, MoreVertical, Plus, RefreshCw, Trash2, Upload, Users, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -105,6 +105,13 @@ const ClassRecordExcel = () => {
   
   // Smart polling state for percentage change detection
   const [lastPercentageHash, setLastPercentageHash] = useState(null);
+  
+  // 🔥 OPTIMIZATION: Debouncing refs to prevent rapid API calls
+  const percentageCheckInProgress = useRef(false);
+  const lastPercentageCheckTime = useRef(0);
+  const fetchInProgress = useRef(false);
+  const hasShownInitialToast = useRef(false);
+  const [isRefreshingAllocation, setIsRefreshingAllocation] = useState(false);
 
 
   // Helper: sync remaining from backend mirror based on current sheet
@@ -118,7 +125,8 @@ const ClassRecordExcel = () => {
       // Fallback: read via service account and compute from header row (row 1)
       try {
         if (!classRecord?.google_sheet_id || !currentSheet?.sheet_name) return;
-        const sa = await classRecordService.getSpecificSheetData(classRecord.google_sheet_id, currentSheet.sheet_name, { force_refresh: true });
+        // 🔥 OPTIMIZATION: Use cached data in fallback too
+        const sa = await classRecordService.getSpecificSheetData(classRecord.google_sheet_id, currentSheet.sheet_name);
         const headersRow = sa?.data?.headers || [];
         const idxFromLetter = (letter) => {
           let total = 0;
@@ -192,6 +200,23 @@ const ClassRecordExcel = () => {
       
       if (!classRecord?.google_sheet_id) return;
       
+      // 🔥 OPTIMIZATION: Debounce - prevent multiple simultaneous checks
+      if (percentageCheckInProgress.current) {
+        console.log('⏭️ Percentage check already in progress, skipping...');
+        return;
+      }
+      
+      // 🔥 OPTIMIZATION: Rate limiting - don't check more than once every 10 seconds
+      const now = Date.now();
+      const timeSinceLastCheck = now - lastPercentageCheckTime.current;
+      if (timeSinceLastCheck < 10000) {
+        console.log(`⏭️ Too soon since last check (${Math.round(timeSinceLastCheck / 1000)}s ago), skipping...`);
+        return;
+      }
+      
+      percentageCheckInProgress.current = true;
+      lastPercentageCheckTime.current = now;
+      
       // Get all sheets from the class record
       const sheetsList = await classRecordService.getSheetsList(classRecord.google_sheet_id);
       const sheets = sheetsList?.data?.sheets || [];
@@ -216,7 +241,8 @@ const ClassRecordExcel = () => {
       // Helper function to calculate percentage for a sheet
       const calculateSheetPercentage = async (sheet) => {
         try {
-          const response = await classRecordService.getSpecificSheetData(classRecord.google_sheet_id, sheet.sheet_name, { force_refresh: true });
+          // 🔥 OPTIMIZATION: Use cached data (30s cache) instead of force_refresh
+          const response = await classRecordService.getSpecificSheetData(classRecord.google_sheet_id, sheet.sheet_name);
           const headersRow = response?.data?.main_headers || response?.data?.headers || [];
           
           if (headersRow.length > 0) {
@@ -323,6 +349,9 @@ const ClassRecordExcel = () => {
       console.warn('⚠️ Error checking percentage changes, falling back to sync:', error);
       // Fallback to regular sync if change detection fails
       await syncRemaining();
+    } finally {
+      // 🔥 OPTIMIZATION: Always reset the in-progress flag
+      percentageCheckInProgress.current = false;
     }
   }, [classRecord?.google_sheet_id, classRecord?.id, currentSheet?.sheet_name, lastPercentageHash, generatePercentageHash, syncRemaining, id, user]);
 
@@ -332,9 +361,30 @@ const ClassRecordExcel = () => {
     await checkAllSheetsForPercentageChanges();
   }, [checkAllSheetsForPercentageChanges]);
 
+  // 🔥 NEW: Manual refresh function for allocation status
+  const manualRefreshAllocation = useCallback(async () => {
+    if (isRefreshingAllocation || percentageCheckInProgress.current) {
+      console.log('⏭️ Refresh already in progress');
+      return;
+    }
+    
+    setIsRefreshingAllocation(true);
+    try {
+      // Bypass rate limiting for manual refresh
+      lastPercentageCheckTime.current = 0;
+      await checkAllSheetsForPercentageChanges();
+      toast.success('Allocation status refreshed', { duration: 2000 });
+    } catch (error) {
+      console.error('Failed to refresh allocation:', error);
+      toast.error('Failed to refresh allocation');
+    } finally {
+      setIsRefreshingAllocation(false);
+    }
+  }, [isRefreshingAllocation, checkAllSheetsForPercentageChanges]);
+
   // No ref sync needed; we use state directly for simplicity
 
-  // Single sticky toast: updates in-place, no stacking, only reappears when values change
+  // 🔥 OPTIMIZED: Smart toast - only show once on initial load, then rely on persistent badge
   useEffect(() => {
     // Require auth
     if (!user) {
@@ -343,6 +393,7 @@ const ClassRecordExcel = () => {
         classStandingToastIdRef.current = null;
       }
       lastToastKeyRef.current = null;
+      hasShownInitialToast.current = false;
       return;
     }
 
@@ -356,41 +407,35 @@ const ClassRecordExcel = () => {
       return;
     }
 
+    // 🔥 NEW LOGIC: Only show toast ONCE on initial load
+    // After that, the persistent badge in the header will show the status
+    if (hasShownInitialToast.current) {
+      console.log('📊 Toast already shown, skipping (badge is visible)');
+      return;
+    }
+
     // Build message from problematic sheets
     let message;
     if (problematicSheets.length === 1) {
-      message = `Unallocated: ${classStandingRemaining}% — ${problematicSheets[0].sheetName}`;
+      message = `${classStandingRemaining}% unallocated in ${problematicSheets[0].sheetName}`;
     } else if (problematicSheets.length > 1) {
       const sheetList = problematicSheets
-        .map(s => `${s.sheetName} ${s.remaining}%`)
+        .map(s => `${s.sheetName} (${s.remaining}%)`)
         .join(', ');
-      message = `Unallocated: ${classStandingRemaining}% — ${sheetList}`;
+      message = `${classStandingRemaining}% total unallocated: ${sheetList}`;
     } else {
-      message = `Unallocated: ${classStandingRemaining}%`;
+      message = `${classStandingRemaining}% unallocated`;
     }
 
-    // Create a stable key based on current values
-    const key = JSON.stringify(problematicSheets.map(s => ({ n: s.sheetName, r: s.remaining })));
+    // Show toast with 8-second duration (not infinite)
+    classStandingToastIdRef.current = showToast.info(
+      message,
+      'Class Standing Allocation',
+      { duration: 8000 } // 🔥 Changed from Infinity to 8 seconds
+    );
 
-    // If values are unchanged, do nothing
-    if (lastToastKeyRef.current === key) return;
-
-    // Values changed: reappear by dismissing current and creating a new one (no stacking)
-    if (classStandingToastIdRef.current) {
-      toast.dismiss(classStandingToastIdRef.current);
-      classStandingToastIdRef.current = null;
-    }
-
-    // slight delay to let dismissal animate before showing new
-    setTimeout(() => {
-      classStandingToastIdRef.current = showToast.info(
-        message,
-        'Class Standing total is below 100%',
-        { duration: Infinity }
-      );
-    }, 50);
-
-    lastToastKeyRef.current = key;
+    hasShownInitialToast.current = true;
+    lastToastKeyRef.current = JSON.stringify(problematicSheets.map(s => ({ n: s.sheetName, r: s.remaining })));
   }, [user, classStandingRemaining, problematicSheets]);
 
   // No-op: kept for backward compatibility with existing calls
@@ -442,23 +487,21 @@ const ClassRecordExcel = () => {
     }
   }, []);
 
-  // Smart polling: Check for percentage changes every 5 seconds
+  // 🔥 OPTIMIZED: Check for percentage changes every 30 seconds (uses 30s backend cache)
+  // This matches the backend cache duration perfectly - no wasted API calls!
   useEffect(() => {
     if (!classRecord?.google_sheet_id || !currentSheet?.sheet_name) return;
+    
+    // Initial check on mount
+    checkForPercentageChanges();
+    
+    // Then poll every 30 seconds to align with backend cache expiration
     const interval = setInterval(() => {
       checkForPercentageChanges();
-    }, 5000); // every 5s - smart polling
+    }, 30000); // every 30s - matches backend cache duration
+    
     return () => clearInterval(interval);
   }, [classRecord?.google_sheet_id, currentSheet?.sheet_name, checkForPercentageChanges]);
-
-  // Backup polling: Fallback every 30 seconds in case smart polling fails
-  useEffect(() => {
-    if (!classRecord?.google_sheet_id || !currentSheet?.sheet_name) return;
-    const backupInterval = setInterval(() => {
-      syncRemaining();
-    }, 30000); // every 30s - backup
-    return () => clearInterval(backupInterval);
-  }, [classRecord?.google_sheet_id, currentSheet?.sheet_name, syncRemaining]);
 
   const loadCategories = async () => {
   try {
@@ -647,7 +690,14 @@ const ClassRecordExcel = () => {
   }, [batchMode]);
 
  const fetchClassRecord = async () => {
+    // 🔥 OPTIMIZATION: Prevent multiple simultaneous fetches
+    if (fetchInProgress.current) {
+      console.log('⏭️ Fetch already in progress, skipping...');
+      return;
+    }
+    
     try {
+      fetchInProgress.current = true;
       setLoading(true);
       
       // Fetch basic class record info
@@ -698,9 +748,10 @@ const ClassRecordExcel = () => {
     } catch (error) {
       console.error('Error fetching class record:', error);
       toast.error('Failed to load class record');
-              navigate('/class-records');
+      navigate('/class-records');
     } finally {
       setLoading(false);
+      fetchInProgress.current = false;
     }
   };
 
@@ -806,24 +857,16 @@ const ClassRecordExcel = () => {
         // After loading sheet data, refresh mirrored CLASS STANDING percentages
         await syncRemaining();
         
-        // Initialize percentage hash for change detection
-        try {
-          const response = await classRecordService.getSpecificSheetData(classRecord.google_sheet_id, sheetName, { force_refresh: true });
-          console.log('🔍 Hash initialization response:', response.data);
-          if (response.data?.main_headers) {
-            const initialHash = generatePercentageHash(response.data.main_headers);
-            setLastPercentageHash(initialHash);
-            console.log('🔍 Initialized percentage hash:', initialHash);
-          } else if (response.data?.headers) {
-            // Fallback to headers if main_headers not available
-            const initialHash = generatePercentageHash(response.data.headers);
-            setLastPercentageHash(initialHash);
-            console.log('🔍 Initialized percentage hash (fallback):', initialHash);
-          } else {
-            console.log('⚠️ No headers found for hash initialization:', response.data);
-          }
-        } catch (error) {
-          console.warn('⚠️ Could not initialize percentage hash:', error);
+        // 🔥 OPTIMIZATION: Use data we already fetched above to initialize hash
+        // No need for another API call - we already have the headers!
+        if (sheetsResponse.data?.main_headers) {
+          const initialHash = generatePercentageHash(sheetsResponse.data.main_headers);
+          setLastPercentageHash(initialHash);
+          console.log('🔍 Initialized percentage hash from existing data:', initialHash);
+        } else if (sheetsResponse.data?.headers) {
+          const initialHash = generatePercentageHash(sheetsResponse.data.headers);
+          setLastPercentageHash(initialHash);
+          console.log('🔍 Initialized percentage hash from existing data (fallback):', initialHash);
         }
       } else {
         console.log(`⚠️ LOAD SHEET: No data available for sheet: "${sheetName}"`);
@@ -2387,7 +2430,9 @@ const handleDriveFileSelect = async (driveFile) => {
       setImportProgress({ status: 'downloading', message: 'Downloading file from Drive...', entity: importType });
     
     // Download file from Drive
-    const response = await fetch(`http://127.0.0.1:8000/api/drive/download/${driveFile.id}/`, {
+    const response = await fetch(`${import.meta.env.PROD 
+      ? 'https://vocalyx-backend-64846917574.asia-southeast1.run.app' 
+      : 'https://vocalyx-backend-64846917574.asia-southeast1.run.app'}/api/drive/download/${driveFile.id}/`, {
       headers: googleDriveService.getHeaders()
     });
     
@@ -4432,6 +4477,52 @@ const handleExportToPDF = async () => {
                   Data is saved automatically in Google Sheets
                 </div>
 
+                {/* 🔥 NEW: Persistent Class Standing Allocation Badge with Manual Refresh */}
+                {classStandingRemaining > 0 ? (
+                  <div className="flex items-center space-x-2 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg shadow-sm">
+                    <div className="flex items-center space-x-1.5">
+                      <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
+                      <span className="text-xs font-semibold text-amber-700">
+                        {classStandingRemaining}% Unallocated
+                      </span>
+                    </div>
+                    {problematicSheets.length > 0 && (
+                      <div className="text-xs text-amber-600 border-l border-amber-300 pl-2">
+                        {problematicSheets.map((s, i) => (
+                          <span key={i}>
+                            {s.sheetName} ({s.remaining}%)
+                            {i < problematicSheets.length - 1 ? ', ' : ''}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <button
+                      onClick={manualRefreshAllocation}
+                      disabled={isRefreshingAllocation}
+                      className="ml-1 p-1 hover:bg-amber-100 rounded transition-colors disabled:opacity-50"
+                      title="Refresh allocation status"
+                    >
+                      <RefreshCw className={`w-3 h-3 text-amber-600 ${isRefreshingAllocation ? 'animate-spin' : ''}`} />
+                    </button>
+                  </div>
+                ) : classStandingRemaining === 0 && user ? (
+                  <div className="flex items-center space-x-2 bg-emerald-50 border border-emerald-200 px-3 py-2 rounded-lg shadow-sm">
+                    <div className="flex items-center space-x-1.5">
+                      <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
+                      <span className="text-xs font-semibold text-emerald-700">
+                        100% Allocated ✓
+                      </span>
+                    </div>
+                    <button
+                      onClick={manualRefreshAllocation}
+                      disabled={isRefreshingAllocation}
+                      className="ml-1 p-1 hover:bg-emerald-100 rounded transition-colors disabled:opacity-50"
+                      title="Refresh allocation status"
+                    >
+                      <RefreshCw className={`w-3 h-3 text-emerald-600 ${isRefreshingAllocation ? 'animate-spin' : ''}`} />
+                    </button>
+                  </div>
+                ) : null}
 
                 {/* 🔥 NEW: Sheet Selector Dropdown */}
               {availableSheets.length > 1 && (
