@@ -176,6 +176,8 @@ CORS_ALLOW_CREDENTIALS = True
 
 # Explicitly allow common development origins
 CORS_ALLOWED_ORIGINS = [
+    "https://vocalyx.online",
+    "https://www.vocalyx.online",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:3000",
