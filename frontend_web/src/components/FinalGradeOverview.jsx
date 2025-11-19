@@ -18,6 +18,9 @@ const FinalGradeOverview = ({
   const [classStandingRemaining, setClassStandingRemaining] = useState(0);
   const [currentSheetName, setCurrentSheetName] = useState('');
   const [problematicSheets, setProblematicSheets] = useState([]);
+  // 🔥 NEW: Export confirmation modal state
+  const [showExportConfirmationModal, setShowExportConfirmationModal] = useState(false);
+  const [exportConfirmationData, setExportConfirmationData] = useState(null);
 
   const loadPreviewData = useCallback(async () => {
     try {
@@ -185,6 +188,123 @@ const FinalGradeOverview = ({
     }
   };
 
+  // 🔥 NEW: Check if required columns exist (PRELIM, MIDTERM, PREFINAL, FINALS)
+  // These appear in student data as: PE (Prelim), ME (Midterm), PFE (Prefinal), FE (Finals)
+  const hasRequiredColumns = useCallback((students) => {
+    if (!students || students.length === 0) return false;
+    
+    // Check if any student has these fields (means columns exist in the data)
+    const firstStudent = students[0];
+    const hasPrelim = 'PE' in firstStudent;
+    const hasMidterm = 'ME' in firstStudent;
+    const hasPrefinal = 'PFE' in firstStudent;
+    const hasFinals = 'FE' in firstStudent;
+    
+    return hasPrelim && hasMidterm && hasPrefinal && hasFinals;
+  }, []);
+
+  // 🔥 NEW: Count total missing scores across all students
+  const countMissingScores = useCallback((students, missingByStudent) => {
+    let totalMissing = 0;
+    const studentsWithMissing = [];
+    
+    students.forEach(student => {
+      const studentKey = `${student.studentId}_${student.lastName}_${student.firstName}`;
+      const missing = missingByStudent[studentKey] || [];
+      
+      if (missing.length > 0) {
+        totalMissing += missing.length; // Each missing item = 1 missing score
+        const fullName = student.fullName || `${student.firstName} ${student.lastName}`.trim();
+        studentsWithMissing.push({
+          fullName: fullName,
+          missingCount: missing.length
+        });
+      }
+    });
+    
+    return { totalMissing, studentsWithMissing };
+  }, []);
+
+  // 🔥 NEW: Validate export eligibility
+  const validateExportEligibility = useCallback(() => {
+    // Check preview data exists
+    if (!previewData || !previewData.students || !Array.isArray(previewData.students)) {
+      return {
+        canExport: false,
+        error: 'No preview data available. Please reload the preview.',
+        needsConfirmation: false,
+        totalMissing: 0,
+        studentsWithMissing: []
+      };
+    }
+    
+    const students = previewData.students;
+    const missingByStudent = previewData.missing_by_student || {};
+    
+    // Check required columns exist
+    const hasColumns = hasRequiredColumns(students);
+    if (!hasColumns) {
+      return {
+        canExport: false,
+        error: 'Required columns are missing. Please ensure PRELIM, MIDTERM (Midterm sheet) and PREFINAL, FINALS (Final sheet) columns exist.',
+        needsConfirmation: false,
+        totalMissing: 0,
+        studentsWithMissing: []
+      };
+    }
+    
+    // Count missing scores
+    const { totalMissing, studentsWithMissing } = countMissingScores(students, missingByStudent);
+    
+    // Check if > 10 missing scores (hard block)
+    if (totalMissing > 10) {
+      return {
+        canExport: false,
+        error: `Cannot export: Too many missing scores (${totalMissing}). Maximum allowed is 10 missing scores.`,
+        needsConfirmation: false,
+        totalMissing,
+        studentsWithMissing
+      };
+    }
+    
+    // If any missing scores exist, need confirmation
+    if (studentsWithMissing.length > 0) {
+      return {
+        canExport: true, // Can proceed after confirmation
+        needsConfirmation: true,
+        totalMissing,
+        studentsWithMissing,
+        error: null
+      };
+    }
+    
+    // No missing scores - can export directly
+    return {
+      canExport: true,
+      needsConfirmation: false,
+      totalMissing: 0,
+      studentsWithMissing: [],
+      error: null
+    };
+  }, [previewData, hasRequiredColumns, countMissingScores]);
+
+  // 🔥 NEW: Perform actual export (extracted from handleExport)
+  const performExport = async () => {
+    try {
+      setExportLoading(true);
+      await googleSheetsService.exportFinalGrades(sheetId, {
+        classRecordId: classRecord.id
+      });
+      showToast.success('Final grades exported successfully!');
+      setShowExportConfirmationModal(false); // Close modal if open
+      setExportConfirmationData(null);
+    } catch (error) {
+      showToast.error('Failed to export: ' + error.message);
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
   const handleExport = async () => {
     // Check if class standing percentage is complete
     if (classStandingRemaining > 0) {
@@ -192,17 +312,33 @@ const FinalGradeOverview = ({
       return;
     }
 
-    try {
-      setExportLoading(true);
-      await googleSheetsService.exportFinalGrades(sheetId, {
-        classRecordId: classRecord.id
-      });
-      showToast.success('Final grades exported successfully!');
-    } catch (error) {
-      showToast.error('Failed to export: ' + error.message);
-    } finally {
-      setExportLoading(false);
+    // 🔥 NEW: Run validation
+    const validation = validateExportEligibility();
+    
+    // If validation error, show error and stop
+    if (!validation.canExport) {
+      showToast.error(validation.error);
+      return;
     }
+    
+    // If needs confirmation, show modal instead of exporting
+    if (validation.needsConfirmation) {
+      setExportConfirmationData({
+        totalMissing: validation.totalMissing,
+        studentsWithMissing: validation.studentsWithMissing
+      });
+      setShowExportConfirmationModal(true);
+      return;
+    }
+    
+    // No missing scores - proceed directly with export
+    await performExport();
+  };
+
+  // 🔥 NEW: Handle export confirmation
+  const handleConfirmExport = async () => {
+    setShowExportConfirmationModal(false);
+    await performExport();
   };
 
   const filteredStudents = getFilteredStudents();
@@ -535,6 +671,107 @@ const FinalGradeOverview = ({
                 className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🔥 NEW: Export Confirmation Modal */}
+      {showExportConfirmationModal && exportConfirmationData && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 z-[70] flex items-center justify-center p-4"
+          onClick={() => setShowExportConfirmationModal(false)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-start">
+                <div className="flex-shrink-0">
+                  <svg className="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                </div>
+                <div className="ml-3 flex-1">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Confirm Export with Missing Scores
+                  </h3>
+                  <p className="mt-1 text-sm text-gray-600">
+                    You have <span className="font-semibold">{exportConfirmationData.totalMissing}</span> missing score(s) across <span className="font-semibold">{exportConfirmationData.studentsWithMissing.length}</span> student(s). Do you want to export anyway?
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowExportConfirmationModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Content - Students List */}
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+                <p className="text-sm text-amber-800">
+                  <strong>Note:</strong> The following students have missing scores. The export will proceed with these missing scores included.
+                </p>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-medium text-gray-700 mb-3">
+                  Students with Missing Scores ({exportConfirmationData.studentsWithMissing.length}):
+                </h4>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {exportConfirmationData.studentsWithMissing.map((item, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                    >
+                      <span className="text-sm font-medium text-gray-900">
+                        {item.fullName}
+                      </span>
+                      <span className="text-xs text-gray-600">
+                        {item.missingCount} missing {item.missingCount === 1 ? 'score' : 'scores'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-6 border-t border-gray-200 flex justify-end space-x-3">
+              <button
+                onClick={() => setShowExportConfirmationModal(false)}
+                disabled={exportLoading}
+                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmExport}
+                disabled={exportLoading}
+                className="px-4 py-2 text-white rounded-lg hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                style={{ backgroundColor: '#333D79' }}
+              >
+                {exportLoading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    <span>Exporting...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span>Export Anyway</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
