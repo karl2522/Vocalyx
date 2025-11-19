@@ -469,6 +469,8 @@ const ClassRecordExcel = () => {
     edit: false
   });
   const [showVoiceGuide, setShowVoiceGuide] = useState(false);
+  // 🔥 NEW: Mode selection modal state
+  const [showModeSelectionModal, setShowModeSelectionModal] = useState(false);
   // 🔊 Single-entry voice processing state
   const [voicePhase, setVoicePhase] = useState('idle'); // idle | listening | recognized | verifying | processing | writing | done | error
   const [voiceStatus, setVoiceStatus] = useState('');
@@ -3763,7 +3765,7 @@ const setBatchModeProtected = useCallback((value, reason = 'unknown') => {
   setBatchMode(value);
 }, []);
 
-const startBatchMode = () => {
+const startBatchMode = async () => {
   console.log('🔥 START BATCH: Setting batchMode to true');
   setBatchModeProtected(true, 'startBatchMode');
   setShowBatchModal(true);
@@ -3773,8 +3775,9 @@ const startBatchMode = () => {
   window.batchModeActive = false; 
   window.batchModeFinishing = false;
   
+  // 🔥 FIX: Return promise so caller can wait for speech to complete
   if (voiceEnabled) {
-    speakText('Batch mode started. Please select a column.');
+    await speakText('Batch mode started. Please select a column.');
   }
 };
 
@@ -4371,12 +4374,44 @@ const handleExportToPDF = async () => {
       return;
     }
 
+    // If already recording, stop (existing behavior)
     if (isListening) {
       stopListening();
       stopSpeaking();
-    } else {
-      startListening();
+      return;
     }
+
+    // 🔥 NEW: Show mode selection modal if not recording
+    setShowModeSelectionModal(true);
+  };
+
+  // 🔥 NEW: Handle Single Mode Selection
+  const handleSingleModeSelected = async () => {
+    setShowModeSelectionModal(false);
+    
+    // If batch mode is already active, cancel it
+    if (batchMode) {
+      cancelBatchMode();
+    }
+    
+    // 🔥 FIX: Speak feedback first and wait for completion
+    if (voiceEnabled) {
+      await speakText('Single mode activated. Start recording.');
+    }
+    
+    // 🔥 FIX: Start recording AFTER voice feedback completes
+    startListening();
+  };
+
+  // 🔥 NEW: Handle Batch Mode Selection
+  const handleBatchModeSelected = async () => {
+    setShowModeSelectionModal(false);
+    
+    // 🔥 FIX: Start batch mode and wait for speech to complete
+    await startBatchMode();
+    
+    // 🔥 FIX: Start recording AFTER voice feedback completes
+    startListening();
   };
   
   const toggleVoiceFeedback = () => {
@@ -4656,8 +4691,8 @@ const handleExportToPDF = async () => {
                     
                     {/* 🔥 NEW: Batch Mode Button */}
                     <button
-                      onClick={() => {
-                        startBatchMode();
+                      onClick={async () => {
+                        await startBatchMode();
                         closeAllDropdowns();
                       }}
                       className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
@@ -4841,6 +4876,86 @@ const handleExportToPDF = async () => {
                   <div className="absolute inset-0 rounded-full border-4 border-red-300 animate-ping"></div>
                 )}
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* 🔥 NEW: Mode Selection Modal */}
+        {showModeSelectionModal && (
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]"
+            onClick={() => setShowModeSelectionModal(false)}
+          >
+            <div 
+              className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="bg-gradient-to-r from-[#333D79] to-[#4A5491] px-6 py-4 flex items-center justify-between">
+                <h3 className="text-xl font-semibold text-white">Select Recording Mode</h3>
+                <button
+                  onClick={() => setShowModeSelectionModal(false)}
+                  className="text-white hover:text-gray-200 transition-colors"
+                  title="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="p-6">
+                <p className="text-gray-600 mb-6 text-center">
+                  Choose how you want to record voice commands:
+                </p>
+
+                <div className="space-y-4">
+                  {/* Single Mode Button */}
+                  <button
+                    onClick={handleSingleModeSelected}
+                    className="w-full p-4 rounded-lg border-2 border-blue-200 hover:border-blue-400 bg-blue-50 hover:bg-blue-100 transition-all duration-200 flex items-center space-x-4 group"
+                  >
+                    <div className="flex-shrink-0 w-12 h-12 rounded-full bg-blue-500 flex items-center justify-center group-hover:bg-blue-600 transition-colors">
+                      <Mic className="w-6 h-6 text-white" />
+                    </div>
+                    <div className="flex-1 text-left">
+                      <h4 className="font-semibold text-gray-900 group-hover:text-blue-700">
+                        Single Mode
+                      </h4>
+                      <p className="text-sm text-gray-600">
+                        Record one command at a time
+                      </p>
+                    </div>
+                  </button>
+
+                  {/* Batch Mode Button */}
+                  <button
+                    onClick={handleBatchModeSelected}
+                    className="w-full p-4 rounded-lg border-2 border-purple-200 hover:border-purple-400 bg-purple-50 hover:bg-purple-100 transition-all duration-200 flex items-center space-x-4 group"
+                  >
+                    <div className="flex-shrink-0 w-12 h-12 rounded-full bg-purple-500 flex items-center justify-center group-hover:bg-purple-600 transition-colors">
+                      <Users className="w-6 h-6 text-white" />
+                    </div>
+                    <div className="flex-1 text-left">
+                      <h4 className="font-semibold text-gray-900 group-hover:text-purple-700">
+                        Batch Mode
+                      </h4>
+                      <p className="text-sm text-gray-600">
+                        Record multiple student scores in sequence
+                      </p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end">
+                <button
+                  onClick={() => setShowModeSelectionModal(false)}
+                  className="px-4 py-2 text-gray-700 hover:text-gray-900 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         )}
