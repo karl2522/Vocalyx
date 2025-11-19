@@ -1,0 +1,220 @@
+version: 1
+
+groups:
+  current_get:
+    - name: GET /api/profile/
+      method: GET
+      path: /api/profile/
+      weight: 2
+      tags: [auth]
+
+    - name: GET /api/validate-token/
+      method: GET
+      path: /api/validate-token/
+      weight: 1
+      tags: [auth]
+
+    - name: GET /api/class-records/
+      method: GET
+      path: /api/class-records/
+      weight: 3
+      tags: [class_records]
+
+    - name: GET /api/class-records/live-counts/
+      method: GET
+      path: /api/class-records/live-counts/
+      weight: 2
+      tags: [class_records]
+
+    - name: GET /api/students/
+      method: GET
+      path: /api/students/
+      weight: 2
+      tags: [students]
+
+    # Google Sheets - service account
+    - name: GET sheets list (service account)
+      method: GET
+      path: /api/sheets/service-account/{sheet_id}/sheets-list/
+      weight: 2
+      tags: [sheets]
+      params:
+        path_vars:
+          sheet_id: ${TEST_SHEET_ID}
+
+    
+
+    # Google Sheets - user scoped
+    - name: GET sheet info
+      method: GET
+      path: /api/sheets/info/{sheet_id}/
+      weight: 1
+      tags: [sheets]
+      params:
+        path_vars:
+          sheet_id: ${TEST_SHEET_ID}
+
+    - name: GET sheets list (user)
+      method: GET
+      path: /api/sheets/list/
+      weight: 1
+      tags: [sheets]
+
+    - name: GET sheet data (user)
+      method: GET
+      path: /api/sheets/data/{sheet_id}/
+      weight: 1
+      tags: [sheets]
+      params:
+        path_vars:
+          sheet_id: ${TEST_SHEET_ID}
+
+    # Class records ancillary GETs
+    - name: GET class record category percentages
+      method: GET
+      path: /api/class-records/{id}/category_percentages/
+      weight: 1
+      tags: [class_records]
+      params:
+        path_vars:
+          id: ${TEST_CLASS_RECORD_ID}
+
+    - name: GET class record columns
+      method: GET
+      path: /api/class-records/{id}/columns/
+      weight: 1
+      tags: [class_records]
+      params:
+        path_vars:
+          id: ${TEST_CLASS_RECORD_ID}
+
+    - name: GET class records test headers
+      method: GET
+      path: /api/class-records/test_headers/
+      weight: 1
+      tags: [class_records]
+
+    # Individual resources
+    - name: GET student detail
+      method: GET
+      path: /api/students/{id}/
+      weight: 1
+      tags: [students]
+      params:
+        path_vars:
+          id: ${TEST_STUDENT_ID}
+
+
+  high_priority_get:
+    # Class records
+    - name: GET class records with live counts
+      method: GET
+      path: /api/class-records/live-counts/
+      weight: 3
+      tags: [class_records]
+
+    # Google Sheets (Service Account)
+    - name: GET sheets list (service account)
+      method: GET
+      path: /api/sheets/service-account/${TEST_SHEET_ID}/sheets-list/
+      weight: 2
+      tags: [sheets]
+      params:
+        path_vars:
+          sheet_id: ${TEST_SHEET_ID}
+
+    - name: GET specific sheet data (service account)
+      method: GET
+      path: /api/sheets/service-account/${TEST_SHEET_ID}/sheet/${TEST_SHEET_NAME}/data/
+      weight: 3
+      tags: [sheets]
+      params:
+        path_vars:
+          sheet_id: ${TEST_SHEET_ID}
+          sheet_name: ${TEST_SHEET_NAME}
+
+    # Google Sheets (User-scoped)
+    - name: GET sheet info (user)
+      method: GET
+      path: /api/sheets/info/${TEST_SHEET_ID}/
+      weight: 1
+      tags: [sheets]
+      params:
+        path_vars:
+          sheet_id: ${TEST_SHEET_ID}
+
+    - name: GET sheets list (user)
+      method: GET
+      path: /api/sheets/list/
+      weight: 1
+      tags: [sheets]
+
+    - name: GET sheet data (user)
+      method: GET
+      path: /api/sheets/data/${TEST_SHEET_ID}/
+      weight: 1
+      tags: [sheets]
+      params:
+        path_vars:
+          sheet_id: ${TEST_SHEET_ID}
+
+    - name: GET import history (user)
+      method: GET
+      path: /api/sheets/${TEST_SHEET_ID}/import-history/
+      weight: 1
+      tags: [sheets]
+      params:
+        path_vars:
+          sheet_id: ${TEST_SHEET_ID}
+
+    - name: GET final grade preview (user)
+      method: GET
+      path: /api/sheets/${TEST_SHEET_ID}/final-grade-preview/
+      weight: 2
+      tags: [sheets]
+      params:
+        path_vars:
+          sheet_id: ${TEST_SHEET_ID}
+
+    # Grades and Students
+    - name: GET student detail
+      method: GET
+      path: /api/students/${TEST_STUDENT_ID}/
+      weight: 1
+      tags: [students]
+      params:
+        path_vars:
+          id: ${TEST_STUDENT_ID}
+
+    - name: GET grade detail
+      method: GET
+      path: /api/grades/${TEST_GRADE_ID}/
+      weight: 1
+      tags: [grades]
+      params:
+        path_vars:
+          id: ${TEST_GRADE_ID}
+
+    # Google Drive
+    - name: GET drive files
+      method: GET
+      path: /api/drive/files/
+      weight: 1
+      tags: [drive]
+
+    - name: GET drive download
+      method: GET
+      path: /api/drive/download/${TEST_DRIVE_FILE_ID}/
+      weight: 1
+      tags: [drive]
+      params:
+        path_vars:
+          file_id: ${TEST_DRIVE_FILE_ID}
+
+    - name: GET google drive check
+      method: GET
+      path: /api/google-drive/check/
+      weight: 1
+      tags: [drive]
+
+

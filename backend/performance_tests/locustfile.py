@@ -22,10 +22,13 @@ from locust.runners import MasterRunner, WorkerRunner
 from config.settings import (
     PRODUCTION_API_URL, USER_WEIGHTS, WAIT_TIME_MIN, WAIT_TIME_MAX
 )
+from config.settings import PERF_SUITE
 from test_scenarios.auth_scenarios import AuthenticationUser
 from test_scenarios.classrecord_scenarios import ClassRecordUser
 from test_scenarios.sheets_scenarios import SheetsUser
 from test_scenarios.notifications_scenarios import NotificationUser
+from utils.endpoint_loader import load_endpoints_yaml, select_endpoints, build_dynamic_tasks
+import os
 
 
 # Custom event handlers for additional metrics tracking
@@ -112,33 +115,6 @@ class AuthenticatedUser(ClassRecordUser):
         self.get_live_counts()
     
     @task(2)
-    def view_sheets(self):
-        """View Google Sheets data."""
-        from utils.helpers import get_auth_headers
-        from config.settings import TEST_SHEET_IDS
-        
-        # Skip only if no sheet IDs configured
-        if not TEST_SHEET_IDS:
-            return
-        
-        sheet_id = TEST_SHEET_IDS[0]
-        # Always make request - will fail with 401 if no token, but Locust will track it
-        headers = get_auth_headers(self.token) if self.token else get_auth_headers()
-        
-        with self.client.get(
-            f'/api/sheets/service-account/{sheet_id}/data/',
-            headers=headers,
-            catch_response=True,
-            name='GET /api/sheets/service-account/{sheet_id}/data/ (AuthenticatedUser)'
-        ) as response:
-            if response.status_code == 401:
-                response.failure("Authentication required")
-            elif response.status_code == 200:
-                response.success()
-            else:
-                response.failure(f"Unexpected status: {response.status_code}")
-    
-    @task(2)
     def check_notifications(self):
         """Check notifications."""
         from utils.helpers import get_auth_headers
@@ -206,12 +182,44 @@ class ActiveTeacherUser(SheetsUser):
     def review_all_data(self):
         """Review all sheet data."""
         self.get_all_sheets_data()
-    
-    @task(1)
-    def manage_categories(self):
-        """View and manage grade categories."""
-        self.get_categories()
 
+
+
+# Dynamic endpoint-driven user (inherits auth from AuthenticatedUser)
+class DynamicApiUser(AuthenticatedUser):
+    pass
+
+
+@events.test_start.add_listener
+def load_dynamic_suite(environment, **kwargs):
+    try:
+        yaml_path = os.path.join(os.path.dirname(__file__), 'endpoints.yaml')
+        doc = load_endpoints_yaml(yaml_path)
+        endpoints = select_endpoints(doc, PERF_SUITE)
+        if endpoints:
+            build_dynamic_tasks(DynamicApiUser, endpoints)
+            if DynamicApiUser not in environment.user_classes:
+                environment.user_classes.append(DynamicApiUser)
+            # Friendly label for suite
+            suite_label = (
+                "Non-High Priority (current_get)" if PERF_SUITE == 'current_get' else
+                "High Priority (high_priority_get)" if PERF_SUITE == 'high_priority_get' else
+                "Combined (all)" if PERF_SUITE == 'all' else
+                PERF_SUITE
+            )
+            print(f"[Dynamic Suite] Active API suite: {suite_label}")
+            print(f"[Dynamic Suite] Loaded {len(endpoints)} endpoints:")
+            try:
+                # Print endpoint names for visibility in the console
+                for ep in endpoints:
+                    name = ep.get('name') or f"{ep.get('method','GET')} {ep.get('path','/')}"
+                    print(f"   • {name}")
+            except Exception:
+                pass
+        else:
+            print(f"[Dynamic Suite] No endpoints selected for suite '{PERF_SUITE}'.")
+    except Exception as e:
+        print(f"[Dynamic Suite] Failed to load dynamic endpoints: {e}")
 
 # Alternative: Simple unified user class for simpler testing
 class WebsiteUser(FastHttpUser):
@@ -320,11 +328,21 @@ class WebsiteUser(FastHttpUser):
 
 
 # Export the user classes that Locust will use
-# Uncomment/Comment classes to include/exclude from tests
-USER_CLASSES = [
-    AnonymousUser,       # 30% load
-    AuthenticatedUser,   # 50% load
-    ActiveTeacherUser,   # 20% load
-    # WebsiteUser,       # Disabled by default
-]
+# If a PERF_SUITE is selected, run ONLY the dynamic suite to avoid mixing in built-in tasks
+try:
+    from config.settings import PERF_SUITE as _PERF_SUITE_FLAG
+except Exception:
+    _PERF_SUITE_FLAG = None
+
+if _PERF_SUITE_FLAG in ("current_get", "high_priority_get", "all"):
+    USER_CLASSES = [
+        DynamicApiUser,
+    ]
+else:
+    USER_CLASSES = [
+        AnonymousUser,       # 30% load
+        AuthenticatedUser,   # 50% load
+        ActiveTeacherUser,   # 20% load
+        # WebsiteUser,       # Disabled by default
+    ]
 
