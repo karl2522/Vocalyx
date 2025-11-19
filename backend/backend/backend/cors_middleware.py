@@ -12,6 +12,8 @@ class CustomCorsMiddleware:
 
             # List of allowed origins
             allowed_origins = [
+                'https://vocalyx.online',
+                'https://www.vocalyx.online',
                 'https://vocalyx-frontend.vercel.app',
                 'http://localhost:5173',
                 'http://127.0.0.1:5173',
@@ -38,6 +40,8 @@ class CustomCorsMiddleware:
         if request.path.startswith('/api/'):
             origin = request.META.get('HTTP_ORIGIN')
             allowed_origins = [
+                'https://vocalyx.online',
+                'https://www.vocalyx.online',
                 'https://vocalyx-frontend.vercel.app',
                 'http://localhost:5173',
                 'http://127.0.0.1:5173',
