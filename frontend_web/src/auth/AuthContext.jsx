@@ -11,7 +11,7 @@ import { showToast } from '../utils/toast';
 
 // Environment variables
 const REDIRECT_URI = import.meta.env.PROD 
-  ? 'https://vocalyx-frontend.vercel.app/' 
+  ? 'https://vocalyx.online/' 
   : 'http://localhost:5173';
 const BACKEND_URL = import.meta.env.PROD 
   ? 'https://vocalyx-backend-64846917574.asia-southeast1.run.app' 
