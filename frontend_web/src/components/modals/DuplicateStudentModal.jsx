@@ -30,7 +30,7 @@ const DuplicateStudentModal = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
       <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
         {/* 🎨 Modern Header with Gradient */}
         <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-6 text-white">

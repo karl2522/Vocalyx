@@ -109,11 +109,15 @@ const BatchGradingModal = ({
       throw new Error('Column headers are not available');
     }
 
-    const convertedTableData = sheetsResponse.data.tableData.map(row => {
+    const convertedTableData = sheetsResponse.data.tableData.map((row, originalIndex) => {
       const rowObject = {};
       sheetsResponse.data.headers.forEach((header, index) => {
         rowObject[header] = row[index] || '';
       });
+      
+      // 🔥 CRITICAL: Preserve the original index for accurate row tracking
+      rowObject._originalTableIndex = originalIndex;
+      
       return rowObject;
     });
     
