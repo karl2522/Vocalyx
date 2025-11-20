@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { ArrowLeft, BarChart3, ChevronDown, Edit, FileSpreadsheet, HelpCircle, Mic, MicOff, MoreVertical, Plus, RefreshCw, Trash2, Upload, Users, X } from 'lucide-react';
+import { ArrowLeft, BarChart3, CheckCircle2, ChevronDown, Edit, FileSpreadsheet, HelpCircle, Mic, MicOff, MoreVertical, Plus, RefreshCw, Trash2, Upload, Users, X, Menu, PieChart } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -93,13 +93,24 @@ const ClassRecordExcel = () => {
   const [currentSheet, setCurrentSheet] = useState(null);
   const [loadingSheets, setLoadingSheets] = useState(false);
   const [showSheetSelector, setShowSheetSelector] = useState(false);
-  const [showNavigationTooltip, setShowNavigationTooltip] = useState(true);
+  
+  // 🔥 NEW: Onboarding State with LocalStorage persistence
+  const [onboardingStep, setOnboardingStep] = useState(() => {
+    const completed = localStorage.getItem('classRecordOnboardingCompleted');
+    return completed === 'true' ? 0 : 1;
+  });
+  
+  const handleOnboardingComplete = () => {
+    setOnboardingStep(0);
+    localStorage.setItem('classRecordOnboardingCompleted', 'true');
+  };
 
   const [overrideConfirmation, setOverrideConfirmation] = useState(null);
 
   // CLASS STANDING percentages state
   const [classStandingRemaining, setClassStandingRemaining] = useState(0);
   const [problematicSheets, setProblematicSheets] = useState([]);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const lastToastKeyRef = useRef(null);
   const classStandingToastIdRef = useRef(null);
   
@@ -3337,7 +3348,7 @@ const handleOverrideCancel = () => {
 const handleDuplicateStudentSelect = async (selectedIndex) => {
     if (!duplicateModalData) return;
     
-    const { matches, command, convertedTableData } = duplicateModalData;
+    const { matches, command, convertedTableData, isBatchMode } = duplicateModalData;
     const selectedMatch = matches[selectedIndex];
     
     // 🔥 FIXED: Use rowData instead of studentData
@@ -3354,7 +3365,49 @@ const handleDuplicateStudentSelect = async (selectedIndex) => {
         return;
     }
     
-    // Check for existing score
+    // 🔥 SPECIAL HANDLING FOR BATCH MODE
+    if (isBatchMode) {
+        console.log('🔥 DUPLICATE SELECT: Handling batch mode selection');
+        
+        const entryId = `${command.searchName}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        const hasExistingScore = student[command.column] && 
+                                String(student[command.column]).trim() !== '' && 
+                                String(student[command.column]).trim() !== '0';
+
+        const newEntry = {
+            id: entryId,
+            originalInput: command.searchName,
+            studentName: studentName, // Use full resolved name
+            score: command.value,
+            status: 'found',
+            rowIndex: correctRowIndex,
+            hasExistingScore,
+            existingValue: hasExistingScore ? student[command.column] : null,
+            confidence: 'high',
+            sheetName: currentSheet?.sheet_name
+        };
+        
+        // Add to batch entries
+        setBatchEntries(prev => {
+            // Filter out any previous attempts for this student
+            const filtered = prev.filter(entry => 
+                !(entry.originalInput.toLowerCase() === command.searchName.toLowerCase() && 
+                  entry.score === command.value)
+            );
+            return [...filtered, newEntry];
+        });
+        
+        addRecentStudent(studentName);
+        toast.success(`Added ${studentName} to batch list`);
+        
+        // Close modal
+        setShowDuplicateModal(false);
+        setDuplicateModalData(null);
+        return;
+    }
+    
+    // Check for existing score (Normal Mode)
     const existingScore = student[command.column];
     const hasExistingScore = existingScore && 
                             String(existingScore).trim() !== '' && 
@@ -3598,6 +3651,32 @@ const processBatchEntry = async (studentName, score) => {
     console.log('🔥 PROCESS BATCH: 🔍 Searching for student...');
     const result = findStudentRowSmart(convertedTableData, studentName, recentStudents, currentBatchColumn);
     console.log('🔥 PROCESS BATCH: 🔍 Search result:', result);
+    
+    // 🔥 Handle duplicate/ambiguous students in batch mode
+    if (result.needsConfirmation && result.possibleMatches.length > 1) {
+        console.log('🔥 PROCESS BATCH: 🤔 Ambiguous match detected, showing duplicate modal');
+        
+        // We need to pause batch processing and show the modal
+        setDuplicateModalData({
+            matches: result.possibleMatches,
+            command: { 
+                column: currentBatchColumn, 
+                value: score,
+                searchName: studentName
+            },
+            searchName: studentName,
+            convertedTableData,
+            isBatchMode: true // Flag to tell modal it's from batch mode
+        });
+        setShowDuplicateModal(true);
+        
+        // Speak to user
+        if (voiceEnabled) {
+            speakText(`Multiple students found for ${studentName}. Please select the correct one.`);
+        }
+        // Don't add to batch entries yet - wait for modal selection
+        return;
+    }
     
     const entryId = `${studentName}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     let newEntry;
@@ -4474,45 +4553,45 @@ const handleExportToPDF = async () => {
         {/* Header */}
         <div className="bg-white border-b border-slate-200 shadow-sm">
           {/* Top Bar */}
-          <div className="px-6 py-3">
-            <div className="flex items-center justify-between">
-              {/* Left Section - Navigation & Title */}
-              <div className="flex items-center space-x-4">
+          <div className="px-4 sm:px-6 py-3">
+            <div className="flex items-center justify-between gap-4">
+              
+              {/* Left Section - Navigation & Title (Always Visible) */}
+              <div className="flex items-center gap-3 min-w-0">
                 <button
                   onClick={() => navigate('/class-records')}
-                  className="flex items-center space-x-2 text-slate-600 hover:text-slate-800 transition-colors group"
+                  className="flex items-center space-x-2 text-slate-600 hover:text-slate-800 transition-colors group flex-shrink-0"
                 >
                   <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
-                  <span className="text-sm font-medium">Back to Records</span>
+                  <span className="text-sm font-medium hidden sm:inline">Back</span>
                 </button>
-                <div className="h-5 w-px bg-slate-300"></div>
-                <div>
-                  <h1 className="text-xl font-semibold text-slate-900">{classRecord?.name}</h1>
-                  <div className="flex items-center space-x-3 text-sm text-slate-500">
+                <div className="h-5 w-px bg-slate-300 flex-shrink-0"></div>
+                <div className="min-w-0 overflow-hidden">
+                  <h1 className="text-lg sm:text-xl font-semibold text-slate-900 break-words">{classRecord?.name}</h1>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs sm:text-sm text-slate-500">
                     <span>{classRecord?.section_name}</span>
+                    <span className="hidden sm:inline">•</span>
                     <span>{classRecord?.semester}</span>
+                    <span className="hidden sm:inline">•</span>
                     <span>{classRecord?.teacher_name}</span>
-
-                    {lastSaved && (
-                      <>
-                        <span>•</span>
-                        <span className="text-emerald-600">
-                          Last saved {new Date(lastSaved).toLocaleTimeString()}
-                        </span>
-                      </>
-                    )}
                   </div>
                 </div>
               </div>
 
-              {/* Right Section */}
-              <div className="flex items-center space-x-3">
-                {/* Save Button */}
-                <div className="text-sm text-slate-600">
-                  Data is saved automatically in Google Sheets
+              {/* Right Section - Desktop (Hidden on Mobile/Tablet) */}
+              <div className="hidden lg:flex items-center gap-3">
+                {/* Save Status */}
+                <div className="text-sm text-slate-600 mr-2">
+                  {lastSaved && (
+                    <span className="text-emerald-600 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" />
+                      Saved {new Date(lastSaved).toLocaleTimeString()}
+                    </span>
+                  )}
                 </div>
 
-                {/* 🔥 NEW: Persistent Class Standing Allocation Badge with Manual Refresh */}
+                {/* Allocation Badge */}
+                <div className="relative">
                 {classStandingRemaining > 0 ? (
                   <div className="flex items-center space-x-2 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg shadow-sm">
                     <div className="flex items-center space-x-1.5">
@@ -4521,16 +4600,6 @@ const handleExportToPDF = async () => {
                         {classStandingRemaining}% Unallocated
                       </span>
                     </div>
-                    {problematicSheets.length > 0 && (
-                      <div className="text-xs text-amber-600 border-l border-amber-300 pl-2">
-                        {problematicSheets.map((s, i) => (
-                          <span key={i}>
-                            {s.sheetName} ({s.remaining}%)
-                            {i < problematicSheets.length - 1 ? ', ' : ''}
-                          </span>
-                        ))}
-                      </div>
-                    )}
                     <button
                       onClick={manualRefreshAllocation}
                       disabled={isRefreshingAllocation}
@@ -4541,257 +4610,501 @@ const handleExportToPDF = async () => {
                     </button>
                   </div>
                 ) : classStandingRemaining === 0 && user ? (
-                  <div className="flex items-center space-x-2 bg-emerald-50 border border-emerald-200 px-3 py-2 rounded-lg shadow-sm">
-                    <div className="flex items-center space-x-1.5">
-                      <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
-                      <span className="text-xs font-semibold text-emerald-700">
-                        100% Allocated ✓
-                      </span>
-                    </div>
-                    <button
-                      onClick={manualRefreshAllocation}
-                      disabled={isRefreshingAllocation}
-                      className="ml-1 p-1 hover:bg-emerald-100 rounded transition-colors disabled:opacity-50"
-                      title="Refresh allocation status"
-                    >
-                      <RefreshCw className={`w-3 h-3 text-emerald-600 ${isRefreshingAllocation ? 'animate-spin' : ''}`} />
-                    </button>
+                  <div className="flex items-center space-x-2 bg-sky-50 border border-sky-200 px-3 py-2 rounded-lg shadow-sm min-h-[34px] text-sm font-medium text-sky-900">
+                    <CheckCircle2 className={`w-4 h-4 ${isRefreshingAllocation ? 'text-sky-400 animate-pulse' : 'text-sky-600'}`} />
+                    <span>
+                      {isRefreshingAllocation ? 'Verifying...' : '100% Allocated'}
+                    </span>
                   </div>
                 ) : null}
-
-                {/* 🔥 NEW: Sheet Selector Dropdown */}
-              {availableSheets.length > 1 && (
-                <div className="relative" onClick={(e) => e.stopPropagation()}>
-                  <button
-                    onClick={() => setShowSheetSelector(!showSheetSelector)}
-                    disabled={loadingSheets}
-                    className="flex items-center space-x-2 bg-indigo-50 text-indigo-700 px-3 py-2 rounded-lg font-medium hover:bg-indigo-100 transition-colors shadow-sm border border-indigo-200 disabled:opacity-50"
-                  >
-                    <FileSpreadsheet className="w-4 h-4" />
-                    <span className="max-w-24 truncate">
-                      {loadingSheets ? 'Loading...' : (currentSheet?.sheet_name || 'Select Sheet')}
-                    </span>
-                    <ChevronDown className={`w-4 h-4 transition-transform ${showSheetSelector ? 'rotate-180' : ''}`} />
-                  </button>
-                  
-                  {/* Professional Tooltip pointing to sheet selector */}
-                  {showNavigationTooltip && (
-                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 z-50 animate-fade-in">
+                
+                {/* Allocation Tooltip */}
+                {onboardingStep === 1 && (
+                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 z-50">
                       <div className="bg-white rounded-lg shadow-xl border border-slate-200 p-3 w-64">
-                        {/* Tooltip arrow pointing up to button */}
                         <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1">
                           <div className="w-3 h-3 bg-white border-l border-t border-slate-200 transform rotate-45"></div>
                         </div>
-                        
-                        {/* Tooltip content */}
                         <div className="flex items-start space-x-3">
                           <div className="w-6 h-6 flex items-center justify-center flex-shrink-0">
-                            <FileSpreadsheet className="w-4 h-4 text-[#333D79]" />
+                            <PieChart className="w-4 h-4 text-[#333D79]" />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-slate-900 mb-2">Switch Between Sheets</p>
+                            <p className="text-sm font-semibold text-slate-900 mb-2">Allocation Status</p>
                             <p className="text-xs text-slate-600 leading-relaxed mb-3">
-                              Click this button to switch between different grade sheets
+                              Check the grade percentage allocation status here.
                             </p>
                             <button
-                              onClick={() => setShowNavigationTooltip(false)}
-                              className="px-4 py-1.5 bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white text-xs rounded-md hover:from-[#2A3366] hover:to-[#3E4677] transition-all duration-200 font-medium shadow-sm hover:shadow-md"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOnboardingStep(2);
+                                }}
+                                className="px-4 py-1.5 bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white text-xs rounded-md hover:from-[#2A3366] hover:to-[#3E4677] transition-all duration-200 font-medium shadow-sm hover:shadow-md"
                             >
-                              Got it!
+                              Next
                             </button>
                           </div>
                         </div>
                       </div>
                     </div>
+                )}
+                </div>
+
+                {/* Sheet Selector */}
+                {availableSheets.length > 1 && (
+                  <div className="relative" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={() => setShowSheetSelector(!showSheetSelector)}
+                      disabled={loadingSheets}
+                      className="flex items-center space-x-2 bg-indigo-50 text-indigo-700 px-3 py-2 rounded-lg font-medium hover:bg-indigo-100 transition-colors shadow-sm border border-indigo-200 disabled:opacity-50"
+                    >
+                      <FileSpreadsheet className="w-4 h-4 flex-shrink-0" />
+                      <span className="whitespace-nowrap max-w-[120px] truncate">
+                        {loadingSheets ? 'Loading...' : (currentSheet?.sheet_name || 'Select Sheet')}
+                      </span>
+                      <ChevronDown className={`w-4 h-4 transition-transform flex-shrink-0 ${showSheetSelector ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {/* Sheet Selector Tooltip */}
+                    {onboardingStep === 2 && (
+                        <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 z-50">
+                          <div className="bg-white rounded-lg shadow-xl border border-slate-200 p-3 w-64">
+                            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1">
+                              <div className="w-3 h-3 bg-white border-l border-t border-slate-200 transform rotate-45"></div>
+                            </div>
+
+                            <div className="flex items-start space-x-3">
+                              <div className="w-6 h-6 flex items-center justify-center flex-shrink-0">
+                                <FileSpreadsheet className="w-4 h-4 text-[#333D79]" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-slate-900 mb-2">Switch Between Sheets</p>
+                                <p className="text-xs text-slate-600 leading-relaxed mb-3">
+                                  Click this button to switch between different grade sheets
+                                </p>
+                                <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setOnboardingStep(3);
+                                    }}
+                                    className="px-4 py-1.5 bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white text-xs rounded-md hover:from-[#2A3366] hover:to-[#3E4677] transition-all duration-200 font-medium shadow-sm hover:shadow-md"
+                                >
+                                  Next
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                    )}
+
+                    {/* Sheet Dropdown */}
+                    {showSheetSelector && (
+                      <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-xl border border-slate-200 py-2 z-50 max-h-60 overflow-y-auto">
+                        <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                          Available Sheets ({availableSheets.length})
+                        </div>
+                        {availableSheets.map((sheet, index) => (
+                          <button
+                            key={sheet.sheet_id}
+                            onClick={() => switchToSheet(sheet)}
+                            disabled={loadingSheets}
+                            className={`flex items-center space-x-3 px-4 py-2 text-sm w-full text-left transition-colors disabled:opacity-50 ${
+                              currentSheet?.sheet_name === sheet.sheet_name
+                                ? 'bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500'
+                                : 'text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            <span className="w-6 h-6 bg-slate-100 rounded text-xs flex items-center justify-center font-medium">
+                              {index + 1}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium truncate">{sheet.sheet_name}</div>
+                            </div>
+                            {currentSheet?.sheet_name === sheet.sheet_name && (
+                              <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Tools Dropdown */}
+                <div className="relative" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    onClick={() => toggleDropdown('tools')}
+                    className="flex items-center space-x-2 bg-slate-100 text-slate-700 px-3 py-2 rounded-lg font-medium hover:bg-slate-200 transition-colors shadow-sm"
+                  >
+                    <MoreVertical className="w-4 h-4" />
+                    <span>Tools</span>
+                    <ChevronDown className={`w-4 h-4 transition-transform ${dropdowns.tools ? 'rotate-180' : ''}`} />
+                  </button>
+                  
+                  {dropdowns.tools && (
+                    <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl border border-slate-200 py-2 z-50">
+                       {/* Tool Items (Same as before) */}
+                      <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                        Import Options
+                      </div>
+                      <button
+                        onClick={() => {
+                          setShowImportInfoModal(true); 
+                          closeAllDropdowns();
+                        }}
+                        className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                      >
+                        <Upload className="w-4 h-4 text-blue-600" />
+                        <span>Import Students</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setShowImportScoresInfoModal(true); 
+                          closeAllDropdowns();
+                        }}
+                        className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                      >
+                        <BarChart3 className="w-4 h-4 text-purple-600" />
+                        <span>Import Scores</span>
+                      </button>
+                      
+                      <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                        Grading Tools
+                      </div>
+                      
+                      <button
+                        onClick={async () => {
+                          await startBatchMode();
+                          closeAllDropdowns();
+                        }}
+                        className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                      >
+                        <Users className="w-4 h-4 text-purple-600" />
+                        <span>Batch Grading</span>
+                      </button>
+                      
+                      <button
+                        onClick={() => {
+                          handleAutoNumberStudents();
+                          closeAllDropdowns();
+                        }}
+                        className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                      >
+                        <span className="w-4 h-4 text-blue-600 text-center font-bold">#</span>
+                        <span>Auto-Number Students</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setShowFinalGradeOverview(true);
+                          closeAllDropdowns();
+                        }}
+                        className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                      >
+                        <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                        <span>Generate Final Grade</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          manualRefreshAllocation();
+                          closeAllDropdowns();
+                        }}
+                        disabled={isRefreshingAllocation}
+                        className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left disabled:opacity-60"
+                      >
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                        <span>{isRefreshingAllocation ? 'Checking allocation...' : 'Run Allocation Checker'}</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setShowAddCategoryModal(true);
+                          closeAllDropdowns();
+                        }}
+                        className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                      >
+                        <Plus className="w-4 h-4 text-green-600" />
+                        <span>Add Category</span>
+                      </button>
+                      
+                      <button
+                        onClick={() => {
+                          setShowEditCategoryModal(true);
+                          closeAllDropdowns();
+                        }}
+                        className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                      >
+                        <Edit className="w-4 h-4 text-blue-600" />
+                        <span>Edit Category</span>
+                      </button>
+                      
+                      <button
+                        onClick={() => {
+                          setShowDeleteCategoryModal(true);
+                          closeAllDropdowns();
+                        }}
+                        className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-red-50 w-full text-left"
+                      >
+                        <Trash2 className="w-4 h-4 text-red-600" />
+                        <span>Delete Category</span>
+                      </button>
+                    </div>
                   )}
                   
-                  {showSheetSelector && (
-                    <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-xl border border-slate-200 py-2 z-50 max-h-60 overflow-y-auto">
-                      <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
-                        Available Sheets ({availableSheets.length})
-                      </div>
+                  {/* Tools Tooltip */}
+                  {onboardingStep === 3 && (
+                        <div className="absolute top-full right-0 mt-2 z-50">
+                          <div className="bg-white rounded-lg shadow-xl border border-slate-200 p-3 w-64">
+                            <div className="absolute bottom-full right-4 mb-1">
+                              <div className="w-3 h-3 bg-white border-l border-t border-slate-200 transform rotate-45"></div>
+                            </div>
+                            <div className="flex items-start space-x-3">
+                              <div className="w-6 h-6 flex items-center justify-center flex-shrink-0">
+                                <MoreVertical className="w-4 h-4 text-[#333D79]" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-slate-900 mb-2">Tools</p>
+                                <p className="text-xs text-slate-600 leading-relaxed mb-3">
+                                  Access import, export, and grading tools here.
+                                </p>
+                                <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setOnboardingStep(4);
+                                    }}
+                                    className="px-4 py-1.5 bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white text-xs rounded-md hover:from-[#2A3366] hover:to-[#3E4677] transition-all duration-200 font-medium shadow-sm hover:shadow-md"
+                                >
+                                  Next
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                  )}
+                </div>
+
+                {/* Open in Sheets Button */}
+                <div className="relative">
+                    <a
+                      href={classRecord.google_sheet_url || `https://docs.google.com/spreadsheets/d/${classRecord.google_sheet_id}/edit`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center space-x-2 bg-green-50 text-green-700 px-3 py-2 rounded-lg font-medium hover:bg-green-100 transition-colors shadow-sm border border-green-200 whitespace-nowrap"
+                    >
+                      <FileSpreadsheet className="w-4 h-4" />
+                      <span>Open in Sheets</span>
+                    </a>
+
+                    {/* Open in Sheets Tooltip */}
+                    {onboardingStep === 4 && (
+                        <div className="absolute top-full right-0 mt-2 z-50">
+                          <div className="bg-white rounded-lg shadow-xl border border-slate-200 p-3 w-64">
+                            <div className="absolute bottom-full right-12 mb-1">
+                              <div className="w-3 h-3 bg-white border-l border-t border-slate-200 transform rotate-45"></div>
+                            </div>
+                            <div className="flex items-start space-x-3">
+                              <div className="w-6 h-6 flex items-center justify-center flex-shrink-0">
+                                <FileSpreadsheet className="w-4 h-4 text-[#333D79]" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-slate-900 mb-2">Open in Sheets</p>
+                                <p className="text-xs text-slate-600 leading-relaxed mb-3">
+                                  Open the full spreadsheet in Google Sheets.
+                                </p>
+                                <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOnboardingComplete();
+                                    }}
+                                    className="px-4 py-1.5 bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white text-xs rounded-md hover:from-[#2A3366] hover:to-[#3E4677] transition-all duration-200 font-medium shadow-sm hover:shadow-md"
+                                >
+                                  Got it!
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                    )}
+                </div>
+              </div>
+
+              {/* Mobile Menu Button (Visible on Mobile/Tablet) */}
+              <div className="flex lg:hidden">
+                <button
+                  onClick={() => setIsDrawerOpen(true)}
+                  className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <Menu className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Mobile Drawer Overlay */}
+        {isDrawerOpen && (
+          <div className="fixed inset-0 z-[60] lg:hidden">
+            <div 
+              className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
+              onClick={() => setIsDrawerOpen(false)}
+            />
+            <div className="absolute inset-y-0 right-0 w-80 bg-white shadow-2xl transform transition-transform duration-300 ease-in-out flex flex-col">
+              {/* Drawer Header */}
+              <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-slate-50">
+                <h2 className="text-lg font-semibold text-slate-900">Class Tools</h2>
+                <button 
+                  onClick={() => setIsDrawerOpen(false)}
+                  className="p-2 hover:bg-slate-200 rounded-full transition-colors"
+                >
+                  <X className="w-5 h-5 text-slate-600" />
+                </button>
+              </div>
+
+              {/* Drawer Content */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-6">
+                
+                {/* Status Section */}
+                <div className="space-y-3">
+                  <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</div>
+                  
+                  {/* Save Status */}
+                  <div className="flex items-center justify-between text-sm bg-slate-50 p-3 rounded-lg border border-slate-100">
+                    <span className="text-slate-600">Sync Status</span>
+                    {lastSaved ? (
+                      <span className="text-emerald-600 flex items-center gap-1 font-medium">
+                        <CheckCircle2 className="w-3 h-3" />
+                        Saved
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {/* Allocation Badge (Mobile) */}
+                   <div className={`flex items-center justify-between p-3 rounded-lg border ${
+                     classStandingRemaining > 0 
+                       ? 'bg-amber-50 border-amber-200' 
+                       : 'bg-sky-50 border-sky-200'
+                   }`}>
+                     {classStandingRemaining > 0 ? (
+                       <>
+                         <div className="flex items-center gap-2">
+                           <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
+                           <span className="text-sm font-medium text-amber-800">{classStandingRemaining}% Unallocated</span>
+                         </div>
+                         <button
+                           onClick={manualRefreshAllocation}
+                           className="p-1.5 bg-white rounded-md shadow-sm text-amber-600 hover:text-amber-800"
+                         >
+                           <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingAllocation ? 'animate-spin' : ''}`} />
+                         </button>
+                       </>
+                     ) : (
+                       <div className="flex items-center gap-2 w-full text-sky-900">
+                         <CheckCircle2 className="w-4 h-4 text-sky-600" />
+                         <span className="text-sm font-medium">Percentage Column: 100%</span>
+                       </div>
+                     )}
+                   </div>
+                </div>
+
+                {/* Sheets Section */}
+                {availableSheets.length > 1 && (
+                  <div className="space-y-3">
+                    <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Sheets</div>
+                    <div className="grid grid-cols-1 gap-2">
                       {availableSheets.map((sheet, index) => (
                         <button
                           key={sheet.sheet_id}
-                          onClick={() => switchToSheet(sheet)}
-                          disabled={loadingSheets}
-                          className={`flex items-center space-x-3 px-4 py-2 text-sm w-full text-left transition-colors disabled:opacity-50 ${
+                          onClick={() => {
+                            switchToSheet(sheet);
+                            setIsDrawerOpen(false);
+                          }}
+                          className={`flex items-center gap-3 p-3 rounded-lg text-sm font-medium transition-all ${
                             currentSheet?.sheet_name === sheet.sheet_name
-                              ? 'bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500'
-                              : 'text-slate-700 hover:bg-slate-50'
+                              ? 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-500'
+                              : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
                           }`}
                         >
-                          <span className="w-6 h-6 bg-slate-100 rounded text-xs flex items-center justify-center font-medium">
+                          <span className="w-6 h-6 flex items-center justify-center bg-white rounded border border-slate-200 text-xs">
                             {index + 1}
                           </span>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium truncate">{sheet.sheet_name}</div>
-                            <div className="text-xs text-slate-500">
-                              Sheet {index + 1}
-                              {currentSheet?.sheet_name === sheet.sheet_name && (
-                                <span className="ml-1 text-indigo-600">• Active</span>
-                              )}
-                            </div>
-                          </div>
-                          {currentSheet?.sheet_name === sheet.sheet_name && (
-                            <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
-                          )}
+                          <span className="truncate">{sheet.sheet_name}</span>
                         </button>
                       ))}
                     </div>
-                  )}
-                </div>
-              )}
+                  </div>
+                )}
 
-
-              {/* Tools Dropdown */}
-              <div className="relative" onClick={(e) => e.stopPropagation()}>
-                <button
-                  onClick={() => toggleDropdown('tools')}
-                  className="flex items-center space-x-2 bg-slate-100 text-slate-700 px-3 py-2 rounded-lg font-medium hover:bg-slate-200 transition-colors shadow-sm"
-                >
-                  <MoreVertical className="w-4 h-4" />
-                  <span>Tools</span>
-                  <ChevronDown className={`w-4 h-4 transition-transform ${dropdowns.tools ? 'rotate-180' : ''}`} />
-                </button>
-                
-                {dropdowns.tools && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-slate-200 py-2 z-50">
-                    {/* Export options */}
-
-                    <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
-                      Import Options
-                    </div>
+                {/* Actions Section */}
+                <div className="space-y-3">
+                  <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</div>
+                  
+                  <div className="grid grid-cols-1 gap-2">
                     <button
-                      onClick={() => {
+                       onClick={() => {
                         setShowImportInfoModal(true); 
-                        closeAllDropdowns();
+                        setIsDrawerOpen(false);
                       }}
-                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                      className="flex items-center space-x-3 px-4 py-3 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50"
                     >
                       <Upload className="w-4 h-4 text-blue-600" />
                       <span>Import Students</span>
                     </button>
 
                     <button
-                      onClick={() => {
-                        setShowImportScoresInfoModal(true); 
-                        closeAllDropdowns();
-                      }}
-                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
-                    >
-                      <BarChart3 className="w-4 h-4 text-purple-600" />
-                      <span>Import Scores</span>
-                    </button>
-                    
-                    {/* Batch Mode & Auto-number options */}
-                    <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
-                      Grading Tools
-                    </div>
-                    
-                    {/* 🔥 NEW: Batch Mode Button */}
-                    <button
                       onClick={async () => {
                         await startBatchMode();
-                        closeAllDropdowns();
+                        setIsDrawerOpen(false);
                       }}
-                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                      className="flex items-center space-x-3 px-4 py-3 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50"
                     >
                       <Users className="w-4 h-4 text-purple-600" />
                       <span>Batch Grading</span>
-                    </button>
-                    
-                    <button
-                      onClick={() => {
-                        handleAutoNumberStudents();
-                        closeAllDropdowns();
-                      }}
-                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
-                    >
-                      <span className="w-4 h-4 text-blue-600 text-center font-bold">#</span>
-                      <span>Auto-Number Students</span>
                     </button>
 
                     <button
                       onClick={() => {
                         setShowFinalGradeOverview(true);
-                        closeAllDropdowns();
+                        setIsDrawerOpen(false);
                       }}
-                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                      className="flex items-center space-x-3 px-4 py-3 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50"
                     >
-                      <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                      </svg>
+                      <BarChart3 className="w-4 h-4 text-blue-600" />
                       <span>Generate Final Grade</span>
                     </button>
-
-                    {/* 🔥 FIXED: Make Categories a simple menu item, not a nested dropdown */}
+                    
                     <button
                       onClick={() => {
                         setShowAddCategoryModal(true);
-                        closeAllDropdowns();
+                        setIsDrawerOpen(false);
                       }}
-                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                      className="flex items-center space-x-3 px-4 py-3 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50"
                     >
                       <Plus className="w-4 h-4 text-green-600" />
                       <span>Add Category</span>
                     </button>
-                    
-                    <button
-                      onClick={() => {
-                        setShowEditCategoryModal(true);
-                        closeAllDropdowns();
-                      }}
-                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
-                    >
-                      <Edit className="w-4 h-4 text-blue-600" />
-                      <span>Edit Category</span>
-                    </button>
-                    
-                    <button
-                      onClick={() => {
-                        setShowDeleteCategoryModal(true);
-                        closeAllDropdowns();
-                      }}
-                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-red-50 w-full text-left"
-                    >
-                      <Trash2 className="w-4 h-4 text-red-600" />
-                      <span>Delete Category</span>
-                    </button>
-
-                    {/* Troubleshooting section */}
-                    <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
-                      Troubleshooting
-                    </div>
-                    
-                    <button
-                      onClick={() => {
-                        fixSheetPermissions();
-                        closeAllDropdowns();
-                      }}
-                      className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
-                    >
-                      <span className="w-4 h-4 text-orange-600 text-center font-bold">🔧</span>
-                      <span>Fix "View Only" Issue</span>
-                    </button>
                   </div>
-                )}
-              </div>
+                </div>
 
-              {/* Open in Google Sheets Button */}
-                <a
-                  href={classRecord.google_sheet_url || `https://docs.google.com/spreadsheets/d/${classRecord.google_sheet_id}/edit`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center space-x-2 bg-green-50 text-green-700 px-3 py-2 rounded-lg font-medium hover:bg-green-100 transition-colors shadow-sm border border-green-200"
-                >
-                  <FileSpreadsheet className="w-4 h-4" />
-                  <span>Open in Sheets</span>
-                </a>
+                {/* Footer Links */}
+                <div className="pt-4 mt-4 border-t border-slate-200">
+                  <a
+                    href={classRecord.google_sheet_url || `https://docs.google.com/spreadsheets/d/${classRecord.google_sheet_id}/edit`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center space-x-2 w-full bg-green-600 text-white px-4 py-3 rounded-lg font-medium hover:bg-green-700 transition-colors shadow-sm"
+                  >
+                    <FileSpreadsheet className="w-4 h-4" />
+                    <span>Open in Google Sheets</span>
+                  </a>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Embedded Google Sheet */}
         <div className="flex-1 p-4">
