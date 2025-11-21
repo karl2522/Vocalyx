@@ -510,5 +510,53 @@
     "student_name": null,
     "confidence": 0.5215120315551758,
     "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-11-21T18:05:44.411257+00:00",
+    "original": "Omen 50, 50, 50.",
+    "corrected": "omen 50, 50, 50.",
+    "student_name": null,
+    "confidence": 0.7036812901496887,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-11-21T18:59:22.682810+00:00",
+    "original": "Indiana 50 gallon, orat. 50, Guardians. 50 50.",
+    "corrected": "indiana 50 gallon, orat 50, guardians. 50 50.",
+    "student_name": null,
+    "confidence": 0.47345128655433655,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-11-21T18:59:30.491996+00:00",
+    "original": "Indiana 50 gallon, orat. 50, Guardians. 50 50.",
+    "corrected": "indiana 50 gallon, orat 50, guardians. 50 50.",
+    "student_name": null,
+    "confidence": 0.47345128655433655,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-11-21T18:59:38.688971+00:00",
+    "original": "Indiana 50 gallon, orat. 50, Guardians. 50 50.",
+    "corrected": "indiana 50 gallon, orat 50, guardians. 50 50.",
+    "student_name": null,
+    "confidence": 0.47345128655433655,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-11-21T19:14:25.528454+00:00",
+    "original": "Reason that the anime quiz 1 Guardians. 50.",
+    "corrected": "reason that the anime quiz 1 gadiane 50.",
+    "student_name": null,
+    "confidence": 0.33463865518569946,
+    "correction_type": "automatic"
+  },
+  {
+    "timestamp": "2025-11-21T19:14:44.574997+00:00",
+    "original": "Reason 1 Guardians 50.",
+    "corrected": "reason 1 gadiane 50.",
+    "student_name": null,
+    "confidence": 0.36999383568763733,
+    "correction_type": "automatic"
   }
 ]
