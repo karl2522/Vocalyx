@@ -817,15 +817,7 @@ const useVoiceRecognition = () => {
           }
         }
 
-        if (hasNewFinalResult && window.batchModeActive) {
-          setTimeout(() => {
-            try {
-              speechRecognition.stop();
-            } catch (error) {
-              // Silent error handling
-            }
-          }, 50);
-        }
+        // Removed forced stop-after-final in batch mode to avoid unexpected pauses
       };
 
       speechRecognition.onerror = (event) => {
@@ -837,6 +829,15 @@ const useVoiceRecognition = () => {
         } else if (event.error === 'no-speech') {
           console.log('🔇 No speech detected');
           retryAttempts.current++;
+          // Keep-alive only for batch mode when user intends listening (no general auto-restart)
+          try {
+            if (window.batchModeActive && window.batchDesiredListening) {
+              speechRecognition.start();
+              setIsListening(true);
+            }
+          } catch (e) {
+            console.error('🔁 Keep-alive restart after no-speech failed:', e);
+          }
         } else if (event.error === 'audio-capture') {
           alert('🎙️ No microphone found. Please check your microphone connection.');
         } else if (event.error === 'network') {
@@ -849,16 +850,14 @@ const useVoiceRecognition = () => {
         setIsListening(false);
         stopAudioRecording();
         retryAttempts.current = 0;
-        
-        if (window.batchModeActive && !window.batchModeFinishing) {
-          setTimeout(() => {
-            try {
-              speechRecognition.start();
-              setIsListening(true);
-            } catch (error) {
-              console.error('❌ AI AUTO-RESTART: Failed to restart:', error);
-            }
-          }, 200);
+        // Keep-alive only if user intends listening in batch mode
+        try {
+          if (window.batchModeActive && window.batchDesiredListening) {
+            speechRecognition.start();
+            setIsListening(true);
+          }
+        } catch (error) {
+          console.error('🔁 Keep-alive restart on end failed:', error);
         }
       };
 
