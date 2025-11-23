@@ -2350,10 +2350,11 @@ def final_grade_preview_logic(sheet_id, class_record_id, sa_sheets_service, user
             # Find identity columns
             lastname_idx = header_index.get(norm2('LASTNAME'))
             firstname_idx = header_index.get(norm2('FIRST NAME'))
-            middlename_idx = header_index.get(norm2('MIDDLE NAME'))
+            middlename_idx = header_index.get(norm2('MIDDLE NAME'))  # Optional - can be None
             studentid_idx = header_index.get(norm2('STUDENT ID'))
 
-            if None in [lastname_idx, firstname_idx, middlename_idx, studentid_idx]:
+            # Only require lastname, firstname, and studentid - middle name is optional
+            if None in [lastname_idx, firstname_idx, studentid_idx]:
                 return {'error': 'Identity headers missing', 'students': [], 'missing_by_student': {}}
 
             # Find grade columns
@@ -2431,23 +2432,35 @@ def final_grade_preview_logic(sheet_id, class_record_id, sa_sheets_service, user
                 first_name = (
                     str(row[firstname_idx]).strip() if firstname_idx < len(row) and row[firstname_idx] is not None else ''
                 )
-                middle_name = (
-                    str(row[middlename_idx]).strip() if middlename_idx < len(row) and row[middlename_idx] is not None else ''
-                )
+                # Middle name is optional - handle case where column doesn't exist or is empty
+                middle_name = ''
+                try:
+                    if middlename_idx is not None and middlename_idx < len(row) and row[middlename_idx] is not None:
+                        middle_name = str(row[middlename_idx]).strip()
+                except (IndexError, TypeError, AttributeError):
+                    # Middle name column doesn't exist or is inaccessible - use empty string
+                    middle_name = ''
                 student_id = (
                     str(row[studentid_idx]).strip() if studentid_idx < len(row) and row[studentid_idx] is not None else ''
                 )
                 
-                if not (last_name and first_name and middle_name and student_id):
+                # Only require last_name, first_name, and student_id - middle_name is optional
+                if not (last_name and first_name and student_id):
                     continue
 
                 student_key = f"{student_id}_{last_name}_{first_name}"
+                # Construct fullName with optional middle name
+                if middle_name:
+                    full_name = f"{last_name}, {first_name} {middle_name}".strip()
+                else:
+                    full_name = f"{last_name}, {first_name}".strip()
+                
                 student_data = {
                     'studentId': student_id,
                     'lastName': last_name,
                     'firstName': first_name,
                     'middleName': middle_name,
-                    'fullName': f"{last_name}, {first_name} {middle_name}".strip()
+                    'fullName': full_name
                 }
 
                 # Extract requested fields from this sheet
@@ -2551,25 +2564,57 @@ def final_grade_preview_logic(sheet_id, class_record_id, sa_sheets_service, user
                 'error': f"Midterm: {midterm_result.get('error', 'OK')}, Final: {final_result.get('error', 'OK')}"
             }
 
-        # Combine results
-        all_students = {}
-        all_missing = {}
-
+        # Combine results - only include students that exist in BOTH sheets
+        # First, track which students exist in each sheet
+        midterm_student_keys = set()
+        final_student_keys = set()
+        
         for student in midterm_result['students']:
             key = f"{student['studentId']}_{student['lastName']}_{student['firstName']}"
-            all_students[key] = student
-            all_missing[key] = midterm_result['missing_by_student'].get(key, [])
-
+            midterm_student_keys.add(key)
+        
         for student in final_result['students']:
             key = f"{student['studentId']}_{student['lastName']}_{student['firstName']}"
-            if key not in all_students:
-                all_students[key] = student
-            else:
-                # Merge final sheet extracted fields into existing student record
-                for field in ['CS2', 'PFE', 'FE', 'finalTermGrade']:
-                    if field in student:
-                        all_students[key][field] = student.get(field, '')
-            all_missing[key] = all_missing.get(key, []) + final_result['missing_by_student'].get(key, [])
+            final_student_keys.add(key)
+        
+        # Only include students that exist in BOTH sheets
+        students_in_both = midterm_student_keys.intersection(final_student_keys)
+        
+        print(f"📊 Students in Midterm sheet: {len(midterm_student_keys)}")
+        print(f"📊 Students in Final sheet: {len(final_student_keys)}")
+        print(f"✅ Students in BOTH sheets (will be included): {len(students_in_both)}")
+        
+        # Build student lookup dictionaries for efficient merging
+        midterm_students_dict = {}
+        for student in midterm_result['students']:
+            key = f"{student['studentId']}_{student['lastName']}_{student['firstName']}"
+            midterm_students_dict[key] = student
+        
+        final_students_dict = {}
+        for student in final_result['students']:
+            key = f"{student['studentId']}_{student['lastName']}_{student['firstName']}"
+            final_students_dict[key] = student
+        
+        # Merge data for students that exist in both sheets
+        all_students = {}
+        all_missing = {}
+        
+        for key in students_in_both:
+            # Start with midterm student data
+            student = midterm_students_dict[key].copy()
+            
+            # Merge final sheet extracted fields into student record
+            if key in final_students_dict:
+                final_student = final_students_dict[key]
+                for field in ['CS2', 'PFE', 'FE', 'finalTermGrade', 'FGOverride']:
+                    if field in final_student:
+                        student[field] = final_student.get(field, '')
+            
+            all_students[key] = student
+            # Combine missing data from both sheets
+            midterm_missing = midterm_result['missing_by_student'].get(key, [])
+            final_missing = final_result['missing_by_student'].get(key, [])
+            all_missing[key] = midterm_missing + final_missing
 
         # Compute FG from midterm and final term grades when numeric
         def to_number(s: str):
@@ -2763,10 +2808,11 @@ def final_grade_preview(request, sheet_id):
             # Find identity columns
             lastname_idx = header_index.get(norm2('LASTNAME'))
             firstname_idx = header_index.get(norm2('FIRST NAME'))
-            middlename_idx = header_index.get(norm2('MIDDLE NAME'))
+            middlename_idx = header_index.get(norm2('MIDDLE NAME'))  # Optional - can be None
             studentid_idx = header_index.get(norm2('STUDENT ID'))
 
-            if None in [lastname_idx, firstname_idx, middlename_idx, studentid_idx]:
+            # Only require lastname, firstname, and studentid - middle name is optional
+            if None in [lastname_idx, firstname_idx, studentid_idx]:
                 return {'error': 'Identity headers missing', 'students': [], 'missing_by_student': {}}
 
             # Find grade columns
@@ -2844,23 +2890,35 @@ def final_grade_preview(request, sheet_id):
                 first_name = (
                     str(row[firstname_idx]).strip() if firstname_idx < len(row) and row[firstname_idx] is not None else ''
                 )
-                middle_name = (
-                    str(row[middlename_idx]).strip() if middlename_idx < len(row) and row[middlename_idx] is not None else ''
-                )
+                # Middle name is optional - handle case where column doesn't exist or is empty
+                middle_name = ''
+                try:
+                    if middlename_idx is not None and middlename_idx < len(row) and row[middlename_idx] is not None:
+                        middle_name = str(row[middlename_idx]).strip()
+                except (IndexError, TypeError, AttributeError):
+                    # Middle name column doesn't exist or is inaccessible - use empty string
+                    middle_name = ''
                 student_id = (
                     str(row[studentid_idx]).strip() if studentid_idx < len(row) and row[studentid_idx] is not None else ''
                 )
                 
-                if not (last_name and first_name and middle_name and student_id):
+                # Only require last_name, first_name, and student_id - middle_name is optional
+                if not (last_name and first_name and student_id):
                     continue
 
                 student_key = f"{student_id}_{last_name}_{first_name}"
+                # Construct fullName with optional middle name
+                if middle_name:
+                    full_name = f"{last_name}, {first_name} {middle_name}".strip()
+                else:
+                    full_name = f"{last_name}, {first_name}".strip()
+                
                 student_data = {
                     'studentId': student_id,
                     'lastName': last_name,
                     'firstName': first_name,
                     'middleName': middle_name,
-                    'fullName': f"{last_name}, {first_name} {middle_name}".strip()
+                    'fullName': full_name
                 }
 
                 # Extract requested fields from this sheet
@@ -2960,25 +3018,57 @@ def final_grade_preview(request, sheet_id):
                 'error': f"Midterm: {midterm_result.get('error', 'OK')}, Final: {final_result.get('error', 'OK')}"
             }, status=400)
 
-        # Combine results
-        all_students = {}
-        all_missing = {}
-
+        # Combine results - only include students that exist in BOTH sheets
+        # First, track which students exist in each sheet
+        midterm_student_keys = set()
+        final_student_keys = set()
+        
         for student in midterm_result['students']:
             key = f"{student['studentId']}_{student['lastName']}_{student['firstName']}"
-            all_students[key] = student
-            all_missing[key] = midterm_result['missing_by_student'].get(key, [])
-
+            midterm_student_keys.add(key)
+        
         for student in final_result['students']:
             key = f"{student['studentId']}_{student['lastName']}_{student['firstName']}"
-            if key not in all_students:
-                all_students[key] = student
-            else:
-                # Merge final sheet extracted fields into existing student record
-                for field in ['CS2', 'PFE', 'FE', 'finalTermGrade']:
-                    if field in student:
-                        all_students[key][field] = student.get(field, '')
-            all_missing[key] = all_missing.get(key, []) + final_result['missing_by_student'].get(key, [])
+            final_student_keys.add(key)
+        
+        # Only include students that exist in BOTH sheets
+        students_in_both = midterm_student_keys.intersection(final_student_keys)
+        
+        print(f"📊 Students in Midterm sheet: {len(midterm_student_keys)}")
+        print(f"📊 Students in Final sheet: {len(final_student_keys)}")
+        print(f"✅ Students in BOTH sheets (will be included): {len(students_in_both)}")
+        
+        # Build student lookup dictionaries for efficient merging
+        midterm_students_dict = {}
+        for student in midterm_result['students']:
+            key = f"{student['studentId']}_{student['lastName']}_{student['firstName']}"
+            midterm_students_dict[key] = student
+        
+        final_students_dict = {}
+        for student in final_result['students']:
+            key = f"{student['studentId']}_{student['lastName']}_{student['firstName']}"
+            final_students_dict[key] = student
+        
+        # Merge data for students that exist in both sheets
+        all_students = {}
+        all_missing = {}
+        
+        for key in students_in_both:
+            # Start with midterm student data
+            student = midterm_students_dict[key].copy()
+            
+            # Merge final sheet extracted fields into student record
+            if key in final_students_dict:
+                final_student = final_students_dict[key]
+                for field in ['CS2', 'PFE', 'FE', 'finalTermGrade', 'FGOverride']:
+                    if field in final_student:
+                        student[field] = final_student.get(field, '')
+            
+            all_students[key] = student
+            # Combine missing data from both sheets
+            midterm_missing = midterm_result['missing_by_student'].get(key, [])
+            final_missing = final_result['missing_by_student'].get(key, [])
+            all_missing[key] = midterm_missing + final_missing
 
         # Compute FG from midterm and final term grades when numeric
         def to_number(s: str):
@@ -3312,7 +3402,8 @@ def final_grade_export(request, sheet_id):
                 cell.font = verdana_font
             if 'middlename' in col_mapping:
                 cell = worksheet.cell(row=row, column=col_mapping['middlename'])
-                cell.value = student['middleName']
+                # Handle empty/missing middle name - use empty string instead of None
+                cell.value = student.get('middleName', '') or ''
                 cell.border = full_border
                 cell.font = verdana_font
             if 'studentid' in col_mapping:

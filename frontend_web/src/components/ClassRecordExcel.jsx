@@ -2436,9 +2436,25 @@ const ClassRecordExcel = () => {
     }
   };
 
-  // Handle Drive file selection and processing
-  const handleDriveFileSelect = async (driveFile) => {
+  // Handle Drive file selection and processing (also handles computer files)
+  const handleDriveFileSelect = async (fileOrDriveFile) => {
     try {
+      // Check if file is from computer
+      if (fileOrDriveFile.fromComputer && fileOrDriveFile.file) {
+        // File is from computer, process directly
+        const file = fileOrDriveFile.file;
+        
+        // Process based on import type
+        if (importType === 'students') {
+          await processImportFile(file);
+        } else if (importType === 'scores') {
+          await processScoresImportFile(file);
+        }
+        return;
+      }
+
+      // File is from Drive, download it first
+      const driveFile = fileOrDriveFile;
       setImportProgress({ status: 'downloading', message: 'Downloading file from Drive...', entity: importType });
 
       // Download file from Drive
@@ -2463,8 +2479,8 @@ const ClassRecordExcel = () => {
       }
 
     } catch (error) {
-      console.error('Drive file processing error:', error);
-      toast.error(`Failed to process Drive file: ${error.message}`);
+      console.error('File processing error:', error);
+      toast.error(`Failed to process file: ${error.message}`);
       setImportProgress(null);
     }
   };
