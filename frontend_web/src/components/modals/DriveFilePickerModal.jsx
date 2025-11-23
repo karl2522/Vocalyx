@@ -1,6 +1,6 @@
-import { AlertCircle, Download, FileSpreadsheet, RefreshCw, Search, X } from 'lucide-react';
+import { AlertCircle, Download, FileSpreadsheet, RefreshCw, Search, Upload, X } from 'lucide-react';
 import PropTypes from 'prop-types';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import googleDriveService from '../../services/googleDriveService';
 
 const DriveFilePickerModal = ({ 
@@ -13,6 +13,7 @@ const DriveFilePickerModal = ({
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [error, setError] = useState(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -82,6 +83,37 @@ const DriveFilePickerModal = ({
   const handleFileSelect = (file) => {
     onFileSelect(file);
     onClose();
+  };
+
+  const handleComputerFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const ext = file.name.toLowerCase();
+    if (!ext.endsWith('.csv') && !ext.endsWith('.xlsx')) {
+      setError('Only .csv or .xlsx files are supported');
+      return;
+    }
+
+    // Create a wrapper object similar to Drive file structure but mark it as from computer
+    // The parent component should check if the file has an id property (Drive) or not (computer)
+    const fileWrapper = {
+      file: file, // Actual File object
+      name: file.name,
+      fromComputer: true // Flag to indicate it's from computer
+    };
+
+    onFileSelect(fileWrapper);
+    onClose();
+
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleComputerButtonClick = () => {
+    fileInputRef.current?.click();
   };
 
   const handleSearch = (e) => {
@@ -226,7 +258,21 @@ const DriveFilePickerModal = ({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
+        <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+          <button
+            onClick={handleComputerButtonClick}
+            className="group inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-[#D7DBEE] bg-white hover:bg-[#F7F8FF] shadow-sm hover:shadow transition-all focus:outline-none focus:ring-2 focus:ring-[#333D79]/30 focus:ring-offset-2 active:scale-[0.98]"
+          >
+            <Upload className="w-4 h-4 text-[#333D79] group-hover:text-[#2A2F66] transition-colors" />
+            <span className="text-sm text-[#1F2A44]">From Computer</span>
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,.xlsx"
+            className="hidden"
+            onChange={handleComputerFileSelect}
+          />
           <button
             onClick={onClose}
             className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"

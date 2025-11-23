@@ -22,6 +22,7 @@ import { enhancedClassRecordService as classRecordService } from '../services/ap
 import { showToast } from '../utils/toast';
 import { TopNavbar } from './layouts/TopNavbar.jsx';
 import CreateClassRecordModal from './modals/CreateClassRecordModal';
+import OnboardingModal from './modals/OnboardingModal';
 
 const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, recordName, isDeleting }) => {
   const [confirmationText, setConfirmationText] = useState('');
@@ -354,7 +355,25 @@ const ClassRecords = () => {
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState('grid');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   
+  // Check if onboarding has been completed
+  useEffect(() => {
+    const onboardingCompleted = localStorage.getItem('onboarding_completed');
+    if (!onboardingCompleted || onboardingCompleted !== 'true') {
+      // Show onboarding modal after a short delay to let the page load
+      const timer = setTimeout(() => {
+        setShowOnboarding(true);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  // Handle onboarding completion
+  const handleOnboardingComplete = () => {
+    localStorage.setItem('onboarding_completed', 'true');
+    setShowOnboarding(false);
+  };
   
   // Global function to update remaining percentage for a specific class record
   useEffect(() => {
@@ -950,6 +969,13 @@ const ClassRecords = () => {
           onConfirm={confirmDelete}
           recordName={deleteModal.record?.name || ''}
           isDeleting={isDeleting}
+        />
+
+        {/* Onboarding Modal */}
+        <OnboardingModal
+          isOpen={showOnboarding}
+          onClose={() => setShowOnboarding(false)}
+          onComplete={handleOnboardingComplete}
         />
         </div>
       </main>

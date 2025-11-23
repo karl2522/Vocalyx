@@ -1,13 +1,13 @@
 import DriveFilePickerModal from './DriveFilePickerModal';
 
-const DriveFilePickerHost = ({ isOpen, onClose, onFile }) => {
+const DriveFilePickerHost = ({ isOpen, onClose, onFile, importType = 'scores' }) => {
   if (!isOpen) return null;
   return (
     <DriveFilePickerModal
       isOpen={isOpen}
       onClose={onClose}
       onFileSelect={onFile}
-      importType="scores"
+      importType={importType}
     />
   );
 };
