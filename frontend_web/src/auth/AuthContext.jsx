@@ -13,7 +13,9 @@ import { showToast } from '../utils/toast';
 const REDIRECT_URI = import.meta.env.PROD 
   ? 'https://vocalyx.online/' 
   : 'http://localhost:5173';
-const BACKEND_URL = 'http://127.0.0.1:8000';
+const BACKEND_URL = import.meta.env.PROD 
+  ? 'https://vocalyx-backend-64846917574.asia-southeast1.run.app' 
+  : 'https://vocalyx-backend-64846917574.asia-southeast1.run.app';
 
 console.log('🔍 Environment Detection:', {
   'import.meta.env.PROD': import.meta.env.PROD,

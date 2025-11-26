@@ -1,6 +1,8 @@
 import { refreshToken as refreshJwt } from './api';
 
-const BACKEND_URL = 'http://127.0.0.1:8000';
+const BACKEND_URL = import.meta.env.PROD 
+  ? 'https://vocalyx-backend-64846917574.asia-southeast1.run.app' 
+  : 'https://vocalyx-backend-64846917574.asia-southeast1.run.app';
 
 class GoogleDriveService {
   constructor() {

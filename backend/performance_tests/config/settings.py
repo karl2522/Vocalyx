@@ -83,6 +83,14 @@ THRESHOLDS = {
 SUCCESS_RATE_TARGET = float(os.getenv('SUCCESS_RATE_TARGET', '0.99'))  # 99%
 SUCCESS_RATE_MINIMUM = float(os.getenv('SUCCESS_RATE_MINIMUM', '0.95'))  # 95%
 
+# Dynamic endpoint suite selection and filters
+# Suites: current, high_priority, custom
+PERF_SUITE = os.getenv('PERF_SUITE', 'current')
+PERF_INCLUDE_TAGS = [t.strip() for t in os.getenv('PERF_INCLUDE_TAGS', '').split(',') if t.strip()]
+PERF_EXCLUDE_TAGS = [t.strip() for t in os.getenv('PERF_EXCLUDE_TAGS', '').split(',') if t.strip()]
+PERF_INCLUDE_ENDPOINTS = [p.strip() for p in os.getenv('PERF_INCLUDE_ENDPOINTS', '').split(',') if p.strip()]
+PERF_EXCLUDE_ENDPOINTS = [p.strip() for p in os.getenv('PERF_EXCLUDE_ENDPOINTS', '').split(',') if p.strip()]
+
 # User behavior weights (percentages should add up to 100)
 # Set 'anonymous' to 0 to disable login POST requests (if you only want authenticated endpoint tests)
 USER_WEIGHTS = {

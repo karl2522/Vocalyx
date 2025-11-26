@@ -3,4 +3,5 @@ requests>=2.31.0
 faker>=19.0.0          # For generating test data
 python-dotenv>=1.0.0   # For environment variables
 pytest>=7.4.0          # Optional: for test validation
+PyYAML>=6.0            # For loading endpoints.yaml configuration
 

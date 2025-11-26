@@ -1,11 +1,13 @@
-const BACKEND_URL = 'http://127.0.0.1:8000';
+const BACKEND_URL = import.meta.env.PROD 
+  ? 'https://vocalyx-backend-64846917574.asia-southeast1.run.app/api'
+  : 'https://vocalyx-backend-64846917574.asia-southeast1.run.app';
 
 import { showToast } from '../utils/toast';
 import googleDriveService from './googleDriveService';
 
 class GoogleSheetsService {
   constructor() {
-    this.baseURL = `${BACKEND_URL}/api`; // 🔥 FIXED: Add the /api prefix
+    this.baseURL = BACKEND_URL; // 🔥 FIXED: Remove the extra /api
   }
 
   /**

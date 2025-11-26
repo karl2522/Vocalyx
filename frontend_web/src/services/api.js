@@ -1,6 +1,8 @@
 import axios from 'axios';
 
-const API_URL = 'http://127.0.0.1:8000/api';
+const API_URL = import.meta.env.PROD 
+  ? 'https://vocalyx-backend-64846917574.asia-southeast1.run.app/api'
+  : 'https://vocalyx-backend-64846917574.asia-southeast1.run.app/api';
 
 console.log('🔍 API Environment Detection:', {
   'import.meta.env.PROD': import.meta.env.PROD,

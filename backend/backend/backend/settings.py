@@ -37,7 +37,24 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-fallback-secret-key-for-de
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*', '10.0.165.206', '192.168.1.10', '.herokuapp.com', "192.168.254.101", '.run.app', '.googleapis.com', 'https://vocalyx-backend-64846917574.asia-southeast1.run.app']
+# SECURITY: Remove '*' wildcard in production - use specific domains only
+ALLOWED_HOSTS = [
+    'localhost', 
+    '127.0.0.1', 
+    '10.0.165.206', 
+    '192.168.1.10', 
+    '.herokuapp.com', 
+    '192.168.254.101', 
+    '.run.app',  # Google Cloud Run
+    '.googleapis.com',
+    'vocalyx-backend-64846917574.asia-southeast1.run.app',
+    'vocalyx.online',
+    'www.vocalyx.online',
+    'vocalyx-frontend.vercel.app'
+]
+# Only allow wildcard in development
+if DEBUG:
+    ALLOWED_HOSTS.append('*')
 
 # Firebase configuration - support both file and environment variable
 FIREBASE_SERVICE_ACCOUNT_PATH = os.path.join(BASE_DIR.parent, 'firebase-service-account.json')
@@ -118,8 +135,9 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'token_management.authentication.CustomJWTAuthentication',
     ),
+    # SECURITY: Default to IsAuthenticated - endpoints must explicitly allow anonymous access
     'DEFAULT_PERMISSION_CLASSES': (
-        'rest_framework.permissions.AllowAny',
+        'rest_framework.permissions.IsAuthenticated',
     ),
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'DEFAULT_PARSER_CLASSES': [
@@ -170,8 +188,8 @@ SIMPLE_JWT = {
 }
 
 
-# CORS settings - DEVELOPMENT MODE
-CORS_ALLOW_ALL_ORIGINS = True  # Allow all origins for development
+# CORS settings - SECURITY: Restrict in production
+CORS_ALLOW_ALL_ORIGINS = DEBUG  # Only allow all origins in development
 CORS_ALLOW_CREDENTIALS = True
 
 # Explicitly allow common development origins
@@ -211,18 +229,11 @@ CORS_ALLOW_HEADERS = [
     'x-requested-with',
     'x-access-token',
     'x-google-access-token',
-    'x-interceptor-debug',
-    'x-timestamp',
-    'x-localstorage-debug',
-    'x-test-header',
-    'x-debug-google-token-status',     # ← ADD THIS
-    'x-debug-google-token-length',     # ← ADD THIS  
-    'x-debug-header-added',            # ← ADD THIS
-    'x-raw-google-token-debug',  # ← ADD THIS
-    'x-user-google-token',    # ← ADD
-    'x-sheets-token',         # ← ADD
-    'x-access-token',  # ← ADD THIS for the new simple header
-    'x-debug-body-added',  # ← ADD THIS ONE!
+    # Production headers only - remove debug headers in production
+    *(['x-interceptor-debug', 'x-timestamp', 'x-localstorage-debug', 'x-test-header',
+       'x-debug-google-token-status', 'x-debug-google-token-length', 'x-debug-header-added',
+       'x-raw-google-token-debug', 'x-user-google-token', 'x-sheets-token', 'x-debug-body-added']
+      if DEBUG else []),
 ]
 
 # Additional CORS settings
@@ -232,9 +243,8 @@ CORS_PREFLIGHT_MAX_AGE = 86400
 # Additional settings to ensure CORS on error responses
 CORS_URLS_REGEX = r'^/api/.*$'
 
-# Ensure CORS headers are sent on error responses too
-CORS_ORIGIN_ALLOW_ALL = True  # Deprecated setting but sometimes needed
-CORS_ALLOW_ALL_ORIGINS = True  # Ensure this is enabled
+# SECURITY: Only allow all origins in development
+CORS_ORIGIN_ALLOW_ALL = DEBUG  # Deprecated setting but sometimes needed
 CORS_REPLACE_HTTPS_REFERER = True
 
 CORS_EXPOSE_HEADERS = [

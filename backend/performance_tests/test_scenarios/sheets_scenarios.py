@@ -72,27 +72,7 @@ class SheetsUser(FastHttpUser):
                 return None
         return None
     
-    @task(5)
-    def get_sheet_data(self):
-        """Test getting sheet data."""
-        # Skip only if no sheet ID (but still make request if no token for tracking)
-        if not self.current_sheet_id:
-            return
-        
-        # Always make request - will fail with 401 if no token, but Locust will track it
-        headers = get_auth_headers(self.token) if self.token else get_auth_headers()
-        
-        with self.client.get(
-            f'/api/sheets/service-account/{self.current_sheet_id}/data/',
-            headers=headers,
-            catch_response=True,
-            name='GET /api/sheets/service-account/{sheet_id}/data/'
-        ) as response:
-            log_response_time(response, 'Get Sheet Data', THRESHOLDS['sheets'])
-            if response.status_code == 401:
-                response.failure("Authentication required")
-            else:
-                validate_response(response, 200)
+    
     
     @task(2)
     def get_all_sheets_data(self):
@@ -190,20 +170,5 @@ class SheetsUser(FastHttpUser):
                 else:
                     response.failure(f"Unexpected status: {response.status_code}")
     
-    @task(2)
-    def get_categories(self):
-        """Test getting sheet categories."""
-        if not self.token or not self.current_sheet_id:
-            return
-        
-        headers = get_auth_headers(self.token)
-        
-        with self.client.get(
-            f'/api/sheets/{self.current_sheet_id}/get-categories/',
-            headers=headers,
-            catch_response=True,
-            name='GET /api/sheets/{sheet_id}/get-categories/'
-        ) as response:
-            log_response_time(response, 'Get Categories', THRESHOLDS['read'])
-            validate_response(response, 200)
+
 
