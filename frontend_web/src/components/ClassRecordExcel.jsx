@@ -11,7 +11,7 @@ import googleDriveService from '../services/googleDriveService';
 import { speakText, stopSpeaking } from '../utils/speechSynthesis';
 import { showToast } from '../utils/toast';
 import useVoiceRecognition from '../utils/useVoiceRecognition';
-import { applyPhoneticCorrections, cleanName, findStudentRowSmart, parseVoiceCommand } from '../utils/voiceCommandParser';
+import { applyPhoneticCorrections, cleanName, findStudentRowSmart, parseVoiceCommand } from '../utils/voicecommandParser';
 import FinalGradeOverview from './FinalGradeOverview';
 import AddCategoryModal from './modals/AddCategoryModal.jsx';
 import BatchGradingModal from './modals/BatchGradingModal';

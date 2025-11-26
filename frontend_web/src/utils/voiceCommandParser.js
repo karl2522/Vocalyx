@@ -745,8 +745,9 @@ const soundsLike = (name1, name2) => {
     if (start1 === start2) return true;
     
     // Method 3: High similarity score
+    // 🔥 FIXED: Increased from 0.8 to 0.85 to prevent false matches like "Capuras" and "Karl"
     const similarity = calculateWordSimilarity(clean1, clean2);
-    if (similarity > 0.8) return true;
+    if (similarity > 0.85) return true;
   }
   
   return false;
@@ -1702,7 +1703,9 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
       }
       
       // 🔥 Algorithm 3: Substring matching
-      else if (candidate.includes(cleanedSearchName) || cleanedSearchName.includes(candidate)) {
+      // 🔥 FIXED: Only match if substring is substantial (at least 4 chars)
+      else if (candidate.length >= 4 && cleanedSearchName.length >= 4 &&
+               (candidate.includes(cleanedSearchName) || cleanedSearchName.includes(candidate))) {
         score = Math.abs(candidate.length - cleanedSearchName.length);
         matchType = 'substring';
         confidence = 0.8;
@@ -1714,14 +1717,18 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
         const maxLength = Math.max(candidate.length, cleanedSearchName.length);
         const similarity = 1 - (distance / maxLength);
         
-        if (similarity > 0.65) { // Adaptive threshold
+        // 🔥 FIXED: Increased threshold from 0.65 to 0.78 to prevent false matches
+        // This prevents "Capuras" from matching "Karl" and other clearly different names
+        if (similarity > 0.78) { // More strict threshold to avoid false positives
           score = distance;
           matchType = 'fuzzy';
           confidence = similarity;
         }
       }
       
-      if (score < 15) { // Collect good matches
+      // 🔥 FIXED: Tightened threshold from 15 to 10 and require minimum confidence
+      // This prevents weak matches from being considered
+      if (score < 10 && confidence > 0.70) { // Only collect strong matches
         // Check if this column already has a score
         const hasExistingScore = targetColumn && row[targetColumn] && 
                                 String(row[targetColumn]).trim() !== '' && 
