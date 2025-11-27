@@ -11,11 +11,11 @@ import { showToast } from '../utils/toast';
 
 // Environment variables
 const REDIRECT_URI = import.meta.env.PROD 
-  ? 'https://vocalyx.online/' 
-  : 'http://localhost:5173';
+  ? (import.meta.env.VITE_FRONTEND_URL_PROD || 'https://vocalyx.online/')
+  : (import.meta.env.VITE_FRONTEND_URL_DEV || 'http://localhost:5173');
 const BACKEND_URL = import.meta.env.PROD 
-  ? 'http://127.0.0.1:8000' 
-  : 'http://127.0.0.1:8000';
+  ? (import.meta.env.VITE_BACKEND_URL_PROD || 'https://vocalyx-backend-64846917574.asia-southeast1.run.app')
+  : (import.meta.env.VITE_BACKEND_URL_DEV || 'http://127.0.0.1:8000');
 
 console.log('🔍 Environment Detection:', {
   'import.meta.env.PROD': import.meta.env.PROD,

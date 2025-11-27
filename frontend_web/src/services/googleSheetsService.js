@@ -1,6 +1,6 @@
 const BACKEND_URL = import.meta.env.PROD 
-  ? 'http://127.0.0.1:8000/api'
-  : 'http://127.0.0.1:8000';
+  ? (import.meta.env.VITE_BACKEND_URL_PROD || 'https://vocalyx-backend-64846917574.asia-southeast1.run.app') + '/api'
+  : (import.meta.env.VITE_BACKEND_URL_DEV || 'http://127.0.0.1:8000');
 
 import { showToast } from '../utils/toast';
 import googleDriveService from './googleDriveService';
