@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import toast from 'react-hot-toast';
 import BatchEntryItem from '../BatchEntryItem';
-import { speakText } from '../../utils/speechSynthesis';
 
 const BatchGradingModal = ({
   showBatchModal,
@@ -188,7 +187,7 @@ const BatchGradingModal = ({
       try {
         stopListening();
       } finally {
-        speakText('Voice paused');
+        // Voice paused - TTS removed
       }
     } else {
       // Resume
@@ -197,7 +196,7 @@ const BatchGradingModal = ({
       try {
         startListening(true); // silent resume
       } finally {
-        speakText('Voice resumed');
+        // Voice resumed - TTS removed
       }
     }
   };
@@ -286,7 +285,19 @@ const BatchGradingModal = ({
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                  {headers.filter(h => !['NO.', 'LASTNAME', 'FIRST NAME', 'STUDENT ID'].includes(h)).map(header => (
+                  {headers.filter(h => {
+                    // Normalize header for case-insensitive comparison
+                    const normalizedHeader = h.trim().toUpperCase();
+                    
+                    // Exclude student info columns (case-insensitive)
+                    const excludedColumns = ['NO.', 'LASTNAME', 'FIRST NAME', 'STUDENT ID', 'MIDDLE NAME', 'TOTAL'];
+                    if (excludedColumns.some(col => normalizedHeader === col.toUpperCase())) return false;
+                    
+                    // Exclude columns with percentage symbol (%)
+                    if (h.includes('%')) return false;
+                    
+                    return true;
+                  }).map(header => (
                     <button
                       key={header}
                       onClick={() => handleColumnSelect(header)}

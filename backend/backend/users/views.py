@@ -70,7 +70,9 @@ class RegisterView(APIView):
                 user.email_verification_token = verification_token
                 user.save()
 
-                verification_url = f"https://vocalyx-backend-64846917574.asia-southeast1.run.app/api/verify-email/{verification_token}/"
+                # Use localhost for dev, production URL for production
+                base_url = "http://127.0.0.1:8000" if settings.DEBUG else "https://vocalyx-backend-64846917574.asia-southeast1.run.app"
+                verification_url = f"{base_url}/api/verify-email/{verification_token}/"
 
                 html_message = render_to_string('email/verification_email.html', {
                     'user': user,
@@ -256,8 +258,9 @@ def resend_verification_email(request):
         user.email_verification_token = verification_token
         user.save()
         
-        # Create verification URL
-        verification_url = f"https://vocalyx-backend-64846917574.asia-southeast1.run.app/api/verify-email/{verification_token}/"
+        # Create verification URL - use localhost for dev, production URL for production
+        base_url = "http://127.0.0.1:8000" if settings.DEBUG else "https://vocalyx-backend-64846917574.asia-southeast1.run.app"
+        verification_url = f"{base_url}/api/verify-email/{verification_token}/"
         
         # Render email template
         html_message = render_to_string('email/verification_email.html', {

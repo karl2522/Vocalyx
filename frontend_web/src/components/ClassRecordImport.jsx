@@ -116,7 +116,7 @@ const ClassRecordImport = () => {
         fileName: file.name
       });
 
-      toast.success(`✅ Excel file loaded and saved! ${rows.length} rows imported`);
+      toast.success(`Excel file loaded and saved! ${rows.length} rows imported`);
       
       if (voiceEnabled) {
         speakText(`Excel file loaded successfully with ${rows.length} rows of data`);
@@ -177,7 +177,7 @@ const ClassRecordImport = () => {
       setSelectedRow(targetRowIndex);
       const student = tableData[targetRowIndex];
       const studentName = Object.values(student).filter(v => v && typeof v === 'string').slice(0, 2).join(' ');
-      toast.success(`✅ ${studentName} - ${data.column}: ${data.value}`);
+      toast.success(`${studentName} - ${data.column}: ${data.value}`);
       if (voiceEnabled) {
         speakText(`Updated ${data.column} to ${data.value} for ${studentName}`);
       }
@@ -198,7 +198,7 @@ const ClassRecordImport = () => {
 
       handleCellChange(data.rowIndex, data.column, data.value);
       setSelectedRow(data.rowIndex);
-      toast.success(`✅ Row ${data.rowIndex + 1} - ${data.column}: ${data.value}`);
+      toast.success(`Row ${data.rowIndex + 1} - ${data.column}: ${data.value}`);
       if (voiceEnabled) {
         speakText(`Updated row ${data.rowIndex + 1} ${data.column} to ${data.value}`);
       }
@@ -217,7 +217,7 @@ const ClassRecordImport = () => {
       handleCellChange(selectedRow, data.column, data.value);
       const student = tableData[selectedRow];
       const studentName = Object.values(student).filter(v => v && typeof v === 'string').slice(0, 2).join(' ') || `Row ${selectedRow + 1}`;
-      toast.success(`✅ ${studentName} - ${data.column}: ${data.value}`);
+      toast.success(`${studentName} - ${data.column}: ${data.value}`);
       if (voiceEnabled) {
         speakText(`Updated ${data.column} to ${data.value} for ${studentName}`);
       }
