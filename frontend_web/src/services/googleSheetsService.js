@@ -7,7 +7,7 @@ import googleDriveService from './googleDriveService';
 
 class GoogleSheetsService {
   constructor() {
-    this.baseURL = `${BACKEND_URL}/api`; // Backend URL without /api, then add /api here
+    this.baseURL = BACKEND_URL;
   }
 
   /**
@@ -37,7 +37,7 @@ class GoogleSheetsService {
    */
   async copyTemplate(templateId, sheetName) {
     try {
-      const response = await fetch(`${this.baseURL}/sheets/copy-template/`, {
+      const response = await fetch(`${this.baseURL}/api/sheets/copy-template/`, {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify({
@@ -62,7 +62,7 @@ class GoogleSheetsService {
    */
   async getSheetInfo(sheetId) {
     try {
-      const response = await fetch(`${this.baseURL}/sheets/info/${sheetId}/`, {
+      const response = await fetch(`${this.baseURL}/api/sheets/info/${sheetId}/`, {
         method: 'GET',
         headers: this.getHeaders()
       });
@@ -83,7 +83,7 @@ class GoogleSheetsService {
    */
   async listUserSheets() {
     try {
-      const response = await fetch(`${this.baseURL}/sheets/list/`, {
+      const response = await fetch(`${this.baseURL}/api/sheets/list/`, {
         method: 'GET',
         headers: this.getHeaders()
       });
@@ -104,7 +104,7 @@ class GoogleSheetsService {
    */
   async updatePermissions(sheetId, makePublic = false, makeEditable = false) {
     try {
-      const response = await fetch(`${this.baseURL}/sheets/permissions/${sheetId}/`, {
+      const response = await fetch(`${this.baseURL}/api/sheets/permissions/${sheetId}/`, {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify({
@@ -168,7 +168,7 @@ class GoogleSheetsService {
       };
 
       console.log('🔍 Final Grade Preview Request:', {
-        url: `${this.baseURL}/sheets/${sheetId}/final-grade-preview/`,
+        url: `${this.baseURL}/api/sheets/${sheetId}/final-grade-preview/`,
         headers: {
           'Authorization': headers['Authorization'] ? 'Bearer [TOKEN]' : 'MISSING',
           'X-Access-Token': headers['X-Access-Token'] ? `[TOKEN-${headers['X-Access-Token'].length}chars]` : 'MISSING',
@@ -177,7 +177,7 @@ class GoogleSheetsService {
         body: requestBody
       });
 
-      const response = await fetch(`${this.baseURL}/sheets/${sheetId}/final-grade-preview/`, {
+      const response = await fetch(`${this.baseURL}/api/sheets/${sheetId}/final-grade-preview/`, {
         method: 'POST',
         headers: headers,
         body: JSON.stringify(requestBody)
@@ -196,7 +196,7 @@ class GoogleSheetsService {
           
           // Retry with fresh token
           const freshHeaders = this.getHeaders();
-          const retryResponse = await fetch(`${this.baseURL}/sheets/${sheetId}/final-grade-preview/`, {
+          const retryResponse = await fetch(`${this.baseURL}/api/sheets/${sheetId}/final-grade-preview/`, {
             method: 'POST',
             headers: freshHeaders,
             body: JSON.stringify(requestBody)
@@ -231,7 +231,7 @@ class GoogleSheetsService {
    */
   async markMissingScores(sheetId, { sheetName, studentId, column, value }) {
     try {
-      const response = await fetch(`${this.baseURL}/sheets/${sheetId}/mark-missing-scores/`, {
+      const response = await fetch(`${this.baseURL}/api/sheets/${sheetId}/mark-missing-scores/`, {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify({
@@ -258,7 +258,7 @@ class GoogleSheetsService {
    */
   async markMissingScoresBatch(sheetId, updates) {
     try {
-      const response = await fetch(`${this.baseURL}/sheets/${sheetId}/mark-missing-scores-batch/`, {
+      const response = await fetch(`${this.baseURL}/api/sheets/${sheetId}/mark-missing-scores-batch/`, {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify({
@@ -282,7 +282,7 @@ class GoogleSheetsService {
    */
   async exportFinalGrades(sheetId, { classRecordId }) {
     try {
-      const response = await fetch(`${this.baseURL}/sheets/${sheetId}/final-grade-export/`, {
+      const response = await fetch(`${this.baseURL}/api/sheets/${sheetId}/final-grade-export/`, {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify({
