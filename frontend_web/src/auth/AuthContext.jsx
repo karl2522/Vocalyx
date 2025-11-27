@@ -202,7 +202,7 @@ export const AuthProvider = ({ children }) => {
 
       console.log('Request body:', requestBody);
 
-      const response = await fetch(`${BACKEND_URL}/api/firebase-auth/`, {
+      const response = await fetch(`${BACKEND_URL}/firebase-auth/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -405,7 +405,7 @@ export const AuthProvider = ({ children }) => {
       console.log('Microsoft auth response:', response);
 
       if (response.accessToken) {
-        const res = await fetch(`${BACKEND_URL}/api/auth/microsoft/`, {
+        const res = await fetch(`${BACKEND_URL}/auth/microsoft/`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
