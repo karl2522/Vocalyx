@@ -1503,7 +1503,7 @@ const ClassRecordExcel = () => {
 
       if (response.data.success) {
         const deletedStudent = response.data.deleted_student;
-        toast.success(`🗑️ Student "${deletedStudent.full_name}" deleted successfully!`);
+        toast.success(`Student "${deletedStudent.full_name}" deleted successfully!`);
 
         if (voiceEnabled) {
           speakText(`Student ${deletedStudent.full_name} has been deleted successfully.`);
@@ -1735,12 +1735,12 @@ const ClassRecordExcel = () => {
       }
 
       // 🔥 SHOW PROGRESS: Refreshing data
-      toast.loading('🔄 Refreshing data...', { id: 'sort-progress' });
+      toast.loading('Refreshing data...', { id: 'sort-progress' });
 
       // 🔥 DISMISS LOADING TOAST
       toast.dismiss('sort-progress');
 
-      toast.success(`✅ Students sorted by ${sortType} successfully! (${totalUpdated} cells updated, formulas preserved)`);
+      toast.success(`Students sorted by ${sortType} successfully! (${totalUpdated} cells updated, formulas preserved)`);
 
       if (voiceEnabled) {
         speakText(`Students have been sorted by ${sortType === 'firstName' ? 'first name' : sortType === 'lastName' ? 'last name' : 'alphabetical order'} with formulas preserved`);
@@ -1843,7 +1843,7 @@ const ClassRecordExcel = () => {
       // Reset toast dismissal flag since user made changes
       resetToastDismissal();
 
-      toast.success(`✅ Updated ${studentName} (ID: ${data.studentId}) - ${data.column}: ${data.value}`);
+      toast.success(`Updated ${studentName} (ID: ${data.studentId}) - ${data.column}: ${data.value}`);
 
       if (voiceEnabled) {
         speakText(`Successfully updated ${studentName} ${data.column} score to ${data.value}`);
@@ -1889,7 +1889,7 @@ const ClassRecordExcel = () => {
         // Reset toast dismissal flag since user made changes
         resetToastDismissal();
 
-        toast.success(`✅ ${data.column} max score updated to ${data.maxScore} in ${sheetUsed}`);
+        toast.success(`${data.column} max score updated to ${data.maxScore} in ${sheetUsed}`);
         if (voiceEnabled) {
           speakText(`Successfully updated ${data.column} maximum score to ${data.maxScore}`);
         }
@@ -1949,7 +1949,7 @@ const ClassRecordExcel = () => {
           const columnList = data.columns.slice(0, 3).join(', ') +
             (data.columns.length > 3 ? `... (${data.columns.length} total)` : '');
 
-          toast.success(`✅ Updated ${results.updated_columns} columns to max score ${data.maxScore}: ${columnList}`);
+          toast.success(`Updated ${results.updated_columns} columns to max score ${data.maxScore}: ${columnList}`);
           if (voiceEnabled) {
             speakText(`Successfully updated ${results.updated_columns} ${data.category} columns to maximum score ${data.maxScore}`);
           }
@@ -2123,7 +2123,7 @@ const ClassRecordExcel = () => {
       console.log('🔥 DEBUG: Final results:', { successCount, totalAttempted: studentsToUpdate.length });
 
       const sheetInfo = currentSheet ? ` in ${currentSheet.sheet_name}` : '';
-      toast.success(`✅ Updated ${targetColumn} to ${data.score} for ${successCount} students${sheetInfo}`);
+      toast.success(`Updated ${targetColumn} to ${data.score} for ${successCount} students${sheetInfo}`);
 
       if (voiceEnabled) {
         speakText(`Successfully updated ${targetColumn} to ${data.score} for ${successCount} students`);
@@ -2205,7 +2205,7 @@ const ClassRecordExcel = () => {
           // Reset toast dismissal flag since user made changes
           resetToastDismissal();
 
-          toast.success(`✅ Updated ${updatedCount} students in ${foundColumn}`);
+          toast.success(`Updated ${updatedCount} students in ${foundColumn}`);
 
           if (voiceEnabled) {
             speakText(`Successfully updated ${updatedCount} students in ${foundColumn}`);
@@ -2267,7 +2267,7 @@ const ClassRecordExcel = () => {
         if (updatedData[i]) {
           updatedData[i][foundColumn] = score;
           updatedCount++;
-          console.log(`✅ Updated row ${i + 1}: ${updatedData[i]['FIRST NAME']} ${updatedData[i]['LASTNAME']} = ${score}`);
+          console.log(`Updated row ${i + 1}: ${updatedData[i]['FIRST NAME']} ${updatedData[i]['LASTNAME']} = ${score}`);
         }
       }
 
@@ -2275,7 +2275,7 @@ const ClassRecordExcel = () => {
       setTableData(updatedData);
 
       // 🔥 STEP 5: Show success feedback IMMEDIATELY
-      toast.success(`✅ Updated ${updatedCount} students in ${foundColumn} (rows ${startRow + 1}-${endRow + 1}) with score ${score}`);
+      toast.success(`Updated ${updatedCount} students in ${foundColumn} (rows ${startRow + 1}-${endRow + 1}) with score ${score}`);
 
       if (voiceEnabled) {
         speakText(`Successfully updated ${updatedCount} students in ${foundColumn} with score ${score}`);
@@ -2419,7 +2419,7 @@ const ClassRecordExcel = () => {
       console.log('🔍 DEBUG: Parsed students:', students);
 
       if (students.length > 10) {
-        toast.success(`📊 Ready to import ${students.length} students using optimized bulk import!`, {
+        toast.success(`Ready to import ${students.length} students using optimized bulk import!`, {
           duration: 3000
         });
       }
@@ -2459,8 +2459,8 @@ const ClassRecordExcel = () => {
 
       // Download file from Drive
       const response = await fetch(`${import.meta.env.PROD
-        ? 'https://vocalyx-backend-64846917574.asia-southeast1.run.app'
-        : 'https://vocalyx-backend-64846917574.asia-southeast1.run.app'}/api/drive/download/${driveFile.id}/`, {
+        ? 'http://127.0.0.1:8000'
+        : 'http://127.0.0.1:8000'}/api/drive/download/${driveFile.id}/`, {
         headers: googleDriveService.getHeaders()
       });
 
@@ -2699,7 +2699,7 @@ const ClassRecordExcel = () => {
       );
 
       if (response.data?.success) {
-        toast.success(`✅ Successfully created "${categoryData.categoryName}" with ${categoryData.subCategoryCount} columns!`);
+        toast.success(`Successfully created "${categoryData.categoryName}" with ${categoryData.subCategoryCount} columns!`);
 
         // 🔥 FIX: Pass the required parameters to loadSheetData
         await loadSheetData(classRecord.google_sheet_id, currentSheet?.sheet_name);
@@ -2827,7 +2827,7 @@ const ClassRecordExcel = () => {
         const studentName = nameParts.join(' ');
         const sheetUsed = response.data.sheet_name || 'unknown';
 
-        toast.success(`✅ Student added to ${sheetUsed} sheet: ${studentName} (Row ${response.data.rowNumber})`);
+        toast.success(`Student added to ${sheetUsed} sheet: ${studentName} (Row ${response.data.rowNumber})`);
         if (voiceEnabled) {
           speakText(`Successfully added student ${studentName} as number ${response.data.rowNumber} to ${sheetUsed} sheet`);
         }
@@ -2979,7 +2979,7 @@ const ClassRecordExcel = () => {
         if (response.data?.success) {
           addRecentStudent(studentName);
 
-          toast.success(`✅ ${studentName} - Student ID: ${data.studentId}`);
+          toast.success(`${studentName} - Student ID: ${data.studentId}`);
           if (voiceEnabled) {
             speakText(`Updated Student ID to ${data.studentId} for ${studentName}`);
           }
@@ -3016,7 +3016,7 @@ const ClassRecordExcel = () => {
       );
 
       if (response.data?.success) {
-        toast.success(`✅ Auto-numbered ${response.data.count} students`);
+        toast.success(`Auto-numbered ${response.data.count} students`);
         if (voiceEnabled) {
           speakText(`Successfully numbered ${response.data.count} students`);
         }
@@ -3273,7 +3273,7 @@ const ClassRecordExcel = () => {
         // Reset toast dismissal flag since user made changes
         resetToastDismissal();
 
-        toast.success(`✅ ${studentName} - ${data.column}: ${data.value}`);
+        toast.success(`${studentName} - ${data.column}: ${data.value}`);
         if (voiceEnabled) {
           speakText(`Updated ${data.column} to ${data.value} for ${studentName}`);
         }
@@ -3345,7 +3345,7 @@ const ClassRecordExcel = () => {
       if (response.data?.success) {
         addRecentStudent(selectedMatch.student);
 
-        toast.success(`✅ ${selectedMatch.student} - ${data.column}: ${data.value}`);
+        toast.success(`${selectedMatch.student} - ${data.column}: ${data.value}`);
         if (voiceEnabled) {
           speakText(`Updated ${data.column} to ${data.value} for ${selectedMatch.student}`);
         }
@@ -3542,9 +3542,6 @@ const ClassRecordExcel = () => {
       setVoiceBusy(true); // Keep overlay visible to show error
       setVoiceStatus('Command not recognized');
       toast.error('Voice command not recognized');
-      if (voiceEnabled) {
-        speakText('Command not recognized. Please try again. For numbered columns, say column, student, score.');
-      }
       // Auto-clear error state after 3 seconds
       setTimeout(() => {
         setVoiceBusy(false);
@@ -3558,12 +3555,6 @@ const ClassRecordExcel = () => {
     if (command.type === 'SELECT_DUPLICATE' && duplicateOptions) {
       handleDuplicateSelection(command.data.selectedOption);
       return;
-    }
-
-    // 🔊 Voice feedback when command is recognized
-    if (voiceEnabled) {
-      const commandName = getCommandDisplayName(command.type);
-      speakText(`Command recognized: ${commandName}`);
     }
 
     executeCommand(command);
@@ -3876,11 +3867,6 @@ const ClassRecordExcel = () => {
 
     window.batchModeActive = false;
     window.batchModeFinishing = false;
-
-    // 🔥 FIX: Return promise so caller can wait for speech to complete
-    if (voiceEnabled) {
-      await speakText('Batch mode started. Please select a column.');
-    }
   };
 
   const cancelBatchMode = () => {
@@ -3904,10 +3890,6 @@ const ClassRecordExcel = () => {
     try {
       clearTranscript && clearTranscript();
     } catch { }
-
-    if (voiceEnabled) {
-      speakText('Batch mode cancelled');
-    }
   };
 
   const handleExportToExcel = async () => {
@@ -4160,7 +4142,7 @@ const ClassRecordExcel = () => {
       XLSX.writeFile(workbook, filename);
 
       // 🔥 IMPROVED: Better success message
-      const message = `✅ Excel exported: ${filename} (${sheetsResponse.data.headers.length} columns with merged category headers)`;
+      const message = `Excel exported: ${filename} (${sheetsResponse.data.headers.length} columns with merged category headers)`;
       toast.success(message);
 
       if (voiceEnabled) {
@@ -4236,7 +4218,7 @@ const ClassRecordExcel = () => {
         URL.revokeObjectURL(url);
       }
 
-      toast.success(`✅ CSV file exported: ${filename}`);
+      toast.success(`CSV file exported: ${filename}`);
       if (voiceEnabled) {
         speakText('CSV file has been exported successfully');
       }
@@ -4458,7 +4440,7 @@ const ClassRecordExcel = () => {
       // Save PDF
       doc.save(filename);
 
-      toast.success(`✅ PDF exported: ${filename} (${pageCount} pages, ${allHeaders.length} columns with Total Score & Term Grade)`);
+      toast.success(`PDF exported: ${filename} (${pageCount} pages, ${allHeaders.length} columns with Total Score & Term Grade)`);
 
       if (voiceEnabled) {
         speakText(`PDF file exported successfully with final grades on page 2`);
@@ -4500,12 +4482,7 @@ const ClassRecordExcel = () => {
       cancelBatchMode();
     }
 
-    // 🔥 FIX: Speak feedback first and wait for completion
-    if (voiceEnabled) {
-      await speakText('Single mode activated. Start recording.');
-    }
-
-    // 🔥 FIX: Start recording AFTER voice feedback completes
+    // Start recording
     startListening();
   };
 

@@ -95,7 +95,7 @@ function Login() {
     //     console.log('Microsoft auth response:', response);
 
     //     if (response.accessToken) {
-    //       const res = await fetch('https://vocalyx-backend-64846917574.asia-southeast1.run.app/api/auth/microsoft/', {
+    //       const res = await fetch('http://127.0.0.1:8000/api/auth/microsoft/', {
     //         method: 'POST',
     //         headers: {
     //           'Content-Type': 'application/json',

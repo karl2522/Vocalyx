@@ -945,13 +945,7 @@ const useVoiceRecognition = () => {
       try {
         recognition.start();
         
-        if (!silent && 'speechSynthesis' in window) {
-          const utterance = new SpeechSynthesisUtterance('Voice ready');
-          utterance.rate = 1.2;
-          utterance.pitch = 1;
-          utterance.volume = 0.6;
-          window.speechSynthesis.speak(utterance);
-        }
+        // Voice ready - TTS removed
       } catch (error) {
         console.error('Error starting enhanced recognition:', error);
         setIsListening(false);
