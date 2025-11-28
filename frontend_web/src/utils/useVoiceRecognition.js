@@ -738,6 +738,21 @@ const useVoiceRecognition = () => {
       };
 
       speechRecognition.onresult = async (event) => {
+        const batchPaused = typeof window !== 'undefined'
+          && window.batchModeActive
+          && window.batchDesiredListening === false;
+
+        if (batchPaused) {
+          // User paused batch voice; ignore any straggler results and force-stop recognition.
+          console.log('🎚️ Batch voice paused — ignoring speech results');
+          try {
+            speechRecognition.stop();
+          } catch (pauseError) {
+            console.error('Failed to stop recognition while paused:', pauseError);
+          }
+          return;
+        }
+
         if (process.env.NODE_ENV === 'development') {
           console.log('🎤 AI VOICE RESULT: Event received, results length:', event.results.length);
         }
@@ -811,6 +826,15 @@ const useVoiceRecognition = () => {
         }
 
         if (finalTranscript || interimTranscript) {
+          const stillPaused = typeof window !== 'undefined'
+            && window.batchModeActive
+            && window.batchDesiredListening === false;
+
+          if (stillPaused) {
+            // Guard against late-arriving transcripts after pause.
+            return;
+          }
+
           const combinedTranscript = finalTranscript + interimTranscript;
           if (combinedTranscript && combinedTranscript.trim().length >= 3) {
             setTranscript(combinedTranscript);
