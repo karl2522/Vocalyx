@@ -1,8 +1,92 @@
 import { Mic, Pause, Play, Users, X } from 'lucide-react';
 import PropTypes from 'prop-types';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import BatchEntryItem from '../BatchEntryItem';
+
+// 🔊 Sound feedback utility using Web Audio API
+const useSoundFeedback = () => {
+  const audioContextRef = useRef(null);
+
+  // Initialize AudioContext lazily (must be triggered by user interaction)
+  const getAudioContext = useCallback(() => {
+    if (!audioContextRef.current) {
+      audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    return audioContextRef. current;
+  }, []);
+
+  // 🔊 Success beep - pleasant, short high-pitched tone
+  const playSuccessSound = useCallback(() => {
+    try {
+      const audioContext = getAudioContext();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+
+      oscillator.frequency.setValueAtTime(880, audioContext.currentTime); // A5 note
+      oscillator.type = 'sine';
+
+      gainNode.gain. setValueAtTime(0.3, audioContext.currentTime);
+      gainNode. gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
+
+      oscillator.start(audioContext.currentTime);
+      oscillator. stop(audioContext. currentTime + 0.15);
+
+      console.log('🔊 SUCCESS SOUND: Played');
+    } catch (error) {
+      console.error('🔊 Sound error:', error);
+    }
+  }, [getAudioContext]);
+
+  // 🔊 Error beep - lower double beep
+  const playErrorSound = useCallback(() => {
+    try {
+      const audioContext = getAudioContext();
+
+      // First beep
+      const oscillator1 = audioContext. createOscillator();
+      const gainNode1 = audioContext.createGain();
+      oscillator1.connect(gainNode1);
+      gainNode1.connect(audioContext.destination);
+      oscillator1.frequency.setValueAtTime(330, audioContext.currentTime); // E4 note
+      oscillator1.type = 'sine';
+      gainNode1.gain.setValueAtTime(0.3, audioContext. currentTime);
+      gainNode1.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+      oscillator1.start(audioContext. currentTime);
+      oscillator1.stop(audioContext. currentTime + 0.1);
+
+      // Second beep (after short pause)
+      const oscillator2 = audioContext.createOscillator();
+      const gainNode2 = audioContext.createGain();
+      oscillator2.connect(gainNode2);
+      gainNode2.connect(audioContext.destination);
+      oscillator2.frequency.setValueAtTime(330, audioContext.currentTime + 0.15); // E4 note
+      oscillator2.type = 'sine';
+      gainNode2.gain.setValueAtTime(0.3, audioContext.currentTime + 0.15);
+      gainNode2.gain.exponentialRampToValueAtTime(0.01, audioContext. currentTime + 0.25);
+      oscillator2.start(audioContext.currentTime + 0.15);
+      oscillator2.stop(audioContext.currentTime + 0.25);
+
+      console.log('🔊 ERROR SOUND: Played');
+    } catch (error) {
+      console.error('🔊 Sound error:', error);
+    }
+  }, [getAudioContext]);
+
+  // Cleanup
+  useEffect(() => {
+    return () => {
+      if (audioContextRef. current) {
+        audioContextRef.current.close();
+      }
+    };
+  }, []);
+
+  return { playSuccessSound, playErrorSound };
+};
 
 const BatchGradingModal = ({
   showBatchModal,
@@ -25,27 +109,46 @@ const BatchGradingModal = ({
   transcript
 }) => {
   const transcriptEndRef = useRef(null);
-  const [desiredListening, setDesiredListening] = useState(false); // user-intended On/Off
-  const [readiness, setReadiness] = useState('idle'); // idle | readying | ready
-  const [isToggling, setIsToggling] = useState(false); // 200ms debounce
-  const prevEntriesLenRef = useRef(batchEntries?.length || 0);
+  const [desiredListening, setDesiredListening] = useState(false);
+  const [readiness, setReadiness] = useState('idle');
+  const [isToggling, setIsToggling] = useState(false);
+  const prevEntriesLenRef = useRef(batchEntries?. length || 0);
+  const prevEntriesRef = useRef([]); // Track previous entries to detect new ones
 
-  // Auto-scroll to newest entry when a new batch entry is appended
+  // 🔊 Initialize sound feedback
+  const { playSuccessSound, playErrorSound } = useSoundFeedback();
+
+  // 🔊 Play sound when new entry is added
   useEffect(() => {
-    const prevLen = prevEntriesLenRef.current;
+    const prevLen = prevEntriesRef.current.length;
     const currLen = batchEntries?.length || 0;
-    if (currLen > prevLen) {
-      // Wait for DOM to paint then scroll the sentinel into view
+
+    if (currLen > prevLen && batchEntries. length > 0) {
+      // Get the newest entry
+      const newestEntry = batchEntries[batchEntries.length - 1];
+      
+      // Play appropriate sound based on status
+      if (newestEntry.status === 'found') {
+        playSuccessSound();
+        console.log('🔊 SOUND: Student found - playing success beep');
+      } else if (newestEntry. status === 'not_found') {
+        playErrorSound();
+        console.log('🔊 SOUND: Student not found - playing error beep');
+      }
+
+      // Auto-scroll to newest entry
       setTimeout(() => {
         try {
           transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
         } catch {}
       }, 30);
     }
-    prevEntriesLenRef.current = currLen;
-  }, [batchEntries]);
 
-  // Cleanup on modal close/unmount (must be before any early return to keep hook order stable)
+    prevEntriesRef. current = batchEntries || [];
+    prevEntriesLenRef.current = currLen;
+  }, [batchEntries, playSuccessSound, playErrorSound]);
+
+  // Cleanup on modal close/unmount
   useEffect(() => {
     return () => {
       try {
@@ -63,11 +166,11 @@ const BatchGradingModal = ({
     setBatchEntries(prev =>
       prev.map(e =>
         e.id === entryId
-          ? { ...e, score: newScore.toString() }
+          ?  { ...e, score: newScore. toString() }
           : e
       )
     );
-    toast.success(`Updated ${entry?.studentName}'s score to ${newScore}`);
+    toast.success(`Updated ${entry?. studentName}'s score to ${newScore}`);
   };
 
   const handleDeleteEntry = (entryId) => {
@@ -79,13 +182,13 @@ const BatchGradingModal = ({
 
   const handleRetryEntry = (entryId, originalInput) => {
     console.log('🔥 RETRY ENTRY:', entryId, originalInput);
-    setBatchEntries(prev => prev.filter(e => e.id !== entryId));
+    setBatchEntries(prev => prev.filter(e => e. id !== entryId));
     setTimeout(() => {
       const match = originalInput.match(/^(.+?)\s+(\d+(?:\.\d+)?)[)\].,!?:;-]*$/);
       if (match) {
         const [, studentName, score] = match;
-        const cleanedScore = score.trim().replace(/[)\].,!?:;-]+$/g, '');
-        processBatchEntry(studentName.trim(), cleanedScore);
+        const cleanedScore = score. trim(). replace(/[)\].,!?:;-]+$/g, '');
+        processBatchEntry(studentName. trim(), cleanedScore);
       }
     }, 100);
   };
@@ -97,57 +200,53 @@ const BatchGradingModal = ({
     window.batchModeFinishing = false;
     setReadiness('readying');
 
-    // 🔥 SPEED OPTIMIZATION: Cache sheet data for entire batch session
     console.log('🔥 CACHING: Loading sheet data for batch session...');
-    toast('Loading student data for batch session...');
+    toast('Loading student data for batch session.. .');
 
     try {
       let sheetsResponse;
       if (currentSheet) {
         console.log('🔥 DEBUG: Using getSpecificSheetData for sheet:', currentSheet.sheet_name);
-        sheetsResponse = await classRecordService.getSpecificSheetData(
+        sheetsResponse = await classRecordService. getSpecificSheetData(
           classRecord.google_sheet_id,
           currentSheet.sheet_name,
-          { force_refresh: true }  // 🔥 FIX: Force refresh to bypass cache
+          { force_refresh: true }
         );
       } else {
         console.log('🔥 DEBUG: Using getGoogleSheetsDataServiceAccount for default sheet');
         sheetsResponse = await classRecordService.getGoogleSheetsDataServiceAccount(
-          classRecord.google_sheet_id
+          classRecord. google_sheet_id
         );
       }
 
-      // 🔥 DEBUG: Log the complete API response
       console.log('🔥 DEBUG: Complete API Response:', sheetsResponse);
       console.log('🔥 DEBUG: Response data:', sheetsResponse.data);
-      console.log('🔥 DEBUG: Success status:', sheetsResponse.data?.success);
-      console.log('🔥 DEBUG: Headers:', sheetsResponse.data?.headers);
+      console.log('🔥 DEBUG: Success status:', sheetsResponse. data?.success);
+      console.log('🔥 DEBUG: Headers:', sheetsResponse. data?.headers);
       console.log('🔥 DEBUG: TableData type:', typeof sheetsResponse.data?.tableData);
-      console.log('🔥 DEBUG: TableData value:', sheetsResponse.data?.tableData);
-      console.log('🔥 DEBUG: Is tableData array?', Array.isArray(sheetsResponse.data?.tableData));
+      console. log('🔥 DEBUG: TableData value:', sheetsResponse.data?. tableData);
+      console.log('🔥 DEBUG: Is tableData array?', Array.isArray(sheetsResponse.data?. tableData));
 
-      if (!sheetsResponse.data?.success) {
+      if (! sheetsResponse.data?.success) {
         throw new Error('Could not load student data');
       }
 
-      // 🔥 FIX: Add proper validation for tableData and headers
-      if (!sheetsResponse.data.tableData || !Array.isArray(sheetsResponse.data.tableData)) {
+      if (! sheetsResponse.data. tableData || ! Array.isArray(sheetsResponse.data.tableData)) {
         console.error('🔥 CACHING: ❌ tableData is missing or not an array:', sheetsResponse.data.tableData);
         throw new Error('Student data is not available in the expected format');
       }
 
-      if (!sheetsResponse.data.headers || !Array.isArray(sheetsResponse.data.headers)) {
-        console.error('🔥 CACHING: ❌ headers is missing or not an array:', sheetsResponse.data.headers);
+      if (! sheetsResponse.data.headers || !Array.isArray(sheetsResponse.data.headers)) {
+        console. error('🔥 CACHING: ❌ headers is missing or not an array:', sheetsResponse.data.headers);
         throw new Error('Column headers are not available');
       }
 
-      const convertedTableData = sheetsResponse.data.tableData.map((row, originalIndex) => {
+      const convertedTableData = sheetsResponse.data. tableData.map((row, originalIndex) => {
         const rowObject = {};
-        sheetsResponse.data.headers.forEach((header, index) => {
+        sheetsResponse.data. headers.forEach((header, index) => {
           rowObject[header] = row[index] || '';
         });
 
-        // 🔥 CRITICAL: Preserve the original index for accurate row tracking
         rowObject._originalTableIndex = originalIndex;
 
         return rowObject;
@@ -155,21 +254,20 @@ const BatchGradingModal = ({
 
       setBatchSheetData(convertedTableData);
       console.log('🔥 CACHING: ✅ Sheet data cached for batch session');
-      console.log('🔥 CACHING: 📊 Cached', convertedTableData.length, 'student records');
+      console.log('🔥 CACHING: 📊 Cached', convertedTableData. length, 'student records');
 
-      toast.success(`Column set to: ${header}. Ready to record! 🎤`);
+      toast.success(`Column set to: ${header}.  Ready to record!  🎤`);
 
-      // One-time auto-start after "Voice ready"
-      console.log('🔥 COLUMN SELECT: 🎤 Starting voice recognition (with TTS)...');
+      console.log('🔥 COLUMN SELECT: 🎤 Starting voice recognition (with TTS).. .');
       setReadiness('ready');
       setDesiredListening(true);
       window.batchDesiredListening = true;
-      if (!isListening) {
-        startListening(false); // speaks "Voice ready"
+      if (! isListening) {
+        startListening(false);
       }
 
     } catch (error) {
-      console.error('🔥 CACHING: ❌ Error loading data:', error);
+      console. error('🔥 CACHING: ❌ Error loading data:', error);
       toast.error('Failed to load student data for batch session');
       setBatchSheetData(null);
     }
@@ -181,22 +279,20 @@ const BatchGradingModal = ({
     setTimeout(() => setIsToggling(false), 200);
 
     if (desiredListening) {
-      // Pause
       setDesiredListening(false);
       window.batchDesiredListening = false;
       try {
         stopListening();
       } finally {
-        // Voice paused - TTS removed
+        // Voice paused
       }
     } else {
-      // Resume
       setDesiredListening(true);
-      window.batchDesiredListening = true;
+      window. batchDesiredListening = true;
       try {
-        startListening(true); // silent resume
+        startListening(true);
       } finally {
-        // Voice resumed - TTS removed
+        // Voice resumed
       }
     }
   };
@@ -210,9 +306,9 @@ const BatchGradingModal = ({
   };
 
   const handleRemoveNotFound = () => {
-    const notFoundEntries = batchEntries.filter(e => e.status === 'not_found');
+    const notFoundEntries = batchEntries.filter(e => e. status === 'not_found');
     setBatchEntries(prev => prev.filter(e => e.status === 'found'));
-    toast.success(`Removed ${notFoundEntries.length} not found entries`);
+    toast. success(`Removed ${notFoundEntries. length} not found entries`);
   };
 
   const handleClearAll = () => {
@@ -225,11 +321,10 @@ const BatchGradingModal = ({
       className="fixed inset-0 bg-slate-900 bg-opacity-50 flex items-center justify-center z-50 p-4"
       onMouseDown={(e) => {
         console.log('🔥 MODAL BACKGROUND: Click prevented');
-        e.preventDefault();
+        e. preventDefault();
         e.stopPropagation();
       }}
     >
-      {/* Local spinner keyframes to ensure rotation even if global motion settings reduce animations */}
       <style>{`
         @keyframes loader-spin { to { transform: rotate(360deg); } }
       `}</style>
@@ -248,7 +343,7 @@ const BatchGradingModal = ({
             </div>
             <div>
               <h2 className="text-lg font-semibold text-slate-900">Batch Grading Mode</h2>
-              {currentBatchColumn ? (
+              {currentBatchColumn ?  (
                 <p className="text-sm text-slate-600">Column: <span className="font-medium text-purple-600">{currentBatchColumn}</span></p>
               ) : (
                 <p className="text-sm text-slate-600">Select a column to start batch grading</p>
@@ -259,7 +354,7 @@ const BatchGradingModal = ({
             onClick={(e) => {
               console.log('🔥 CLOSE BUTTON: Clicked - calling cancelBatchMode');
               e.preventDefault();
-              e.stopPropagation();
+              e. stopPropagation();
               cancelBatchMode();
             }}
             className="text-slate-400 hover:text-slate-600 transition-colors"
@@ -270,7 +365,7 @@ const BatchGradingModal = ({
 
         {/* Modal Content */}
         <div className="flex-1 overflow-hidden flex flex-col relative">
-          {!currentBatchColumn ? (
+          {! currentBatchColumn ?  (
             /* Column Selection */
             <div className="p-6 overflow-y-auto">
               <div className="text-center py-8">
@@ -286,16 +381,10 @@ const BatchGradingModal = ({
 
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                   {headers.filter(h => {
-                    // Normalize header for case-insensitive comparison
-                    const normalizedHeader = h.trim().toUpperCase();
-                    
-                    // Exclude student info columns (case-insensitive)
-                    const excludedColumns = ['NO.', 'LASTNAME', 'FIRST NAME', 'STUDENT ID', 'MIDDLE NAME', 'TOTAL'];
-                    if (excludedColumns.some(col => normalizedHeader === col.toUpperCase())) return false;
-                    
-                    // Exclude columns with percentage symbol (%)
-                    if (h.includes('%')) return false;
-                    
+                    const normalizedHeader = h. trim().toUpperCase();
+                    const excludedColumns = ['NO. ', 'LASTNAME', 'FIRST NAME', 'STUDENT ID', 'MIDDLE NAME', 'TOTAL'];
+                    if (excludedColumns. some(col => normalizedHeader === col.toUpperCase())) return false;
+                    if (h. includes('%')) return false;
                     return true;
                   }).map(header => (
                     <button
@@ -334,7 +423,7 @@ const BatchGradingModal = ({
                   <div className="text-xs text-gray-500">
                     <span className="font-medium text-purple-700">{batchEntries.filter(e => e.status === 'found').length} valid</span>
                     <span className="mx-1">•</span>
-                    <span className="text-red-600">{batchEntries.filter(e => e.status === 'not_found').length} not found</span>
+                    <span className="text-red-600">{batchEntries.filter(e => e.status === 'not_found'). length} not found</span>
                   </div>
                 </div>
               )}
@@ -345,7 +434,7 @@ const BatchGradingModal = ({
                   <div className="text-center py-12 flex flex-col items-center justify-center h-full">
                     <div className="mb-8">
                       <div className={`w-20 h-20 mx-auto rounded-full flex items-center justify-center mb-4 transition-all duration-500 ${desiredListening ? 'bg-purple-100 animate-pulse' : 'bg-slate-100'}`}>
-                        <Mic className={`w-10 h-10 ${desiredListening ? 'text-purple-600' : 'text-slate-400'}`} />
+                        <Mic className={`w-10 h-10 ${desiredListening ?  'text-purple-600' : 'text-slate-400'}`} />
                       </div>
                       <h3 className="text-xl font-medium text-slate-900 mb-2">
                         {desiredListening ? 'Listening...' : 'Ready to Record'}
@@ -353,11 +442,14 @@ const BatchGradingModal = ({
                       <p className="text-slate-500 max-w-xs mx-auto">
                         Say "Student Name + Score" (e.g., "Capuras 85")
                       </p>
+                      <p className="text-xs text-slate-400 mt-2">
+                        🔊 You'll hear a beep when a student is found
+                      </p>
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-3"> {/* Padding bottom for sticky footer */}
-                    {batchEntries.map((entry, index) => (
+                  <div className="space-y-3">
+                    {batchEntries. map((entry, index) => (
                       <BatchEntryItem
                         key={entry.id}
                         entry={entry}
@@ -372,12 +464,11 @@ const BatchGradingModal = ({
                 )}
               </div>
 
-              {/* 🔥 NEW: Voice Interaction Footer (Sticky) */}
+              {/* Voice Interaction Footer (Sticky) */}
               <div className="border-t border-slate-200 bg-white shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-10">
                 {/* Real-Time Transcript Section */}
                 <div className="px-6 py-3 border-b border-slate-100 bg-slate-50/50">
-                  {transcript && transcript.trim() ? (
-                    /* Show transcript when available */
+                  {transcript && transcript.trim() ?  (
                     <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
                       <div className="text-xs text-slate-500 mb-1">You said:</div>
                       <div className="text-slate-800 font-medium leading-relaxed">
@@ -385,11 +476,10 @@ const BatchGradingModal = ({
                       </div>
                     </div>
                   ) : (
-                    /* Show listening state when no transcript */
                     <div className="flex items-center space-x-2">
                       <div className={`w-2 h-2 rounded-full ${isListening ? 'bg-red-500 animate-pulse' : 'bg-slate-300'}`}></div>
                       <span className="text-sm text-slate-600">
-                        {isListening ? 'Speak now...' : 'Ready to listen'}
+                        {isListening ? 'Speak now.. .' : 'Ready to listen'}
                       </span>
                     </div>
                   )}
@@ -448,14 +538,14 @@ const BatchGradingModal = ({
                     </button>
                     <button
                       onClick={executeBatchEntries}
-                      disabled={batchEntries.filter(e => e.status === 'found').length === 0 || isProcessingBatch}
+                      disabled={batchEntries.filter(e => e. status === 'found').length === 0 || isProcessingBatch}
                       className="px-6 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50 flex items-center space-x-2 shadow-sm transition-all"
                     >
                       {isProcessingBatch ? (
                         <>
                           <span className="relative inline-block w-4 h-4" aria-hidden="true">
                             <span
-                              className="absolute inset-0 rounded-full border-2 border-white/70 border-t-transparent animate-[loader-spin_0.8s_linear_infinite]"
+                              className="absolute inset-0 rounded-full border-2 border-white/70 border-t-transparent animate-[loader-spin_0. 8s_linear_infinite]"
                               style={{ animation: 'loader-spin 0.8s linear infinite' }}
                             ></span>
                           </span>
@@ -463,7 +553,7 @@ const BatchGradingModal = ({
                         </>
                       ) : (
                         <>
-                          <span>Save {batchEntries.filter(e => e.status === 'found').length} Students</span>
+                          <span>Save {batchEntries. filter(e => e.status === 'found').length} Students</span>
                         </>
                       )}
                     </button>
@@ -481,33 +571,33 @@ const BatchGradingModal = ({
 export default BatchGradingModal;
 
 // Prop types validation
-BatchGradingModal.propTypes = {
+BatchGradingModal. propTypes = {
   showBatchModal: PropTypes.bool.isRequired,
   currentBatchColumn: PropTypes.string,
-  setCurrentBatchColumn: PropTypes.func.isRequired,
-  headers: PropTypes.arrayOf(PropTypes.string).isRequired,
+  setCurrentBatchColumn: PropTypes.func. isRequired,
+  headers: PropTypes.arrayOf(PropTypes. string). isRequired,
   isListening: PropTypes.bool,
-  startListening: PropTypes.func.isRequired,
+  startListening: PropTypes.func. isRequired,
   batchEntries: PropTypes.arrayOf(PropTypes.shape({
-    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]). isRequired,
     studentName: PropTypes.string,
     score: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
     status: PropTypes.string
   })).isRequired,
-  setBatchEntries: PropTypes.func.isRequired,
+  setBatchEntries: PropTypes. func.isRequired,
   isProcessingBatch: PropTypes.bool,
-  cancelBatchMode: PropTypes.func.isRequired,
+  cancelBatchMode: PropTypes.func. isRequired,
   executeBatchEntries: PropTypes.func.isRequired,
   processBatchEntry: PropTypes.func.isRequired,
   currentSheet: PropTypes.object,
   classRecord: PropTypes.object,
   classRecordService: PropTypes.object,
   setBatchSheetData: PropTypes.func.isRequired,
-  stopListening: PropTypes.func.isRequired,
-  transcript: PropTypes.string
+  stopListening: PropTypes.func. isRequired,
+  transcript: PropTypes. string
 };
 
-BatchGradingModal.defaultProps = {
+BatchGradingModal. defaultProps = {
   currentBatchColumn: '',
   isListening: false,
   isProcessingBatch: false,

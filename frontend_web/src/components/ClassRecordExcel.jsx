@@ -602,11 +602,8 @@ const ClassRecordExcel = () => {
           !transcript.toLowerCase().includes('exit')) {
           console.log('🔥 MAIN EFFECT: 🔄 Skipping main processing - using interim processing only');
           setLastVoiceCommand(transcript);
-          setTimeout(() => {
-            console.log('🔥 MAIN EFFECT: 🧹 Clearing transcript (batch mode)');
-            clearTranscript();
-          }, 1000);
-          return; // 🔥 EARLY RETURN - Don't process again
+          clearTranscript();
+          return;
         }
 
         handleBatchVoiceCommand(transcript);
@@ -617,10 +614,7 @@ const ClassRecordExcel = () => {
           transcript.toLowerCase().includes('exit')) {
           console.log('🔥 MAIN EFFECT: 🏁 FINISHING batch mode detected');
           window.batchModeFinishing = true;
-          setTimeout(() => {
-            console.log('🔥 MAIN EFFECT: 🧹 Clearing transcript after done command');
-            clearTranscript();
-          }, 2000);
+          clearTranscript();
         }
 
       } else {
@@ -683,6 +677,7 @@ const ClassRecordExcel = () => {
 
         // 🔥 Clear immediately
         setInterimBatchCommand('');
+        clearTranscript();
       }
     }
   }, [interimBatchCommand, batchMode, currentBatchColumn]);
@@ -3574,6 +3569,7 @@ const ClassRecordExcel = () => {
     if (/\b(done|finish|exit|complete)\b/i.test(transcript)) {
       console.log('🔥 BATCH VOICE: Finishing batch mode - calling executeBatchEntries');
       await executeBatchEntries();
+      clearTranscript();
       return;
     }
 
@@ -3582,6 +3578,7 @@ const ClassRecordExcel = () => {
       console.log('🔥 BATCH VOICE: Clearing entries');
       setBatchEntries([]);
       toast.success('Batch entries cleared');
+      clearTranscript();
       return;
     }
 
@@ -3605,6 +3602,8 @@ const ClassRecordExcel = () => {
 
       console.log('🔥 BATCH VOICE: Processing batch entry:', cleanedName, score);
       await processBatchEntry(cleanedName, score.trim());
+
+      clearTranscript();
     } else {
       console.log('🔥 BATCH VOICE: Pattern not matched:', transcript);
     }
