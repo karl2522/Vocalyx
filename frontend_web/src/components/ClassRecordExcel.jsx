@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { ArrowLeft, BarChart3, CheckCircle2, ChevronDown, Edit, FileSpreadsheet, HelpCircle, Menu, Mic, MicOff, MoreVertical, PieChart, Plus, RefreshCw, Trash2, Upload, Users, X } from 'lucide-react';
+import { ArrowLeft, BarChart3, CheckCircle2, ChevronDown, Edit, FileSpreadsheet, HelpCircle, Menu, Mic, MicOff, MoreVertical, PieChart, Plus, RefreshCw, Star, Trash2, Upload, Users, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -122,6 +122,45 @@ const ClassRecordExcel = () => {
   const fetchInProgress = useRef(false);
   const hasShownInitialToast = useRef(false);
   const [isRefreshingAllocation, setIsRefreshingAllocation] = useState(false);
+
+  // 🔄 AUTO-SYNC: Refs for tracking sync status
+  const midtermFinalSyncInProgress = useRef(false);
+  const lastMidtermHashRef = useRef(null);
+  const lastSyncToastRef = useRef(null); // Track last toast to prevent duplicates
+  const lastSyncResultRef = useRef({ syncCount: 0, clearCount: 0 }); // Track last sync result
+  const toastDebounceTimeoutRef = useRef(null); // Debounce toast to prevent multiple toasts
+  
+  // 🔥 OPTIMIZATION: Calculate hash of STUDENT INFO data for change detection
+  // This allows us to skip sync if no changes detected (reduces server load by 90%+)
+  const calculateStudentInfoHash = useCallback((tableData, studentInfoCols) => {
+    if (!tableData || !Array.isArray(tableData) || !studentInfoCols) {
+      return null;
+    }
+    
+    // Extract only STUDENT INFO columns (A-E: NO., LASTNAME, FIRST NAME, MIDDLE NAME, STUDENT ID)
+    const studentInfoData = tableData.map(row => {
+      const info = {};
+      Object.entries(studentInfoCols).forEach(([colName, colIndex]) => {
+        if (colIndex !== undefined && row && row.length > colIndex) {
+          info[colName] = String(row[colIndex] || '').trim();
+        } else {
+          info[colName] = '';
+        }
+      });
+      return info;
+    });
+    
+    // Create hash from student info data (simple string hash)
+    const hashString = JSON.stringify(studentInfoData);
+    // Simple hash function (fast, not cryptographically secure - just for change detection)
+    let hash = 0;
+    for (let i = 0; i < hashString.length; i++) {
+      const char = hashString.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    return hash.toString();
+  }, []);
 
 
   // Helper: sync remaining from backend mirror based on current sheet
@@ -371,6 +410,804 @@ const ClassRecordExcel = () => {
     await checkAllSheetsForPercentageChanges();
   }, [checkAllSheetsForPercentageChanges]);
 
+  // 🔄 AUTO-SYNC: Identify STUDENT INFO columns in headers
+  const identifyStudentInfoColumns = useCallback((headers) => {
+    if (!headers || !Array.isArray(headers)) return {};
+    
+    const studentInfoPatterns = {
+      'NO.': ['NO.', 'NO', 'NUMBER', '#'],
+      'LASTNAME': ['LASTNAME', 'LAST NAME', 'LAST', 'SURNAME'],
+      'FIRST NAME': ['FIRST NAME', 'FIRSTNAME', 'FIRST', 'GIVEN NAME'],
+      'MIDDLE NAME': ['MIDDLE NAME', 'MIDDLENAME', 'MIDDLE', 'MI'],
+      'STUDENT ID': ['STUDENT ID', 'STUDENTID', 'ID', 'STUDENT NUMBER']
+    };
+    
+    const foundColumns = {};
+    
+    headers.forEach((header, index) => {
+      const normalizedHeader = header.trim().toUpperCase();
+      
+      Object.entries(studentInfoPatterns).forEach(([colName, patterns]) => {
+        if (!foundColumns[colName]) {
+          const matches = patterns.some(pattern => {
+            const patternUpper = pattern.toUpperCase();
+            return normalizedHeader === patternUpper || 
+                   normalizedHeader.includes(patternUpper) ||
+                   patternUpper.includes(normalizedHeader);
+          });
+          
+          if (matches) {
+            foundColumns[colName] = index;
+          }
+        }
+      });
+    });
+    
+    return foundColumns;
+  }, []);
+
+  // 🔄 AUTO-SYNC: Find matching student in Final sheet
+  const findMatchingStudent = useCallback((finalTableData, finalHeaders, midtermStudent, midtermRowIndex, finalStudentInfoCols) => {
+    if (!finalTableData || !finalHeaders || !midtermStudent) return null;
+    
+    // Try matching by STUDENT ID first (most reliable)
+    if (midtermStudent['STUDENT ID'] && finalStudentInfoCols['STUDENT ID'] !== undefined) {
+      const studentIdCol = finalStudentInfoCols['STUDENT ID'];
+      const midtermStudentId = String(midtermStudent['STUDENT ID'] || '').trim();
+      
+      if (midtermStudentId) {
+        const match = finalTableData.find((row, index) => {
+          if (row.length <= studentIdCol) return false;
+          const finalStudentId = String(row[studentIdCol] || '').trim();
+          return finalStudentId === midtermStudentId && finalStudentId !== '';
+        });
+        
+        if (match) {
+          return { 
+            rowIndex: finalTableData.indexOf(match), 
+            matchType: 'student_id' 
+          };
+        }
+      }
+    }
+    
+    // Try matching by full name
+    const midtermLastName = String(midtermStudent['LASTNAME'] || '').trim().toLowerCase();
+    const midtermFirstName = String(midtermStudent['FIRST NAME'] || '').trim().toLowerCase();
+    const midtermMiddleName = String(midtermStudent['MIDDLE NAME'] || '').trim().toLowerCase();
+    
+    if (midtermLastName && midtermFirstName) {
+      const lastNameCol = finalStudentInfoCols['LASTNAME'];
+      const firstNameCol = finalStudentInfoCols['FIRST NAME'];
+      const middleNameCol = finalStudentInfoCols['MIDDLE NAME'];
+      
+      if (lastNameCol !== undefined && firstNameCol !== undefined) {
+        const match = finalTableData.find((row, index) => {
+          if (row.length <= Math.max(lastNameCol, firstNameCol)) return false;
+          
+          const finalLastName = String(row[lastNameCol] || '').trim().toLowerCase();
+          const finalFirstName = String(row[firstNameCol] || '').trim().toLowerCase();
+          const finalMiddleName = middleNameCol !== undefined && row.length > middleNameCol
+            ? String(row[middleNameCol] || '').trim().toLowerCase()
+            : '';
+          
+          // Match by last name + first name (required)
+          if (finalLastName === midtermLastName && finalFirstName === midtermFirstName) {
+            // If middle names exist, they should match (or one is empty)
+            if (!midtermMiddleName || !finalMiddleName || finalMiddleName === midtermMiddleName) {
+              return true;
+            }
+          }
+          return false;
+        });
+        
+        if (match) {
+          return { 
+            rowIndex: finalTableData.indexOf(match), 
+            matchType: 'name' 
+          };
+        }
+      }
+    }
+    
+    // Try matching by row number (same position) - only if row is empty
+    if (midtermRowIndex < finalTableData.length) {
+      const rowAtSameIndex = finalTableData[midtermRowIndex];
+      if (rowAtSameIndex) {
+        const lastNameCol = finalStudentInfoCols['LASTNAME'];
+        const firstNameCol = finalStudentInfoCols['FIRST NAME'];
+        
+        if (lastNameCol !== undefined && firstNameCol !== undefined && 
+            rowAtSameIndex.length > Math.max(lastNameCol, firstNameCol)) {
+          const finalLastName = String(rowAtSameIndex[lastNameCol] || '').trim();
+          const finalFirstName = String(rowAtSameIndex[firstNameCol] || '').trim();
+          
+          // Row is empty, can use same position
+          if (!finalLastName && !finalFirstName) {
+            return { 
+              rowIndex: midtermRowIndex, 
+              matchType: 'row_position' 
+            };
+          }
+        }
+      }
+    }
+    
+    return null; // No match found
+  }, []);
+
+  // 🔄 AUTO-SYNC: Generate hash for STUDENT INFO rows (for change detection)
+  const generateStudentInfoHash = useCallback((tableData, headers) => {
+    if (!tableData || !headers || !Array.isArray(tableData) || !Array.isArray(headers)) {
+      return null;
+    }
+    
+    const studentInfoCols = identifyStudentInfoColumns(headers);
+    
+    // Extract STUDENT INFO data for each row
+    const studentInfoRows = tableData
+      .map((row, index) => {
+        const studentInfo = {};
+        Object.entries(studentInfoCols).forEach(([colName, colIndex]) => {
+          if (colIndex !== undefined && row.length > colIndex) {
+            studentInfo[colName] = String(row[colIndex] || '').trim();
+          } else {
+            studentInfo[colName] = '';
+          }
+        });
+        
+        // Only include rows with actual student data
+        if (studentInfo['LASTNAME'] || studentInfo['FIRST NAME']) {
+          return {
+            rowIndex: index,
+            data: studentInfo
+          };
+        }
+        return null;
+      })
+      .filter(Boolean);
+    
+    // Generate hash string
+    const hashString = JSON.stringify(studentInfoRows);
+    return hashString;
+  }, [identifyStudentInfoColumns]);
+
+  // 🔄 AUTO-SYNC: Helper to convert column index to A1 notation
+  const columnIndexToLetter = useCallback((index) => {
+    let result = '';
+    let num = index;
+    while (num >= 0) {
+      result = String.fromCharCode(65 + (num % 26)) + result;
+      num = Math.floor(num / 26) - 1;
+    }
+    return result;
+  }, []);
+
+  // 🔄 AUTO-SYNC: Sync a single student's info from Midterm to Final
+  // 🔥 OPTIMIZATION: Now collects updates into provided array instead of making individual API calls
+  const syncStudentInfoToFinal = useCallback((
+    sheetId,
+    midtermStudent,
+    midtermRowIndex,
+    finalSheetName,
+    finalTableData,
+    finalHeaders,
+    matchResult,
+    finalStudentInfoCols,
+    midtermStudentInfoCols,
+    midtermHeaders,
+    midtermTableData,
+    updatesArray // 🔥 NEW: Array to collect updates for batching
+  ) => {
+    try {
+      if (matchResult) {
+        // Student exists - UPDATE
+        const updates = [];
+        const finalRowNumber = matchResult.rowIndex + 4; // +3 headers + 1 for 1-based
+        
+        // 🔥 FIX: Use Final sheet's column indices, not Midterm's
+        // This ensures we sync to the correct columns even if column positions differ
+        Object.entries(finalStudentInfoCols).forEach(([colName, finalColIndex]) => {
+          if (finalColIndex === undefined) return;
+          
+          // 🔥 CRITICAL: For STUDENT ID, verify we're using the correct column
+          // Check that the header at this index actually says "STUDENT ID"
+          if (colName === 'STUDENT ID') {
+            const headerAtIndex = finalHeaders[finalColIndex];
+            const normalizedHeader = headerAtIndex ? String(headerAtIndex).trim().toUpperCase() : '';
+            const isStudentIdColumn = normalizedHeader.includes('STUDENT ID') || 
+                                     normalizedHeader.includes('STUDENTID') || 
+                                     (normalizedHeader === 'ID' && !normalizedHeader.includes('MIDDLE'));
+            
+            if (!isStudentIdColumn) {
+              // 🔥 FIX: Find the correct STUDENT ID column index in Final sheet
+              let correctStudentIdIndex = -1;
+              for (let i = 0; i < finalHeaders.length; i++) {
+                const header = String(finalHeaders[i] || '').trim().toUpperCase();
+                if (header.includes('STUDENT ID') || header.includes('STUDENTID') || 
+                    (header === 'ID' && !header.includes('MIDDLE'))) {
+                  correctStudentIdIndex = i;
+                  break;
+                }
+              }
+              
+              if (correctStudentIdIndex === -1) {
+                console.error(`🔄 SYNC ERROR: STUDENT ID column not found in Final sheet headers!`);
+                return; // Skip - can't find STUDENT ID column
+              }
+              
+              // Use the correct index instead
+              finalColIndex = correctStudentIdIndex;
+            }
+          }
+          
+          // Skip NO. column - handled separately
+          if (colName === 'NO.') {
+            const currentValue = finalTableData[matchResult.rowIndex]?.[finalColIndex];
+            if (!currentValue || String(currentValue).trim() === '') {
+              const midtermNo = midtermStudent['NO.'] || (midtermRowIndex + 1);
+              const columnLetter = columnIndexToLetter(finalColIndex);
+              updates.push({
+                range: `'${finalSheetName}'!${columnLetter}${finalRowNumber}`,
+                values: [[String(midtermNo)]]
+              });
+            }
+            return;
+          }
+          
+          // 🔥 CRITICAL FIX: Get Midterm value correctly
+          // For STUDENT ID, use extracted value, but re-search if empty AND row has other data
+          // This handles misalignment while respecting explicit clearing
+          let midtermValue = midtermStudent[colName];
+          
+          // 🔥 SMART HANDLING FOR STUDENT ID:
+          // 1. If extracted value exists → use it (STUDENT ID is in correct column)
+          // 2. If extracted value is empty BUT row has other data → re-search (might be misaligned)
+          // 3. If extracted value is empty AND row is empty → use empty (explicitly cleared)
+          if (colName === 'STUDENT ID') {
+            const extractedStudentId = String(midtermStudent[colName] || '').trim();
+            
+            // If extracted value is empty, check if row has other student data
+            if (!extractedStudentId) {
+              const hasOtherStudentData = (midtermStudent['LASTNAME'] && midtermStudent['LASTNAME'].trim() !== '') ||
+                                        (midtermStudent['FIRST NAME'] && midtermStudent['FIRST NAME'].trim() !== '');
+              
+              // Only re-search if row has other data (might be misaligned)
+              // If row is empty, STUDENT ID is explicitly cleared - respect empty value
+              if (hasOtherStudentData) {
+                // Re-search the row to find STUDENT ID (handles misalignment)
+                const studentIdPattern = /^\d{2}-\d{4}-\d{3}$/;
+                const originalRow = midtermTableData?.[midtermRowIndex];
+                if (originalRow) {
+                  midtermValue = '';
+                  for (let i = 0; i < originalRow.length; i++) {
+                    const cellValue = String(originalRow[i] || '').trim();
+                    if (studentIdPattern.test(cellValue)) {
+                      midtermValue = cellValue;
+                      break;
+                    }
+                  }
+                } else {
+                  midtermValue = '';
+                }
+              } else {
+                // Row is empty - STUDENT ID is explicitly cleared, use empty value
+                midtermValue = '';
+              }
+            } else {
+              // Extracted value exists - use it directly
+              midtermValue = extractedStudentId;
+            }
+          }
+          
+          // Update other columns (including STUDENT ID, MIDDLE NAME, etc.)
+          const midtermValueStr = midtermValue !== undefined && midtermValue !== null 
+            ? String(midtermValue).trim() 
+            : '';
+          
+          // 🔥 CRITICAL: For STUDENT ID, validate the value if it exists
+          // But allow empty values to be synced (to clear Final if Midterm is empty)
+          if (colName === 'STUDENT ID') {
+            const studentIdPattern = /^\d{2}-\d{4}-\d{3}$/;
+            // If the value exists but doesn't match STUDENT ID pattern, don't sync it
+            // This prevents MIDDLE NAME or other values from being synced to STUDENT ID
+            if (midtermValueStr && !studentIdPattern.test(midtermValueStr)) {
+              return; // Skip - this is not a valid STUDENT ID, don't sync to STUDENT ID column
+            }
+            // If midtermValueStr is empty, we'll allow it to sync (to clear Final)
+          }
+          
+          // Get current Final value - normalize to empty string if undefined/null/empty
+          const finalRow = finalTableData[matchResult.rowIndex];
+          const finalValue = finalRow && finalRow.length > finalColIndex && 
+                           finalRow[finalColIndex] !== undefined && 
+                           finalRow[finalColIndex] !== null &&
+                           String(finalRow[finalColIndex]).trim() !== ''
+            ? String(finalRow[finalColIndex]).trim()
+            : '';
+          
+          // 🔥 EFFICIENT & ROBUST: Sync if values are different
+          // This handles ALL cases efficiently:
+          // 1. Empty in Midterm, has value in Final → Clear Final (sync empty string)
+          // 2. Has value in Midterm, empty in Final → Update Final (sync value)
+          // 3. Different non-empty values → Update Final (sync new value)
+          // 4. Both empty → Skip (no change needed, more efficient)
+          if (midtermValueStr !== finalValue) {
+            const columnLetter = columnIndexToLetter(finalColIndex);
+            updates.push({
+              range: `'${finalSheetName}'!${columnLetter}${finalRowNumber}`,
+              values: [[midtermValueStr]] // Empty string will clear the cell in Final
+            });
+          }
+        });
+        
+        // 🔥 OPTIMIZATION: Collect updates into provided array instead of making API call
+        // All updates will be batched into single API call later
+        if (updates.length > 0 && updatesArray) {
+          updatesArray.push(...updates);
+          return updates.length; // Return count of actual updates
+        }
+        return 0; // No updates made
+      } else {
+        // Student doesn't exist - this case is now handled in the caller
+        // Return 0 as this function only handles updates, not additions
+        return 0;
+      }
+    } catch (error) {
+      console.error(`🔄 SYNC: Error syncing student ${midtermStudent['FIRST NAME']} ${midtermStudent['LASTNAME']}:`, error);
+      return 0; // Return 0 on error
+    }
+  }, [columnIndexToLetter]);
+
+  // 🔄 AUTO-SYNC: Main checker function - compares Midterm and Final sheets
+  const checkMidtermFinalSync = useCallback(async () => {
+    try {
+      // Prevent overlapping checks
+      if (midtermFinalSyncInProgress.current) {
+        return;
+      }
+      
+      midtermFinalSyncInProgress.current = true;
+      
+      if (!classRecord?.google_sheet_id) {
+        midtermFinalSyncInProgress.current = false;
+        return;
+      }
+      
+      // Get all sheets
+      const sheetsList = await classRecordService.getSheetsList(classRecord.google_sheet_id);
+      const sheets = sheetsList?.data?.sheets || [];
+      
+      if (!sheets || sheets.length === 0) {
+        midtermFinalSyncInProgress.current = false;
+        return;
+      }
+      
+      // Find Midterm and Final sheets
+      const midtermSheet = sheets.find(sheet => 
+        sheet.sheet_name?.toLowerCase().includes('midterm') && 
+        !sheet.sheet_name?.toLowerCase().includes('premidterm')
+      );
+      
+      const finalSheet = sheets.find(sheet => 
+        sheet.sheet_name?.toLowerCase().includes('final') && 
+        !sheet.sheet_name?.toLowerCase().includes('prefinal')
+      );
+      
+      if (!midtermSheet || !finalSheet) {
+        midtermFinalSyncInProgress.current = false;
+        return;
+      }
+      
+      // Get Midterm sheet data
+      const midtermData = await classRecordService.getSpecificSheetData(
+        classRecord.google_sheet_id,
+        midtermSheet.sheet_name
+      );
+      
+      if (!midtermData.data?.success) {
+        console.error('🔄 SYNC: Failed to load Midterm sheet');
+        midtermFinalSyncInProgress.current = false;
+        return;
+      }
+      
+      // Extract STUDENT INFO columns from Midterm to calculate hash
+      const midtermStudentInfoCols = identifyStudentInfoColumns(midtermData.data.headers);
+      
+      // 🔥 OPTIMIZATION: Calculate hash of Midterm STUDENT INFO data
+      // If hash hasn't changed, skip sync (no changes detected)
+      const currentMidtermHash = calculateStudentInfoHash(
+        midtermData.data.tableData,
+        midtermStudentInfoCols
+      );
+      
+      // Check if Midterm data has changed
+      if (lastMidtermHashRef.current !== null && 
+          lastMidtermHashRef.current === currentMidtermHash) {
+        // No changes detected - skip sync to reduce server load
+        midtermFinalSyncInProgress.current = false;
+        return;
+      }
+      
+      // Get Final sheet data (only if Midterm has changes)
+      const finalData = await classRecordService.getSpecificSheetData(
+        classRecord.google_sheet_id,
+        finalSheet.sheet_name
+      );
+      
+      if (!finalData.data?.success) {
+        console.error('🔄 SYNC: Failed to load Final sheet');
+        midtermFinalSyncInProgress.current = false;
+        return;
+      }
+      
+      // Extract STUDENT INFO from Final sheet
+      const finalStudentInfoCols = identifyStudentInfoColumns(finalData.data.headers);
+      
+      // Validate required columns exist
+      if (!midtermStudentInfoCols['LASTNAME'] || !midtermStudentInfoCols['FIRST NAME']) {
+        console.warn('🔄 SYNC: Midterm sheet missing required STUDENT INFO columns');
+        midtermFinalSyncInProgress.current = false;
+        return;
+      }
+      
+      if (!finalStudentInfoCols['LASTNAME'] || !finalStudentInfoCols['FIRST NAME']) {
+        console.warn('🔄 SYNC: Final sheet missing required STUDENT INFO columns');
+        midtermFinalSyncInProgress.current = false;
+        return;
+      }
+      
+      // 🔥 EFFICIENT & ROBUST: Extract ALL rows from Midterm (including empty ones)
+      // This ensures we detect when rows are cleared/deleted and sync them to Final
+      // We check all rows under STUDENT INFO category (columns A-E: NO., LASTNAME, FIRST NAME, MIDDLE NAME, STUDENT ID)
+      const midtermRows = midtermData.data.tableData.map((row, index) => {
+        const student = {};
+        let hasAnyData = false;
+        
+        Object.entries(midtermStudentInfoCols).forEach(([colName, colIndex]) => {
+          // 🔥 FIX: Handle sparse arrays - check if value exists, not just row length
+          // Google Sheets API returns sparse arrays (empty cells are undefined, not included)
+          if (colIndex !== undefined) {
+            // Get raw value - may be undefined if cell is empty or row is sparse
+            let rawValue = row[colIndex];
+            let actualIndex = colIndex;
+            
+            // 🔥 FIX: If STUDENT ID is empty at identified index, search for it in the row
+            // This handles cases where headers and data rows are misaligned
+            if (colName === 'STUDENT ID' && (!rawValue || String(rawValue).trim() === '')) {
+              // Pattern to match STUDENT ID format: XX-XXXX-XXX (e.g., 22-1234-567)
+              const studentIdPattern = /^\d{2}-\d{4}-\d{3}$/;
+              
+              // Search the row for a value matching STUDENT ID pattern
+              for (let i = 0; i < row.length; i++) {
+                const cellValue = String(row[i] || '').trim();
+                if (studentIdPattern.test(cellValue)) {
+                  rawValue = cellValue;
+                  actualIndex = i;
+                  break;
+                }
+              }
+            }
+            
+            // Convert to string, handling undefined/null/empty
+            const stringValue = rawValue !== undefined && rawValue !== null 
+              ? String(rawValue) 
+              : '';
+            student[colName] = stringValue.trim();
+            
+            // Check if this column has data (for STUDENT INFO columns A-E)
+            if (student[colName] && student[colName] !== '') {
+              hasAnyData = true;
+            }
+          } else {
+            student[colName] = '';
+          }
+        });
+        
+        // Return ALL rows, including empty ones - mark if they have data
+        return { 
+          rowIndex: index, 
+          data: student, 
+          hasData: hasAnyData || (student['LASTNAME'] || student['FIRST NAME'])
+        };
+      });
+      
+      // Use all rows for comparison, but filter for syncing (only sync rows with data)
+      const midtermStudents = midtermRows.filter(row => row.hasData);
+      
+      if (midtermStudents.length === 0) {
+        midtermFinalSyncInProgress.current = false;
+        return;
+      }
+      
+      // 🔥 OPTIMIZATION: Collect all updates first, then batch into single API call
+      // This reduces API calls from N to 1, making it much more efficient
+      let syncCount = 0;
+      const allUpdates = []; // Collect ALL updates (syncs + clears) for batching
+      const newStudentsToAdd = []; // Collect new students to add
+      
+      // Process syncs and collect updates
+      for (const midtermStudent of midtermStudents) {
+        const match = findMatchingStudent(
+          finalData.data.tableData,
+          finalData.data.headers,
+          midtermStudent.data,
+          midtermStudent.rowIndex,
+          finalStudentInfoCols
+        );
+        
+        // Check if sync is needed
+        let needsSync = false;
+        
+        if (!match) {
+          // New student - needs to be added
+          needsSync = true;
+        } else {
+          // Student exists - check if info is different
+          const finalRow = finalData.data.tableData[match.rowIndex];
+          
+          // 🔥 EFFICIENT & ROBUST: Check all columns for differences
+          // This includes empty values - if Midterm is empty, Final should be empty too
+          Object.entries(finalStudentInfoCols).forEach(([colName, colIndex]) => {
+            if (colIndex === undefined) return;
+            
+            // 🔥 ROBUST: Normalize Midterm value - treat undefined/null/empty as empty string
+            const midtermValue = midtermStudent.data[colName] !== undefined && 
+                                midtermStudent.data[colName] !== null &&
+                                String(midtermStudent.data[colName]).trim() !== ''
+              ? String(midtermStudent.data[colName]).trim()
+              : '';
+            
+            // 🔥 ROBUST: Normalize Final value - treat undefined/null/empty as empty string
+            const finalValue = finalRow && 
+                              finalRow.length > colIndex && 
+                              finalRow[colIndex] !== undefined && 
+                              finalRow[colIndex] !== null &&
+                              String(finalRow[colIndex]).trim() !== ''
+              ? String(finalRow[colIndex]).trim()
+              : '';
+            
+            // Skip NO. column for comparison (can differ)
+            // 🔥 EFFICIENT & ROBUST: For all other fields, sync if different
+            // This includes:
+            // - Empty in Midterm, has value in Final → needsSync = true (will clear Final)
+            // - Has value in Midterm, empty in Final → needsSync = true (will update Final)
+            // - Different non-empty values → needsSync = true (will update Final)
+            // - Both empty → needsSync = false (no change needed, more efficient)
+            if (colName !== 'NO.' && midtermValue !== finalValue) {
+              needsSync = true;
+            }
+          });
+          
+        }
+        
+        if (needsSync) {
+          if (!match) {
+            // New student - collect for batch addition
+            const studentData = {
+              'LASTNAME': midtermStudent.data['LASTNAME'],
+              'FIRST NAME': midtermStudent.data['FIRST NAME']
+            };
+            
+            if (midtermStudent.data['MIDDLE NAME']) {
+              studentData['MIDDLE NAME'] = midtermStudent.data['MIDDLE NAME'];
+            }
+            
+            if (midtermStudent.data['STUDENT ID']) {
+              studentData['STUDENT ID'] = midtermStudent.data['STUDENT ID'];
+            }
+            
+            newStudentsToAdd.push(
+              classRecordService.addStudentToGoogleSheetsWithAutoNumber(
+                classRecord.google_sheet_id,
+                studentData,
+                finalSheet.sheet_name
+              )
+            );
+          } else {
+            // Existing student - collect updates for batching
+            const updateCount = syncStudentInfoToFinal(
+              classRecord.google_sheet_id,
+              midtermStudent.data,
+              midtermStudent.rowIndex,
+              finalSheet.sheet_name,
+              finalData.data.tableData,
+              finalData.data.headers,
+              match,
+              finalStudentInfoCols,
+              midtermStudentInfoCols,
+              midtermData.data.headers,
+              midtermData.data.tableData,
+              allUpdates // Pass updates array to collect updates
+            );
+            
+            if (updateCount && updateCount > 0) {
+              syncCount++;
+            }
+          }
+        }
+      }
+      
+      // Wait for all new students to be added
+      await Promise.all(newStudentsToAdd);
+      if (newStudentsToAdd.length > 0) {
+        syncCount += newStudentsToAdd.length;
+      }
+      
+      // 🔥 EFFICIENT & ROBUST: Clear rows in Final that are empty/null in Midterm
+      // Check ALL rows in Final against ALL rows in Midterm (by position and by matching)
+      // This handles cases where data was deleted/cleared in Midterm
+      // 🔥 OPTIMIZATION: Collect clear updates into allUpdates array for batching
+      let clearCount = 0;
+      
+      // Get ALL rows from Final sheet (including empty ones)
+      const finalRows = finalData.data.tableData.map((row, index) => {
+        const student = {};
+        let hasAnyStudentInfoData = false;
+        
+        Object.entries(finalStudentInfoCols).forEach(([colName, colIndex]) => {
+          if (colIndex !== undefined && row.length > colIndex) {
+            student[colName] = String(row[colIndex] || '').trim();
+            if (student[colName] && student[colName] !== '') {
+              hasAnyStudentInfoData = true;
+            }
+          } else {
+            student[colName] = '';
+          }
+        });
+        
+        // Return ALL rows with their data state
+        return { 
+          rowIndex: index, 
+          data: student,
+          hasData: hasAnyStudentInfoData || (student['LASTNAME'] || student['FIRST NAME'])
+        };
+      });
+      
+      // 🔥 EFFICIENT & ROBUST: Check each Final row against ALL Midterm rows (including empty ones)
+      // Verify that each Final row matches a Midterm row WITH DATA - if not, clear it
+      for (const finalRow of finalRows) {
+        // Only process rows that have data in Final
+        if (!finalRow.hasData) continue;
+        
+        // 🔥 CRITICAL FIX: Match by IDENTIFIER first (STUDENT ID or name), then check if Midterm row has data
+        // This detects when a Midterm row is empty but still has the same identifier
+        let matchFound = false;
+        let matchedMidtermRow = null;
+        let matchedMidtermRowHasData = false;
+        
+        // First priority: Match by STUDENT ID (most reliable)
+        // Check ALL Midterm rows, including empty ones, to find matching STUDENT ID
+        if (finalRow.data['STUDENT ID'] && finalRow.data['STUDENT ID'] !== '') {
+          for (const midtermRow of midtermRows) {
+            // Match by STUDENT ID regardless of whether Midterm row has data
+            if (midtermRow.data['STUDENT ID'] && 
+                midtermRow.data['STUDENT ID'] === finalRow.data['STUDENT ID']) {
+              matchFound = true;
+              matchedMidtermRow = midtermRow;
+              matchedMidtermRowHasData = midtermRow.hasData;
+              break; // Found match, stop searching
+            }
+          }
+        }
+        
+        // Second priority: Match by name (LASTNAME + FIRST NAME) if no STUDENT ID match
+        // Check ALL Midterm rows, including empty ones, to find matching name
+        if (!matchFound && finalRow.data['LASTNAME'] && finalRow.data['FIRST NAME']) {
+          const finalLastName = finalRow.data['LASTNAME'].toLowerCase().trim();
+          const finalFirstName = finalRow.data['FIRST NAME'].toLowerCase().trim();
+          
+          for (const midtermRow of midtermRows) {
+            const midtermLastName = (midtermRow.data['LASTNAME'] || '').toLowerCase().trim();
+            const midtermFirstName = (midtermRow.data['FIRST NAME'] || '').toLowerCase().trim();
+            
+            // Match by name regardless of whether Midterm row has data
+            if (midtermLastName === finalLastName && 
+                midtermFirstName === finalFirstName) {
+              matchFound = true;
+              matchedMidtermRow = midtermRow;
+              matchedMidtermRowHasData = midtermRow.hasData;
+              break; // Found match, stop searching
+            }
+          }
+        }
+        
+        // 🔥 CLEAR LOGIC: Clear Final row if:
+        // 1. No match found in Midterm (student doesn't exist), OR
+        // 2. Match found but Midterm row is empty (student was deleted/cleared)
+        const shouldClear = !matchFound || (matchFound && !matchedMidtermRowHasData);
+        
+        if (shouldClear) {
+          const finalRowNumber = finalRow.rowIndex + 4; // +3 headers + 1 for 1-based
+          const clearUpdates = [];
+          
+          // Clear all STUDENT INFO columns (A-E: NO., LASTNAME, FIRST NAME, MIDDLE NAME, STUDENT ID)
+          Object.entries(finalStudentInfoCols).forEach(([colName, colIndex]) => {
+            if (colIndex !== undefined) {
+              const columnLetter = columnIndexToLetter(colIndex);
+              clearUpdates.push({
+                range: `'${finalSheet.sheet_name}'!${columnLetter}${finalRowNumber}`,
+                values: [['']] // Clear the cell - make it null/empty
+              });
+            }
+          });
+          
+          if (clearUpdates.length > 0) {
+            // 🔥 OPTIMIZATION: Collect clear updates into allUpdates array for batching
+            allUpdates.push(...clearUpdates);
+            clearCount++;
+          }
+        }
+      }
+      
+      // 🔥 OPTIMIZATION: Batch ALL updates (syncs + clears) into single API call
+      // This reduces API calls from N to 1, making it much more efficient
+      if (allUpdates.length > 0) {
+        try {
+          await classRecordService.updateMultipleCells(classRecord.google_sheet_id, {
+            updates: allUpdates,
+            sheet_name: finalSheet.sheet_name
+          });
+        } catch (error) {
+          console.error(`🔄 SYNC: Failed to batch update Final sheet:`, error);
+          // Don't throw - continue to update hash even if some updates failed
+        }
+      }
+      
+      // 🔥 OPTIMIZATION: Update hash after successful sync
+      // This ensures we don't re-sync the same data
+      lastMidtermHashRef.current = currentMidtermHash;
+      
+      const totalChanges = syncCount + clearCount;
+      
+      // 🔥 PREVENT DUPLICATE TOASTS: Only show toast if result is different from last sync
+      // This prevents showing the same toast multiple times for the same changes
+      const currentSyncResult = { syncCount, clearCount, timestamp: Date.now() };
+      const isDuplicateResult = 
+        lastSyncResultRef.current.syncCount === syncCount &&
+        lastSyncResultRef.current.clearCount === clearCount &&
+        (Date.now() - (lastSyncResultRef.current.timestamp || 0)) < 2000; // Same result within 2 seconds = duplicate
+      
+      if (totalChanges > 0 && !isDuplicateResult) {
+        // Clear any pending toast debounce
+        if (toastDebounceTimeoutRef.current) {
+          clearTimeout(toastDebounceTimeoutRef.current);
+          toastDebounceTimeoutRef.current = null;
+        }
+        
+        // Dismiss any existing toast first
+        if (lastSyncToastRef.current) {
+          toast.dismiss(lastSyncToastRef.current);
+        }
+        
+        let message = '';
+        if (syncCount > 0 && clearCount > 0) {
+          message = `Synced ${syncCount} student(s) and cleared ${clearCount} student(s) in Final sheet`;
+        } else if (syncCount > 0) {
+          message = `Synced ${syncCount} student(s) to Final sheet`;
+        } else if (clearCount > 0) {
+          message = `Cleared ${clearCount} student(s) in Final sheet`;
+        }
+        
+        // Show toast immediately (no debounce)
+        const toastId = toast.success(message, { duration: 3000 });
+        lastSyncToastRef.current = toastId;
+        
+        // Update last sync result to prevent duplicates
+        lastSyncResultRef.current = currentSyncResult;
+      } else if (totalChanges === 0) {
+        // No changes - reset last sync result so next change will show toast
+        lastSyncResultRef.current = { syncCount: 0, clearCount: 0, timestamp: 0 };
+      }
+      
+    } catch (error) {
+      console.error('🔄 SYNC: Error checking Midterm-Final sync:', error);
+      // Don't show error toast - this is background operation
+    } finally {
+      midtermFinalSyncInProgress.current = false;
+    }
+  }, [classRecord?.google_sheet_id, identifyStudentInfoColumns, findMatchingStudent, syncStudentInfoToFinal]);
+
   // 🔥 NEW: Manual refresh function for allocation status
   const manualRefreshAllocation = useCallback(async () => {
     if (isRefreshingAllocation || percentageCheckInProgress.current) {
@@ -515,6 +1352,34 @@ const ClassRecordExcel = () => {
     return () => clearInterval(interval);
   }, [classRecord?.google_sheet_id, currentSheet?.sheet_name, checkForPercentageChanges]);
 
+  // 🔄 AUTO-SYNC: Periodic checker for Midterm to Final sync (every 10 seconds for faster sync)
+  useEffect(() => {
+    if (!classRecord?.google_sheet_id) return;
+    
+    // Initial check after 3 seconds (let page load, but faster than before)
+    const initialTimeout = setTimeout(() => {
+      if (!midtermFinalSyncInProgress.current) {
+        checkMidtermFinalSync();
+      }
+    }, 3000); // Reduced from 5s to 3s for faster initial sync
+    
+    // Then check every 10 seconds (faster polling for quicker sync detection)
+    // This ensures changes are synced within 30 seconds (3 checks max)
+    const interval = setInterval(() => {
+      // Prevent overlapping checks
+      if (midtermFinalSyncInProgress.current) {
+        return;
+      }
+      
+      checkMidtermFinalSync();
+    }, 10000); // 10 seconds - faster polling for quicker sync
+    
+    return () => {
+      clearTimeout(initialTimeout);
+      clearInterval(interval);
+    };
+  }, [classRecord?.google_sheet_id, checkMidtermFinalSync]);
+
   const loadCategories = async () => {
     try {
       console.log('🔍 LOAD_CATEGORIES: Starting...');
@@ -602,7 +1467,7 @@ const ClassRecordExcel = () => {
           !transcript.toLowerCase().includes('exit')) {
           console.log('🔥 MAIN EFFECT: 🔄 Skipping main processing - using interim processing only');
           setLastVoiceCommand(transcript);
-          clearTranscript();
+          // Keep transcript visible in batch mode
           return;
         }
 
@@ -614,7 +1479,7 @@ const ClassRecordExcel = () => {
           transcript.toLowerCase().includes('exit')) {
           console.log('🔥 MAIN EFFECT: 🏁 FINISHING batch mode detected');
           window.batchModeFinishing = true;
-          clearTranscript();
+          // Keep transcript visible in batch mode
         }
 
       } else {
@@ -675,9 +1540,8 @@ const ClassRecordExcel = () => {
         const cleanedScore = score.trim().replace(/[)\].,!?:;-]+$/g, '');
         processBatchEntry(cleanedName, cleanedScore);
 
-        // 🔥 Clear immediately
+        // 🔥 Clear interim command only (keep transcript visible)
         setInterimBatchCommand('');
-        clearTranscript();
       }
     }
   }, [interimBatchCommand, batchMode, currentBatchColumn]);
@@ -3603,7 +4467,7 @@ const ClassRecordExcel = () => {
       console.log('🔥 BATCH VOICE: Processing batch entry:', cleanedName, score);
       await processBatchEntry(cleanedName, score.trim());
 
-      clearTranscript();
+      // Keep transcript visible in batch mode
     } else {
       console.log('🔥 BATCH VOICE: Pattern not matched:', transcript);
     }
@@ -4811,6 +5675,27 @@ const ClassRecordExcel = () => {
                         <span>{isRefreshingAllocation ? 'Checking allocation...' : 'Run Allocation Checker'}</span>
                       </button>
 
+                      <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                        Sync Tools
+                      </div>
+
+                      <button
+                        onClick={async () => {
+                          closeAllDropdowns();
+                          if (midtermFinalSyncInProgress.current) {
+                            toast('Sync already in progress...');
+                            return;
+                          }
+                          toast('Syncing Midterm to Final sheet...');
+                          await checkMidtermFinalSync();
+                        }}
+                        disabled={midtermFinalSyncInProgress.current}
+                        className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left disabled:opacity-60"
+                      >
+                        <RefreshCw className={`w-4 h-4 text-indigo-600 ${midtermFinalSyncInProgress.current ? 'animate-spin' : ''}`} />
+                        <span>{midtermFinalSyncInProgress.current ? 'Syncing...' : 'Sync Midterm to Final'}</span>
+                      </button>
+
                       <button
                         onClick={() => {
                           setShowAddCategoryModal(true);
@@ -5033,6 +5918,23 @@ const ClassRecordExcel = () => {
 
                   <div className="grid grid-cols-1 gap-2">
                     <button
+                      onClick={async () => {
+                        setIsDrawerOpen(false);
+                        if (midtermFinalSyncInProgress.current) {
+                          toast('Sync already in progress...');
+                          return;
+                        }
+                        toast('Syncing Midterm to Final sheet...');
+                        await checkMidtermFinalSync();
+                      }}
+                      disabled={midtermFinalSyncInProgress.current}
+                      className="flex items-center space-x-3 px-4 py-3 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                    >
+                      <RefreshCw className={`w-4 h-4 text-indigo-600 ${midtermFinalSyncInProgress.current ? 'animate-spin' : ''}`} />
+                      <span>{midtermFinalSyncInProgress.current ? 'Syncing...' : 'Sync Midterm to Final'}</span>
+                    </button>
+
+                    <button
                       onClick={() => {
                         setShowImportInfoModal(true);
                         setIsDrawerOpen(false);
@@ -5231,12 +6133,18 @@ const ClassRecordExcel = () => {
                   {/* Batch Mode Button */}
                   <button
                     onClick={handleBatchModeSelected}
-                    className="w-full p-4 rounded-lg border-2 border-purple-200 hover:border-purple-400 bg-purple-50 hover:bg-purple-100 transition-all duration-200 flex items-center space-x-4 group"
+                    className="w-full p-4 rounded-lg border-2 border-purple-200 hover:border-purple-400 bg-purple-50 hover:bg-purple-100 transition-all duration-200 flex items-center space-x-4 group relative overflow-hidden"
                   >
+                    {/* Recommended Badge */}
+                    <div className="absolute top-2 right-2 flex items-center space-x-1.5 bg-gradient-to-r from-amber-400 to-amber-500 text-white px-3 py-1.5 rounded-full text-xs font-semibold shadow-lg z-10">
+                      <Star className="w-3.5 h-3.5 fill-current" />
+                      <span>Recommended</span>
+                    </div>
+                    
                     <div className="flex-shrink-0 w-12 h-12 rounded-full bg-purple-500 flex items-center justify-center group-hover:bg-purple-600 transition-colors">
                       <Users className="w-6 h-6 text-white" />
                     </div>
-                    <div className="flex-1 text-left">
+                    <div className="flex-1 text-left pr-16">
                       <h4 className="font-semibold text-gray-900 group-hover:text-purple-700">
                         Batch Mode
                       </h4>
@@ -5607,6 +6515,7 @@ const ClassRecordExcel = () => {
           processingEntries={processingEntries}
           setProcessingEntries={setProcessingEntries}
           transcript={transcript}
+          clearTranscript={clearTranscript}
         />
 
         {/* Final Grade Overview Modal */}

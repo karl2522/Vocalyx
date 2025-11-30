@@ -1,6 +1,6 @@
 import { Mic, Pause, Play, Users, X } from 'lucide-react';
 import PropTypes from 'prop-types';
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import BatchEntryItem from '../BatchEntryItem';
 
@@ -106,7 +106,8 @@ const BatchGradingModal = ({
   classRecordService,
   setBatchSheetData,
   stopListening,
-  transcript
+  transcript,
+  clearTranscript
 }) => {
   const transcriptEndRef = useRef(null);
   const [desiredListening, setDesiredListening] = useState(false);
@@ -114,11 +115,12 @@ const BatchGradingModal = ({
   const [isToggling, setIsToggling] = useState(false);
   const prevEntriesLenRef = useRef(batchEntries?. length || 0);
   const prevEntriesRef = useRef([]); // Track previous entries to detect new ones
+  const clearTranscriptTimeoutRef = useRef(null); // Track clearing timeout
 
   // 🔊 Initialize sound feedback
   const { playSuccessSound, playErrorSound } = useSoundFeedback();
 
-  // 🔊 Play sound when new entry is added
+  // 🔊 Play sound when new entry is added and clear transcript after delay
   useEffect(() => {
     const prevLen = prevEntriesRef.current.length;
     const currLen = batchEntries?.length || 0;
@@ -136,6 +138,26 @@ const BatchGradingModal = ({
         console.log('🔊 SOUND: Student not found - playing error beep');
       }
 
+      // Clear previous timeout if exists (for rapid entries)
+      if (clearTranscriptTimeoutRef.current) {
+        clearTimeout(clearTranscriptTimeoutRef.current);
+        clearTranscriptTimeoutRef.current = null;
+      }
+
+      // 🔥 Clear transcript after ensuring it's visible
+      // Wait 2 seconds to ensure transcript appears and is visible before clearing
+      clearTranscriptTimeoutRef.current = setTimeout(() => {
+        // Always clear transcript if clearTranscript function exists
+        // Don't check transcript value - if it's already cleared, no harm done
+        if (clearTranscript) {
+          clearTranscript();
+          console.log('🔥 BATCH: Transcript cleared after entry processed');
+        } else {
+          console.warn('🔥 BATCH: clearTranscript function not available');
+        }
+        clearTranscriptTimeoutRef.current = null;
+      }, 2000); // 2 seconds delay to ensure transcript is visible
+
       // Auto-scroll to newest entry
       setTimeout(() => {
         try {
@@ -146,7 +168,15 @@ const BatchGradingModal = ({
 
     prevEntriesRef. current = batchEntries || [];
     prevEntriesLenRef.current = currLen;
-  }, [batchEntries, playSuccessSound, playErrorSound]);
+
+    // Cleanup timeout on unmount or when entries change
+    return () => {
+      if (clearTranscriptTimeoutRef.current) {
+        clearTimeout(clearTranscriptTimeoutRef.current);
+        clearTranscriptTimeoutRef.current = null;
+      }
+    };
+  }, [batchEntries, playSuccessSound, playErrorSound, clearTranscript]); // Removed transcript from deps to prevent timeout cancellation
 
   // Cleanup on modal close/unmount
   useEffect(() => {
@@ -154,6 +184,11 @@ const BatchGradingModal = ({
       try {
         window.batchDesiredListening = false;
         stopListening();
+        // Clear any pending transcript clearing timeout
+        if (clearTranscriptTimeoutRef.current) {
+          clearTimeout(clearTranscriptTimeoutRef.current);
+          clearTranscriptTimeoutRef.current = null;
+        }
       } catch {}
     };
   }, [stopListening]);
@@ -313,6 +348,19 @@ const BatchGradingModal = ({
 
   const handleClearAll = () => {
     setBatchEntries([]);
+    
+    // Clear any pending transcript clearing timeout
+    if (clearTranscriptTimeoutRef.current) {
+      clearTimeout(clearTranscriptTimeoutRef.current);
+      clearTranscriptTimeoutRef.current = null;
+    }
+    
+    // Clear the transcript text
+    if (clearTranscript) {
+      clearTranscript();
+      console.log('🔥 BATCH: Transcript cleared via Clear All button');
+    }
+    
     toast('Cleared all entries');
   };
 
@@ -381,10 +429,30 @@ const BatchGradingModal = ({
 
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                   {headers.filter(h => {
-                    const normalizedHeader = h. trim().toUpperCase();
-                    const excludedColumns = ['NO. ', 'LASTNAME', 'FIRST NAME', 'STUDENT ID', 'MIDDLE NAME', 'TOTAL'];
-                    if (excludedColumns. some(col => normalizedHeader === col.toUpperCase())) return false;
-                    if (h. includes('%')) return false;
+                    const normalizedHeader = h.trim().toUpperCase();
+                    
+                    // Exclude columns that are part of STUDENT INFO category
+                    const excludedColumns = [
+                      'NO.', 'NO', 'NO. ', 'NO ', // Number column variations
+                      'LASTNAME', 'LAST NAME', 'LAST', // Last name variations
+                      'FIRST NAME', 'FIRSTNAME', 'FIRST', // First name variations
+                      'STUDENT ID', 'STUDENTID', 'ID', // Student ID variations
+                      'MIDDLE NAME', 'MIDDLENAME', 'MIDDLE', // Middle name variations
+                      'TOTAL', 'TOTAL SCORE', 'TOTALSCORE' // Total columns
+                    ];
+                    
+                    // Check exact matches
+                    if (excludedColumns.some(col => normalizedHeader === col.toUpperCase())) return false;
+                    
+                    // Check if header contains "STUDENT INFO" (category header)
+                    if (normalizedHeader.includes('STUDENT INFO')) return false;
+                    
+                    // Check if header starts with "NO" (handles NO., NO, NO. , etc.)
+                    if (normalizedHeader.startsWith('NO') && (normalizedHeader.length <= 3 || normalizedHeader[2] === '.' || normalizedHeader[2] === ' ')) return false;
+                    
+                    // Exclude percentage columns
+                    if (h.includes('%')) return false;
+                    
                     return true;
                   }).map(header => (
                     <button
@@ -437,7 +505,7 @@ const BatchGradingModal = ({
                         <Mic className={`w-10 h-10 ${desiredListening ?  'text-purple-600' : 'text-slate-400'}`} />
                       </div>
                       <h3 className="text-xl font-medium text-slate-900 mb-2">
-                        {desiredListening ? 'Listening...' : 'Ready to Record'}
+                        {desiredListening ? 'Listening...' : readiness === 'readying' ? 'Loading student data...' : readiness === 'ready' ? 'Ready to record' : 'Initializing...'}
                       </h3>
                       <p className="text-slate-500 max-w-xs mx-auto">
                         Say "Student Name + Score" (e.g., "Capuras 85")
@@ -468,21 +536,18 @@ const BatchGradingModal = ({
               <div className="border-t border-slate-200 bg-white shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-10">
                 {/* Real-Time Transcript Section */}
                 <div className="px-6 py-3 border-b border-slate-100 bg-slate-50/50">
-                  {transcript && transcript.trim() ?  (
-                    <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
-                      <div className="text-xs text-slate-500 mb-1">You said:</div>
+                  <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                    <div className="text-xs text-slate-500 mb-1">You said:</div>
+                    {transcript && transcript.trim() ? (
                       <div className="text-slate-800 font-medium leading-relaxed">
                         "{transcript}"
                       </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center space-x-2">
-                      <div className={`w-2 h-2 rounded-full ${isListening ? 'bg-red-500 animate-pulse' : 'bg-slate-300'}`}></div>
-                      <span className="text-sm text-slate-600">
-                        {isListening ? 'Speak now.. .' : 'Ready to listen'}
-                      </span>
-                    </div>
-                  )}
+                    ) : (
+                      <div className="text-slate-400 italic text-sm">
+                        {isListening ? 'Listening...' : readiness === 'readying' ? 'Loading data...' : readiness === 'ready' ? 'Ready for next entry' : 'Initializing...'}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Controls Area */}
@@ -594,7 +659,8 @@ BatchGradingModal. propTypes = {
   classRecordService: PropTypes.object,
   setBatchSheetData: PropTypes.func.isRequired,
   stopListening: PropTypes.func. isRequired,
-  transcript: PropTypes. string
+  transcript: PropTypes. string,
+  clearTranscript: PropTypes.func.isRequired
 };
 
 BatchGradingModal. defaultProps = {
@@ -604,5 +670,6 @@ BatchGradingModal. defaultProps = {
   currentSheet: null,
   classRecord: null,
   classRecordService: null,
-  transcript: ''
+  transcript: '',
+  clearTranscript: () => {}
 };
