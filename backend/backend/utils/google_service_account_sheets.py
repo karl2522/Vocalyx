@@ -5305,6 +5305,347 @@ class GoogleServiceAccountSheets:
                 'error': f'Failed to delete category: {str(e)}'
             }
 
+    def add_column_to_category(self, sheet_id: str, category_name: str, new_column_name: str = None,
+                               sheet_name: str = None) -> dict:
+        """Add a new column to an existing category"""
+        try:
+            print(f"➕ ADD_COLUMN: Adding column to category '{category_name}'")
+
+            # Get sheet data
+            if sheet_name:
+                range_name = f"'{sheet_name}'!A1:AM10"
+                print(f"➕ ADD_COLUMN: Requesting raw range: {range_name}")
+
+                result = self.sheets_service.spreadsheets().values().get(
+                    spreadsheetId=sheet_id,
+                    range=range_name,
+                    valueRenderOption='UNFORMATTED_VALUE'
+                ).execute()
+
+                raw_data = result.get('values', [])
+
+                if not raw_data or len(raw_data) < 3:
+                    return {'success': False, 'error': 'Sheet has insufficient data'}
+
+                all_data = raw_data
+                target_sheet_name = sheet_name
+            else:
+                sheet_data = self.get_sheet_data(sheet_id)
+                if not sheet_data['success']:
+                    return sheet_data
+
+                if 'data' not in sheet_data or not sheet_data['data']:
+                    return {'success': False, 'error': 'Sheet has no data to analyze'}
+
+                all_data = sheet_data['data']
+                target_sheet_name = sheet_data['sheet_name']
+
+            print(f"➕ ADD_COLUMN: Target sheet: {target_sheet_name}")
+
+            # Row 1: Category headers
+            # Row 2: Column headers (Quiz 1, Quiz 2, etc., Total)
+            # Row 3: Max scores
+            categories_row = all_data[0]
+            columns_row = all_data[1] if len(all_data) > 1 else []
+            max_scores_row = all_data[2] if len(all_data) > 2 else []
+
+            # Find the category and its range
+            category_start = None
+            category_end = None
+            total_col = None
+
+            for i, cell in enumerate(categories_row):
+                if cell and str(cell).strip().upper() == category_name.upper():
+                    category_start = i
+                    print(f"➕ ADD_COLUMN: Found category '{category_name}' starting at column {i}")
+                    
+                    # Find where this category ends (look for next category or Total column)
+                    for j in range(i + 1, len(columns_row)):
+                        if j < len(columns_row) and columns_row[j]:
+                            col_header = str(columns_row[j]).strip().upper()
+                            if col_header == 'TOTAL':
+                                total_col = j
+                                category_end = j - 1
+                                print(f"➕ ADD_COLUMN: Found Total column at {j}, category ends at {category_end}")
+                                break
+                        
+                        # Check if we hit another category
+                        if j < len(categories_row) and categories_row[j] and j > i:
+                            category_end = j - 1
+                            print(f"➕ ADD_COLUMN: Category ends at {category_end} (next category starts)")
+                            break
+                    
+                    if category_end is None:
+                        category_end = len(columns_row) - 1
+                    break
+
+            if category_start is None:
+                return {'success': False, 'error': f'Category "{category_name}" not found'}
+
+            if total_col is None:
+                return {'success': False, 'error': f'Total column for category "{category_name}" not found'}
+
+            # Count existing subcategories
+            existing_subcategories = []
+            for i in range(category_start, total_col):
+                if i < len(columns_row) and columns_row[i]:
+                    col_name = str(columns_row[i]).strip()
+                    if col_name and col_name.upper() != 'TOTAL':
+                        existing_subcategories.append(col_name)
+
+            print(f"➕ ADD_COLUMN: Existing subcategories: {existing_subcategories}")
+
+            # Generate new column name
+            if not new_column_name:
+                # Auto-generate based on pattern (e.g., Quiz 1, Quiz 2, ... -> Quiz 6)
+                base_name = category_name
+                if existing_subcategories:
+                    first_col = existing_subcategories[0]
+                    # Extract pattern (e.g., "Quiz 1" -> "Quiz")
+                    import re
+                    match = re.match(r'^(.+?)\s*\d+$', first_col)
+                    if match:
+                        base_name = match.group(1).strip()
+                
+                new_number = len(existing_subcategories) + 1
+                new_column_name = f"{base_name} {new_number}"
+            
+            print(f"➕ ADD_COLUMN: New column name: {new_column_name}")
+
+            # Insert 1 column at the Total position (before Total)
+            insert_position = total_col
+            print(f"➕ ADD_COLUMN: Inserting column at position {insert_position} (before Total)")
+
+            # Step 1: Insert the column
+            insert_result = self._insert_columns(sheet_id, target_sheet_name, insert_position, 1)
+            if not insert_result['success']:
+                return insert_result
+
+            print(f"✅ ADD_COLUMN: Successfully inserted 1 column")
+
+            # Step 2: Update the merged category header to include the new column
+            # The category header should now span from category_start to total_col (inclusive of new column)
+            new_category_end = total_col  # Now includes the new column
+            merge_result = self._merge_cells(
+                sheet_id,
+                target_sheet_name,
+                start_row=0,
+                end_row=0,
+                start_col=category_start,
+                end_col=new_category_end
+            )
+
+            if not merge_result['success']:
+                print(f"⚠️ ADD_COLUMN: Failed to update merged header: {merge_result.get('error')}")
+
+            # Step 3: Add the new column header in Row 2
+            new_col_letter = self._column_index_to_a1(insert_position)
+            header_result = self._update_cell_range(
+                sheet_id,
+                target_sheet_name,
+                f"{new_col_letter}2",
+                [[new_column_name]]
+            )
+
+            if not header_result['success']:
+                return header_result
+
+            # Step 4: Add max score (100) in Row 3
+            max_score_result = self._update_cell_range(
+                sheet_id,
+                target_sheet_name,
+                f"{new_col_letter}3",
+                [['100']]
+            )
+
+            if not max_score_result['success']:
+                return max_score_result
+
+            # Step 5: Update the Total column formula to include the new column
+            # Total column is now at position total_col + 1
+            new_total_col = total_col + 1
+            new_total_col_letter = self._column_index_to_a1(new_total_col)
+            
+            # Get the range of subcategory columns
+            first_subcol_letter = self._column_index_to_a1(category_start)
+            last_subcol_letter = self._column_index_to_a1(new_total_col - 1)
+
+            print(f"🧮 ADD_COLUMN: Updating Total formulas from {first_subcol_letter} to {last_subcol_letter}")
+
+            # Update Total column formulas for rows 4-50
+            formula_updates = []
+            for row in range(4, 51):
+                formula = f"=SUM({first_subcol_letter}{row}:{last_subcol_letter}{row})"
+                formula_updates.append({
+                    'range': f"'{target_sheet_name}'!{new_total_col_letter}{row}",
+                    'values': [[formula]]
+                })
+
+            # Update max score in Total column (Row 3)
+            new_total_max = str(100 * (len(existing_subcategories) + 1))
+            formula_updates.append({
+                'range': f"'{target_sheet_name}'!{new_total_col_letter}3",
+                'values': [[new_total_max]]
+            })
+
+            # Batch update all formulas
+            if formula_updates:
+                body = {
+                    'valueInputOption': 'USER_ENTERED',
+                    'data': formula_updates
+                }
+
+                self.sheets_service.spreadsheets().values().batchUpdate(
+                    spreadsheetId=sheet_id,
+                    body=body
+                ).execute()
+
+                print(f"✅ ADD_COLUMN: Updated {len(formula_updates)} formulas")
+
+            # Step 6: Apply formatting to the new column
+            format_result = self._format_new_column(sheet_id, target_sheet_name, insert_position)
+            if not format_result['success']:
+                print(f"⚠️ ADD_COLUMN: Failed to format column: {format_result.get('error')}")
+
+            return {
+                'success': True,
+                'category_name': category_name,
+                'new_column_name': new_column_name,
+                'column_position': insert_position,
+                'message': f"Successfully added '{new_column_name}' to category '{category_name}'"
+            }
+
+        except Exception as e:
+            logger.error(f"Add column to category error: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return {
+                'success': False,
+                'error': f'Failed to add column to category: {str(e)}'
+            }
+
+    def _format_new_column(self, sheet_id: str, sheet_name: str, col_index: int) -> dict:
+        """Apply formatting to a newly added column - matches existing category columns"""
+        try:
+            # Get sheet properties
+            spreadsheet = self.sheets_service.spreadsheets().get(spreadsheetId=sheet_id).execute()
+            target_sheet_id = None
+
+            for sheet in spreadsheet['sheets']:
+                if sheet['properties']['title'] == sheet_name:
+                    target_sheet_id = sheet['properties']['sheetId']
+                    break
+
+            if target_sheet_id is None:
+                return {'success': False, 'error': f'Sheet "{sheet_name}" not found'}
+
+            # Create formatting requests
+            requests = []
+
+            # Format the column header (Row 2) - Light blue like other quiz columns
+            requests.append({
+                'repeatCell': {
+                    'range': {
+                        'sheetId': target_sheet_id,
+                        'startRowIndex': 1,
+                        'endRowIndex': 2,
+                        'startColumnIndex': col_index,
+                        'endColumnIndex': col_index + 1
+                    },
+                    'cell': {
+                        'userEnteredFormat': {
+                            'textFormat': {'bold': True, 'fontSize': 10},
+                            'horizontalAlignment': 'CENTER',
+                            'verticalAlignment': 'MIDDLE',
+                            'backgroundColor': {'red': 0.7, 'green': 0.85, 'blue': 1.0},  # Light blue like Quiz columns
+                            'borders': {
+                                'top': {'style': 'SOLID', 'width': 1},
+                                'bottom': {'style': 'SOLID', 'width': 1},
+                                'left': {'style': 'SOLID', 'width': 1},
+                                'right': {'style': 'SOLID', 'width': 1}
+                            }
+                        }
+                    },
+                    'fields': 'userEnteredFormat'
+                }
+            })
+
+            # Format max score row (Row 3) - Very light blue
+            requests.append({
+                'repeatCell': {
+                    'range': {
+                        'sheetId': target_sheet_id,
+                        'startRowIndex': 2,
+                        'endRowIndex': 3,
+                        'startColumnIndex': col_index,
+                        'endColumnIndex': col_index + 1
+                    },
+                    'cell': {
+                        'userEnteredFormat': {
+                            'horizontalAlignment': 'CENTER',
+                            'verticalAlignment': 'MIDDLE',
+                            'backgroundColor': {'red': 0.9, 'green': 0.95, 'blue': 1.0},  # Very light blue
+                            'borders': {
+                                'top': {'style': 'SOLID', 'width': 1},
+                                'bottom': {'style': 'SOLID', 'width': 1},
+                                'left': {'style': 'SOLID', 'width': 1},
+                                'right': {'style': 'SOLID', 'width': 1}
+                            }
+                        }
+                    },
+                    'fields': 'userEnteredFormat'
+                }
+            })
+
+            # Format data cells (Row 4 onwards) - Peach/salmon color like other quiz columns
+            requests.append({
+                'repeatCell': {
+                    'range': {
+                        'sheetId': target_sheet_id,
+                        'startRowIndex': 3,
+                        'endRowIndex': 50,
+                        'startColumnIndex': col_index,
+                        'endColumnIndex': col_index + 1
+                    },
+                    'cell': {
+                        'userEnteredFormat': {
+                            'horizontalAlignment': 'CENTER',
+                            'verticalAlignment': 'MIDDLE',
+                            'backgroundColor': {'red': 1.0, 'green': 0.9, 'blue': 0.8}  # Peach/salmon color
+                        }
+                    },
+                    'fields': 'userEnteredFormat'
+                }
+            })
+
+            # Apply left border only (solid black line on left side like Quiz 3, Quiz 4)
+            requests.append({
+                'updateBorders': {
+                    'range': {
+                        'sheetId': target_sheet_id,
+                        'startRowIndex': 3,
+                        'endRowIndex': 50,
+                        'startColumnIndex': col_index,
+                        'endColumnIndex': col_index + 1
+                    },
+                    'left': {'style': 'SOLID', 'width': 1, 'color': {'red': 0.0, 'green': 0.0, 'blue': 0.0}}
+                }
+            })
+
+            # Execute formatting
+            body = {'requests': requests}
+            self.sheets_service.spreadsheets().batchUpdate(
+                spreadsheetId=sheet_id,
+                body=body
+            ).execute()
+
+            print(f"✅ FORMAT_COLUMN: Applied peach/salmon formatting to column {col_index}")
+            return {'success': True}
+
+        except Exception as e:
+            logger.error(f"Format column error: {str(e)}")
+            return {'success': False, 'error': str(e)}
+
     def edit_category_in_sheet(self, sheet_id: str, old_category_name: str, new_category_name: str, new_percentage: str,
                                sheet_name: str = None) -> dict:
         """Edit a category name and percentage in Google Sheet"""

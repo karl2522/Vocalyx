@@ -14,6 +14,7 @@ import useVoiceRecognition from '../utils/useVoiceRecognition';
 import { applyPhoneticCorrections, cleanName, findStudentRowSmart, parseVoiceCommand } from '../utils/voicecommandParser';
 import FinalGradeOverview from './FinalGradeOverview';
 import AddCategoryModal from './modals/AddCategoryModal.jsx';
+import AddColumnToCategoryModal from './modals/AddColumnToCategoryModal.jsx';
 import BatchGradingModal from './modals/BatchGradingModal';
 import ColumnMappingModal from './modals/ColumnMappingModal';
 import DeleteCategoryModal from './modals/DeleteCategoryModal.jsx';
@@ -59,6 +60,7 @@ const ClassRecordExcel = () => {
     isVisible: false
   });
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
+  const [showAddColumnModal, setShowAddColumnModal] = useState(false);
   const [categoryLoading, setCategoryLoading] = useState(false);
   const [showDeleteCategoryModal, setShowDeleteCategoryModal] = useState(false);
   const [showEditCategoryModal, setShowEditCategoryModal] = useState(false);
@@ -3647,6 +3649,39 @@ const ClassRecordExcel = () => {
     }
   };
 
+  const handleAddColumnToCategory = async (columnData) => {
+    try {
+      setIsLoading(true);
+
+      console.log('➕ Adding column to category:', columnData);
+
+      const response = await classRecordService.addColumnToCategory(
+        classRecord.google_sheet_id,
+        columnData.categoryName,
+        columnData.newColumnName,
+        currentSheet?.sheet_name
+      );
+
+      if (response.data.success) {
+        toast.success(`Successfully added column to "${columnData.categoryName}"!`);
+        setShowAddColumnModal(false);
+
+        // Reload the sheet data
+        if (currentSheet?.sheet_name) {
+          await loadSheetData(classRecord.google_sheet_id, currentSheet.sheet_name);
+        }
+        await loadCategories(); // Refresh categories list
+      } else {
+        toast.error(response.data.error || 'Failed to add column to category');
+      }
+    } catch (error) {
+      console.error('Add column to category error:', error);
+      toast.error('Failed to add column to category');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleConfirmStudent = async (finalData) => {
     console.log('✅ Confirmed student data:', finalData);
 
@@ -5709,6 +5744,17 @@ const ClassRecordExcel = () => {
 
                       <button
                         onClick={() => {
+                          setShowAddColumnModal(true);
+                          closeAllDropdowns();
+                        }}
+                        className="flex items-center space-x-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 w-full text-left"
+                      >
+                        <Plus className="w-4 h-4 text-emerald-600" />
+                        <span>Add Column to Category</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
                           setShowEditCategoryModal(true);
                           closeAllDropdowns();
                         }}
@@ -5976,6 +6022,17 @@ const ClassRecordExcel = () => {
                     >
                       <Plus className="w-4 h-4 text-green-600" />
                       <span>Add Category</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setShowAddColumnModal(true);
+                        setIsDrawerOpen(false);
+                      }}
+                      className="flex items-center space-x-3 px-4 py-3 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      <Plus className="w-4 h-4 text-emerald-600" />
+                      <span>Add Column to Category</span>
                     </button>
                   </div>
                 </div>
@@ -6430,6 +6487,14 @@ const ClassRecordExcel = () => {
             remainingAvailable={classStandingRemaining}
           />
         )}
+
+        <AddColumnToCategoryModal
+          isOpen={showAddColumnModal}
+          onClose={() => setShowAddColumnModal(false)}
+          onSubmit={handleAddColumnToCategory}
+          isLoading={isLoading}
+          categories={availableCategories}
+        />
 
         <DeleteCategoryModal
           isOpen={showDeleteCategoryModal}
