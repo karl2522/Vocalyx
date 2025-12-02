@@ -1,6 +1,17 @@
 import { Check, CheckCircle2, Mic, MicOff, Play, Volume2, X } from 'lucide-react';
+import {
+  FaRocket,
+  FaGraduationCap,
+  FaVolumeUp,
+  FaMicrophoneAlt,
+  FaCheckCircle,
+  FaLightbulb,
+  FaChartBar,
+  FaMagic,
+} from 'react-icons/fa';
 import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
+import SkipTutorialConfirmModal from './SkipTutorialConfirmModal';
 
 const InteractiveTutorialModal = ({ isOpen, onClose, onComplete }) => {
   const [currentStep, setCurrentStep] = useState(0);
@@ -16,10 +27,11 @@ const InteractiveTutorialModal = ({ isOpen, onClose, onComplete }) => {
   const [isNarrating, setIsNarrating] = useState(false);
   const audioContextRef = useRef(null);
   const recognitionRef = useRef(null);
+  const [showSkipConfirm, setShowSkipConfirm] = useState(false);
 
   const tutorialSteps = [
     {
-      title: "Welcome to Vocalyx! 🎉",
+      title: 'Welcome to Vocalyx!',
       description: "Let me show you how easy it is to record grades using your voice!",
       narration: "Welcome to Vocalyx! I'm here to guide you through our voice-powered grading system. Let's make grading fun and efficient!",
       action: null,
@@ -58,7 +70,7 @@ const InteractiveTutorialModal = ({ isOpen, onClose, onComplete }) => {
       highlight: "multiple"
     },
     {
-      title: "Step 5: Batch Mode! 🚀",
+      title: 'Step 5: Batch Mode!',
       description: "Say multiple students continuously: 'Omen 20, Santos 18, Reyes 19'",
       narration: "Amazing! Now let me show you the power of batch mode! You can say multiple students in one go. Try saying: Omen 20, Santos 18, Reyes 19. Just keep talking and the system will record them all!",
       action: "batch",
@@ -66,7 +78,7 @@ const InteractiveTutorialModal = ({ isOpen, onClose, onComplete }) => {
       highlight: "batch"
     },
     {
-      title: "You're Ready! 🎓",
+      title: "You're Ready!",
       description: "You've mastered voice grading! Start using it with your real class records.",
       narration: "Congratulations! You're now ready to use Vocalyx with your real class records. Remember, you can use single mode for one student at a time, or batch mode to record multiple students continuously. It's that simple!",
       action: null,
@@ -284,7 +296,12 @@ const InteractiveTutorialModal = ({ isOpen, onClose, onComplete }) => {
       // Use fuzzy matching for Omen
       if (fuzzyMatchName(cleanTranscript, 'omen')) {
         playSuccessSound();
-        toast.success('✅ Perfect! Student found!');
+        toast.success(
+          <div className="flex items-center gap-2">
+            <FaCheckCircle className="text-emerald-500" />
+            <span>Perfect! Student found!</span>
+          </div>
+        );
         setTimeout(() => {
           markStepComplete();
           nextStep();
@@ -296,7 +313,12 @@ const InteractiveTutorialModal = ({ isOpen, onClose, onComplete }) => {
       if (cleanTranscript.includes('20')) {
         playSuccessSound();
         updateSimulatedScore(0, 'quiz1', '20');
-        toast.success('✅ Score recorded!');
+        toast.success(
+          <div className="flex items-center gap-2">
+            <FaCheckCircle className="text-emerald-500" />
+            <span>Score recorded!</span>
+          </div>
+        );
         setTimeout(() => {
           markStepComplete();
           nextStep();
@@ -311,7 +333,12 @@ const InteractiveTutorialModal = ({ isOpen, onClose, onComplete }) => {
           cleanTranscript.includes('20')) {
         playSuccessSound();
         updateSimulatedScore(0, 'quiz1', '20');
-        toast.success('✅ Complete command recorded!');
+        toast.success(
+          <div className="flex items-center gap-2">
+            <FaCheckCircle className="text-emerald-500" />
+            <span>Complete command recorded!</span>
+          </div>
+        );
         setTimeout(() => {
           markStepComplete();
           nextStep();
@@ -323,11 +350,21 @@ const InteractiveTutorialModal = ({ isOpen, onClose, onComplete }) => {
       if (cleanTranscript.includes('santos') && cleanTranscript.includes('18')) {
         playSuccessSound();
         updateSimulatedScore(1, 'quiz1', '18');
-        toast.success('✅ Santos recorded!');
+        toast.success(
+          <div className="flex items-center gap-2">
+            <FaCheckCircle className="text-emerald-500" />
+            <span>Santos recorded!</span>
+          </div>
+        );
       } else if (cleanTranscript.includes('reyes') && cleanTranscript.includes('19')) {
         playSuccessSound();
         updateSimulatedScore(2, 'quiz1', '19');
-        toast.success('✅ Reyes recorded!');
+        toast.success(
+          <div className="flex items-center gap-2">
+            <FaCheckCircle className="text-emerald-500" />
+            <span>Reyes recorded!</span>
+          </div>
+        );
         
         // Check if both are recorded
         setTimeout(() => {
@@ -372,7 +409,12 @@ const InteractiveTutorialModal = ({ isOpen, onClose, onComplete }) => {
       if (newRecordings.length > 0) {
         playSuccessSound();
         const names = newRecordings.map(n => n.charAt(0).toUpperCase() + n.slice(1)).join(', ');
-        toast.success(`✅ Recorded ${names} in Quiz 2!`);
+        toast.success(
+          <div className="flex items-center gap-2">
+            <FaCheckCircle className="text-emerald-500" />
+            <span>{`Recorded ${names} in Quiz 2!`}</span>
+          </div>
+        );
       }
       
       // Auto-advance when all 3 students recorded
@@ -447,7 +489,12 @@ const InteractiveTutorialModal = ({ isOpen, onClose, onComplete }) => {
     } else {
       // Tutorial complete
       if (onComplete) onComplete();
-      toast.success('🎉 Tutorial completed! You\'re ready to grade!');
+      toast.success(
+        <div className="flex items-center gap-2">
+          <FaGraduationCap className="text-emerald-500" />
+          <span>Tutorial completed! You&apos;re ready to grade!</span>
+        </div>
+      );
     }
   };
 
@@ -460,10 +507,17 @@ const InteractiveTutorialModal = ({ isOpen, onClose, onComplete }) => {
   };
 
   const skipTutorial = () => {
-    if (window.confirm('Are you sure you want to skip the tutorial? You can always restart it later.')) {
-      if (onComplete) onComplete();
-      onClose();
-    }
+    setShowSkipConfirm(true);
+  };
+
+  const handleConfirmSkip = () => {
+    setShowSkipConfirm(false);
+    if (onComplete) onComplete();
+    onClose();
+  };
+
+  const handleCancelSkip = () => {
+    setShowSkipConfirm(false);
   };
 
   const replayNarration = () => {
@@ -472,73 +526,103 @@ const InteractiveTutorialModal = ({ isOpen, onClose, onComplete }) => {
 
   if (!isOpen) return null;
 
+  const goToStep = (index) => {
+    if (index < 0 || index >= tutorialSteps.length) return;
+    setCurrentStep(index);
+    setRecognizedText('');
+    setBatchRecordedStudents([]);
+    narrateStep(index);
+  };
+
   const currentStepData = tutorialSteps[currentStep];
   const progress = ((currentStep + 1) / tutorialSteps.length) * 100;
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[95vh] overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
-                <Play className="w-5 h-5 text-white" />
+    <div className="fixed inset-0 z-[200]">
+      {/* Backdrop - full-screen blur matching OnboardingModal */}
+      <div
+        className="fixed inset-0 bg-black/50 backdrop-blur-[2px]"
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          width: '100vw',
+          height: '100vh',
+          zIndex: 199,
+        }}
+      />
+
+      {/* Modal Container */}
+      <div
+        className="fixed inset-0 flex items-center justify-center p-4"
+        style={{ zIndex: 200 }}
+      >
+        <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[95vh] overflow-hidden flex flex-col">
+          {/* Header - match OnboardingModal colors */}
+          <div className="bg-gradient-to-r from-[#333D79] to-[#4A5491] px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+                  <Play className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Interactive Tutorial</h2>
+                  <p className="text-sm text-white/80">Learn the basics of voice grading</p>
+                </div>
               </div>
-              <div>
-                <h2 className="text-xl font-bold text-white">Interactive Tutorial</h2>
-                <p className="text-sm text-indigo-100">Learn by doing!</p>
-              </div>
+              <button
+                onClick={skipTutorial}
+                className="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
-            <button
-              onClick={skipTutorial}
-              className="p-2 hover:bg-white/20 rounded-lg transition-colors"
-            >
-              <X className="w-5 h-5 text-white" />
-            </button>
           </div>
 
-          {/* Progress Bar */}
-          <div className="mt-4">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-sm text-white font-medium">
+          {/* Progress Bar - separate white section, matching OnboardingModal */}
+          <div className="px-6 py-3 bg-slate-50 border-b border-slate-200 flex-shrink-0">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs sm:text-sm font-medium text-slate-700">
                 Step {currentStep + 1} of {tutorialSteps.length}
               </span>
-              <span className="text-sm text-indigo-100">{Math.round(progress)}% Complete</span>
+              <span className="text-xs sm:text-sm font-medium text-slate-600 hidden sm:inline">
+                How It Works
+              </span>
             </div>
-            <div className="w-full bg-white/20 rounded-full h-2">
+            <div className="w-full bg-slate-200 rounded-full h-2">
               <div
-                className="bg-white h-2 rounded-full transition-all duration-500"
+                className="bg-gradient-to-r from-[#333D79] to-[#4A5491] h-2 rounded-full transition-all duration-300"
                 style={{ width: `${progress}%` }}
               />
             </div>
           </div>
-        </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Left Column - Instructions */}
-            <div className="space-y-4">
-              {/* Step Title */}
-              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-xl p-4">
-                <div className="flex items-start space-x-3">
-                  <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <span className="text-white font-bold">{currentStep + 1}</span>
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-lg font-bold text-gray-900 mb-1">
-                      {currentStepData.title}
-                    </h3>
-                    <p className="text-gray-600 text-sm leading-relaxed">
-                      {currentStepData.description}
-                    </p>
+          {/* Content (unchanged) */}
+          <div className="flex-1 overflow-y-auto p-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Left Column - Instructions */}
+              <div className="space-y-4">
+                {/* Step Title */}
+                <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-xl p-4">
+                  <div className="flex items-start space-x-3">
+                    <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <span className="text-white font-bold">{currentStep + 1}</span>
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-bold text-gray-900 mb-1">
+                        {currentStepData.title}
+                      </h3>
+                      <p className="text-gray-600 text-sm leading-relaxed">
+                        {currentStepData.description}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Narration Control */}
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                {/* Narration Control */}
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center space-x-2">
                     <Volume2 className="w-5 h-5 text-blue-600" />
@@ -547,207 +631,244 @@ const InteractiveTutorialModal = ({ isOpen, onClose, onComplete }) => {
                   <button
                     onClick={() => narrateStep(currentStep)}
                     disabled={isNarrating}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                       isNarrating
                         ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                         : 'bg-blue-600 text-white hover:bg-blue-700'
                     }`}
                   >
-                    {isNarrating ? '🔊 Speaking...' : '🔊 Play'}
+                    <FaVolumeUp className="w-4 h-4" />
+                    <span>{isNarrating ? 'Speaking...' : 'Play'}</span>
                   </button>
                 </div>
-                <p className="text-sm text-gray-700 leading-relaxed italic">
-                  "{currentStepData.narration}"
-                </p>
-              </div>
+                  <p className="text-sm text-gray-700 leading-relaxed italic">
+                    "{currentStepData.narration}"
+                  </p>
+                </div>
 
-              {/* Microphone Control */}
-              {currentStepData.action && (
-                <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl p-4">
-                  <div className="text-center">
-                    {currentStepData.action === 'batch' && (
-                      <div className="mb-3 p-2 bg-orange-100 border border-orange-300 rounded-lg">
-                        <p className="text-sm font-bold text-orange-800">🚀 Batch Mode Active!</p>
-                        <p className="text-xs text-orange-700">Say all students continuously</p>
-                      </div>
-                    )}
-                    
-                    <button
-                      onClick={isListening ? stopListening : startListening}
-                      className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-3 transition-all ${
-                        isListening
-                          ? 'bg-red-500 hover:bg-red-600 animate-pulse shadow-lg shadow-red-200'
-                          : 'bg-green-600 hover:bg-green-700 shadow-lg shadow-green-200'
-                      }`}
-                    >
-                      {isListening ? (
-                        <MicOff className="w-10 h-10 text-white" />
-                      ) : (
-                        <Mic className="w-10 h-10 text-white" />
+                {/* Microphone Control */}
+                {currentStepData.action && (
+                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl p-4">
+                    <div className="text-center">
+                      {currentStepData.action === 'batch' && (
+                        <div className="mb-3 p-2 bg-orange-100 border border-orange-300 rounded-lg">
+                          <p className="flex items-center justify-center gap-2 text-sm font-bold text-orange-800">
+                            <FaRocket className="w-4 h-4" />
+                            <span>Batch Mode Active!</span>
+                          </p>
+                          <p className="text-xs text-orange-700">Say all students continuously</p>
+                        </div>
                       )}
-                    </button>
-                    <p className="text-sm font-medium text-gray-900 mb-1">
-                      {isListening ? '🎤 Listening...' : 'Click to Start Speaking'}
-                    </p>
-                    {recognizedText && (
-                      <div className="mt-2 px-3 py-2 bg-white border border-gray-200 rounded-lg">
-                        <p className="text-sm text-gray-600">You said:</p>
-                        <p className="text-base font-semibold text-gray-900">"{recognizedText}"</p>
-                      </div>
-                    )}
-                    
-                    {currentStepData.action === 'batch' && batchRecordedStudents.length > 0 && (
-                      <div className="mt-2 p-2 bg-green-100 border border-green-300 rounded-lg">
-                        <p className="text-xs text-green-700 font-semibold">
-                          ✅ {batchRecordedStudents.length}/3 students recorded!
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
 
-              {/* Completed Steps */}
-              {completedSteps.length > 0 && (
-                <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <CheckCircle2 className="w-5 h-5 text-green-600" />
-                    <span className="text-sm font-medium text-gray-900">Completed Steps</span>
-                  </div>
-                  <div className="space-y-1">
-                    {completedSteps.map(stepIndex => (
-                      <div key={stepIndex} className="flex items-center space-x-2 text-sm text-green-700">
-                        <Check className="w-4 h-4" />
-                        <span>{tutorialSteps[stepIndex].title}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+                      <button
+                        onClick={isListening ? stopListening : startListening}
+                        className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-3 transition-all ${
+                          isListening
+                            ? 'bg-red-500 hover:bg-red-600 animate-pulse shadow-lg shadow-red-200'
+                            : 'bg-green-600 hover:bg-green-700 shadow-lg shadow-green-200'
+                        }`}
+                      >
+                        {isListening ? (
+                          <MicOff className="w-10 h-10 text-white" />
+                        ) : (
+                          <Mic className="w-10 h-10 text-white" />
+                        )}
+                      </button>
+                      <p className="flex items-center justify-center gap-2 text-sm font-medium text-gray-900 mb-1">
+                        {isListening && <FaMicrophoneAlt className="w-4 h-4 text-red-500" />}
+                        <span>{isListening ? 'Listening...' : 'Click to Start Speaking'}</span>
+                      </p>
+                      {recognizedText && (
+                        <div className="mt-2 px-3 py-2 bg-white border border-gray-200 rounded-lg">
+                          <p className="text-sm text-gray-600">You said:</p>
+                          <p className="text-base font-semibold text-gray-900">"{recognizedText}"</p>
+                        </div>
+                      )}
 
-            {/* Right Column - Simulated Spreadsheet */}
-            <div className="space-y-4">
-              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-                <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center space-x-2">
-                  <span>📊</span>
-                  <span>Practice Spreadsheet</span>
-                </h4>
-                
-                {/* Simulated Table */}
-                <div className="bg-white rounded-lg overflow-hidden border border-gray-200 shadow-sm">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-indigo-600 text-white">
-                        <th className="px-3 py-2 text-left font-semibold">No.</th>
-                        <th className="px-3 py-2 text-left font-semibold">Student Name</th>
-                        <th className="px-3 py-2 text-center font-semibold">Quiz 1</th>
-                        <th className="px-3 py-2 text-center font-semibold">Quiz 2</th>
-                        <th className="px-3 py-2 text-center font-semibold">Quiz 3</th>
-                        <th className="px-3 py-2 text-center font-semibold bg-green-700">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {simulatedData.map((student, index) => (
-                        <tr
-                          key={index}
-                          className={`border-b border-gray-100 hover:bg-indigo-50 transition-colors ${
-                            student.quiz1 ? 'bg-green-50' : ''
-                          }`}
+                      {currentStepData.action === 'batch' && batchRecordedStudents.length > 0 && (
+                        <div className="mt-2 p-2 bg-green-100 border border-green-300 rounded-lg">
+                          <p className="flex items-center justify-center gap-2 text-xs text-green-700 font-semibold">
+                            <FaCheckCircle className="w-3 h-3" />
+                            <span>{batchRecordedStudents.length}/3 students recorded!</span>
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+        {/* Completed Steps */}
+                {completedSteps.length > 0 && (
+                  <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <CheckCircle2 className="w-5 h-5 text-green-600" />
+                      <span className="text-sm font-medium text-gray-900">Completed Steps</span>
+                    </div>
+                    <div className="space-y-1">
+                      {completedSteps.map(stepIndex => (
+                        <div
+                          key={stepIndex}
+                          className="flex items-center space-x-2 text-sm text-green-700"
                         >
-                          <td className="px-3 py-2 text-gray-700">{student.no}</td>
-                          <td className="px-3 py-2 font-medium text-gray-900">{student.name}</td>
-                          <td className="px-3 py-2 text-center">
-                            <span className={`inline-block px-2 py-1 rounded ${
-                              student.quiz1 ? 'bg-green-100 text-green-800 font-semibold' : 'text-gray-400'
-                            }`}>
-                              {student.quiz1 || '-'}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2 text-center">
-                            <span className={`inline-block px-2 py-1 rounded ${
-                              student.quiz2 ? 'bg-blue-100 text-blue-800 font-semibold' : 'text-gray-400'
-                            }`}>
-                              {student.quiz2 || '-'}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2 text-center text-gray-400">-</td>
-                          <td className="px-3 py-2 text-center bg-green-50">
-                            <span className="font-semibold text-green-800">{student.total}</span>
-                          </td>
-                        </tr>
+                          <Check className="w-4 h-4" />
+                          <span>{tutorialSteps[stepIndex].title}</span>
+                        </div>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Live Updates Indicator */}
-                {simulatedData.some(s => s.quiz1 || s.quiz2) && (
-                  <div className="mt-3 p-2 bg-green-50 border border-green-200 rounded-lg">
-                    <p className="text-xs text-green-700 text-center font-medium">
-                      ✨ Scores are being recorded in real-time!
-                    </p>
+                    </div>
                   </div>
                 )}
               </div>
 
-              {/* Tips */}
-              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
-                <h4 className="text-sm font-semibold text-gray-900 mb-2">💡 Pro Tips</h4>
-                <ul className="space-y-1 text-xs text-gray-600">
-                  <li>• Speak clearly and at a normal pace</li>
-                  <li>• You can use last names only</li>
-                  <li>• Say numbers naturally (e.g., "twenty" or "20")</li>
-                  <li>• The system auto-saves immediately</li>
-                  <li>• Works with any assignment type (Quiz, Exam, Project, etc.)</li>
-                </ul>
+              {/* Right Column - Simulated Spreadsheet */}
+              <div className="space-y-4">
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center space-x-2">
+                    <FaChartBar className="w-4 h-4 text-indigo-600" />
+                    <span>Practice Spreadsheet</span>
+                  </h4>
+
+                  {/* Simulated Table */}
+                  <div className="bg-white rounded-lg overflow-hidden border border-gray-200 shadow-sm">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-indigo-600 text-white">
+                          <th className="px-3 py-2 text-left font-semibold">No.</th>
+                          <th className="px-3 py-2 text-left font-semibold">Student Name</th>
+                          <th className="px-3 py-2 text-center font-semibold">Quiz 1</th>
+                          <th className="px-3 py-2 text-center font-semibold">Quiz 2</th>
+                          <th className="px-3 py-2 text-center font-semibold">Quiz 3</th>
+                          <th className="px-3 py-2 text-center font-semibold bg-green-700">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {simulatedData.map((student, index) => (
+                          <tr
+                            key={index}
+                            className={`border-b border-gray-100 hover:bg-indigo-50 transition-colors ${
+                              student.quiz1 ? 'bg-green-50' : ''
+                            }`}
+                          >
+                            <td className="px-3 py-2 text-gray-700">{student.no}</td>
+                            <td className="px-3 py-2 font-medium text-gray-900">{student.name}</td>
+                            <td className="px-3 py-2 text-center">
+                              <span
+                                className={`inline-block px-2 py-1 rounded ${
+                                  student.quiz1
+                                    ? 'bg-green-100 text-green-800 font-semibold'
+                                    : 'text-gray-400'
+                                }`}
+                              >
+                                {student.quiz1 || '-'}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              <span
+                                className={`inline-block px-2 py-1 rounded ${
+                                  student.quiz2
+                                    ? 'bg-blue-100 text-blue-800 font-semibold'
+                                    : 'text-gray-400'
+                                }`}
+                              >
+                                {student.quiz2 || '-'}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-center text-gray-400">-</td>
+                            <td className="px-3 py-2 text-center bg-green-50">
+                              <span className="font-semibold text-green-800">{student.total}</span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Live Updates Indicator */}
+                  {simulatedData.some(s => s.quiz1 || s.quiz2) && (
+                    <div className="mt-3 p-2 bg-green-50 border border-green-200 rounded-lg">
+                      <p className="flex items-center justify-center gap-2 text-xs text-green-700 text-center font-medium">
+                        <FaMagic className="w-3 h-3" />
+                        <span>Scores are being recorded in real-time!</span>
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Tips */}
+                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+                  <h4 className="flex items-center gap-2 text-sm font-semibold text-gray-900 mb-2">
+                    <FaLightbulb className="w-4 h-4 text-yellow-500" />
+                    <span>Pro Tips</span>
+                  </h4>
+                  <ul className="space-y-1 text-xs text-gray-600">
+                    <li>• Speak clearly and at a normal pace</li>
+                    <li>• You can use last names only</li>
+                    <li>• Say numbers naturally (e.g., "twenty" or "20")</li>
+                    <li>• The system auto-saves immediately</li>
+                    <li>• Works with any assignment type (Quiz, Exam, Project, etc.)</li>
+                  </ul>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Footer */}
-        <div className="border-t border-gray-200 px-6 py-4 bg-gray-50">
-          <div className="flex items-center justify-between">
-            <button
-              onClick={previousStep}
-              disabled={currentStep === 0}
-              className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg font-medium hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              ← Previous
-            </button>
+          {/* Footer */}
+          <div className="border-t border-gray-200 px-6 py-4 bg-gray-50">
+            <div className="flex items-center justify-between gap-4">
+              <button
+                onClick={previousStep}
+                disabled={currentStep === 0}
+                className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg font-medium hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                ← Previous
+              </button>
 
-            <div className="text-center">
-              <p className="text-sm text-gray-600">
-                {currentStep === tutorialSteps.length - 1 ? (
-                  <span className="text-green-600 font-semibold">🎉 Tutorial Complete!</span>
-                ) : (
-                  `${tutorialSteps.length - currentStep - 1} steps remaining`
-                )}
-              </p>
+              {/* Step Indicators - match OnboardingModal style */}
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-1 justify-center">
+                {tutorialSteps.map((_, index) => (
+                  <button
+                    key={index}
+                    onClick={() => goToStep(index)}
+                    className={`h-2 rounded-full transition-all ${
+                      index === currentStep
+                        ? 'w-6 sm:w-8 bg-[#4A5491]'
+                        : index < currentStep
+                        ? 'w-2 bg-[#333D79]'
+                        : 'w-2 bg-slate-300 hover:bg-slate-400'
+                    }`}
+                    aria-label={`Go to step ${index + 1}`}
+                  />
+                ))}
+              </div>
+
+              {currentStep === tutorialSteps.length - 1 ? (
+                <button
+                  onClick={() => {
+                    if (onComplete) onComplete();
+                    onClose();
+                  }}
+                  className="px-6 py-2 bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white rounded-lg font-medium hover:from-[#2A2F66] hover:to-[#3A4080] transition-colors shadow-lg"
+                >
+                  Start Grading! →
+                </button>
+              ) : (
+                <button
+                  onClick={nextStep}
+                  className="px-4 py-2 bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white rounded-lg font-medium hover:from-[#2A2F66] hover:to-[#3A4080] transition-colors"
+                >
+                  Next →
+                </button>
+              )}
             </div>
-
-            {currentStep === tutorialSteps.length - 1 ? (
-              <button
-                onClick={() => {
-                  if (onComplete) onComplete();
-                  onClose();
-                }}
-                className="px-6 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg font-medium hover:from-indigo-700 hover:to-purple-700 transition-colors shadow-lg"
-              >
-                Start Grading! →
-              </button>
-            ) : (
-              <button
-                onClick={nextStep}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors"
-              >
-                Next →
-              </button>
-            )}
           </div>
         </div>
       </div>
+
+      {/* Skip confirmation modal */}
+      <SkipTutorialConfirmModal
+        isOpen={showSkipConfirm}
+        onCancel={handleCancelSkip}
+        onConfirm={handleConfirmSkip}
+      />
     </div>
   );
 };

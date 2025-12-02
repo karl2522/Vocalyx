@@ -17,6 +17,7 @@ import {
     FiX
 } from 'react-icons/fi';
 import { RiSoundModuleLine } from 'react-icons/ri';
+import { FaMicrophoneAlt } from 'react-icons/fa';
 import { Link } from 'react-router-dom';
 import { enhancedClassRecordService as classRecordService } from '../services/api';
 import { showToast } from '../utils/toast';
@@ -224,7 +225,7 @@ const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, recordName, isDel
 
 // Skeleton Loader Component (keep existing)
 const Skeleton = ({ className }) => (
-  <div className={`bg-gray-200 rounded-md ${className}`}></div>
+  <div className={`bg-gray-200 rounded-md animate-pulse ${className}`}></div>
 );
 
 
@@ -754,21 +755,24 @@ const ClassRecords = () => {
                   <Lightbulb className="w-10 h-10 text-orange-500" />
                 </div>
                 <div className="text-white">
-                  <h3 className="text-2xl font-bold mb-1 flex items-center gap-2">
+                  <h3 className="text-lg md:text-xl font-bold mb-1 flex items-center gap-2">
                     <span>New to Voice Grading?</span>
-                    <span className="px-3 py-1 bg-white text-orange-600 text-xs font-bold rounded-full animate-pulse">
+                    <span className="px-2.5 py-0.5 bg-white text-orange-600 text-[11px] font-bold rounded-full animate-pulse">
                       START HERE!
                     </span>
                   </h3>
-                  <p className="text-white/90 text-sm lg:text-base">
-                    🎤 Take our <strong>5-minute interactive tutorial</strong> to learn how to grade with your voice! 
-                    Practice with a simulation - no real data involved.
+                  <p className="text-white/90 text-xs sm:text-sm lg:text-base flex items-center gap-2">
+                    <FaMicrophoneAlt className="w-4 h-4 md:w-5 md:h-5 flex-shrink-0" />
+                    <span>
+                      Take our <strong>5-minute interactive tutorial</strong> to learn how to grade with your voice! 
+                      Practice with a simulation - no real data involved.
+                    </span>
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setShowTutorial(true)}
-                className="flex-shrink-0 bg-white text-orange-600 px-8 py-4 rounded-xl font-bold text-lg shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all flex items-center gap-3 group"
+                className="flex-shrink-0 bg-white text-orange-600 px-5 py-2.5 rounded-xl font-semibold text-sm md:text-base shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all flex items-center gap-2 group"
               >
                 <span>Start Tutorial Now</span>
                 <svg className="w-6 h-6 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
