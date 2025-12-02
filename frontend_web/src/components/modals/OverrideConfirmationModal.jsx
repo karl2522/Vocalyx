@@ -32,7 +32,7 @@ const OverrideConfirmationModal = ({
           </div>
           <div>
             <h3 className="text-lg font-semibold text-gray-900">
-              {exceedsMax ? 'Score Exceeds Maximum!' : 'Override Existing Score?'}
+              {exceedsMax ?  'Score Exceeds Maximum!' : 'Override Existing Score? '}
             </h3>
             <p className="text-sm text-gray-500">
               {exceedsMax 
@@ -102,14 +102,8 @@ const OverrideConfirmationModal = ({
           </p>
         </div>
         
+        {/* 🔥 FIXED: Buttons swapped - [Yes, Override] comes FIRST now! */}
         <div className="flex gap-3">
-          <button
-            onClick={onClose}
-            disabled={isProcessing}
-            className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
-          >
-            Cancel
-          </button>
           <button
             onClick={onConfirm}
             disabled={isProcessing || !isValidScore}
@@ -128,11 +122,19 @@ const OverrideConfirmationModal = ({
               exceedsMax ? 'Override Anyway' : 'Yes, Override'
             )}
           </button>
+          <button
+            onClick={onClose}
+            disabled={isProcessing}
+            className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+          >
+            Cancel
+          </button>
         </div>
         
+        {/* 🔥 FIXED: Changed from voice command to click instruction */}
         <div className="mt-4 text-center">
           <p className="text-xs text-gray-500">
-            💡 You can also say "yes" or "no" to confirm
+            💡 Please click "Yes, Override" to confirm or "Cancel" to keep the current score
           </p>
         </div>
       </div>

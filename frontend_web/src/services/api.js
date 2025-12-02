@@ -577,6 +577,18 @@ export const classRecordService = {
         return api.post(`/sheets/${sheetId}/edit-category/`, payload);
     },
 
+    addColumnToCategory: (sheetId, categoryName, newColumnName = null, sheetName = null) => {
+        const payload = { 
+            category_name: categoryName,
+            new_column_name: newColumnName
+        };
+        if (sheetName) payload.sheet_name = sheetName;
+        
+        console.log('➕ API SERVICE: Adding column to category:', payload);
+        
+        return api.post(`/sheets/${sheetId}/add-column-to-category/`, payload);
+    },
+
     getCategoriesFromSheet: (sheetId, sheetName = null) => {
         const params = {};
         if (sheetName) params.sheet_name = sheetName;

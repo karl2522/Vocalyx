@@ -2054,6 +2054,39 @@ def sheets_delete_category_service_account(request, sheet_id):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+def sheets_add_column_to_category_service_account(request, sheet_id):
+    """Add a new column to an existing category in Google Sheet using service account"""
+    try:
+        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+
+        category_name = request.data.get('category_name')  # e.g., 'Quizzes'
+        new_column_name = request.data.get('new_column_name')  # e.g., 'Quiz 6' (optional, auto-generated if not provided)
+        sheet_name = request.data.get('sheet_name')  # Optional specific sheet
+
+        if not category_name:
+            return Response({'error': 'category_name is required'}, status=400)
+
+        print(f"➕ API: Adding column to category '{category_name}' in sheet: {sheet_name}")
+        print(f"➕ API: New column name: {new_column_name or 'auto-generated'}")
+
+        service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+        result = service.add_column_to_category(sheet_id, category_name, new_column_name, sheet_name)
+
+        if result['success']:
+            return Response(result, status=200)
+        else:
+            return Response(result, status=400)
+
+    except Exception as e:
+        logger.error(f"Add column to category API error: {str(e)}")
+        return Response({
+            'success': False,
+            'error': f'Server error: {str(e)}'
+        }, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def sheets_edit_category_service_account(request, sheet_id):
     """Edit a category name and percentage in Google Sheet using service account"""
     try:

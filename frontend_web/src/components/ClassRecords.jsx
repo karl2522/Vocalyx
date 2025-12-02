@@ -17,11 +17,13 @@ import {
     FiX
 } from 'react-icons/fi';
 import { RiSoundModuleLine } from 'react-icons/ri';
+import { FaMicrophoneAlt } from 'react-icons/fa';
 import { Link } from 'react-router-dom';
 import { enhancedClassRecordService as classRecordService } from '../services/api';
 import { showToast } from '../utils/toast';
 import { TopNavbar } from './layouts/TopNavbar.jsx';
 import CreateClassRecordModal from './modals/CreateClassRecordModal';
+import InteractiveTutorialModal from './modals/InteractiveTutorialModal';
 import OnboardingModal from './modals/OnboardingModal';
 
 const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, recordName, isDeleting }) => {
@@ -223,7 +225,7 @@ const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, recordName, isDel
 
 // Skeleton Loader Component (keep existing)
 const Skeleton = ({ className }) => (
-  <div className={`bg-gray-200 rounded-md ${className}`}></div>
+  <div className={`bg-gray-200 rounded-md animate-pulse ${className}`}></div>
 );
 
 
@@ -356,10 +358,14 @@ const ClassRecords = () => {
   const [viewMode, setViewMode] = useState('grid');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [tutorialCompleted, setTutorialCompleted] = useState(false);
   
   // Check if onboarding has been completed
   useEffect(() => {
     const onboardingCompleted = localStorage.getItem('onboarding_completed');
+    const tutorialDone = localStorage.getItem('tutorial_completed');
+    
     if (!onboardingCompleted || onboardingCompleted !== 'true') {
       // Show onboarding modal after a short delay to let the page load
       const timer = setTimeout(() => {
@@ -367,12 +373,25 @@ const ClassRecords = () => {
       }, 500);
       return () => clearTimeout(timer);
     }
+    
+    // Check if tutorial was completed
+    if (tutorialDone === 'true') {
+      setTutorialCompleted(true);
+    }
   }, []);
 
   // Handle onboarding completion
   const handleOnboardingComplete = () => {
     localStorage.setItem('onboarding_completed', 'true');
     setShowOnboarding(false);
+  };
+
+  // Handle tutorial completion
+  const handleTutorialComplete = () => {
+    localStorage.setItem('tutorial_completed', 'true');
+    setTutorialCompleted(true);
+    setShowTutorial(false);
+    toast.success('🎉 You\'re ready to start grading!');
   };
   
   // Global function to update remaining percentage for a specific class record
@@ -656,7 +675,33 @@ const ClassRecords = () => {
             <p className="text-gray-600">Manage and explore your academic records</p>
           </div>
           
-          <div className="flex items-center gap-4 mt-4 lg:mt-0">
+          <div className="flex items-center gap-4 mt-4 lg:mt-0 flex-wrap">
+            {/* Tutorial Button - Eye-catching with animation */}
+            {!tutorialCompleted && (
+              <button
+                onClick={() => setShowTutorial(true)}
+                className="relative flex items-center gap-2 bg-gradient-to-r from-yellow-400 via-orange-500 to-pink-500 text-white px-5 py-2.5 rounded-lg font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all animate-pulse"
+              >
+                <Lightbulb className="w-5 h-5" />
+                <span>Start Tutorial</span>
+                <span className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center text-xs font-bold animate-bounce">
+                  NEW
+                </span>
+              </button>
+            )}
+
+            {/* Tutorial Button - Subtle version after completion */}
+            {tutorialCompleted && (
+              <button
+                onClick={() => setShowTutorial(true)}
+                className="flex items-center gap-2 bg-gradient-to-r from-indigo-100 to-purple-100 text-indigo-700 border-2 border-indigo-300 px-4 py-2 rounded-lg font-medium hover:from-indigo-200 hover:to-purple-200 transition-all shadow-sm hover:shadow-md"
+                title="Replay Tutorial"
+              >
+                <Lightbulb className="w-5 h-5" />
+                <span>Tutorial</span>
+              </button>
+            )}
+
             {/* View Toggle */}
             <div className="flex bg-gray-100 rounded-lg p-1">
               <button
@@ -693,6 +738,50 @@ const ClassRecords = () => {
             </button>
           </div>
         </div>
+
+        {/* 🎓 NEW: First-Time Tutorial Banner */}
+        {!tutorialCompleted && classRecords.length > 0 && (
+          <div className="relative overflow-hidden bg-gradient-to-r from-yellow-400 via-orange-500 to-pink-500 rounded-2xl shadow-2xl p-6 mb-6">
+            {/* Animated Background Pattern */}
+            <div className="absolute inset-0 opacity-20">
+              <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-white to-transparent"></div>
+              <div className="absolute -top-10 -right-10 w-40 h-40 bg-white rounded-full blur-3xl opacity-30 animate-pulse"></div>
+              <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-white rounded-full blur-3xl opacity-30 animate-pulse delay-1000"></div>
+            </div>
+
+            <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="flex-shrink-0 w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-lg animate-bounce">
+                  <Lightbulb className="w-10 h-10 text-orange-500" />
+                </div>
+                <div className="text-white">
+                  <h3 className="text-lg md:text-xl font-bold mb-1 flex items-center gap-2">
+                    <span>New to Voice Grading?</span>
+                    <span className="px-2.5 py-0.5 bg-white text-orange-600 text-[11px] font-bold rounded-full animate-pulse">
+                      START HERE!
+                    </span>
+                  </h3>
+                  <p className="text-white/90 text-xs sm:text-sm lg:text-base flex items-center gap-2">
+                    <FaMicrophoneAlt className="w-4 h-4 md:w-5 md:h-5 flex-shrink-0" />
+                    <span>
+                      Take our <strong>5-minute interactive tutorial</strong> to learn how to grade with your voice! 
+                      Practice with a simulation - no real data involved.
+                    </span>
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowTutorial(true)}
+                className="flex-shrink-0 bg-white text-orange-600 px-5 py-2.5 rounded-xl font-semibold text-sm md:text-base shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all flex items-center gap-2 group"
+              >
+                <span>Start Tutorial Now</span>
+                <svg className="w-6 h-6 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* 🔥 NEW: Navigation Tip Banner */}
         {showNavigationTip && classRecords.length > 0 && (
@@ -976,6 +1065,13 @@ const ClassRecords = () => {
           isOpen={showOnboarding}
           onClose={() => setShowOnboarding(false)}
           onComplete={handleOnboardingComplete}
+        />
+
+        {/* Interactive Tutorial Modal */}
+        <InteractiveTutorialModal
+          isOpen={showTutorial}
+          onClose={() => setShowTutorial(false)}
+          onComplete={handleTutorialComplete}
         />
         </div>
       </main>
