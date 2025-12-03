@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import apiService from '../../services/api';
+import googleDriveService from '../../services/googleDriveService';
 import { showToast } from '../../utils/toast';
 import DriveFilePickerModal from './DriveFilePickerModal';
 
@@ -11,7 +12,8 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
     name: '',
     semester: '',
     teacher_name: '',
-    section_name: ''
+    section_name: '',
+    academic_year: ''
   });
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
@@ -85,7 +87,8 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
         name: editData.name || '',
         semester: editData.semester || '',
         teacher_name: editData.teacher_name || '',
-        section_name: editData.section_name || ''
+        section_name: editData.section_name || '',
+        academic_year: editData.academic_year || ''
       });
     } else {
       // Reset for new records
@@ -93,7 +96,8 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
         name: '',
         semester: '',
         teacher_name: '',
-        section_name: ''
+        section_name: '',
+        academic_year: ''
       });
     }
     // Clear errors when modal opens/closes
@@ -131,6 +135,10 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
     if (!formData.semester.trim()) {
       newErrors.semester = 'Semester is required';
     }
+
+    if (!formData.academic_year.trim()) {
+      newErrors.academic_year = 'Academic Year is required';
+    }
     
     if (!formData.teacher_name.trim()) {
       newErrors.teacher_name = 'Teacher Name is required';
@@ -155,7 +163,7 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
     try {
       await onSubmit(formData);
       // Reset form after successful submission
-      setFormData({ name: '', semester: '', teacher_name: '', section_name: '' });
+      setFormData({ name: '', semester: '', teacher_name: '', section_name: '', academic_year: '' });
       setErrors({});
       setDuplicateInfo(null);
       onClose();
@@ -168,7 +176,7 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
   };
 
   const handleClose = () => {
-    setFormData({ name: '', semester: '', teacher_name: '', section_name: '' });
+    setFormData({ name: '', semester: '', teacher_name: '', section_name: '', academic_year: '' });
     setErrors({});
     setDuplicateInfo(null);
     // no-op: removed importFile state
@@ -185,7 +193,18 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
   };
 
   // 🔥 NEW: Check if form can be submitted
-  const manualValid = !loading && !errors.name && !errors.semester && !errors.teacher_name && !errors.section_name && formData.name.trim() && formData.semester.trim() && formData.teacher_name.trim() && formData.section_name.trim() && duplicateInfo?.type !== 'exact';
+  const manualValid = !loading 
+    && !errors.name 
+    && !errors.semester 
+    && !errors.academic_year
+    && !errors.teacher_name 
+    && !errors.section_name 
+    && formData.name.trim() 
+    && formData.semester.trim() 
+    && formData.academic_year.trim()
+    && formData.teacher_name.trim() 
+    && formData.section_name.trim() 
+    && duplicateInfo?.type !== 'exact';
   const canSubmit = manualValid;
 
   const handleFileChange = async (e) => {
@@ -193,12 +212,30 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
     setImportError('');
     setImportPreview(null);
     if (!file) return;
+
+    // Require Academic Year before importing
+    if (!formData.academic_year.trim()) {
+      setImportError('Please enter an Academic Year before importing a class record.');
+      showToast.error('Please enter an Academic Year before importing a class record.');
+      return;
+    }
     const ext = file.name.toLowerCase();
     if (!ext.endsWith('.csv') && !ext.endsWith('.xlsx')) {
       setImportError('Only .csv or .xlsx files are supported');
       return;
     }
     try {
+      // Ensure we have a valid Google access token before calling import endpoints
+      let googleToken = localStorage.getItem('googleAccessToken');
+      if (!googleToken) {
+        googleToken = await googleDriveService.ensureGoogleAccessToken();
+      }
+      if (!googleToken) {
+        setImportError('Please connect your Google account before importing a class record.');
+        showToast.error('Please connect your Google account before importing a class record.');
+        return;
+      }
+
       setImportLoading(true);
       setImportProcessing(true);
       // Close the create modal while processing to avoid overlap/confusion
@@ -210,7 +247,7 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
       if (typeof mapping === 'string') {
         try { mapping = JSON.parse(mapping); } catch { /* ignore */ }
       }
-      await apiService.classRecordService.importUpload(file, mapping, '', '');
+      await apiService.classRecordService.importUpload(file, mapping, '', '', formData.academic_year || '');
       showToast.success('Class record imported successfully');
       setTimeout(() => window.location.reload(), 600);
     } catch (err) {
@@ -230,12 +267,65 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
       setImportProcessing(true);
       // Close the create modal while processing to avoid overlap/confusion
       onClose();
+
+      // Handle "From Computer" selection coming from DriveFilePickerModal
+      if (file?.fromComputer && file.file) {
+        const localFile = file.file;
+
+        if (!formData.academic_year.trim()) {
+          setImportError('Please enter an Academic Year before importing a class record.');
+          showToast.error('Please enter an Academic Year before importing a class record.');
+          return;
+        }
+
+        // Ensure we have a valid Google access token before calling import endpoints
+        let googleToken = localStorage.getItem('googleAccessToken');
+        if (!googleToken) {
+          googleToken = await googleDriveService.ensureGoogleAccessToken();
+        }
+        if (!googleToken) {
+          setImportError('Please connect your Google account before importing a class record.');
+          showToast.error('Please connect your Google account before importing a class record.');
+          return;
+        }
+
+        const res = await apiService.classRecordService.previewImportUpload(localFile);
+        setImportPreview(res.data);
+
+        // Auto-import after preview using auto mapping
+        let mapping = res.data?.mapping || {};
+        if (typeof mapping === 'string') {
+          try { mapping = JSON.parse(mapping); } catch { /* ignore */ }
+        }
+        await apiService.classRecordService.importUpload(localFile, mapping, '', '', formData.academic_year || '');
+        showToast.success('Class record imported successfully');
+        setTimeout(() => window.location.reload(), 600);
+        return;
+      }
+
+      // Drive file path (original behaviour), but ensure Google token first
+      let googleToken = localStorage.getItem('googleAccessToken');
+      if (!googleToken) {
+        googleToken = await googleDriveService.ensureGoogleAccessToken();
+      }
+      if (!googleToken) {
+        setImportError('Please connect your Google account before importing a class record.');
+        showToast.error('Please connect your Google account before importing a class record.');
+        return;
+      }
+
+      if (!formData.academic_year.trim()) {
+        setImportError('Please enter an Academic Year before importing a class record.');
+        showToast.error('Please enter an Academic Year before importing a class record.');
+        return;
+      }
+
       const preview = await apiService.classRecordService.previewImportDrive(file.id, file.name);
       let mapping = preview.data?.mapping || {};
       if (typeof mapping === 'string') {
         try { mapping = JSON.parse(mapping); } catch { /* ignore */ }
       }
-      await apiService.classRecordService.importDrive(file.id, file.name, mapping, '', '');
+      await apiService.classRecordService.importDrive(file.id, file.name, mapping, '', '', formData.academic_year || '');
       showToast.success('Class record imported successfully from Drive');
       setTimeout(() => window.location.reload(), 600);
     } catch (err) {
@@ -382,12 +472,36 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
                   <option value="">Select Semester</option>
                   <option value="1st Semester">1st Semester</option>
                   <option value="2nd Semester">2nd Semester</option>
-                  <option value="Summer">Summer</option>
+                  <option value="Midyear">Midyear</option>
                 </select>
                 <Calendar className="absolute right-3 top-3 w-5 h-5 text-gray-400 pointer-events-none" />
               </div>
               {errors.semester && (
                 <p className="mt-1 text-sm text-red-600">{errors.semester}</p>
+              )}
+              </div>
+
+              {/* Academic Year */}
+              <div>
+              <label htmlFor="academic_year" className="block text-sm font-medium text-gray-700 mb-2">
+                Academic Year <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  id="academic_year"
+                  name="academic_year"
+                  value={formData.academic_year}
+                  onChange={handleInputChange}
+                  placeholder="e.g., 2024-2025"
+                  className={`w-full pl-3 pr-10 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#333D79] focus:border-[#333D79] focus:outline-none transition-all duration-200 text-gray-900 bg-gray-50 ${
+                    errors.academic_year ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                  }`}
+                />
+                <Calendar className="absolute right-3 top-3 w-5 h-5 text-gray-400" />
+              </div>
+              {errors.academic_year && (
+                <p className="mt-1 text-sm text-red-600">{errors.academic_year}</p>
               )}
               </div>
 

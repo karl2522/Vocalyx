@@ -16,6 +16,7 @@ from .serializers import (
     CategoryPercentageSerializer
 )
 from users.google_sheets_service import GoogleSheetsService
+from utils.google_service_account_sheets import GoogleServiceAccountSheets
 from users.google_drive_service import GoogleDriveService
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from .import_service import build_preview, ImportParseError, read_csv_bytes, read_xlsx_bytes, detect_and_map_headers, validate_required_mappings, normalize_rows
@@ -85,6 +86,7 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
                 print(f"🔍 Class record name: {class_record.name}")
                 print(f"🔍 Section name: {class_record.section_name}")
                 print(f"🔍 Semester: {class_record.semester}")
+                print(f"🔍 Academic Year: {getattr(class_record, 'academic_year', '')}")
                 
                 formatted_name = course_code
                 if course_name:
@@ -92,7 +94,11 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
                 if class_record.section_name:
                     formatted_name += f" {class_record.section_name}"
                 
-                sheet_title = f"{formatted_name} - {class_record.semester}".strip()
+                # Include academic year in the sheet title when available
+                if getattr(class_record, 'academic_year', ''):
+                    sheet_title = f"{formatted_name} - {class_record.semester} ({class_record.academic_year})".strip()
+                else:
+                    sheet_title = f"{formatted_name} - {class_record.semester}".strip()
                 print(f"🔍 Generated sheet title: {sheet_title}")
                 
                 copy_result = user_sheets_service.copy_template_sheet(
@@ -280,7 +286,7 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
             if cached:
                 return Response(cached)
 
-            qs = self.get_queryset().only('id', 'name', 'semester', 'teacher_name', 'created_at', 'google_sheet_id', 'spreadsheet_data', 'imported_excel_data', 'is_excel_imported')
+            qs = self.get_queryset().only('id', 'name', 'semester', 'teacher_name', 'section_name', 'academic_year', 'created_at', 'google_sheet_id', 'spreadsheet_data', 'imported_excel_data', 'is_excel_imported')
 
             if search:
                 from django.db.models import Q
@@ -343,6 +349,8 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
                     'name': cr.name,
                     'semester': cr.semester,
                     'teacher_name': cr.teacher_name,
+                    'section_name': cr.section_name,
+                    'academic_year': getattr(cr, 'academic_year', ''),
                     'created_at': cr.created_at,
                     'student_count': student_count,
                     'google_sheet_id': cr.google_sheet_id,
@@ -1016,6 +1024,7 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
                 user=request.user,
                 name=name,
                 semester=semester,
+                academic_year=request.data.get('academic_year', '').strip() or '',
                 imported_excel_headers=list(mapping.values()),
                 imported_excel_data=valid_rows,
                 imported_file_name=uploaded.name,
@@ -1037,6 +1046,7 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
                     print(f"🔍 [Excel Import 1] Class record name: {class_record.name}")
                     print(f"🔍 [Excel Import 1] Section name: {class_record.section_name}")
                     print(f"🔍 [Excel Import 1] Semester: {class_record.semester}")
+                    print(f"🔍 [Excel Import 1] Academic Year: {getattr(class_record, 'academic_year', '')}")
                     
                     formatted_name = course_code
                     if course_name:
@@ -1044,7 +1054,10 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
                     if class_record.section_name:
                         formatted_name += f" {class_record.section_name}"
                     
-                    sheet_title = f"{formatted_name} - {class_record.semester}".strip()
+                    if getattr(class_record, 'academic_year', ''):
+                        sheet_title = f"{formatted_name} - {class_record.semester} ({class_record.academic_year})".strip()
+                    else:
+                        sheet_title = f"{formatted_name} - {class_record.semester}".strip()
                     
                     copy_result = user_sheets_service.copy_template_sheet(
                         template_file_id=template_id,
@@ -1061,6 +1074,74 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
                         )
             except Exception:
                 pass
+
+            # 🔥 NEW: Populate STUDENTS into the newly created Google Sheet using the same
+            # core validation/import logic as the Import Students workflow.
+            try:
+                if class_record.google_sheet_id and rows:
+                    sa_service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+
+                    # Determine a target sheet name (use the first data sheet, similar to how
+                    # Import Students passes the active sheet name from the UI).
+                    target_sheet_name = None
+                    sheets_info = sa_service.get_sheets_list(class_record.google_sheet_id)
+                    if sheets_info.get('success') and sheets_info.get('sheets'):
+                        target_sheet_name = sheets_info['sheets'][0]['sheet_name']
+
+                    # Build student import payload from RAW rows + mapping (students only)
+                    import_students = []
+                    for idx, raw_row in enumerate(rows, start=1):
+                        identity = {}
+                        for original_header, value in raw_row.items():
+                            mapped = mapping.get(original_header)
+                            if not mapped:
+                                continue
+                            v = (value or '').strip()
+                            if mapped == 'FIRSTNAME':
+                                identity['FIRSTNAME'] = v
+                            elif mapped == 'LASTNAME':
+                                identity['LASTNAME'] = v
+                            elif mapped == 'MIDDLENAME':
+                                identity['MIDDLENAME'] = v
+                            elif mapped == 'STUDENT ID':
+                                identity['STUDENT ID'] = v
+
+                        first_name = (identity.get('FIRSTNAME') or '').strip()
+                        last_name = (identity.get('LASTNAME') or '').strip()
+                        middle_name = (identity.get('MIDDLENAME') or '').strip()
+                        student_id_val = (identity.get('STUDENT ID') or '').strip()
+
+                        # Require at least a first or last name, same as validate_import_data
+                        if not first_name and not last_name:
+                            continue
+
+                        student = {
+                            'FIRST NAME': first_name,
+                            'LASTNAME': last_name,
+                            'originalRow': idx,
+                        }
+                        if middle_name:
+                            student['MIDDLE NAME'] = middle_name
+                        if student_id_val:
+                            student['STUDENT ID'] = student_id_val
+
+                        import_students.append(student)
+
+                    if import_students and target_sheet_name:
+                        # Reuse the same validation logic as sheets_import_students_preview
+                        validation = sa_service.validate_import_data(import_students)
+                        if validation.get('success'):
+                            valid_students = validation.get('validStudents', [])
+                            if valid_students:
+                                # Fast path: import all students at once without conflict UI.
+                                sa_service.import_all_students_at_once(
+                                    class_record.google_sheet_id,
+                                    valid_students,
+                                    sheet_name=target_sheet_name
+                                )
+            except Exception as e:
+                # Do not fail the main import if student population fails; just log.
+                print(f"⚠️ Student population from Excel import failed: {str(e)}")
 
             return Response({
                 'status': 'success',
@@ -1153,6 +1234,7 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
                 user=request.user,
                 name=name,
                 semester=semester,
+                academic_year=request.data.get('academic_year', '').strip() or '',
                 imported_excel_headers=list(mapping.values()),
                 imported_excel_data=valid_rows,
                 imported_file_name=file_name,
@@ -1192,6 +1274,68 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
                         )
             except Exception:
                 pass
+
+            # 🔥 NEW: Populate STUDENTS into the newly created Google Sheet (Drive import path)
+            try:
+                if class_record.google_sheet_id and rows:
+                    sa_service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+
+                    # Determine a target sheet name (first sheet) for Drive-imported records
+                    target_sheet_name = None
+                    sheets_info = sa_service.get_sheets_list(class_record.google_sheet_id)
+                    if sheets_info.get('success') and sheets_info.get('sheets'):
+                        target_sheet_name = sheets_info['sheets'][0]['sheet_name']
+
+                    import_students = []
+                    for idx, raw_row in enumerate(rows, start=1):
+                        identity = {}
+                        for original_header, value in raw_row.items():
+                            mapped = mapping.get(original_header)
+                            if not mapped:
+                                continue
+                            v = (value or '').strip()
+                            if mapped == 'FIRSTNAME':
+                                identity['FIRSTNAME'] = v
+                            elif mapped == 'LASTNAME':
+                                identity['LASTNAME'] = v
+                            elif mapped == 'MIDDLENAME':
+                                identity['MIDDLENAME'] = v
+                            elif mapped == 'STUDENT ID':
+                                identity['STUDENT ID'] = v
+
+                        first_name = (identity.get('FIRSTNAME') or '').strip()
+                        last_name = (identity.get('LASTNAME') or '').strip()
+                        middle_name = (identity.get('MIDDLENAME') or '').strip()
+                        student_id_val = (identity.get('STUDENT ID') or '').strip()
+
+                        # Require at least a first or last name, same as validate_import_data
+                        if not first_name and not last_name:
+                            continue
+
+                        student = {
+                            'FIRST NAME': first_name,
+                            'LASTNAME': last_name,
+                            'originalRow': idx,
+                        }
+                        if middle_name:
+                            student['MIDDLE NAME'] = middle_name
+                        if student_id_val:
+                            student['STUDENT ID'] = student_id_val
+
+                        import_students.append(student)
+
+                    if import_students and target_sheet_name:
+                        validation = sa_service.validate_import_data(import_students)
+                        if validation.get('success'):
+                            valid_students = validation.get('validStudents', [])
+                            if valid_students:
+                                sa_service.import_all_students_at_once(
+                                    class_record.google_sheet_id,
+                                    valid_students,
+                                    sheet_name=target_sheet_name
+                                )
+            except Exception as e:
+                print(f"⚠️ Student population from Drive Excel import failed: {str(e)}")
 
             return Response({
                 'status': 'success',

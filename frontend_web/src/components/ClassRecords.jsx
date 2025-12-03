@@ -923,9 +923,19 @@ const ClassRecords = () => {
                       <FiFileText className="h-5 w-5 text-white" />
                     </div>
                     {viewMode === 'grid' && (
-                      <span className="text-xs bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-800 px-2 py-0.5 rounded-full font-medium border border-blue-200/50">
-                        {record.semester}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        {record.academic_year && (
+                          <span className="text-xs bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-800 px-2 py-0.5 rounded-full font-medium border border-blue-200/50">
+                            {record.academic_year}
+                          </span>
+                        )}
+                        <span className="text-xs bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-800 px-2 py-0.5 rounded-full font-medium border border-blue-200/50">
+                          {record.semester}
+                        </span>
+                        <span className="text-xs bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-800 px-2 py-0.5 rounded-full font-medium border border-blue-200/50">
+                          {record.section_name || 'Section'}
+                        </span>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -939,9 +949,19 @@ const ClassRecords = () => {
                               {record.name}
                             </h3>
                             {viewMode === 'list' && (
-                              <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full font-medium">
-                                {record.semester}
-                              </span>
+                              <div className="flex items-center gap-1.5">
+                                {record.academic_year && (
+                                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full font-medium">
+                                    {record.academic_year}
+                                  </span>
+                                )}
+                                <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full font-medium">
+                                  {record.semester}
+                                </span>
+                                <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full font-medium">
+                                  {record.section_name || 'Section'}
+                                </span>
+                              </div>
                             )}
                           </div>
                           
@@ -950,10 +970,6 @@ const ClassRecords = () => {
                               <span className="flex items-center gap-1">
                                 <FiUser className="h-4 w-4" />
                                 {record.teacher_name || 'Teacher'}
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <FiUsers className="h-4 w-4" />
-                                {record.section_name || 'Section'}
                               </span>
                               <span className="flex items-center gap-1">
                                 <FiCalendar className="h-4 w-4" />
@@ -988,10 +1004,6 @@ const ClassRecords = () => {
                           <div className="flex items-center gap-2">
                             <FiUser className="h-4 w-4" />
                             <span>Teacher: {record.teacher_name || 'N/A'}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <FiUsers className="h-4 w-4" />
-                            <span>Section: {record.section_name|| 'N/A'}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <FiCalendar className="h-4 w-4" />

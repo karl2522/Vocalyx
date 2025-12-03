@@ -609,12 +609,15 @@ export const classRecordService = {
         });
     },
 
-    importUpload: (file, mapping, name, semester) => {
+    importUpload: (file, mapping, name, semester, academicYear = '') => {
         const form = new FormData();
         form.append('file', file);
         form.append('mapping', JSON.stringify(mapping));
         form.append('name', name);
         form.append('semester', semester);
+        if (academicYear) {
+            form.append('academic_year', academicYear);
+        }
         return api.post('/class-records/import/upload/', form, {
             headers: { 'Content-Type': 'multipart/form-data' }
         });
@@ -629,13 +632,17 @@ export const classRecordService = {
         return api.post('/class-records/import/preview-drive/', { fileId, fileName }, config);
     },
 
-    importDrive: (fileId, fileName, mapping, name, semester) => {
+    importDrive: (fileId, fileName, mapping, name, semester, academicYear = '') => {
         const googleAccessToken = localStorage.getItem('googleAccessToken');
         const config = {};
         if (googleAccessToken) {
             config.headers = { 'X-Access-Token': googleAccessToken };
         }
-        return api.post('/class-records/import/drive/', { fileId, fileName, mapping, name, semester }, config);
+        const payload = { fileId, fileName, mapping, name, semester };
+        if (academicYear) {
+            payload.academic_year = academicYear;
+        }
+        return api.post('/class-records/import/drive/', payload, config);
     },
 };
 

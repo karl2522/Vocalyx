@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { ArrowLeft, BarChart3, CheckCircle2, ChevronDown, Edit, FileSpreadsheet, HelpCircle, Menu, Mic, MicOff, MoreVertical, PieChart, Plus, RefreshCw, Star, Trash2, Upload, Users, X, Lightbulb, CheckCircle, Zap, Target, Award} from 'lucide-react';
+import { ArrowLeft, BarChart3, CheckCircle2, ChevronDown, Clock, Edit, FileSpreadsheet, HelpCircle, Menu, Mic, MicOff, MoreVertical, PieChart, Plus, RefreshCw, Star, Trash2, Upload, Users, X, Lightbulb, CheckCircle, Zap, Target, Award} from 'lucide-react';
+import { FiCheckCircle } from 'react-icons/fi';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -5459,12 +5460,22 @@ const ClassRecordExcel = () => {
                 <div className="h-5 w-px bg-slate-300 flex-shrink-0"></div>
                 <div className="min-w-0 overflow-hidden">
                   <h1 className="text-lg sm:text-xl font-semibold text-slate-900 break-words">{classRecord?.name}</h1>
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs sm:text-sm text-slate-500">
-                    <span>{classRecord?.section_name}</span>
-                    <span className="hidden sm:inline">•</span>
-                    <span>{classRecord?.semester}</span>
-                    <span className="hidden sm:inline">•</span>
-                    <span>{classRecord?.teacher_name}</span>
+                  <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                    {classRecord?.academic_year && (
+                      <span className="text-[11px] sm:text-xs bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-800 px-2 py-0.5 rounded-full font-medium border border-blue-200/50">
+                        {classRecord.academic_year}
+                      </span>
+                    )}
+                    {classRecord?.semester && (
+                      <span className="text-[11px] sm:text-xs bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-800 px-2 py-0.5 rounded-full font-medium border border-blue-200/50">
+                        {classRecord.semester}
+                      </span>
+                    )}
+                    {classRecord?.section_name && (
+                      <span className="text-[11px] sm:text-xs bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-800 px-2 py-0.5 rounded-full font-medium border border-blue-200/50">
+                        {classRecord.section_name}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -6147,22 +6158,24 @@ const ClassRecordExcel = () => {
             onClick={() => setShowModeSelectionModal(false)}
           >
             <div
-              className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full mx-4 overflow-hidden max-h-[85vh] overflow-y-auto"
+              className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full mx-4 overflow-hidden max-h-[85vh] flex flex-col"
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Header - Compact */}
-              <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 px-6 py-4">
+              {/* Header - match VoiceGuideModal colors */}
+              <div className="bg-gradient-to-r from-[#333D79] to-[#4A5491] px-6 py-4 rounded-t-2xl flex-shrink-0">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-xl font-bold text-white flex items-center space-x-2">
-                      <Mic className="w-5 h-5" />
-                      <span>Choose Your Grading Mode</span>
-                    </h3>
-                    <p className="text-xs text-indigo-100 mt-0.5">Pick the best way to record grades for your workflow</p>
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+                      <Mic className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-white">Choose Your Recording Mode</h3>
+                      <p className="text-sm text-white/80">Pick the best way to record grades for your workflow</p>
+                    </div>
                   </div>
                   <button
                     onClick={() => setShowModeSelectionModal(false)}
-                    className="text-white/80 hover:text-white hover:bg-white/20 rounded-lg p-2 transition-colors"
+                    className="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
                     title="Close"
                     aria-label="Close modal"
                   >
@@ -6172,13 +6185,13 @@ const ClassRecordExcel = () => {
               </div>
 
               {/* Content - SIDE BY SIDE LAYOUT */}
-              <div className="p-6">
+              <div className="p-6 overflow-y-auto flex-1 custom-scrollbar">
                 {/* Quick Guide - Compact */}
                 <div className="bg-blue-50 border-l-4 border-blue-500 rounded-lg p-3 mb-5">
                   <div className="flex items-start space-x-2">
                     <Lightbulb className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
                     <p className="text-xs text-blue-800">
-                      <strong className="text-blue-900">💡 Quick Guide:</strong> <strong>Single Mode:</strong> Best for grading 1-5 students.  <strong>Batch Mode:</strong> Best for grading 10+ students quickly! 
+                      <strong className="text-blue-900">Quick Guide:</strong> <strong>Single Mode:</strong> Best for grading 1-5 students.  <strong>Batch Mode:</strong> Best for grading 10+ students quickly!
                     </p>
                   </div>
                 </div>
@@ -6214,7 +6227,10 @@ const ClassRecordExcel = () => {
                       <p className="text-xs font-mono text-blue-900 bg-blue-100 px-3 py-2 rounded">
                         "Quiz 1 Maria eighty-five"
                       </p>
-                      <p className="text-xs text-gray-600 mt-1. 5">✅ Records one grade, then stops</p>
+                      <p className="text-xs text-gray-600 mt-1.5 flex items-center space-x-1">
+                        <FiCheckCircle className="w-3 h-3 text-green-600 flex-shrink-0" />
+                        <span>Records one grade, then stops</span>
+                      </p>
                     </div>
 
                     {/* When to Use */}
@@ -6232,14 +6248,14 @@ const ClassRecordExcel = () => {
                     className="p-5 rounded-xl border-2 border-purple-300 hover:border-purple-500 bg-gradient-to-br from-purple-50 via-pink-50 to-purple-50 hover:shadow-xl transition-all duration-200 group relative text-left h-full"
                   >
                     {/* Recommended Badge - Top Right */}
-                    <div className="absolute -top-2 -right-2 flex items-center space-x-1 bg-gradient-to-r from-amber-400 to-orange-500 text-white px-3 py-1. 5 rounded-full text-xs font-bold shadow-lg z-10 animate-pulse">
-                      <Star className="w-3. 5 h-3.5 fill-current" />
+                    <div className="absolute -top-2 -right-2 flex items-center space-x-2 bg-gradient-to-r from-amber-400 to-orange-500 text-white px-4 py-2 rounded-full text-xs font-bold shadow-lg z-10 animate-pulse">
+                      <Star className="w-3.5 h-3.5 fill-current" />
                       <span>RECOMMENDED</span>
                     </div>
 
                     {/* Time Saver Badge - Top Left */}
-                    <div className="absolute -top-2 -left-2 flex items-center space-x-1 bg-gradient-to-r from-green-500 to-emerald-600 text-white px-2. 5 py-1 rounded-full text-xs font-bold shadow-lg z-10">
-                      <Zap className="w-3 h-3 fill-current" />
+                    <div className="absolute -top-2 -left-2 flex items-center space-x-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white px-3 py-1.5 rounded-full text-xs font-bold shadow-lg z-10">
+                      <Zap className="w-3.5 h-3.5 fill-current" />
                       <span>Saves Hours!</span>
                     </div>
                     
@@ -6266,25 +6282,28 @@ const ClassRecordExcel = () => {
                       <p className="text-xs font-mono text-purple-900 bg-purple-100 px-3 py-2 rounded leading-relaxed">
                         "Maria 85, John 90, Sarah 78, Tom 92, Lisa 88"
                       </p>
-                      <p className="text-xs text-gray-600 mt-1.5">✅ Records <strong className="text-green-600">5 grades instantly</strong> in one command! </p>
+                      <p className="text-xs text-gray-600 mt-1.5 flex items-center space-x-1">
+                        <FiCheckCircle className="w-3 h-3 text-green-600 flex-shrink-0" />
+                        <span>Records <strong className="text-green-600">5 grades instantly</strong> in one command!</span>
+                      </p>
                     </div>
 
                     {/* Benefits List - Compact */}
-                    <div className="space-y-1. 5">
+                    <div className="space-y-1.5">
                       <div className="flex items-start space-x-2">
-                        <Zap className="w-3. 5 h-3.5 text-green-600 flex-shrink-0 mt-0.5" />
+                        <Zap className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
                         <p className="text-xs text-gray-700">
                           <span className="font-semibold">Super Fast:</span> Grade 20-30 students in under 2 minutes
                         </p>
                       </div>
                       <div className="flex items-start space-x-2">
-                        <Target className="w-3.5 h-3.5 text-blue-600 flex-shrink-0 mt-0.5" />
+                        <Target className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
                         <p className="text-xs text-gray-700">
                           <span className="font-semibold">Perfect for:</span> Quizzes, homework, tests with whole-class grading
                         </p>
                       </div>
                       <div className="flex items-start space-x-2">
-                        <Award className="w-3.5 h-3.5 text-purple-600 flex-shrink-0 mt-0.5" />
+                        <Award className="w-3.5 h-3.5 text-purple-600 flex-shrink-0" />
                         <p className="text-xs text-gray-700">
                           <span className="font-semibold">Best for:</span> Grading 10+ students at once
                         </p>
@@ -6293,23 +6312,60 @@ const ClassRecordExcel = () => {
                   </button>
                 </div>
 
-                {/* Comparison Table - Compact & Below Cards */}
-                <div className="mt-5 bg-gray-50 rounded-xl p-4 border border-gray-200">
-                  <h5 className="font-bold text-gray-900 mb-3 text-center text-sm">📊 Quick Comparison</h5>
-                  <div className="grid grid-cols-2 gap-4 text-xs">
-                    <div className="text-center">
-                      <div className="bg-blue-100 rounded-lg p-2. 5">
-                        <p className="font-bold text-blue-900 mb-1 text-xs">Single Mode</p>
-                        <p className="text-blue-700 text-xs">⏱️ ~20 seconds/student</p>
+                {/* Comparison Table - Enhanced */}
+                <div className="mt-5 bg-gradient-to-br from-slate-50 to-gray-50 rounded-xl p-5 border-2 border-gray-200 shadow-sm">
+                  <div className="flex items-center justify-center space-x-2 mb-4">
+                    <BarChart3 className="w-5 h-5 text-indigo-600" />
+                    <h5 className="font-bold text-gray-900 text-base">Quick Comparison</h5>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Single Mode */}
+                    <div className="bg-white rounded-lg p-4 border-2 border-blue-200 shadow-sm">
+                      <div className="flex items-center justify-center space-x-2 mb-3">
+                        <Mic className="w-4 h-4 text-blue-600" />
+                        <p className="font-bold text-blue-900 text-sm">Single Mode</p>
                       </div>
-                      <p className="text-gray-600 mt-2 text-xs">20 students = <strong>~7 min</strong></p>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-center space-x-1.5">
+                          <Clock className="w-4 h-4 text-blue-600" />
+                          <p className="text-blue-700 text-xs font-semibold">~20 seconds/student</p>
+                        </div>
+                        <div className="bg-blue-50 rounded-lg p-2.5 border border-blue-200 mt-2">
+                          <p className="text-gray-700 text-xs mb-0.5">For 20 students:</p>
+                          <p className="text-blue-900 font-bold text-sm">~7 minutes</p>
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-center">
-                      <div className="bg-purple-100 rounded-lg p-2.5">
-                        <p className="font-bold text-purple-900 mb-1 text-xs">Batch Mode</p>
-                        <p className="text-purple-700 text-xs">⚡ ~6 seconds/student</p>
+                    
+                    {/* Batch Mode */}
+                    <div className="bg-white rounded-lg p-4 border-2 border-purple-300 shadow-sm relative">
+                      <div className="absolute -top-2 -right-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white px-2 py-0.5 rounded-full text-[10px] font-bold">
+                        3.5x FASTER
                       </div>
-                      <p className="text-gray-600 mt-2 text-xs">20 students = <strong>~2 min</strong></p>
+                      <div className="flex items-center justify-center space-x-2 mb-3">
+                        <Users className="w-4 h-4 text-purple-600" />
+                        <p className="font-bold text-purple-900 text-sm">Batch Mode</p>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-center space-x-1.5">
+                          <Zap className="w-4 h-4 text-purple-600" />
+                          <p className="text-purple-700 text-xs font-semibold">~6 seconds/student</p>
+                        </div>
+                        <div className="bg-purple-50 rounded-lg p-2.5 border border-purple-200 mt-2">
+                          <p className="text-gray-700 text-xs mb-0.5">For 20 students:</p>
+                          <p className="text-purple-900 font-bold text-sm">~2 minutes</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Time Savings Highlight */}
+                  <div className="mt-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-3 border-2 border-green-200">
+                    <div className="flex items-center justify-center space-x-2">
+                      <Zap className="w-4 h-4 text-green-600" />
+                      <p className="text-green-900 text-xs font-bold">
+                        <span className="text-sm">Save ~5 minutes</span> per assignment with Batch Mode!
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -6329,7 +6385,7 @@ const ClassRecordExcel = () => {
               </div>
 
               {/* Footer - Compact */}
-              <div className="px-6 py-3 bg-gradient-to-r from-gray-50 to-gray-100 border-t border-gray-200 flex items-center justify-between">
+              <div className="px-6 py-3 bg-gradient-to-r from-gray-50 to-gray-100 border-t border-gray-200 flex items-center justify-between rounded-b-2xl flex-shrink-0">
                 <p className="text-xs text-gray-600">
                   💡 <strong>Tip:</strong> You can change modes anytime! 
                 </p>

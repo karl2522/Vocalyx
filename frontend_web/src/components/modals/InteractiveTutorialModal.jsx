@@ -599,8 +599,8 @@ const InteractiveTutorialModal = ({ isOpen, onClose, onComplete }) => {
             </div>
           </div>
 
-          {/* Content (unchanged) */}
-          <div className="flex-1 overflow-y-auto p-6">
+          {/* Content with custom scrollbar */}
+          <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Left Column - Instructions */}
               <div className="space-y-4">

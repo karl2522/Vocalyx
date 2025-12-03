@@ -1,6 +1,6 @@
 const BACKEND_URL = import.meta.env.PROD 
   ? 'http://127.0.0.1:8000/api'
-  : 'http://127.0.0.1:8000';
+  : 'http://127.0.0.1:8000/api';
 
 import { showToast } from '../utils/toast';
 import googleDriveService from './googleDriveService';
