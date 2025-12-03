@@ -549,26 +549,6 @@ const Profile = () => {
                   <p className="text-white/80 max-w-2xl">{formData.bio}</p>
                 )}
               </div>
-              
-              {/* Edit Button */}
-              <div className="md:ml-auto">
-                <button
-                  onClick={() => setIsEditing(!isEditing)}
-                  className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg flex items-center gap-2 transition-all border border-white/20"
-                >
-                  {isEditing ? (
-                    <>
-                      <FiX size={18} />
-                      <span>Cancel</span>
-                    </>
-                  ) : (
-                    <>
-                      <FiEdit size={18} />
-                      <span>Edit Profile</span>
-                    </>
-                  )}
-                </button>
-              </div>
             </div>
           </div>
         </div>
@@ -713,7 +693,19 @@ const Profile = () => {
                       <div className="flex justify-end">
                         <button
                           type="button"
-                          onClick={() => setIsEditing(false)}
+                          onClick={() => {
+                            // 🔥 Reset form data to original user data
+                            setFormData({
+                              first_name: user.first_name || '',
+                              last_name: user.last_name || '',
+                              email: user. email || '',
+                              institution: user.institution || 'Cebu Institute of Technology - University',
+                              position: user.position || 'Teacher/Instructor',
+                              bio: user.bio || '',
+                            });
+                            // Close edit mode
+                            setIsEditing(false);
+                          }}
                           className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg mr-3 hover:bg-gray-50 transition-colors"
                           disabled={isSubmitting}
                         >

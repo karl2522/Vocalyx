@@ -1664,23 +1664,22 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
     
     const firstName = cleanName(row['FIRST NAME'] || '');
     const lastName = cleanName(row['LASTNAME'] || '');
-    const middleName = cleanName(row['MIDDLE NAME'] || '');  // 🔥 NEW: Add middle name
-    const fullName = `${firstName} ${lastName}`.trim();
-    const fullNameWithMiddle = `${firstName} ${middleName} ${lastName}`.trim(); // 🔥 NEW: Full name with middle
-
+    const middleName = cleanName(row['MIDDLE NAME'] || '');
+    const fullName = `${firstName} ${lastName}`. trim();
+    const fullNameWithMiddle = `${firstName} ${middleName} ${lastName}`.trim();
     
     // Enhanced candidate generation
     const candidates = [
       firstName, 
       lastName, 
-      middleName,  // 🔥 NEW: Add middle name as a candidate
+      middleName,
       fullName,
-      fullNameWithMiddle,  // 🔥 NEW: Full name with middle name
+      fullNameWithMiddle,
       `${lastName} ${firstName}`, // Reversed order
-      `${lastName} ${firstName} ${middleName}`, // 🔥 NEW: Reversed with middle
+      `${lastName} ${firstName} ${middleName}`,
       firstName.split(' ')[0], // First word of first name
       lastName.split(' ')[0],   // First word of last name
-      middleName.split(' ')[0]  // 🔥 NEW: First word of middle name
+      middleName.split(' ')[0]
     ].filter(c => c && c.length > 1);
       
     candidates.forEach(candidate => {
@@ -1688,47 +1687,109 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
       let matchType = '';
       let confidence = 0;
       
+      // 🔥 🔥 🔥 CRITICAL: Calculate length difference FIRST (universal gate check)
+      const lengthDiff = Math.abs(candidate.length - cleanedSearchName.length);
+      const longerLength = Math.max(candidate.length, cleanedSearchName.length);
+      const shorterLength = Math.min(candidate.length, cleanedSearchName.length);
+      const lengthRatio = lengthDiff / longerLength;
+      
+      // 🔥 GATE CHECK 1: Reject if length difference is too extreme (>40%)
+      // Example: "Kapuras" (7) vs "Karl" (4) = 43% difference → REJECTED! 
+      if (lengthRatio > 0.40 && shorterLength < 5) {
+        console.log(`🚫 REJECTED by length check: "${candidate}" vs "${cleanedSearchName}" (${(lengthRatio * 100).toFixed(0)}% diff)`);
+        return; // Skip this candidate entirely
+      }
+      
+      // 🔥 GATE CHECK 2: First character validation
+      const firstChar1 = cleanedSearchName[0]?.toLowerCase() || '';
+      const firstChar2 = candidate[0]?.toLowerCase() || '';
+      const firstCharMatch = firstChar1 === firstChar2;
+      
       // 🔥 Algorithm 1: Exact match (highest priority)
       if (candidate === cleanedSearchName) {
         score = 0;
         matchType = 'exact';
         confidence = 1.0;
+        console.log(`✅ EXACT MATCH: "${candidate}"`);
       }
       
       // 🔥 Algorithm 2: Soundex phonetic matching
       else if (soundsLike(candidate, cleanedSearchName)) {
-        score = 1;
-        matchType = 'phonetic';
-        confidence = 0.9;
+        // 🔥 ENHANCED: Validate phonetic matches with length check
+        if (lengthRatio < 0.35) { // Only if length is reasonably similar
+          score = 1;
+          matchType = 'phonetic';
+          confidence = 0.9;
+          console.log(`✅ PHONETIC MATCH: "${candidate}" sounds like "${cleanedSearchName}"`);
+        } else {
+          console.log(`🚫 REJECTED phonetic (length diff too large): "${candidate}" vs "${cleanedSearchName}"`);
+          return;
+        }
       }
       
-      // 🔥 Algorithm 3: Substring matching
-      // 🔥 FIXED: Only match if substring is substantial (at least 4 chars)
-      else if (candidate.length >= 4 && cleanedSearchName.length >= 4 &&
-               (candidate.includes(cleanedSearchName) || cleanedSearchName.includes(candidate))) {
-        score = Math.abs(candidate.length - cleanedSearchName.length);
-        matchType = 'substring';
-        confidence = 0.8;
+      // 🔥 Algorithm 3: STRICT Substring matching
+      else if (candidate.length >= 5 && cleanedSearchName.length >= 5) {
+        const isSubstring = candidate.includes(cleanedSearchName) || cleanedSearchName.includes(candidate);
+        
+        if (isSubstring) {
+          // 🔥 NEW: Calculate overlap ratio for validation
+          const overlapLength = Math.min(candidate.length, cleanedSearchName.length);
+          const overlapRatio = overlapLength / longerLength;
+          
+          // 🔥 STRICT: Require at least 75% overlap
+          if (overlapRatio >= 0.75) {
+            score = Math.abs(candidate. length - cleanedSearchName.length);
+            matchType = 'substring';
+            confidence = 0.85 * overlapRatio; // Adjusted confidence
+            console.log(`✅ SUBSTRING MATCH: "${candidate}" contains "${cleanedSearchName}" (${(overlapRatio * 100).toFixed(0)}% overlap)`);
+          } else {
+            console.log(`🚫 REJECTED substring (overlap too small): "${candidate}" vs "${cleanedSearchName}" (${(overlapRatio * 100).toFixed(0)}% overlap)`);
+            return;
+          }
+        }
       }
       
-      // 🔥 Algorithm 4: Levenshtein distance with adaptive threshold
+      // 🔥 Algorithm 4: ULTRA STRICT Levenshtein distance with adaptive threshold
       else {
         const distance = levenshteinDistance(candidate, cleanedSearchName);
         const maxLength = Math.max(candidate.length, cleanedSearchName.length);
         const similarity = 1 - (distance / maxLength);
         
-        // 🔥 FIXED: Increased threshold from 0.65 to 0.78 to prevent false matches
-        // This prevents "Capuras" from matching "Karl" and other clearly different names
-        if (similarity > 0.78) { // More strict threshold to avoid false positives
+        console.log(`🔍 Fuzzy check: "${candidate}" vs "${cleanedSearchName}" = ${(similarity * 100).toFixed(1)}% similar`);
+        
+        // 🔥 🔥 🔥 CRITICAL IMPROVEMENT: Multi-tier threshold system
+        let requiredSimilarity = 0.90; // Default: 90% required!
+        
+        // If first characters don't match, be EVEN MORE strict
+        if (!firstCharMatch) {
+          requiredSimilarity = 0.95; // 95% required if first letter differs!
+          console.log(`⚠️ First char mismatch: "${firstChar1}" vs "${firstChar2}" - requiring ${requiredSimilarity * 100}% similarity`);
+        }
+        
+        // If length difference is significant (20-40%), be MORE strict
+        if (lengthRatio > 0.20 && lengthRatio <= 0.40) {
+          requiredSimilarity = Math.max(requiredSimilarity, 0.92); // At least 92%
+          console.log(`⚠️ Length diff ${(lengthRatio * 100).toFixed(0)}% - requiring ${requiredSimilarity * 100}% similarity`);
+        }
+        
+        // Apply the threshold
+        if (similarity >= requiredSimilarity) {
           score = distance;
           matchType = 'fuzzy';
-          confidence = similarity;
+          
+          // 🔥 Penalize confidence if first char doesn't match
+          confidence = firstCharMatch ? similarity : similarity * 0.85;
+          
+          console.log(`✅ FUZZY MATCH: "${candidate}" (${(similarity * 100).toFixed(1)}% similar, confidence: ${(confidence * 100).toFixed(1)}%)`);
+        } else {
+          console.log(`🚫 REJECTED fuzzy (below ${requiredSimilarity * 100}% threshold): "${candidate}" vs "${cleanedSearchName}"`);
+          return;
         }
       }
       
-      // 🔥 FIXED: Tightened threshold from 15 to 10 and require minimum confidence
-      // This prevents weak matches from being considered
-      if (score < 10 && confidence > 0.70) { // Only collect strong matches
+      // 🔥 🔥 🔥 FINAL GATE: Only accept matches with high confidence and low score
+      // Changed from score < 10 && confidence > 0.70 to MORE STRICT
+      if (score < 8 && confidence > 0.80) { // Much stricter!
         // Check if this column already has a score
         const hasExistingScore = targetColumn && row[targetColumn] && 
                                 String(row[targetColumn]).trim() !== '' && 
@@ -1745,15 +1806,21 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
           existingValue: hasExistingScore ? row[targetColumn] : null,
           rowData: row
         });
+        
+        console.log(`✅ ADDED TO MATCHES: Row ${index}, "${candidate}", Score: ${score}, Confidence: ${(confidence * 100).toFixed(1)}%, Type: ${matchType}`);
+      } else {
+        console.log(`🚫 REJECTED (final gate): Score ${score} or Confidence ${(confidence * 100). toFixed(1)}% too low`);
       }
     });
   });
   
   // Enhanced sorting: primary by score, secondary by confidence
-  allMatches.sort((a, b) => {
+  allMatches. sort((a, b) => {
     if (a.score !== b.score) return a.score - b.score;
-    return b.confidence - a.confidence;
+    return b.confidence - a. confidence;
   });
+  
+  console.log(`📊 Total matches found: ${allMatches.length}`);
   
   // 🔥 🔥 🔥 DEDUPLICATE BY ROW INDEX - Keep only the best match per student row
   const deduplicatedMatches = [];
@@ -1790,7 +1857,7 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
     return {
       bestMatch: match.index,
       possibleMatches: [match],
-      confidence: match.confidence > 0.9 ? 'high' : match.confidence > 0.7 ? 'medium' : 'low',
+      confidence: match.confidence > 0.9 ? 'high' : match.confidence > 0.8 ? 'medium' : 'low',
       hasDuplicates: false,
       needsConfirmation: false
     };
@@ -1885,10 +1952,10 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
     // Only use recent context if we haven't detected multiple entries above
     for (const recent of recentStudents) {
       const recentMatch = allMatches.find(match => 
-        match.student.toLowerCase() === recent.toLowerCase() ||
+        match.student. toLowerCase() === recent.toLowerCase() ||
         soundsLike(match.student, recent)
       );
-      if (recentMatch && recentMatch.confidence > 0.7) {
+      if (recentMatch && recentMatch.confidence > 0.8) { // Increased from 0.7 to 0.8
         console.log('✅ Found recent context match (no duplicates detected):', recentMatch);
         return {
           bestMatch: recentMatch.index,
@@ -1906,7 +1973,7 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
   if (targetColumn) {
     const emptyMatches = allMatches.filter(match => !match.hasExistingScore);
     
-    if (emptyMatches.length === 1 && emptyMatches[0].confidence > 0.7) {
+    if (emptyMatches.length === 1 && emptyMatches[0].confidence > 0.8) { // Increased from 0.7 to 0.8
       console.log('✅ Found single empty score match:', emptyMatches[0]);
       return {
         bestMatch: emptyMatches[0].index,
@@ -1919,8 +1986,8 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
     }
   }
   
-  // 🔥 Strategy 5: High confidence single match
-  const highConfidenceMatches = allMatches.filter(match => match.confidence > 0.85);
+  // 🔥 Strategy 5: High confidence single match (MORE STRICT)
+  const highConfidenceMatches = allMatches.filter(match => match. confidence > 0.90); // Increased from 0.85 to 0.90
   if (highConfidenceMatches.length === 1) {
     console.log('✅ Found high confidence match:', highConfidenceMatches[0]);
     return {
@@ -1933,14 +2000,14 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
     };
   }
   
-  // Strategy 6: Best available match
+  // Strategy 6: Best available match (MORE STRICT)
   const bestMatch = allMatches[0];
-  if (bestMatch.confidence > 0.6) {
+  if (bestMatch.confidence > 0.75) { // Increased from 0.6 to 0.75
     console.log('✅ Using best available match:', bestMatch);
     return {
       bestMatch: bestMatch.index,
-      possibleMatches: allMatches.slice(0, 3),
-      confidence: bestMatch.confidence > 0.8 ? 'medium' : 'low',
+      possibleMatches: allMatches. slice(0, 3),
+      confidence: bestMatch.confidence > 0.85 ? 'medium' : 'low', // Adjusted thresholds
       hasDuplicates: false,
       needsConfirmation: false
     };

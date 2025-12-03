@@ -3026,7 +3026,25 @@ const ClassRecordExcel = () => {
 
       console.log(`🎯 Found column: "${foundColumn}" for "${columnName}"`);
 
-      // 🔥 STEP 2: Find and update students
+      // 🔥 STEP 2: Validate all scores first
+      const invalidScores = [];
+      students.forEach(({ name, score }) => {
+        const validation = validateScore(foundColumn, score);
+        if (!validation.valid) {
+          invalidScores.push({ name, score, error: validation.error });
+        }
+      });
+
+      if (invalidScores.length > 0) {
+        const errorMsg = invalidScores.map(e => `${e.name}: ${e.score} - ${e.error}`).join(', ');
+        toast.error(`Cannot process batch: Invalid scores detected - ${errorMsg}`);
+        if (voiceEnabled) {
+          speakText(`Cannot process batch. ${invalidScores.length} invalid scores detected.`);
+        }
+        return;
+      }
+
+      // 🔥 STEP 3: Find and update students
       const updatedData = [...tableData];
       let updatedCount = 0;
       const updates = [];
@@ -3110,7 +3128,17 @@ const ClassRecordExcel = () => {
 
       console.log(`🎯 Found column: "${foundColumn}" for "${columnName}"`);
 
-      // 🔥 STEP 2: Validate rows
+      // 🔥 STEP 2: Validate score against max score
+      const validation = validateScore(foundColumn, score);
+      if (!validation.valid) {
+        toast.error(`❌ ${validation.error}`);
+        if (voiceEnabled) {
+          speakText(validation.error);
+        }
+        return;
+      }
+
+      // 🔥 STEP 3: Validate rows
       if (startRow < 0 || endRow < 0 || startRow > endRow) {
         toast.error('Invalid row range');
         return;
@@ -4520,6 +4548,17 @@ const ClassRecordExcel = () => {
       return;
     }
 
+    // 🔥 VALIDATION: Check if score exceeds max score
+    const validation = validateScore(currentBatchColumn, score);
+    if (!validation.valid) {
+      console.log('🔥 PROCESS BATCH: ❌ Validation failed:', validation.error);
+      toast.error(`❌ ${validation.error}`);
+      if (voiceEnabled) {
+        speakText(validation.error);
+      }
+      return;
+    }
+
     // 🔥 DUPLICATE PREVENTION: Create unique entry key
     const entryKey = `${studentName.toLowerCase()}_${score}`;
 
@@ -4662,6 +4701,28 @@ const ClassRecordExcel = () => {
 
     if (validEntries.length === 0) {
       toast.error('No valid entries to save');
+      return;
+    }
+
+    // 🔥 VALIDATION: Validate all scores before executing batch
+    const invalidEntries = [];
+    for (const entry of validEntries) {
+      const validation = validateScore(currentBatchColumn, entry.score);
+      if (!validation.valid) {
+        invalidEntries.push({
+          student: entry.studentName,
+          score: entry.score,
+          error: validation.error
+        });
+      }
+    }
+
+    if (invalidEntries.length > 0) {
+      const errorMsg = invalidEntries.map(e => `${e.student}: ${e.score} - ${e.error}`).join('\n');
+      toast.error(`Cannot execute batch: Invalid scores detected\n${errorMsg}`);
+      if (voiceEnabled) {
+        speakText(`Cannot execute batch. ${invalidEntries.length} invalid scores detected.`);
+      }
       return;
     }
 
