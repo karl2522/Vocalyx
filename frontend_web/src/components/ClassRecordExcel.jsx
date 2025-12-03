@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { ArrowLeft, BarChart3, CheckCircle2, ChevronDown, Edit, FileSpreadsheet, HelpCircle, Menu, Mic, MicOff, MoreVertical, PieChart, Plus, RefreshCw, Star, Trash2, Upload, Users, X } from 'lucide-react';
+import { ArrowLeft, BarChart3, CheckCircle2, ChevronDown, Edit, FileSpreadsheet, HelpCircle, Menu, Mic, MicOff, MoreVertical, PieChart, Plus, RefreshCw, Star, Trash2, Upload, Users, X, Lightbulb, CheckCircle, Zap, Target, Award} from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -6143,81 +6143,199 @@ const ClassRecordExcel = () => {
         {/* 🔥 NEW: Mode Selection Modal */}
         {showModeSelectionModal && (
           <div
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]"
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4"
             onClick={() => setShowModeSelectionModal(false)}
           >
             <div
-              className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 overflow-hidden"
+              className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full mx-4 overflow-hidden max-h-[85vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Header */}
-              <div className="bg-gradient-to-r from-[#333D79] to-[#4A5491] px-6 py-4 flex items-center justify-between">
-                <h3 className="text-xl font-semibold text-white">Select Recording Mode</h3>
-                <button
-                  onClick={() => setShowModeSelectionModal(false)}
-                  className="text-white hover:text-gray-200 transition-colors"
-                  title="Close"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Content */}
-              <div className="p-6">
-                <p className="text-gray-600 mb-6 text-center">
-                  Choose how you want to record voice commands:
-                </p>
-
-                <div className="space-y-4">
-                  {/* Single Mode Button */}
+              {/* Header - Compact */}
+              <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 px-6 py-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xl font-bold text-white flex items-center space-x-2">
+                      <Mic className="w-5 h-5" />
+                      <span>Choose Your Grading Mode</span>
+                    </h3>
+                    <p className="text-xs text-indigo-100 mt-0.5">Pick the best way to record grades for your workflow</p>
+                  </div>
                   <button
-                    onClick={handleSingleModeSelected}
-                    className="w-full p-4 rounded-lg border-2 border-blue-200 hover:border-blue-400 bg-blue-50 hover:bg-blue-100 transition-all duration-200 flex items-center space-x-4 group"
+                    onClick={() => setShowModeSelectionModal(false)}
+                    className="text-white/80 hover:text-white hover:bg-white/20 rounded-lg p-2 transition-colors"
+                    title="Close"
+                    aria-label="Close modal"
                   >
-                    <div className="flex-shrink-0 w-12 h-12 rounded-full bg-blue-500 flex items-center justify-center group-hover:bg-blue-600 transition-colors">
-                      <Mic className="w-6 h-6 text-white" />
-                    </div>
-                    <div className="flex-1 text-left">
-                      <h4 className="font-semibold text-gray-900 group-hover:text-blue-700">
-                        Single Mode
-                      </h4>
-                      <p className="text-sm text-gray-600">
-                        Record one command at a time
-                      </p>
-                    </div>
-                  </button>
-
-                  {/* Batch Mode Button */}
-                  <button
-                    onClick={handleBatchModeSelected}
-                    className="w-full p-4 rounded-lg border-2 border-purple-200 hover:border-purple-400 bg-purple-50 hover:bg-purple-100 transition-all duration-200 flex items-center space-x-4 group relative overflow-hidden"
-                  >
-                    {/* Recommended Badge */}
-                    <div className="absolute top-2 right-2 flex items-center space-x-1.5 bg-gradient-to-r from-amber-400 to-amber-500 text-white px-3 py-1.5 rounded-full text-xs font-semibold shadow-lg z-10">
-                      <Star className="w-3.5 h-3.5 fill-current" />
-                      <span>Recommended</span>
-                    </div>
-                    
-                    <div className="flex-shrink-0 w-12 h-12 rounded-full bg-purple-500 flex items-center justify-center group-hover:bg-purple-600 transition-colors">
-                      <Users className="w-6 h-6 text-white" />
-                    </div>
-                    <div className="flex-1 text-left pr-16">
-                      <h4 className="font-semibold text-gray-900 group-hover:text-purple-700">
-                        Batch Mode
-                      </h4>
-                      <p className="text-sm text-gray-600">
-                        Record multiple student scores in sequence
-                      </p>
-                    </div>
+                    <X className="w-5 h-5" />
                   </button>
                 </div>
               </div>
 
-              {/* Footer */}
-              <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end">
+              {/* Content - SIDE BY SIDE LAYOUT */}
+              <div className="p-6">
+                {/* Quick Guide - Compact */}
+                <div className="bg-blue-50 border-l-4 border-blue-500 rounded-lg p-3 mb-5">
+                  <div className="flex items-start space-x-2">
+                    <Lightbulb className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-blue-800">
+                      <strong className="text-blue-900">💡 Quick Guide:</strong> <strong>Single Mode:</strong> Best for grading 1-5 students.  <strong>Batch Mode:</strong> Best for grading 10+ students quickly! 
+                    </p>
+                  </div>
+                </div>
+
+                {/* TWO COLUMN LAYOUT - SIDE BY SIDE */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                  
+                  {/* LEFT SIDE: Single Mode */}
+                  <button
+                    onClick={handleSingleModeSelected}
+                    className="p-5 rounded-xl border-2 border-blue-200 hover:border-blue-400 bg-gradient-to-br from-blue-50 to-cyan-50 hover:shadow-lg transition-all duration-200 group text-left h-full"
+                  >
+                    {/* Badge */}
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform shadow-md">
+                          <Mic className="w-6 h-6 text-white" />
+                        </div>
+                        <div>
+                          <h4 className="text-lg font-bold text-gray-900 group-hover:text-blue-700">Single Mode</h4>
+                          <span className="text-xs bg-blue-200 text-blue-800 px-2 py-0.5 rounded-full font-semibold">One at a time</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="text-sm text-gray-700 mb-3 leading-relaxed">
+                      Record <strong>one grade at a time</strong>. Click microphone → Speak → Done. Perfect for small classes or individual grade corrections.
+                    </p>
+                    
+                    {/* Example */}
+                    <div className="bg-white rounded-lg p-3 border border-blue-200 mb-3">
+                      <p className="text-xs font-semibold text-gray-700 mb-1">🎤 Example:</p>
+                      <p className="text-xs font-mono text-blue-900 bg-blue-100 px-3 py-2 rounded">
+                        "Quiz 1 Maria eighty-five"
+                      </p>
+                      <p className="text-xs text-gray-600 mt-1. 5">✅ Records one grade, then stops</p>
+                    </div>
+
+                    {/* When to Use */}
+                    <div className="flex items-start space-x-2">
+                      <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-gray-600">
+                        <span className="font-semibold text-gray-700">Best for:</span> Grading 1-5 students, fixing individual grades, or when you're new to voice commands
+                      </p>
+                    </div>
+                  </button>
+
+                  {/* RIGHT SIDE: Batch Mode */}
+                  <button
+                    onClick={handleBatchModeSelected}
+                    className="p-5 rounded-xl border-2 border-purple-300 hover:border-purple-500 bg-gradient-to-br from-purple-50 via-pink-50 to-purple-50 hover:shadow-xl transition-all duration-200 group relative text-left h-full"
+                  >
+                    {/* Recommended Badge - Top Right */}
+                    <div className="absolute -top-2 -right-2 flex items-center space-x-1 bg-gradient-to-r from-amber-400 to-orange-500 text-white px-3 py-1. 5 rounded-full text-xs font-bold shadow-lg z-10 animate-pulse">
+                      <Star className="w-3. 5 h-3.5 fill-current" />
+                      <span>RECOMMENDED</span>
+                    </div>
+
+                    {/* Time Saver Badge - Top Left */}
+                    <div className="absolute -top-2 -left-2 flex items-center space-x-1 bg-gradient-to-r from-green-500 to-emerald-600 text-white px-2. 5 py-1 rounded-full text-xs font-bold shadow-lg z-10">
+                      <Zap className="w-3 h-3 fill-current" />
+                      <span>Saves Hours!</span>
+                    </div>
+                    
+                    {/* Header */}
+                    <div className="flex items-center justify-between mb-3 mt-2">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center group-hover:scale-110 transition-transform shadow-md">
+                          <Users className="w-6 h-6 text-white" />
+                        </div>
+                        <div>
+                          <h4 className="text-lg font-bold text-gray-900 group-hover:text-purple-700">Batch Mode</h4>
+                          <span className="text-xs bg-purple-200 text-purple-800 px-2 py-0.5 rounded-full font-semibold">Grade many students</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="text-sm text-gray-700 mb-3 leading-relaxed">
+                      Record <strong>multiple grades in one session</strong>.  Speak all student names and scores together, separated by commas. <span className="font-bold text-purple-700">Up to 3x faster!</span>
+                    </p>
+                    
+                    {/* Example */}
+                    <div className="bg-white rounded-lg p-3 border border-purple-300 mb-3">
+                      <p className="text-xs font-semibold text-gray-700 mb-1">🎤 Example:</p>
+                      <p className="text-xs font-mono text-purple-900 bg-purple-100 px-3 py-2 rounded leading-relaxed">
+                        "Maria 85, John 90, Sarah 78, Tom 92, Lisa 88"
+                      </p>
+                      <p className="text-xs text-gray-600 mt-1.5">✅ Records <strong className="text-green-600">5 grades instantly</strong> in one command! </p>
+                    </div>
+
+                    {/* Benefits List - Compact */}
+                    <div className="space-y-1. 5">
+                      <div className="flex items-start space-x-2">
+                        <Zap className="w-3. 5 h-3.5 text-green-600 flex-shrink-0 mt-0.5" />
+                        <p className="text-xs text-gray-700">
+                          <span className="font-semibold">Super Fast:</span> Grade 20-30 students in under 2 minutes
+                        </p>
+                      </div>
+                      <div className="flex items-start space-x-2">
+                        <Target className="w-3.5 h-3.5 text-blue-600 flex-shrink-0 mt-0.5" />
+                        <p className="text-xs text-gray-700">
+                          <span className="font-semibold">Perfect for:</span> Quizzes, homework, tests with whole-class grading
+                        </p>
+                      </div>
+                      <div className="flex items-start space-x-2">
+                        <Award className="w-3.5 h-3.5 text-purple-600 flex-shrink-0 mt-0.5" />
+                        <p className="text-xs text-gray-700">
+                          <span className="font-semibold">Best for:</span> Grading 10+ students at once
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+
+                {/* Comparison Table - Compact & Below Cards */}
+                <div className="mt-5 bg-gray-50 rounded-xl p-4 border border-gray-200">
+                  <h5 className="font-bold text-gray-900 mb-3 text-center text-sm">📊 Quick Comparison</h5>
+                  <div className="grid grid-cols-2 gap-4 text-xs">
+                    <div className="text-center">
+                      <div className="bg-blue-100 rounded-lg p-2. 5">
+                        <p className="font-bold text-blue-900 mb-1 text-xs">Single Mode</p>
+                        <p className="text-blue-700 text-xs">⏱️ ~20 seconds/student</p>
+                      </div>
+                      <p className="text-gray-600 mt-2 text-xs">20 students = <strong>~7 min</strong></p>
+                    </div>
+                    <div className="text-center">
+                      <div className="bg-purple-100 rounded-lg p-2.5">
+                        <p className="font-bold text-purple-900 mb-1 text-xs">Batch Mode</p>
+                        <p className="text-purple-700 text-xs">⚡ ~6 seconds/student</p>
+                      </div>
+                      <p className="text-gray-600 mt-2 text-xs">20 students = <strong>~2 min</strong></p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Help Text - Compact */}
+                <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <div className="flex items-start space-x-2">
+                    <HelpCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-semibold text-amber-900 mb-0.5">Not sure which to choose?</p>
+                      <p className="text-xs text-amber-800">
+                        <strong>Try Batch Mode first!</strong> It's faster and easier for most teachers.  You can always switch back to Single Mode anytime. 
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer - Compact */}
+              <div className="px-6 py-3 bg-gradient-to-r from-gray-50 to-gray-100 border-t border-gray-200 flex items-center justify-between">
+                <p className="text-xs text-gray-600">
+                  💡 <strong>Tip:</strong> You can change modes anytime! 
+                </p>
                 <button
                   onClick={() => setShowModeSelectionModal(false)}
-                  className="px-4 py-2 text-gray-700 hover:text-gray-900 transition-colors"
+                  className="px-4 py-2 text-sm text-gray-700 hover:text-gray-900 hover:bg-white rounded-lg transition-all font-medium border border-gray-300"
                 >
                   Cancel
                 </button>
