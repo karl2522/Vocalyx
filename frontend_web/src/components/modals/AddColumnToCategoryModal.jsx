@@ -1,5 +1,5 @@
+import { AlertTriangle, CheckCircle, Eye, Plus, X } from 'lucide-react';
 import React, { useState } from 'react';
-import { Plus, X, AlertTriangle, CheckCircle, Eye } from 'lucide-react';
 
 const AddColumnToCategoryModal = ({ 
   isOpen, 
@@ -12,6 +12,7 @@ const AddColumnToCategoryModal = ({
   const [newColumnName, setNewColumnName] = useState('');
   const [autoGenerate, setAutoGenerate] = useState(true);
   const [showPreview, setShowPreview] = useState(true);
+  const [categoryWeight, setCategoryWeight] = useState('0.30'); // Default 30%
   const [errors, setErrors] = useState({});
 
   React.useEffect(() => {
@@ -33,6 +34,16 @@ const AddColumnToCategoryModal = ({
       newErrors.newColumnName = 'Please enter a column name or enable auto-generation';
     }
     
+    // Validate category weight
+    if (!categoryWeight || categoryWeight.trim() === '') {
+      newErrors.categoryWeight = 'Category weight is required';
+    } else {
+      const weight = parseFloat(categoryWeight);
+      if (isNaN(weight) || weight < 0 || weight > 1) {
+        newErrors.categoryWeight = 'Weight must be a decimal between 0 and 1 (e.g., 0.30 for 30%)';
+      }
+    }
+    
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -42,7 +53,8 @@ const AddColumnToCategoryModal = ({
     
     const columnData = {
       categoryName: selectedCategory,
-      newColumnName: autoGenerate ? null : newColumnName.trim()
+      newColumnName: autoGenerate ? null : newColumnName.trim(),
+      categoryWeight: parseFloat(categoryWeight) // Convert to number
     };
     
     console.log('➕ MODAL: Submitting add column data:', columnData);
@@ -53,6 +65,7 @@ const AddColumnToCategoryModal = ({
     setSelectedCategory('');
     setNewColumnName('');
     setAutoGenerate(true);
+    setCategoryWeight('0.30');
     setErrors({});
   };
 
@@ -187,6 +200,42 @@ const AddColumnToCategoryModal = ({
                 </div>
               )}
 
+              {/* Category Weight Input */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Category Weight <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="1"
+                    value={categoryWeight}
+                    onChange={(e) => setCategoryWeight(e.target.value)}
+                    placeholder="0.30"
+                    disabled={isLoading}
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors ${
+                      errors.categoryWeight 
+                        ? 'border-red-300 bg-red-50' 
+                        : 'border-slate-300 hover:border-slate-400'
+                    } disabled:bg-slate-100 disabled:cursor-not-allowed`}
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">
+                    {(parseFloat(categoryWeight) * 100 || 0).toFixed(0)}%
+                  </div>
+                </div>
+                {errors.categoryWeight && (
+                  <p className="text-red-600 text-sm mt-1 flex items-center space-x-1">
+                    <AlertTriangle className="w-4 h-4" />
+                    <span>{errors.categoryWeight}</span>
+                  </p>
+                )}
+                <p className="text-xs text-slate-500 mt-1">
+                  Enter as decimal (e.g., 0.30 for 30%, 0.40 for 40%). This will be saved to the SETTINGS tab.
+                </p>
+              </div>
+
               {/* Preview Toggle */}
               <div className="flex items-center space-x-2">
                 <button
@@ -300,7 +349,7 @@ const AddColumnToCategoryModal = ({
               </button>
               <button
                 onClick={handleSubmit}
-                disabled={isLoading || !selectedCategory || (!autoGenerate && !newColumnName.trim())}
+                disabled={isLoading || !selectedCategory || (!autoGenerate && !newColumnName.trim()) || !categoryWeight}
                 className="px-6 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
               >
                 {isLoading ? (

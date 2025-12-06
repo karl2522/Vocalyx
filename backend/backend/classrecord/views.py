@@ -21,8 +21,20 @@ from users.google_drive_service import GoogleDriveService
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from .import_service import build_preview, ImportParseError, read_csv_bytes, read_xlsx_bytes, detect_and_map_headers, validate_required_mappings, normalize_rows
 import json
+import logging
+logger = logging.getLogger(__name__)
 # Remove the service account imports since we're switching to user-based approach
 # from utils.google_service_account_sheets import GoogleServiceAccountSheets
+
+
+def number_to_column_letter(n):
+    """Convert column number (1-based) to letter (A, B, ..., Z, AA, AB, ...)"""
+    result = ""
+    while n > 0:
+        n -= 1
+        result = chr(65 + (n % 26)) + result
+        n //= 26
+    return result
 
 
 class ClassRecordViewSet(viewsets.ModelViewSet):
@@ -461,8 +473,27 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
             try:
                 print(f"🔄 CACHE MISS: Fetching fresh data from Google Sheets...")
 
-                # 🚀 OPTIMIZATION: Use minimal range - only 6 rows, specific columns
-                percentage_range = f"'{sheet_name}'!K1:AC6"  # Only columns K, Q, W, AC and first 6 rows
+                # 🔥 PHASE 0: Dynamic Category Detection
+                # Step 1: Get all categories dynamically
+                sa = None
+                try:
+                    if hasattr(settings, 'GOOGLE_SERVICE_ACCOUNT_CREDENTIALS'):
+                        sa = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+                    else:
+                        sa = GoogleServiceAccountSheets()
+                    
+                    categories_data = sa.get_categories_from_sheet(class_record.google_sheet_id, sheet_name)
+                    categories = categories_data.get('categories', [])
+                    print(f"📋 Dynamic detection: Found {len(categories)} categories: {categories}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to get categories dynamically: {str(e)}, falling back to fixed mapping")
+                    categories = ['QUIZZES', 'ASSIGNMENTS', 'SEATWORK', 'LABORATORY ACTIVITIES']
+
+                # Step 2: Read header row to find category positions
+                # Read wider range to capture all categories (rows 1-15 to handle hidden rows)
+                max_col_estimate = min(100, len(categories) * 8 + 20)  # ~8 cols per category + buffer
+                col_letter = number_to_column_letter(max_col_estimate)
+                percentage_range = f"'{sheet_name}'!A1:{col_letter}15"  # Rows 1-15 to handle hidden rows
                 
                 read_ok = False
                 percentage_data = None
@@ -491,14 +522,13 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
                 # 🚀 Fallback: Service account with optimized settings
                 if not read_ok:
                     try:
-                        from utils.google_service_account_sheets import GoogleServiceAccountSheets
+                        if not sa:
+                            if hasattr(settings, 'GOOGLE_SERVICE_ACCOUNT_CREDENTIALS'):
+                                sa = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+                            else:
+                                sa = GoogleServiceAccountSheets()
                         
-                        if hasattr(settings, 'GOOGLE_SERVICE_ACCOUNT_CREDENTIALS'):
-                            sa = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
-                        else:
-                            sa = GoogleServiceAccountSheets()
-                        
-                        # Direct API call with minimal range
+                        # Direct API call with dynamic range
                         result = sa.sheets_service.spreadsheets().values().get(
                             spreadsheetId=class_record.google_sheet_id,
                             range=percentage_range,
@@ -533,29 +563,79 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
                     except:
                         return None
 
-                # 🚀 Optimized column mapping (relative to K column = index 0)
-                column_mapping = {
-                    'QUIZZES': 0,           # K column
-                    'ASSIGNMENTS': 6,       # Q column (Q-K = 6)
-                    'SEATWORK': 12,         # W column (W-K = 12)
-                    'LABORATORY ACTIVITIES': 18,  # AC column (AC-K = 18)
-                }
-
+                # 🔥 NEW LOGIC: Row 2 contains category-percentage pairs starting from Column F (index 5)
+                # Format: [F: Category1, G: Percentage1, H: Category2, I: Percentage2, ...] until CLASS STANDING
+                # Row 1 = headers, Row 2 = category names and percentages (merged cells)
+                
+                if len(percentage_data) < 2:
+                    return Response({
+                        'error': 'Sheet must have at least 2 rows',
+                        'response_time': round(time.time() - start_time, 2)
+                    }, status=400)
+                
+                row2 = percentage_data[1] if len(percentage_data) > 1 else []  # Row 2
+                
+                # 🔥 Start from Column F (index 5) - skip STUDENT INFO columns (A-E)
+                START_COL = 5  # Column F
                 results = {}
                 
-                # 🚀 Lightning-fast row scanning
-                for category, col_offset in column_mapping.items():
-                    percentage = None
-                    for row_idx in range(min(6, len(percentage_data))):
-                        row = percentage_data[row_idx]
-                        if col_offset < len(row):
-                            candidate = parse_percentage_lightning(row[col_offset])
-                            if candidate is not None:
-                                percentage = candidate
-                                break
+                def normalize_for_matching(text):
+                    """Normalize text for fuzzy matching"""
+                    return str(text).strip().upper().replace(' ', '').replace('_', '').replace('-', '')
+                
+                # 🔥 Scan Row 2 from Column F until CLASS STANDING
+                i = START_COL
+                while i < len(row2):
+                    # Check if we've reached CLASS STANDING column
+                    cell_value = str(row2[i]).strip() if i < len(row2) else ''
+                    cell_normalized = normalize_for_matching(cell_value)
                     
-                    if percentage is not None:
-                        results[category] = percentage
+                    # Stop at CLASS STANDING
+                    if 'CLASSSTANDING' in cell_normalized or cell_normalized == 'CLASSSTANDING':
+                        print(f"📋 Reached CLASS STANDING column at index {i}, stopping scan")
+                        break
+                    
+                    # Skip empty cells
+                    if not cell_value:
+                        i += 1
+                        continue
+                    
+                    # Check if this cell is a category name (not a percentage)
+                    # Percentages contain % or are numeric
+                    is_percentage = '%' in cell_value or (cell_value.replace('.', '').replace(',', '').isdigit())
+                    
+                    if not is_percentage:
+                        # This is a category name
+                        category_name = cell_value.strip()
+                        
+                        # 🔥 Filter out STUDENT INFO categories
+                        student_info_keywords = ['STUDENT INFO', 'NO.', 'LASTNAME', 'FIRST NAME', 'MIDDLE NAME',
+                                                'STUDENT ID', 'PRELIM', 'MIDTERM', 'FINAL',
+                                                'TOTAL SCORE', 'TERM GRADE', 'Total', 'TOTAL']
+                        
+                        category_upper = category_name.upper()
+                        if any(keyword in category_upper for keyword in student_info_keywords):
+                            i += 1
+                            continue  # Skip STUDENT INFO categories
+                        
+                        # Next cell should be the percentage (merged cell structure)
+                        if i + 1 < len(row2):
+                            percentage_cell = row2[i + 1]
+                            percentage = parse_percentage_lightning(percentage_cell)
+                            
+                            if percentage is not None:
+                                results[category_name] = percentage
+                                print(f"📋 Found category '{category_name}': {percentage}% (Row 2, col {i+1} -> {i+2})")
+                                i += 2  # Skip both category name and percentage cells
+                            else:
+                                print(f"⚠️ Category '{category_name}' found but no percentage in next cell (col {i+2})")
+                                i += 1
+                        else:
+                            print(f"⚠️ Category '{category_name}' found but no next cell for percentage")
+                            i += 1
+                    else:
+                        # This cell is a percentage, skip it (shouldn't happen if structure is correct)
+                        i += 1
 
                 # 🚀 BULK database operations - single transaction
                 if results:
@@ -592,6 +672,45 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
                 total = sum(final_percentages.values())
                 response_time = round(time.time() - start_time, 2)
                 
+                # 🔥 NEW: Sync percentages to SETTINGS tab
+                settings_synced = {}
+                settings_errors = {}
+                if results:
+                    from utils.google_apps_script_service import GoogleAppsScriptService, determine_sheet_type
+                    from utils.id_generator import generate_category_id
+                    
+                    sheet_type = determine_sheet_type(sheet_name)
+                    apps_script_service = GoogleAppsScriptService()
+                    
+                    for category_name, percentage in results.items():
+                        try:
+                            # Generate internal ID for category
+                            internal_id = generate_category_id(category_name)
+                            
+                            # Convert percentage to decimal (e.g., 40 -> 0.40)
+                            weight_decimal = percentage / 100.0
+                            
+                            # Update SETTINGS tab via Apps Script
+                            if sheet_type:
+                                update_result = apps_script_service.update_category_weight(
+                                    internal_id=internal_id,
+                                    new_weight=weight_decimal,
+                                    sheet_type=sheet_type
+                                )
+                                
+                                if update_result.get('success'):
+                                    settings_synced[category_name] = True
+                                    logger.info(f"✅ Synced {category_name} ({percentage}%) to SETTINGS_{sheet_type.upper()}")
+                                else:
+                                    settings_errors[category_name] = update_result.get('error', 'Unknown error')
+                                    logger.warning(f"⚠️ Failed to sync {category_name} to SETTINGS: {update_result.get('error')}")
+                            else:
+                                logger.warning(f"⚠️ Cannot determine sheet type for '{sheet_name}', skipping SETTINGS sync")
+                                settings_errors[category_name] = 'Sheet type unknown'
+                        except Exception as e:
+                            logger.error(f"❌ Error syncing {category_name} to SETTINGS: {str(e)}")
+                            settings_errors[category_name] = str(e)
+                
                 result = {
                     'status': 'success',
                     'mirrored': results,
@@ -604,7 +723,9 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
                     'cache_type': 'fresh',
                     'cached': False,
                     'performance_note': f'Fresh data: {len(percentage_data)} rows in {response_time}s',
-                    'cache_expires': '2min fast, 10min standard'
+                    'cache_expires': '2min fast, 10min standard',
+                    'settings_synced': settings_synced,  # 🔥 NEW: Which categories were synced
+                    'settings_errors': settings_errors  # 🔥 NEW: Any sync errors
                 }
                 
                 # 🚀 MULTI-LAYER CACHING
@@ -643,6 +764,148 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
                     print(f"🆘 EMERGENCY CACHE: Returned fallback data")
                     return Response(emergency_data)
             
+            return Response({
+                'error': str(e),
+                'response_time': response_time
+            }, status=400)
+
+    @action(detail=True, methods=['get'], url_path='get-settings-percentages')
+    def get_settings_percentages(self, request, pk=None):
+        """Get percentages from SETTINGS tab (source of truth for formulas)
+        
+        Reads from SETTINGS_MIDTERM or SETTINGS_FINAL tab based on sheet_name.
+        Column B = INTERNAL_ID, Column D = WEIGHT (as decimal, e.g., 0.40 for 40%)
+        """
+        import time
+        start_time = time.time()
+        
+        try:
+            class_record = self.get_object()
+            sheet_name = request.query_params.get('sheet_name')
+            
+            if not sheet_name:
+                return Response({'error': 'sheet_name is required'}, status=400)
+            
+            if not class_record.google_sheet_id:
+                return Response({'error': 'Class record has no linked Google Sheet'}, status=400)
+            
+            # Determine which SETTINGS tab to read
+            from utils.google_apps_script_service import determine_sheet_type
+            sheet_type = determine_sheet_type(sheet_name)
+            
+            if not sheet_type:
+                return Response({
+                    'error': f'Cannot determine sheet type for "{sheet_name}". Sheet name must contain "midterm" or "final".',
+                    'sheet_name': sheet_name
+                }, status=400)
+            
+            settings_tab_name = 'SETTINGS_MIDTERM' if sheet_type == 'midterm' else 'SETTINGS_FINAL'
+            
+            # Read from SETTINGS tab via Google Sheets API
+            # Column B = INTERNAL_ID, Column C = DISPLAY_NAME, Column D = WEIGHT (decimal)
+            access_token = self._get_access_token(request)
+            read_ok = False
+            settings_data = None
+            
+            # Try user token first
+            try:
+                if access_token:
+                    import requests
+                    # Read columns B, C, D (INTERNAL_ID, DISPLAY_NAME, WEIGHT)
+                    # Read up to 100 rows to handle many categories
+                    range_name = f"'{settings_tab_name}'!B2:D100"
+                    api_url = f"https://sheets.googleapis.com/v4/spreadsheets/{class_record.google_sheet_id}/values/{range_name}"
+                    headers = {
+                        'Authorization': f'Bearer {access_token}',
+                        'Accept': 'application/json'
+                    }
+                    
+                    response = requests.get(api_url, headers=headers, timeout=6)
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        settings_data = data.get('values', [])
+                        read_ok = True
+                        print(f"✅ User token API: Read {len(settings_data)} rows from {settings_tab_name}")
+            except Exception as e:
+                print(f"⚠️ User token failed: {str(e)}")
+            
+            # Fallback: Service account
+            if not read_ok:
+                try:
+                    if hasattr(settings, 'GOOGLE_SERVICE_ACCOUNT_CREDENTIALS'):
+                        sa = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+                    else:
+                        sa = GoogleServiceAccountSheets()
+                    
+                    range_name = f"'{settings_tab_name}'!B2:D100"
+                    result = sa.sheets_service.spreadsheets().values().get(
+                        spreadsheetId=class_record.google_sheet_id,
+                        range=range_name,
+                        valueRenderOption='UNFORMATTED_VALUE'
+                    ).execute()
+                    
+                    settings_data = result.get('values', [])
+                    read_ok = True
+                    print(f"✅ Service account API: Read {len(settings_data)} rows from {settings_tab_name}")
+                except Exception as e:
+                    print(f"❌ Service account failed: {str(e)}")
+            
+            if not read_ok or settings_data is None:
+                return Response({
+                    'error': f'Failed to read from {settings_tab_name} tab',
+                    'settings_tab': settings_tab_name,
+                    'response_time': round(time.time() - start_time, 2)
+                }, status=400)
+            
+            # Parse settings data
+            # Each row: [INTERNAL_ID, DISPLAY_NAME, WEIGHT]
+            percentages = {}  # {display_name: percentage}
+            weights = []  # List of weight decimals
+            
+            for row in settings_data:
+                if len(row) >= 3:
+                    internal_id = str(row[0]).strip() if len(row) > 0 else ''
+                    display_name = str(row[1]).strip() if len(row) > 1 else ''
+                    weight_str = str(row[2]).strip() if len(row) > 2 else ''
+                    
+                    # Skip empty rows
+                    if not weight_str or not display_name:
+                        continue
+                    
+                    try:
+                        # Convert weight decimal to percentage (e.g., 0.40 -> 40)
+                        weight_decimal = float(weight_str)
+                        weight_percentage = int(weight_decimal * 100)
+                        
+                        if weight_percentage > 0:
+                            percentages[display_name] = weight_percentage
+                            weights.append(weight_decimal)
+                    except (ValueError, TypeError):
+                        # Skip invalid weight values
+                        continue
+            
+            # Calculate totals
+            total_decimal = sum(weights)
+            total_percentage = int(total_decimal * 100)
+            remaining = max(0, 100 - total_percentage)
+            
+            response_time = round(time.time() - start_time, 2)
+            
+            return Response({
+                'total': total_percentage,
+                'remaining': remaining,
+                'percentages': percentages,  # {category_name: percentage}
+                'source': settings_tab_name,
+                'sheet_type': sheet_type,
+                'sheet_name': sheet_name,
+                'response_time': response_time,
+                'categories_count': len(percentages)
+            })
+            
+        except Exception as e:
+            response_time = round(time.time() - start_time, 2)
+            logger.error(f"get_settings_percentages failed in {response_time}s: {str(e)}")
             return Response({
                 'error': str(e),
                 'response_time': response_time

@@ -1,6 +1,7 @@
 import { Lightbulb } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
+import { FaMicrophoneAlt } from 'react-icons/fa';
 import {
     FiCalendar,
     FiEdit3,
@@ -13,11 +14,9 @@ import {
     FiPlus,
     FiTrash2,
     FiUser,
-    FiUsers,
     FiX
 } from 'react-icons/fi';
 import { RiSoundModuleLine } from 'react-icons/ri';
-import { FaMicrophoneAlt } from 'react-icons/fa';
 import { Link } from 'react-router-dom';
 import { enhancedClassRecordService as classRecordService } from '../services/api';
 import { showToast } from '../utils/toast';

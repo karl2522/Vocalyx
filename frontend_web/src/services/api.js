@@ -302,6 +302,19 @@ export const classRecordService = {
         return api.post(`/class-records/${classRecordId}/sync_percentages_from_sheet/`, body, config);
     },
 
+    // 🔥 PHASE 1: Get percentages from SETTINGS tab (source of truth)
+    getSettingsPercentages: (classRecordId, sheetName) => {
+        const googleAccessToken = localStorage.getItem('googleAccessToken');
+        const config = { headers: {} };
+        if (googleAccessToken) {
+            config.headers['X-Access-Token'] = googleAccessToken;
+        }
+        return api.get(`/class-records/${classRecordId}/get-settings-percentages/`, {
+            params: { sheet_name: sheetName },
+            ...config
+        });
+    },
+
     getCategoryPercentages: (classRecordId, sheetName) => 
         api.get(`/class-records/${classRecordId}/category_percentages/`, { params: { sheet_name: sheetName } }),
 
@@ -581,11 +594,14 @@ export const classRecordService = {
         return api.post(`/sheets/${sheetId}/edit-category/`, payload);
     },
 
-    addColumnToCategory: (sheetId, categoryName, newColumnName = null, sheetName = null) => {
+    addColumnToCategory: (sheetId, categoryName, newColumnName = null, categoryWeight = null, sheetName = null) => {
         const payload = { 
             category_name: categoryName,
             new_column_name: newColumnName
         };
+        if (categoryWeight !== null) {
+            payload.category_weight = categoryWeight; // Required: decimal format (e.g., 0.30 for 30%)
+        }
         if (sheetName) payload.sheet_name = sheetName;
         
         console.log('➕ API SERVICE: Adding column to category:', payload);

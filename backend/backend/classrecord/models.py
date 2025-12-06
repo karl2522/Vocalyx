@@ -8,7 +8,7 @@ class ClassRecord(models.Model):
     SEMESTER_CHOICES = [
         ('1st Semester', '1st Semester'),
         ('2nd Semester', '2nd Semester'),
-        ('Summer', 'Summer'),
+        ('Midyear', 'Midyear'),
     ]
 
     name = models.CharField(max_length=200)

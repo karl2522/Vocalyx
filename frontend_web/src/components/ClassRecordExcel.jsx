@@ -1,9 +1,9 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { ArrowLeft, BarChart3, CheckCircle2, ChevronDown, Clock, Edit, FileSpreadsheet, HelpCircle, Menu, Mic, MicOff, MoreVertical, PieChart, Plus, RefreshCw, Star, Trash2, Upload, Users, X, Lightbulb, CheckCircle, Zap, Target, Award} from 'lucide-react';
-import { FiCheckCircle } from 'react-icons/fi';
+import { AlertCircle, ArrowLeft, Award, BarChart3, CheckCircle, CheckCircle2, ChevronDown, Clock, Edit, FileSpreadsheet, HelpCircle, Lightbulb, Menu, Mic, MicOff, MoreVertical, PieChart, Plus, RefreshCw, Star, Target, Trash2, Upload, Users, X, Zap } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
+import { FiCheckCircle } from 'react-icons/fi';
 import { useNavigate, useParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { useAuth } from '../auth/AuthContext';
@@ -126,6 +126,9 @@ const ClassRecordExcel = () => {
   const hasShownInitialToast = useRef(false);
   const [isRefreshingAllocation, setIsRefreshingAllocation] = useState(false);
 
+  // 🔥 PHASE 6: Sync status tracking
+  const [syncStatus, setSyncStatus] = useState({}); // {sheetName: {isSynced: bool, differences: []}}
+
   // 🔄 AUTO-SYNC: Refs for tracking sync status
   const midtermFinalSyncInProgress = useRef(false);
   const lastMidtermHashRef = useRef(null);
@@ -173,80 +176,58 @@ const ClassRecordExcel = () => {
       const res = await classRecordService.syncCategoryPercentages(id, currentSheet.sheet_name);
       const data = res.data || {};
       setClassStandingRemaining(Math.max(0, data.remaining || 0));
+      
+      // 🔥 NEW: Show SETTINGS tab sync feedback
+      if (data.settings_synced && Object.keys(data.settings_synced).length > 0) {
+        const sheetType = currentSheet.sheet_name?.toLowerCase().includes('midterm') ? 'Midterm' : 
+                         currentSheet.sheet_name?.toLowerCase().includes('final') ? 'Final' : 'sheet';
+        const syncedCount = Object.keys(data.settings_synced).length;
+        toast.success(`✅ Synced ${syncedCount} categor${syncedCount === 1 ? 'y' : 'ies'} to SETTINGS_${sheetType.toUpperCase()} tab`, {
+          duration: 3000
+        });
+      }
+      
+      if (data.settings_errors && Object.keys(data.settings_errors).length > 0) {
+        const errorCount = Object.keys(data.settings_errors).length;
+        toast.error(`⚠️ ${errorCount} categor${errorCount === 1 ? 'y' : 'ies'} failed to sync to SETTINGS tab`, {
+          duration: 4000
+        });
+      }
     } catch (e) {
-      // Fallback: read via service account and compute from header row (row 1)
+      // 🔥 PHASE 4: Fallback: Read from SETTINGS tab (source of truth) instead of fixed columns
       try {
-        if (!classRecord?.google_sheet_id || !currentSheet?.sheet_name) return;
-        // 🔥 OPTIMIZATION: Use cached data in fallback too
-        const sa = await classRecordService.getSpecificSheetData(classRecord.google_sheet_id, currentSheet.sheet_name);
-        const headersRow = sa?.data?.headers || [];
-        const idxFromLetter = (letter) => {
-          let total = 0;
-          const up = letter.toUpperCase();
-          for (let i = 0; i < up.length; i++) {
-            total = total * 26 + (up.charCodeAt(i) - 64);
-          }
-          return total - 1; // zero-based
-        };
-        const letters = ['K', 'Q', 'W', 'AC'];
-        const sum = letters.reduce((acc, l) => {
-          const idx = idxFromLetter(l);
-          const cell = headersRow[idx];
-          if (!cell) return acc;
-          let s = String(cell).trim();
-          if (s.endsWith('%')) s = s.slice(0, -1).trim();
-          const val = parseInt(parseFloat(s));
-          if (Number.isFinite(val)) return acc + Math.max(0, val);
-          return acc;
-        }, 0);
-        const remaining = Math.max(0, 100 - sum);
+        if (!id || !currentSheet?.sheet_name) return;
+        
+        // Try to read from SETTINGS tab directly
+        const settingsRes = await classRecordService.getSettingsPercentages(id, currentSheet.sheet_name);
+        const settingsData = settingsRes.data || {};
+        
+        if (settingsData.error) {
+          console.warn('⚠️ Fallback: Failed to read SETTINGS tab:', settingsData.error);
+          return;
+        }
+        
+        const remaining = settingsData.remaining || 0;
         setClassStandingRemaining(remaining);
+        console.log(`📊 Fallback: Read remaining from SETTINGS tab (${settingsData.source}): ${remaining}%`);
       } catch (ignored) {
-        // ignore
+        console.warn('⚠️ Fallback: Both sync and SETTINGS read failed:', ignored);
+        // ignore - keep previous value
       }
     }
   }, [id, currentSheet?.sheet_name, classRecord?.google_sheet_id]);
 
-  // Helper: Generate hash from percentage values for change detection
-  const generatePercentageHash = useCallback((headers) => {
-    if (!headers || !Array.isArray(headers)) return null;
+  // 🔥 PHASE 1: Removed generatePercentageHash - no longer needed (SETTINGS tabs use formulas that auto-update)
 
-    // Extract percentage values from specific columns (K, Q, W, AC)
-    // Convert column letters to indices
-    const idxFromLetter = (letter) => {
-      let total = 0;
-      const up = letter.toUpperCase();
-      for (let i = 0; i < up.length; i++) {
-        total = total * 26 + (up.charCodeAt(i) - 64);
-      }
-      return total - 1; // zero-based
-    };
+  // 🔥 PHASE 1: Removed comparePercentages - no longer needed (SETTINGS tabs use formulas that auto-update)
 
-    const letters = ['K', 'Q', 'W', 'AC'];
-    const percentageValues = [];
-
-    letters.forEach(letter => {
-      const idx = idxFromLetter(letter);
-      const cell = headers[idx];
-      if (cell) {
-        let s = String(cell).trim();
-        if (s.endsWith('%')) s = s.slice(0, -1).trim();
-        const val = parseInt(parseFloat(s));
-        if (Number.isFinite(val)) {
-          percentageValues.push(`${letter}:${val}`);
-        }
-      }
-    });
-
-    return percentageValues.join('|');
-  }, []);
-
-  // Check both Midterm and Final sheets for percentage changes
-  const checkAllSheetsForPercentageChanges = useCallback(async () => {
+  // 🔥 PHASE 1: Simplified checker - reads ONLY from SETTINGS tabs
+  // Renamed from checkAllSheetsForPercentageChanges to checkAllSheetsAllocation
+  const checkAllSheetsAllocation = useCallback(async () => {
     try {
-      // Don't check percentages if user is not authenticated
+      // Don't check if user is not authenticated
       if (!user) {
-        console.log('🔔 User not authenticated, skipping percentage check');
+        console.log('🔔 User not authenticated, skipping allocation check');
         return;
       }
 
@@ -254,7 +235,7 @@ const ClassRecordExcel = () => {
 
       // 🔥 OPTIMIZATION: Debounce - prevent multiple simultaneous checks
       if (percentageCheckInProgress.current) {
-        console.log('⏭️ Percentage check already in progress, skipping...');
+        console.log('⏭️ Allocation check already in progress, skipping...');
         return;
       }
 
@@ -290,91 +271,40 @@ const ClassRecordExcel = () => {
       const problematicSheets = [];
       let totalRemaining = 0;
 
-      // Helper function to calculate percentage for a sheet
-      const calculateSheetPercentage = async (sheet) => {
+      // 🔥 PHASE 1: Simplified - Read ONLY from SETTINGS tabs (no sheet reading needed)
+      // SETTINGS tabs use formulas that auto-update, so no sync needed
+      for (const sheet of sheetsToCheck) {
         try {
-          // 🔥 OPTIMIZATION: Use cached data (30s cache) instead of force_refresh
-          const response = await classRecordService.getSpecificSheetData(classRecord.google_sheet_id, sheet.sheet_name);
-          const headersRow = response?.data?.main_headers || response?.data?.headers || [];
-
-          if (headersRow.length > 0) {
-            const currentHash = generatePercentageHash(headersRow);
-
-            // Check if this sheet has changes (for current sheet only)
-            if (sheet.sheet_name === currentSheet?.sheet_name && currentHash && currentHash !== lastPercentageHash) {
-              console.log('🔄 Percentage values changed, syncing...');
-              console.log('🔄 Old hash:', lastPercentageHash);
-              console.log('🔄 New hash:', currentHash);
-
-              // Force sync with cache bypass and manual calculation
-              try {
-                const res = await classRecordService.syncCategoryPercentages(id, sheet.sheet_name, { force: true });
-                const data = res.data || {};
-                console.log('🔄 Backend sync result:', data);
-
-                if (currentHash) {
-                  console.log('🔄 Calculating manually from hash:', currentHash);
-                  const hashParts = currentHash.split('|');
-                  let total = 0;
-                  hashParts.forEach(part => {
-                    const match = part.match(/:(\d+)$/);
-                    if (match) {
-                      total += parseInt(match[1]);
-                    }
-                  });
-                  const remaining = Math.max(0, 100 - total);
-                  console.log('🔄 Manual calculation - total:', total, 'remaining:', remaining);
-                  console.log('🔄 Backend said remaining:', data.remaining, 'but we calculated:', remaining);
-
-                  setLastPercentageHash(currentHash);
-                  return { sheetName: sheet.sheet_name, remaining, total };
-                }
-              } catch (e) {
-                console.warn('⚠️ Force sync failed, trying regular sync:', e);
-              }
-            }
-
-            // Calculate manually from header row (same logic as before)
-            const idxFromLetter = (letter) => {
-              let total = 0;
-              const up = letter.toUpperCase();
-              for (let i = 0; i < up.length; i++) {
-                total = total * 26 + (up.charCodeAt(i) - 64);
-              }
-              return total - 1; // zero-based
-            };
-
-            const letters = ['K', 'Q', 'W', 'AC'];
-            let total = 0;
-
-            letters.forEach(letter => {
-              const idx = idxFromLetter(letter);
-              const cell = headersRow[idx];
-              if (cell) {
-                let s = String(cell).trim();
-                if (s.endsWith('%')) s = s.slice(0, -1).trim();
-                const val = parseInt(parseFloat(s));
-                if (Number.isFinite(val)) {
-                  total += Math.max(0, val);
-                }
-              }
+          // Read from SETTINGS tab only
+          const settingsRes = await classRecordService.getSettingsPercentages(id, sheet.sheet_name);
+          const settingsData = settingsRes.data || {};
+          
+          if (settingsData.error) {
+            console.warn(`⚠️ Failed to read SETTINGS tab for ${sheet.sheet_name}:`, settingsData.error);
+            continue;
+          }
+          
+          const total = settingsData.total || 0;
+          const remaining = settingsData.remaining || 0;
+          const source = settingsData.source || 'SETTINGS';
+          const sheetType = settingsData.sheet_type || 'unknown';
+          const percentages = settingsData.percentages || {};
+          
+          console.log(`📊 SETTINGS tab (${source}): total=${total}%, remaining=${remaining}%`);
+          
+          // Only add to problematic sheets if there's an allocation issue
+          if (remaining !== 0) {
+            problematicSheets.push({
+              sheetName: sheet.sheet_name,
+              total,
+              remaining,
+              source: `SETTINGS_${sheetType.toUpperCase()}`,
+              percentages
             });
-
-            const remaining = Math.max(0, 100 - total);
-            return { sheetName: sheet.sheet_name, remaining, total };
+            totalRemaining += remaining;
           }
         } catch (error) {
-          console.warn(`Failed to calculate percentage for sheet ${sheet.sheet_name}:`, error);
-          return { sheetName: sheet.sheet_name, remaining: 0, total: 0 };
-        }
-      };
-
-      // Check all sheets
-      for (const sheet of sheetsToCheck) {
-        const result = await calculateSheetPercentage(sheet);
-        if (result && result.remaining > 0) {
-          problematicSheets.push(result);
-          totalRemaining += result.remaining;
+          console.error(`Failed to check ${sheet.sheet_name}:`, error);
         }
       }
 
@@ -398,20 +328,21 @@ const ClassRecordExcel = () => {
       } catch { }
 
     } catch (error) {
-      console.warn('⚠️ Error checking percentage changes, falling back to sync:', error);
-      // Fallback to regular sync if change detection fails
-      await syncRemaining();
+      console.error('⚠️ Error checking allocation:', error);
     } finally {
       // 🔥 OPTIMIZATION: Always reset the in-progress flag
       percentageCheckInProgress.current = false;
     }
-  }, [classRecord?.google_sheet_id, classRecord?.id, currentSheet?.sheet_name, lastPercentageHash, generatePercentageHash, syncRemaining, id, user]);
+  }, [classRecord?.google_sheet_id, classRecord?.id, id, user]);
 
-  // Smart polling: Check for percentage changes before syncing (legacy function for current sheet only)
+  // Legacy function name for backward compatibility
   const checkForPercentageChanges = useCallback(async () => {
-    // Use the new function that checks all sheets
-    await checkAllSheetsForPercentageChanges();
-  }, [checkAllSheetsForPercentageChanges]);
+    // Use the simplified function that checks all sheets
+    await checkAllSheetsAllocation();
+  }, [checkAllSheetsAllocation]);
+  
+  // Alias for backward compatibility (deprecated - use checkAllSheetsAllocation)
+  const checkAllSheetsForPercentageChanges = checkAllSheetsAllocation;
 
   // 🔄 AUTO-SYNC: Identify STUDENT INFO columns in headers
   const identifyStudentInfoColumns = useCallback((headers) => {
@@ -1211,26 +1142,67 @@ const ClassRecordExcel = () => {
     }
   }, [classRecord?.google_sheet_id, identifyStudentInfoColumns, findMatchingStudent, syncStudentInfoToFinal]);
 
-  // 🔥 NEW: Manual refresh function for allocation status
-  const manualRefreshAllocation = useCallback(async () => {
+  // 🔥 PHASE 5: Manual sync function - syncs to SETTINGS tab and checks allocation
+  const manualSyncToSettings = useCallback(async (sheetName = null) => {
     if (isRefreshingAllocation || percentageCheckInProgress.current) {
-      console.log('⏭️ Refresh already in progress');
+      console.log('⏭️ Sync already in progress');
       return;
     }
 
     setIsRefreshingAllocation(true);
     try {
-      // Bypass rate limiting for manual refresh
-      lastPercentageCheckTime.current = 0;
+      const targetSheet = sheetName || currentSheet?.sheet_name;
+      if (!targetSheet) {
+        toast.error('No sheet selected for sync');
+        return;
+      }
+
+      console.log(`🔄 Manual sync triggered for ${targetSheet}`);
+      
+      // Force sync to SETTINGS tab
+      const syncRes = await classRecordService.syncCategoryPercentages(id, targetSheet, { force: true });
+      const syncData = syncRes.data || {};
+      
+      // Show sync feedback
+      if (syncData.settings_synced && Object.keys(syncData.settings_synced).length > 0) {
+        const syncedCount = Object.keys(syncData.settings_synced).length;
+        const sheetType = targetSheet?.toLowerCase().includes('midterm') ? 'SETTINGS_MIDTERM' : 
+                         targetSheet?.toLowerCase().includes('final') ? 'SETTINGS_FINAL' : 'SETTINGS';
+        toast.success(
+          `✅ Synced ${syncedCount} categor${syncedCount === 1 ? 'y' : 'ies'} to ${sheetType} tab`,
+          { duration: 3000 }
+        );
+      }
+      
+      if (syncData.settings_errors && Object.keys(syncData.settings_errors).length > 0) {
+        const errorCount = Object.keys(syncData.settings_errors).length;
+        toast.error(
+          `⚠️ ${errorCount} categor${errorCount === 1 ? 'y' : 'ies'} failed to sync`,
+          { duration: 4000 }
+        );
+      }
+      
+      // Wait a bit for sync to complete
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Then check allocation (which reads from SETTINGS tab)
+      lastPercentageCheckTime.current = 0; // Bypass rate limiting
       await checkAllSheetsForPercentageChanges();
-      toast.success('Allocation status refreshed', { duration: 2000 });
+      
+      toast.success('Allocation status updated from SETTINGS tab', { duration: 2000 });
     } catch (error) {
-      console.error('Failed to refresh allocation:', error);
-      toast.error('Failed to refresh allocation');
+      console.error('Failed to sync to SETTINGS:', error);
+      toast.error('Failed to sync to SETTINGS tab');
     } finally {
       setIsRefreshingAllocation(false);
     }
-  }, [isRefreshingAllocation, checkAllSheetsForPercentageChanges]);
+  }, [isRefreshingAllocation, checkAllSheetsForPercentageChanges, currentSheet?.sheet_name, id]);
+
+  // 🔥 PHASE 5: Manual refresh function for allocation status (kept for backward compatibility)
+  const manualRefreshAllocation = useCallback(async () => {
+    // This now calls manualSyncToSettings to ensure sync happens first
+    await manualSyncToSettings();
+  }, [manualSyncToSettings]);
 
   // No ref sync needed; we use state directly for simplicity
 
@@ -1730,18 +1702,6 @@ const ClassRecordExcel = () => {
 
         // After loading sheet data, refresh mirrored CLASS STANDING percentages
         await syncRemaining();
-
-        // 🔥 OPTIMIZATION: Use data we already fetched above to initialize hash
-        // No need for another API call - we already have the headers!
-        if (sheetsResponse.data?.main_headers) {
-          const initialHash = generatePercentageHash(sheetsResponse.data.main_headers);
-          setLastPercentageHash(initialHash);
-          console.log('🔍 Initialized percentage hash from existing data:', initialHash);
-        } else if (sheetsResponse.data?.headers) {
-          const initialHash = generatePercentageHash(sheetsResponse.data.headers);
-          setLastPercentageHash(initialHash);
-          console.log('🔍 Initialized percentage hash from existing data (fallback):', initialHash);
-        }
       } else {
         console.log(`⚠️ LOAD SHEET: No data available for sheet: "${sheetName}"`);
         toast(`No data found in sheet: ${sheetName}`);
@@ -2638,15 +2598,22 @@ const ClassRecordExcel = () => {
     try {
       toast('🆔 Finding student by ID...');
 
-      // Get fresh sheet data
-      const sheetsResponse = await getSheetDataCached();
-
-      if (!sheetsResponse.data?.success) {
-        toast.error('Could not load sheet data');
+      // Ensure sheet data is loaded
+      if (!classRecord?.google_sheet_id || !currentSheet?.sheet_name) {
+        toast.error('No sheet selected');
         return;
       }
 
-      const { headers, tableData } = sheetsResponse.data;
+      // Load fresh sheet data if needed
+      if (headers.length === 0 || tableData.length === 0) {
+        await loadSheetData(classRecord.google_sheet_id, currentSheet.sheet_name);
+      }
+
+      // Use current state variables
+      if (headers.length === 0 || tableData.length === 0) {
+        toast.error('Could not load sheet data');
+        return;
+      }
 
       // Find student by ID
       const studentIdColumnIndex = headers.findIndex(h =>
@@ -3049,8 +3016,33 @@ const ClassRecordExcel = () => {
       let updatedCount = 0;
       const updates = [];
 
+      // Find name column indices
+      const lastNameIndex = headers.findIndex(h => h.toLowerCase().includes('lastname'));
+      const firstNameIndex = headers.findIndex(h => h.toLowerCase().includes('first'));
+
       students.forEach(({ name, score }) => {
-        const studentIndex = findStudentIndex(name);
+        // Search for student by name (try matching against last name, first name, or full name)
+        const nameLower = name.toLowerCase().trim();
+        const studentIndex = tableData.findIndex((row, index) => {
+          if (lastNameIndex !== -1 && firstNameIndex !== -1) {
+            const lastName = String(row[lastNameIndex] || '').toLowerCase().trim();
+            const firstName = String(row[firstNameIndex] || '').toLowerCase().trim();
+            const fullName = `${firstName} ${lastName}`.trim();
+            return lastName === nameLower || 
+                   firstName === nameLower || 
+                   fullName === nameLower ||
+                   fullName.includes(nameLower) ||
+                   nameLower.includes(fullName);
+          } else if (lastNameIndex !== -1) {
+            const lastName = String(row[lastNameIndex] || '').toLowerCase().trim();
+            return lastName === nameLower || lastName.includes(nameLower) || nameLower.includes(lastName);
+          } else if (firstNameIndex !== -1) {
+            const firstName = String(row[firstNameIndex] || '').toLowerCase().trim();
+            return firstName === nameLower || firstName.includes(nameLower) || nameLower.includes(firstName);
+          }
+          return false;
+        });
+
         if (studentIndex !== -1) {
           updatedData[studentIndex][foundColumn] = score;
           updates.push({
@@ -3595,6 +3587,9 @@ const ClassRecordExcel = () => {
         await loadSheetData(classRecord.google_sheet_id, currentSheet?.sheet_name);
         await syncRemaining();
 
+        // 🔥 FIX: Refresh categories list so DeleteCategoryModal can detect the newly added category
+        await loadCategories();
+
         // Reset percentage hash after category changes
         setLastPercentageHash(null);
 
@@ -3688,11 +3683,30 @@ const ClassRecordExcel = () => {
         classRecord.google_sheet_id,
         columnData.categoryName,
         columnData.newColumnName,
+        columnData.categoryWeight, // Pass category weight (required)
         currentSheet?.sheet_name
       );
 
       if (response.data.success) {
-        toast.success(`Successfully added column to "${columnData.categoryName}"!`);
+        // Show success message with SETTINGS sync status
+        let successMessage = `Successfully added column to "${columnData.categoryName}"!`;
+        
+        if (response.data.settings_synced) {
+          successMessage += ` Category registered in SETTINGS tab.`;
+          toast.success(successMessage);
+        } else if (response.data.settings_warning) {
+          // Sheet operation succeeded but SETTINGS sync failed
+          toast.success(successMessage);
+          toast.warning(`Note: ${response.data.settings_warning}`);
+        } else {
+          toast.success(successMessage);
+        }
+
+        // Log internal ID for debugging
+        if (response.data.internal_id) {
+          console.log(`✅ Category registered with internal ID: ${response.data.internal_id}`);
+        }
+
         setShowAddColumnModal(false);
 
         // Reload the sheet data
@@ -3705,7 +3719,8 @@ const ClassRecordExcel = () => {
       }
     } catch (error) {
       console.error('Add column to category error:', error);
-      toast.error('Failed to add column to category');
+      const errorMessage = error.response?.data?.error || error.message || 'Failed to add column to category';
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -5555,6 +5570,38 @@ const ClassRecordExcel = () => {
 
                 {/* Allocation Badge */}
                 <div className="relative">
+                  {/* 🔥 PHASE 6: Sync Status Indicator */}
+                  {currentSheet?.sheet_name && syncStatus[currentSheet.sheet_name] && (
+                    <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg shadow-sm border ${
+                      syncStatus[currentSheet.sheet_name].isSynced
+                        ? 'bg-green-50 border-green-200'
+                        : 'bg-orange-50 border-orange-200'
+                    }`}>
+                      {syncStatus[currentSheet.sheet_name].isSynced ? (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 text-green-600" />
+                          <span className="text-xs font-medium text-green-700">
+                            Synced with {syncStatus[currentSheet.sheet_name].source || 'SETTINGS'}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <AlertCircle className="w-4 h-4 text-orange-600" />
+                          <span className="text-xs font-medium text-orange-700">
+                            Not synced with SETTINGS
+                          </span>
+                          <button
+                            onClick={() => manualSyncToSettings(currentSheet.sheet_name)}
+                            disabled={isRefreshingAllocation}
+                            className="ml-2 px-2 py-0.5 bg-orange-600 text-white text-xs rounded hover:bg-orange-700 disabled:opacity-50"
+                          >
+                            Sync Now
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  
                   {classStandingRemaining > 0 ? (
                     <div className="flex items-center space-x-2 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg shadow-sm">
                       <div className="flex items-center space-x-1.5">
@@ -5803,6 +5850,10 @@ const ClassRecordExcel = () => {
                         <span>{midtermFinalSyncInProgress.current ? 'Syncing...' : 'Sync Midterm to Final'}</span>
                       </button>
 
+                      <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                        Category Tools
+                      </div>
+
                       <button
                         onClick={() => {
                           setShowAddCategoryModal(true);
@@ -5967,7 +6018,7 @@ const ClassRecordExcel = () => {
 
                   {/* Save Status */}
                   <div className="flex items-center justify-between text-sm bg-slate-50 p-3 rounded-lg border border-slate-100">
-                    <span className="text-slate-600">Sync Status</span>
+                    <span className="text-slate-600">Save Status</span>
                     {lastSaved ? (
                       <span className="text-emerald-600 flex items-center gap-1 font-medium">
                         <CheckCircle2 className="w-3 h-3" />
@@ -5975,6 +6026,61 @@ const ClassRecordExcel = () => {
                       </span>
                     ) : null}
                   </div>
+
+                  {/* 🔥 PHASE 6: SETTINGS Sync Status */}
+                  {currentSheet?.sheet_name && syncStatus[currentSheet.sheet_name] && (
+                    <div className={`text-sm p-3 rounded-lg border ${
+                      syncStatus[currentSheet.sheet_name].isSynced
+                        ? 'bg-green-50 border-green-200'
+                        : 'bg-orange-50 border-orange-200'
+                    }`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-slate-600 font-medium">SETTINGS Sync</span>
+                        {syncStatus[currentSheet.sheet_name].isSynced ? (
+                          <span className="text-green-600 flex items-center gap-1 font-medium">
+                            <CheckCircle2 className="w-3 h-3" />
+                            Synced
+                          </span>
+                        ) : (
+                          <span className="text-orange-600 flex items-center gap-1 font-medium">
+                            <AlertCircle className="w-3 h-3" />
+                            Not Synced
+                          </span>
+                        )}
+                      </div>
+                      {!syncStatus[currentSheet.sheet_name].isSynced && (
+                        <div className="mt-2 space-y-1">
+                          <p className="text-xs text-orange-700">
+                            Sheet percentages differ from {syncStatus[currentSheet.sheet_name].source || 'SETTINGS'} tab
+                          </p>
+                          {syncStatus[currentSheet.sheet_name].differences.length > 0 && (
+                            <div className="text-xs text-orange-600 mt-1">
+                              {syncStatus[currentSheet.sheet_name].differences.slice(0, 2).map((diff, idx) => (
+                                <div key={idx}>
+                                  {diff.category}: {diff.sheet}% → {diff.settings}%
+                                </div>
+                              ))}
+                              {syncStatus[currentSheet.sheet_name].differences.length > 2 && (
+                                <div>+{syncStatus[currentSheet.sheet_name].differences.length - 2} more</div>
+                              )}
+                            </div>
+                          )}
+                          <button
+                            onClick={() => manualSyncToSettings(currentSheet.sheet_name)}
+                            disabled={isRefreshingAllocation}
+                            className="mt-2 w-full px-3 py-1.5 bg-orange-600 text-white text-xs rounded hover:bg-orange-700 disabled:opacity-50 transition-colors"
+                          >
+                            Sync Now
+                          </button>
+                        </div>
+                      )}
+                      {syncStatus[currentSheet.sheet_name].isSynced && (
+                        <p className="text-xs text-green-700 mt-1">
+                          Using {syncStatus[currentSheet.sheet_name].source || 'SETTINGS'} tab
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                   {/* Allocation Badge (Mobile) */}
                   <div className={`flex items-center justify-between p-3 rounded-lg border ${classStandingRemaining > 0
