@@ -1241,14 +1241,14 @@ const ClassRecordExcel = () => {
     // Build message from problematic sheets
     let message;
     if (problematicSheets.length === 1) {
-      message = `${classStandingRemaining}% unallocated in ${problematicSheets[0].sheetName}`;
+      message = `Class Standing allocation incomplete: ${classStandingRemaining}% remaining in ${problematicSheets[0].sheetName}`;
     } else if (problematicSheets.length > 1) {
       const sheetList = problematicSheets
-        .map(s => `${s.sheetName} (${s.remaining}%)`)
+        .map(s => `${s.sheetName} (${s.remaining}% remaining)`)
         .join(', ');
-      message = `${classStandingRemaining}% total unallocated: ${sheetList}`;
+      message = `Class Standing allocation incomplete: ${classStandingRemaining}% total remaining across ${sheetList}`;
     } else {
-      message = `${classStandingRemaining}% unallocated`;
+      message = `Class Standing allocation incomplete: ${classStandingRemaining}% remaining`;
     }
 
     // Show toast with 8-second duration (not infinite)
@@ -5690,7 +5690,7 @@ const ClassRecordExcel = () => {
                       <div className="flex items-center space-x-1.5">
                         <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
                         <span className="text-xs font-semibold text-amber-700">
-                          {classStandingRemaining}% Unallocated
+                          Class Standing: {classStandingRemaining}% remaining
                         </span>
                       </div>
                       <button
@@ -5725,7 +5725,7 @@ const ClassRecordExcel = () => {
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold text-slate-900 mb-2">Allocation Status</p>
                             <p className="text-xs text-slate-600 leading-relaxed mb-3">
-                              Check the grade percentage allocation status here.
+                              Check the grade percentage allocation status here. For example, cell K2 shows the percentage column for quizzes. Ensure all category percentages total 100%.
                             </p>
                             <button
                               onClick={(e) => {
@@ -6179,7 +6179,7 @@ const ClassRecordExcel = () => {
                       <>
                         <div className="flex items-center gap-2">
                           <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
-                          <span className="text-sm font-medium text-amber-800">{classStandingRemaining}% Unallocated</span>
+                          <span className="text-sm font-medium text-amber-800">Class Standing: {classStandingRemaining}% remaining</span>
                         </div>
                         <button
                           onClick={manualRefreshAllocation}

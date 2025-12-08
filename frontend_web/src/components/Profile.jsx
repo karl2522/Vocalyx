@@ -1,6 +1,6 @@
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { useEffect, useState } from 'react';
-import { FiArrowLeft, FiCamera, FiEdit, FiInfo, FiSave, FiUser, FiX } from 'react-icons/fi';
+import { FiArrowLeft, FiEdit, FiInfo, FiSave, FiUser } from 'react-icons/fi';
 import { MdOutlineAlternateEmail, MdOutlineEmail, MdOutlineSchool } from 'react-icons/md';
 import { RiGraduationCapLine, RiUserSettingsLine } from 'react-icons/ri';
 import { useNavigate } from 'react-router-dom'; // Add this import
@@ -75,45 +75,48 @@ const Profile = () => {
   const [isConnectingGoogle, setIsConnectingGoogle] = useState(false);
   const [isSendingVerification, setIsSendingVerification] = useState(false);
 
-  useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        setIsLoading(true);
-        const response = await userService.getProfile();
-        const freshUser = response.data.user;
-        
-        // Update user context and localStorage with fresh data
-        setUser(freshUser);
-        localStorage.setItem('user', JSON.stringify(freshUser));
-        
-        // Update form data with fresh data
+  // Fetch profile function - accessible throughout component
+  const fetchProfile = async () => {
+    try {
+      setIsLoading(true);
+      const response = await userService.getProfile();
+      const freshUser = response.data.user;
+      
+      // Update user context and localStorage with fresh data
+      setUser(freshUser);
+      localStorage.setItem('user', JSON.stringify(freshUser));
+      
+      // Update form data with fresh data
+      setFormData({
+        first_name: freshUser.first_name || '',
+        last_name: freshUser.last_name || '',
+        email: freshUser.email || '',
+        institution: freshUser.institution || 'Cebu Institute of Technology - University',
+        position: freshUser.position || 'Teacher/Instructor',
+        bio: freshUser.bio || '',
+      });
+      return freshUser;
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+      // Fall back to cached data if API fails
+      if (user) {
         setFormData({
-          first_name: freshUser.first_name || '',
-          last_name: freshUser.last_name || '',
-          email: freshUser.email || '',
-          institution: freshUser.institution || 'Cebu Institute of Technology - University',
-          position: freshUser.position || 'Teacher/Instructor',
-          bio: freshUser.bio || '',
+          first_name: user.first_name || '',
+          last_name: user.last_name || '',
+          email: user.email || '',
+          institution: user.institution || 'Cebu Institute of Technology - University',
+          position: user.position || 'Teacher/Instructor',
+          bio: user.bio || '',
         });
-      } catch (error) {
-        console.error('Error fetching profile:', error);
-        // Fall back to cached data if API fails
-        if (user) {
-          setFormData({
-            first_name: user.first_name || '',
-            last_name: user.last_name || '',
-            email: user.email || '',
-            institution: user.institution || 'Cebu Institute of Technology - University',
-            position: user.position || 'Teacher/Instructor',
-            bio: user.bio || '',
-          });
-        }
-        showToast.error('Failed to load latest profile data');
-      } finally {
-        setIsLoading(false);
       }
-    };
+      showToast.error('Failed to load latest profile data');
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchProfile();
   }, []); // Run once on mount
 
@@ -508,16 +511,6 @@ const Profile = () => {
                     </div>
                   )}
                 </div>
-                
-                <label className="absolute bottom-0 right-0 h-10 w-10 rounded-full bg-white text-[#333D79] shadow-md flex items-center justify-center cursor-pointer hover:bg-[#333D79] hover:text-white transition-all group-hover:scale-110">
-                  <FiCamera size={18} />
-                  <input 
-                    type="file" 
-                    className="hidden" 
-                    accept="image/*"
-                    onChange={handleImageUpload}
-                  />
-                </label>
               </div>
               
               {/* Profile Info */}

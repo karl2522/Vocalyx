@@ -2,6 +2,7 @@ import { AlertTriangle, BookOpen, Calendar, CheckCircle, Upload, User, Users, X 
 import PropTypes from 'prop-types';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useAuth } from '../../auth/AuthContext';
 import apiService from '../../services/api';
 import googleDriveService from '../../services/googleDriveService';
 import { showToast } from '../../utils/toast';
@@ -9,6 +10,7 @@ import DriveFilePickerModal from './DriveFilePickerModal';
 import ImportStudentsInfoModal from './ImportStudentsInfoModal';
 
 const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing, existingRecords = [] }) => {
+  const { user } = useAuth();
   const [formData, setFormData] = useState({
     name: '',
     semester: '',
@@ -158,6 +160,11 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    if (!hasGoogleDriveAccess) {
+      showToast.error('Please connect Google Drive or Google account in your profile settings');
+      return;
+    }
+
     if (!validateForm() || duplicateInfo?.type === 'exact') {
       return;
     }
@@ -195,6 +202,9 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
     }
   };
 
+  // Check if user has Google Drive access (Google account OR connected Google Drive)
+  const hasGoogleDriveAccess = user?.has_google || user?.google_drive_connected;
+
   // 🔥 NEW: Check if form can be submitted
   const manualValid = !loading
     && !errors.name
@@ -208,7 +218,7 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
     && formData.teacher_name.trim()
     && formData.section_name.trim()
     && duplicateInfo?.type !== 'exact';
-  const canSubmit = manualValid;
+  const canSubmit = manualValid && hasGoogleDriveAccess;
 
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
@@ -429,11 +439,11 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" onMouseDown={handleBackdropClick}>
       {/* Backdrop */}
       <div className="fixed inset-0 bg-black/20 backdrop-blur-[2px] transition-opacity duration-300" style={{ zIndex: 100 }} aria-hidden="true"></div>
-      <div ref={modalRef} className="relative z-[101] w-full max-w-lg mx-auto">
+      <div ref={modalRef} className="relative z-[101] w-full max-w-lg mx-auto max-h-[calc(100vh-2rem)] md:max-h-[90vh] flex flex-col">
         {/* Modal Card */}
-        <div className="bg-white rounded-2xl shadow-2xl w-full border border-[#E5E7EB]">
+        <div className="bg-white rounded-2xl shadow-2xl w-full border border-[#E5E7EB] flex flex-col max-h-full overflow-hidden">
           {/* 🔥 UPDATED: Header with dynamic title */}
-          <div className="flex items-center justify-between px-5 py-4 rounded-t-2xl" style={{ background: 'linear-gradient(90deg, #333D79 0%, #4A5491 100%)' }}>
+          <div className="flex items-center justify-between px-5 py-4 rounded-t-2xl flex-shrink-0" style={{ background: 'linear-gradient(90deg, #333D79 0%, #4A5491 100%)' }}>
             <div className="flex items-center space-x-3">
               <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center shadow">
                 <BookOpen className="w-5 h-5 text-white" />
@@ -454,9 +464,38 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
           {/* No tabs - streamlined UI */}
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="p-5 space-y-3">
+          <form onSubmit={handleSubmit} className="p-5 space-y-3 overflow-y-auto flex-1 min-h-0 relative">
+            {/* Blurred overlay with centered message when Google Drive not connected */}
+            {!hasGoogleDriveAccess && (
+              <div className="absolute inset-0 bg-white/70 backdrop-blur-[2px] rounded-b-2xl z-30 flex items-center justify-center">
+                <div className="bg-white rounded-xl shadow-xl p-6 max-w-md mx-4 border border-gray-200">
+                  <div className="flex flex-col items-center text-center">
+                    <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mb-4">
+                      <AlertTriangle className="w-8 h-8 text-amber-600" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                      Google Drive Connection Required
+                    </h3>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Please connect your Google Drive or Google account in your profile settings to create class records.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleClose();
+                        window.location.href = '/profile';
+                      }}
+                      className="px-4 py-2 bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white rounded-lg hover:from-[#2A2F66] hover:to-[#3A4080] transition-all font-medium"
+                    >
+                      Go to Profile Settings
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Manual Fields */}
-            <div>
+            <div className={!hasGoogleDriveAccess ? 'opacity-60 pointer-events-none' : ''}>
               {/* Class Record Name */}
               <div>
                 <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
@@ -485,7 +524,7 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
 
               {/* Semester */}
               <div>
-                <label htmlFor="semester" className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="semester" className="block text-sm font-medium text-gray-700 mb-2 mt-4">
                   Semester <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
@@ -514,7 +553,7 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
 
               {/* Academic Year */}
               <div>
-                <label htmlFor="academic_year" className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="academic_year" className="block text-sm font-medium text-gray-700 mb-2 mt-4">
                   Academic Year <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
@@ -537,7 +576,7 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
 
               {/* 🔥 NEW: Section Name Field */}
               <div>
-                <label htmlFor="section_name" className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="section_name" className="block text-sm font-medium text-gray-700 mb-2 mt-4">
                   Section Name <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
@@ -560,7 +599,7 @@ const CreateClassRecordModal = ({ isOpen, onClose, onSubmit, editData, isEditing
 
               {/* 🔥 NEW: Teacher Name Field */}
               <div>
-                <label htmlFor="teacher_name" className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="teacher_name" className="block text-sm font-medium text-gray-700 mb-2 mt-4">
                   Teacher Name <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">

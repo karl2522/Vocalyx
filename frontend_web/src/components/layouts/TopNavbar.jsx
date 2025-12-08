@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { FiChevronDown, FiLogOut, FiSettings, FiUser } from 'react-icons/fi';
+import { FiChevronDown, FiLogOut, FiUser } from 'react-icons/fi';
 import { HiOutlineUserCircle } from 'react-icons/hi';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
@@ -162,10 +162,6 @@ const TopNavbar = () => {
                           </span>
                         </div>
                       )}
-                    </Link>
-                    <Link to="/settings" className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-[#EEF0F8] hover:text-[#333D79] transition-colors">
-                      <FiSettings className="mr-3 text-gray-500" size={18} />
-                      Settings
                     </Link>
                   </div>
                   

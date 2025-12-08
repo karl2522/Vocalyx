@@ -14,6 +14,7 @@ const FinalGradeOverview = ({
   const [exportLoading, setExportLoading] = useState(false);
   const [previewData, setPreviewData] = useState(null);
   const [selectedStudent, setSelectedStudent] = useState(null);
+  const [selectedAction, setSelectedAction] = useState('');
   const [markingLoading, setMarkingLoading] = useState(false);
   const [classStandingRemaining, setClassStandingRemaining] = useState(0);
   const [currentSheetName, setCurrentSheetName] = useState('');
@@ -45,25 +46,51 @@ const FinalGradeOverview = ({
 
   const loadClassStandingPercentage = useCallback(async () => {
     try {
-      // Use backend mirror (DB) for instant per-sheet remaining without Google calls
-      const res = await classRecordService.getCategoryPercentages(classRecord.id);
-      const sheets = Array.isArray(res?.data?.sheets) ? res.data.sheets : [];
-      const total = Number.isFinite(res?.data?.remaining) ? Number(res.data.remaining) : (
-        sheets.reduce((sum, s) => sum + (Number(s.remaining) || 0), 0)
-      );
+      if (!classRecord?.google_sheet_id) return;
 
-      setProblematicSheets(sheets);
-      setClassStandingRemaining(Math.max(0, total));
+      // Align with sync logic: read allocations directly from SETTINGS tabs
+      const sheetsList = await classRecordService.getSheetsList(classRecord.google_sheet_id);
+      const sheets = sheetsList?.data?.sheets || [];
 
-      if (sheets.length > 0) {
-        setCurrentSheetName(sheets[0].sheetName);
-      } else {
-        setCurrentSheetName('');
+      const midtermSheet = sheets.find(sheet => sheet.sheet_name?.toLowerCase().includes('midterm'));
+      const finalSheet = sheets.find(sheet => sheet.sheet_name?.toLowerCase().includes('final'));
+
+      const sheetsToCheck = [];
+      if (midtermSheet) sheetsToCheck.push(midtermSheet);
+      if (finalSheet) sheetsToCheck.push(finalSheet);
+      if (sheetsToCheck.length === 0 && sheets.length > 0) sheetsToCheck.push(sheets[0]);
+
+      const problematic = [];
+      let totalRemaining = 0;
+
+      for (const sheet of sheetsToCheck) {
+        try {
+          const settingsRes = await classRecordService.getSettingsPercentages(classRecord.id, sheet.sheet_name);
+          const settingsData = settingsRes?.data || {};
+          const remaining = Number(settingsData?.remaining ?? (settingsData?.total ? Math.max(0, 100 - settingsData.total) : 0));
+          const total = Number(settingsData?.total ?? 0);
+
+          if (remaining > 0) {
+            problematic.push({
+              sheetName: sheet.sheet_name,
+              remaining,
+              total,
+              source: settingsData?.source || 'SETTINGS'
+            });
+            totalRemaining += remaining;
+          }
+        } catch (innerErr) {
+          console.warn(`Failed to load SETTINGS percentages for ${sheet.sheet_name}:`, innerErr);
+        }
       }
+
+      setProblematicSheets(problematic);
+      setClassStandingRemaining(Math.max(0, totalRemaining));
+      setCurrentSheetName(problematic[0]?.sheetName || '');
     } catch (error) {
       console.warn('Failed to load class standing percentage:', error);
     }
-  }, [classRecord.id]);
+  }, [classRecord?.google_sheet_id, classRecord?.id]);
 
   useEffect(() => {
     if (isOpen && classRecord?.id && sheetId) {
@@ -72,9 +99,19 @@ const FinalGradeOverview = ({
     }
   }, [isOpen, classRecord?.id, sheetId, loadPreviewData, loadClassStandingPercentage]);
 
+  useEffect(() => {
+    // reset action whenever modal opens/closes or student changes
+    setSelectedAction('');
+  }, [selectedStudent]);
+
   const getFilteredStudents = () => {
     if (!previewData?.students) return [];
     return previewData.students;11
+  };
+
+  const isIncompleteMark = (fgValue) => {
+    const normalized = String(fgValue ?? '').toUpperCase();
+    return normalized === 'INC' || normalized === 'N/A';
   };
 
   const getMissingForStudent = (student) => {
@@ -217,7 +254,9 @@ const FinalGradeOverview = ({
         const fullName = student.fullName || `${student.firstName} ${student.lastName}`.trim();
         studentsWithMissing.push({
           fullName: fullName,
-          missingCount: missing.length
+          missingCount: missing.length,
+          fg: student.FG,
+          studentId: student.studentId
         });
       }
     });
@@ -234,7 +273,8 @@ const FinalGradeOverview = ({
         error: 'No preview data available. Please reload the preview.',
         needsConfirmation: false,
         totalMissing: 0,
-        studentsWithMissing: []
+        studentsWithMissing: [],
+        isHardBlocked: true
       };
     }
     
@@ -249,32 +289,59 @@ const FinalGradeOverview = ({
         error: 'Required columns are missing. Please ensure PRELIM, MIDTERM (Midterm sheet) and PREFINAL, FINALS (Final sheet) columns exist.',
         needsConfirmation: false,
         totalMissing: 0,
-        studentsWithMissing: []
+        studentsWithMissing: [],
+        isHardBlocked: true
       };
     }
     
     // Count missing scores
     const { totalMissing, studentsWithMissing } = countMissingScores(students, missingByStudent);
-    
-    // Check if > 10 missing scores (hard block)
-    if (totalMissing > 10) {
+
+    const blockingStudents = studentsWithMissing.filter(
+      (s) => s.missingCount >= 10 && !isIncompleteMark(s.fg)
+    );
+
+    // If any student has 10+ missing and is NOT marked INC/N/A, hard block
+    if (blockingStudents.length > 0) {
+      const details = blockingStudents.map(s => `${s.fullName} has ${s.missingCount} missing score(s)`).join('; ');
       return {
         canExport: false,
-        error: `Cannot export: Too many missing scores (${totalMissing}). Maximum allowed is 10 missing scores.`,
+        error: `Export blocked: ${details}. Mark the student(s) as INC or N/A to proceed.`,
         needsConfirmation: false,
         totalMissing,
-        studentsWithMissing
+        studentsWithMissing,
+        isHardBlocked: true,
+        blockingStudents
       };
     }
+
+    // If total missing > 10 but all missing students are already INC/N/A, allow (with confirmation)
+    if (totalMissing > 10) {
+      const hasNonIncomplete = studentsWithMissing.some(s => !isIncompleteMark(s.fg));
+      if (hasNonIncomplete) {
+        const offenders = studentsWithMissing
+          .filter(s => !isIncompleteMark(s.fg))
+          .map(s => `${s.fullName} has ${s.missingCount} missing score(s)`).join('; ');
+        return {
+          canExport: false,
+          error: `Export blocked: ${offenders}. Mark the student(s) as INC or N/A to proceed.`,
+          needsConfirmation: false,
+          totalMissing,
+          studentsWithMissing,
+          isHardBlocked: true
+        };
+      }
+    }
     
-    // If any missing scores exist, need confirmation
+    // If any missing scores exist, need confirmation (soft warning)
     if (studentsWithMissing.length > 0) {
       return {
         canExport: true, // Can proceed after confirmation
         needsConfirmation: true,
         totalMissing,
         studentsWithMissing,
-        error: null
+        error: null,
+        isHardBlocked: false
       };
     }
     
@@ -284,7 +351,8 @@ const FinalGradeOverview = ({
       needsConfirmation: false,
       totalMissing: 0,
       studentsWithMissing: [],
-      error: null
+      error: null,
+      isHardBlocked: false
     };
   }, [previewData, hasRequiredColumns, countMissingScores]);
 
@@ -341,7 +409,15 @@ const FinalGradeOverview = ({
     await performExport();
   };
 
+  const handleMarkSelectedAction = async () => {
+    if (!selectedStudent || !selectedAction) return;
+    await handleMarkMissing(selectedStudent, 'Final Grade', selectedAction);
+    setSelectedStudent(null);
+    setSelectedAction('');
+  };
+
   const filteredStudents = getFilteredStudents();
+  const exportValidationState = validateExportEligibility();
 
 
   if (!isOpen) return null;
@@ -368,13 +444,13 @@ const FinalGradeOverview = ({
           <div className="flex items-center space-x-3">
             <button
               onClick={handleExport}
-              disabled={exportLoading || classStandingRemaining > 0}
+              disabled={exportLoading || classStandingRemaining > 0 || exportValidationState?.isHardBlocked}
               className={`px-4 py-2 text-white rounded-lg flex items-center space-x-2 transition-colors ${
-                classStandingRemaining > 0 
+                classStandingRemaining > 0 || exportValidationState?.isHardBlocked
                   ? 'bg-gray-400 cursor-not-allowed' 
                   : 'hover:opacity-90 disabled:opacity-50'
               }`}
-              style={classStandingRemaining === 0 ? { backgroundColor: '#333D79' } : {}}
+              style={classStandingRemaining === 0 && !exportValidationState?.isHardBlocked ? { backgroundColor: '#333D79' } : {}}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -424,6 +500,38 @@ const FinalGradeOverview = ({
             </div>
           </div>
         )}
+
+        {/* Requirements / Tips */}
+        <div className="mx-6 my-4 rounded-lg border border-indigo-100 bg-indigo-50/70 shadow-[0_4px_12px_-6px_rgba(79,70,229,0.35)]">
+          <div className="flex items-start gap-3 px-4 py-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-indigo-100 to-indigo-200 text-indigo-700 shadow-sm border border-indigo-100">
+              <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 2a10 10 0 100 20 10 10 0 000-20z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8.5v4.5m0 3h.01" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-indigo-900">Final grade generation tips</h3>
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-indigo-600 bg-white/70 border border-indigo-100 px-2 py-0.5 rounded-full">Reminder</span>
+              </div>
+              <div className="mt-2 text-sm text-indigo-900 space-y-1.5">
+                <div className="flex items-start gap-2">
+                  <span className="mt-1 inline-flex h-2 w-2 rounded-full bg-indigo-400"></span>
+                  <span>Class standing allocation on Midterm and Final must total 100%.</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="mt-1 inline-flex h-2 w-2 rounded-full bg-indigo-400"></span>
+                  <span>Any student with 10+ missing scores is blocked unless marked INC or N/A.</span>
+                </div>
+                <div className="flex items-start gap-2 text-indigo-800">
+                  <span className="mt-1 inline-flex h-2 w-2 rounded-full bg-indigo-200"></span>
+                  <span>If a student has many missing scores and should still be exported, mark them as INC or N/A first.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
 
 
         {/* Content */}
@@ -595,7 +703,7 @@ const FinalGradeOverview = ({
               </h3>
             </div>
             
-            <div className="p-6">
+            <div className="p-6 bg-gray-50">
               {/* Info note */}
               <div className="mb-4 bg-amber-50 border border-amber-200 rounded px-3 py-2">
                 <p className="text-xs text-amber-800">
@@ -604,7 +712,7 @@ const FinalGradeOverview = ({
               </div>
 
               {/* Single action card */}
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-white border border-gray-200 rounded-lg shadow-sm">
                 <div>
                   <div className="font-medium text-gray-900">{selectedStudent.fullName}</div>
                   <div className="text-xs text-gray-500">Student ID: {selectedStudent.studentId}</div>
@@ -646,16 +754,12 @@ const FinalGradeOverview = ({
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center gap-2">
                   <select
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        handleMarkMissing(selectedStudent, 'Final Grade', e.target.value);
-                      }
-                    }}
+                    value={selectedAction}
+                    onChange={(e) => setSelectedAction(e.target.value)}
                     disabled={markingLoading}
-                    className="px-3 py-1 border border-gray-300 rounded-md text-sm"
-                    defaultValue=""
+                    className="px-3 py-2 border border-gray-300 rounded-md text-sm bg-white"
                   >
                     <option value="">Select action...</option>
                     <option value="N/A">Mark as N/A</option>
@@ -665,12 +769,20 @@ const FinalGradeOverview = ({
               </div>
             </div>
             
-            <div className="p-6 border-t border-gray-200 flex justify-end">
+            <div className="p-6 border-t border-gray-200 flex justify-between items-center bg-white">
               <button
                 onClick={() => setSelectedStudent(null)}
-                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
               >
                 Close
+              </button>
+              <button
+                onClick={handleMarkSelectedAction}
+                disabled={markingLoading || !selectedAction}
+                className={`px-7 py-2 rounded-lg font-semibold text-white transition-colors disabled:opacity-60 disabled:cursor-not-allowed`}
+                style={{ backgroundColor: '#333D79' }}
+              >
+                {markingLoading ? 'Marking...' : 'Mark'}
               </button>
             </div>
           </div>
