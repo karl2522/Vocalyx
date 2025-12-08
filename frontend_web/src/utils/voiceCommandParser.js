@@ -11,8 +11,8 @@ const nameVariations = {
   'james': ['james', 'jim', 'jimmy', 'jaimes', 'jamie'],
   'jessica': ['jessica', 'jess', 'jesica', 'jessie'],
   'jared': ['jared', 'jarod', 'jerrod', 'jarrod'],
-  'owen': ['owen', 'owin', 'owain', 'owen\'s', 'owens'],        
-  'omen': ['omen', 'omein', 'omens', 'omen\'s'],             
+  'owen': ['owen', 'owin', 'owain', 'owen\'s', 'owens'],
+  'omen': ['omen', 'omein', 'omens', 'omen\'s'],
   'bikada': ['bikada', 'because', 'because of the', 'be cada', 'picked up'],
   'carl': ['carl', 'karl', 'carlos'],
   'ana': ['ana', 'anna', 'anne', 'ann'],
@@ -30,7 +30,7 @@ const nameVariations = {
 const batchPatterns = {
   // Batch keywords with variations
   'everyone': 'EVERYONE',
-  'all students': 'ALL_STUDENTS', 
+  'all students': 'ALL_STUDENTS',
   'entire class': 'ALL_STUDENTS',
   'whole class': 'ALL_STUDENTS',
   'everybody': 'EVERYONE',
@@ -39,7 +39,7 @@ const batchPatterns = {
   'full class': 'ALL_STUDENTS',
   'total class': 'ALL_STUDENTS',
   'the class': 'ALL_STUDENTS',
-  
+
   // Range keywords with more variations
   'through': 'THROUGH',
   'to': 'TO',
@@ -51,7 +51,7 @@ const batchPatterns = {
   'down to': 'TO',
   'between': 'BETWEEN',
   'range': 'RANGE',
-  
+
   // Conditional keywords
   'present': 'PRESENT',
   'absent': 'ABSENT',
@@ -72,18 +72,18 @@ const phoneticCorrections = {
   'laboratory': 'lab', 'laboratories': 'lab', 'lab': 'lab',
   'love one': 'lab 1', 'love to': 'lab 2', 'love tree': 'lab 3', 'love for': 'lab 4', 'love five': 'lab 5',
   'level': 'lab', 'label': 'lab', 'lap': 'lab', 'liberal': 'lab',
-  
+
   // 🔥 Quiz variations (enhanced)
   'quizzes': 'quiz', 'quick': 'quiz', 'quite': 'quiz', 'quiet': 'quiz', 'quest': 'quiz', 'question': 'quiz',
   'kids': 'quiz', 'chris': 'quiz', 'quests': 'quiz', 'queries': 'quiz',
   'quiz one': 'quiz 1', 'quiz to': 'quiz 2', 'quiz tree': 'quiz 3', 'quiz for': 'quiz 4', 'quiz five': 'quiz 5',
   'queens': 'quiz', 'quill': 'quiz', 'quit': 'quiz', 'quotes': 'quiz',
-  
+
   // 🔥 Exam variations (enhanced)
   'example': 'exam', 'examine': 'exam', 'exact': 'exam', 'exit': 'exam', 'eggs am': 'exam',
   'examination': 'exam', 'examinations': 'exam', 'eggs': 'exam',
   'exam one': 'exam 1', 'exam to': 'exam 2', 'exam tree': 'exam 3',
-  
+
   // 🔥 NEW: Middle Name phonetic corrections (comprehensive!)
   'mendel': 'middle', 'mendal': 'middle', 'mental': 'middle', 'medal': 'middle', 'medel': 'middle',
   'meddle': 'middle', 'meddel': 'middle', 'midel': 'middle', 'middel': 'middle',
@@ -91,7 +91,7 @@ const phoneticCorrections = {
   'meadow': 'middle', 'metal': 'middle', 'mettle': 'middle', 'mitle': 'middle',
   'mittle': 'middle', 'muddle': 'middle', 'model': 'middle', 'modal': 'middle',
   'medlar': 'middle', 'middle': 'middle', // Keep the correct spelling too
-  
+
   // 🔥 ENHANCED: Student ID dash corrections
   'dash': '-', 'dashed': '-', 'hyphen': '-', 'minus': '-', 'dash dash': '--',
   'with dash': '-', 'and dash': '-', 'then dash': '-', 'plus dash': '-',
@@ -103,7 +103,7 @@ const phoneticCorrections = {
   'seven twenty six': '726', 'seven two six': '726',
   'twenty twenty': '2020', 'twenty twenty one': '2021',
   'nineteen ninety': '1990', 'two thousand': '2000',
-  
+
   // 🔥 Final variations (enhanced)
   'final': 'final', 'finale': 'final', 'find': 'final', 'file': 'final', 'fine': 'final',
   'finals': 'final', 'finding': 'final', 'finally': 'final',
@@ -115,7 +115,7 @@ const phoneticCorrections = {
   'assignment': 'quiz', 'assignments': 'quiz', 'homework': 'quiz',
   'project': 'assignment', 'projects': 'assignment', 'task': 'assignment',
   'test': 'quiz', 'tests': 'quiz', 'testing': 'quiz',
-  
+
   // 🔥 Numbers with phonetic mishearings (massively enhanced)
   'want': '1', 'once': '1', 'won': '1', 'one': '1', 'wand': '1', 'wine': '1',
   'to': '2', 'too': '2', 'two': '2', 'tune': '2', 'tooth': '2', 'true': '2',
@@ -138,7 +138,7 @@ const phoneticCorrections = {
   'jen': 'jennifer', 'jenny': 'jennifer', 'jenna': 'jennifer',
   'jim': 'james', 'jimmy': 'james', 'jamie': 'james',
   'jess': 'jessica', 'jessie': 'jessica',
-  
+
   'jarred': 'jared', 'jarod': 'jared', 'jerrod': 'jared',
   'owin': 'owen', 'owain': 'owen', 'open': 'owen', 'ocean': 'owen',
   'because': 'bikada', 'because of the': 'bikada', 'be cada': 'bikada', 'picked up': 'bikada',
@@ -190,7 +190,7 @@ const wordsToNumbers = {
   'six': '6', 'seven': '7', 'eight': '8', 'nine': '9', 'ten': '10',
   'eleven': '11', 'twelve': '12', 'thirteen': '13', 'fourteen': '14', 'fifteen': '15',
   'sixteen': '16', 'seventeen': '17', 'eighteen': '18', 'nineteen': '19', 'twenty': '20',
-  
+
   // Compound numbers (with and without hyphens)
   'twenty-one': '21', 'twenty-two': '22', 'twenty-three': '23', 'twenty-four': '24', 'twenty-five': '25',
   'twenty-six': '26', 'twenty-seven': '27', 'twenty-eight': '28', 'twenty-nine': '29',
@@ -204,10 +204,10 @@ const wordsToNumbers = {
   'eighty': '80', 'eighty-five': '85', 'eighty five': '85', 'eighty-one': '81', 'eighty one': '81',
   'ninety': '90', 'ninety-five': '95', 'ninety five': '95', 'ninety-one': '91', 'ninety one': '91',
   'hundred': '100', 'one hundred': '100',
-  
+
   // Alternative words for zero
   'oh': '0', 'zip': '0', 'nil': '0', 'nothing': '0', 'nada': '0', 'blank': '0', 'empty': '0',
-  
+
   // 🔥 ENHANCED: Phonetic number variations
   'won': '1', 'want': '1', 'wand': '1', 'wine': '1', 'when': '1',
   'too': '2', 'to': '2', 'tune': '2', 'true': '2', 'tooth': '2',
@@ -215,10 +215,10 @@ const wordsToNumbers = {
   'for': '4', 'fore': '4', 'floor': '4', 'more': '4', 'door': '4',
   'ate': '8', 'late': '8', 'gate': '8', 'hate': '8', 'rate': '8',
   'night': '9', 'line': '9', 'mine': '9', 'fine': '9', 'wine': '9',
-  
+
   // ❌ REMOVED ORDINALS - they were breaking student name parsing!
   // 'first': '1st', 'second': '2nd', etc. - REMOVED!
-  
+
   // 🔥 NEW: Decimal numbers (spoken)
   'point five': '.5', 'point zero': '.0', 'point one': '.1', 'point two': '.2',
   'point three': '.3', 'point four': '.4', 'point six': '.6', 'point seven': '.7',
@@ -243,15 +243,15 @@ const undoRedoPatterns = {
 // 🚀 MASSIVELY ENHANCED: Batch command parsing with more patterns
 const parseBatchCommand = (transcript) => {
   console.log('🎯 Parsing batch command:', transcript);
-  
+
   // 🔥 Pattern 1: "Quiz 1: John 85, Maria 92, Carlos 88" (enhanced)
   const studentListPattern = /^(.+?):\s*(.+)$/;
   const studentListMatch = transcript.match(studentListPattern);
-  
+
   if (studentListMatch) {
     const columnPart = studentListMatch[1].trim();
     const studentsPart = studentListMatch[2].trim();
-    
+
     // 🔥 ENHANCED: Better parsing of student entries
     const studentEntries = studentsPart.split(/[,;]/).map(entry => {
       const parts = entry.trim().split(/\s+/);
@@ -265,7 +265,7 @@ const parseBatchCommand = (transcript) => {
       }
       return null;
     }).filter(Boolean);
-    
+
     if (studentEntries.length > 0) {
       console.log('✅ Student list batch detected:', { columnPart, studentEntries });
       return {
@@ -278,70 +278,70 @@ const parseBatchCommand = (transcript) => {
       };
     }
   }
-  
+
   // 🔥 Pattern 2: Enhanced row range patterns
   const rowRangePatterns = [
     // 🔥 NEW: Handle "rowan" → "row 1" phonetic correction
     /^(.+?):\s*(?:rowan|row\s*one|row\s*1)\s*(?:through|to|thru|until)\s*(\d+).*?(?:all\s*(?:score|get|gets?))?\s*(\d+)$/i,
     /^(.+?)\s+(?:rowan|row\s*one|row\s*1)\s*(?:through|to|thru|until)\s*(\d+).*?(?:all\s*(?:score|get|gets?))?\s*(\d+)$/i,
-    
+
     // 🔥 EXISTING: Standard row range patterns (keep these)
     /^(.+?):\s*row\s*(\d+)\s*(?:through|to|thru|until)\s*(\d+).*?(?:all\s*(?:score|get|gets?))?\s*(\d+)$/i,
     /^(.+?):\s*(?:row|rows)\s*(\d+)\s*(?:through|to|thru|until)\s*(\d+).*?(\d+)$/i,
     /^(.+?):\s*students?\s*(\d+)\s*(?:through|to|thru|until)\s*(\d+).*?(\d+)$/i,
-    
+
     // 🔥 NEW: Handle cases without colon
     /^(.+?)\s+row\s*(\d+)\s*(?:through|to|thru|until)\s*(\d+).*?(?:all\s*(?:score|get|gets?))?\s*(\d+)$/i,
     /^(.+?)\s+(?:rowan|row\s*one)\s*(?:through|to|thru|until)\s*(\d+).*?(?:all\s*(?:score|get|gets?))?\s*(\d+)$/i
   ];
-  
+
   for (const pattern of rowRangePatterns) {
-  const match = transcript.match(pattern);
-  if (match) {
-    console.log('🔍 Row range match found:', match);
-    
-    let column, startRow, endRow, score;
-    
-    // Handle "rowan" special case patterns (first 2 patterns)
-    if (pattern.source.includes('rowan')) {
-      column = match[1].trim();
-      startRow = 1; // "rowan" always means "row 1"
-      endRow = parseInt(match[2]);
-      score = match[3];
-    } else {
-      // Standard patterns
-      column = match[1].trim();
-      startRow = parseInt(match[2]);
-      endRow = parseInt(match[3]);
-      score = match[4];
-    }
-    
-    console.log('✅ Row range batch detected:', { column, startRow, endRow, score });
-    return {
-      type: 'BATCH_ROW_RANGE',
-      data: {
-        column,
-        startRow: startRow - 1, // Convert to 0-based index
-        endRow: endRow - 1,
-        score,
-        confidence: 'high'
+    const match = transcript.match(pattern);
+    if (match) {
+      console.log('🔍 Row range match found:', match);
+
+      let column, startRow, endRow, score;
+
+      // Handle "rowan" special case patterns (first 2 patterns)
+      if (pattern.source.includes('rowan')) {
+        column = match[1].trim();
+        startRow = 1; // "rowan" always means "row 1"
+        endRow = parseInt(match[2]);
+        score = match[3];
+      } else {
+        // Standard patterns
+        column = match[1].trim();
+        startRow = parseInt(match[2]);
+        endRow = parseInt(match[3]);
+        score = match[4];
       }
-    };
+
+      console.log('✅ Row range batch detected:', { column, startRow, endRow, score });
+      return {
+        type: 'BATCH_ROW_RANGE',
+        data: {
+          column,
+          startRow: startRow - 1, // Convert to 0-based index
+          endRow: endRow - 1,
+          score,
+          confidence: 'high'
+        }
+      };
+    }
   }
-}
-  
+
   // 🔥 Pattern 3: Enhanced "everyone" patterns
   const everyonePatterns = [
     /^(.+?)\s+(?:everyone|all students|entire class|everybody|whole class)\s*(?:present|presents|filled|here)?\s*(?:gets?|get|scores?|score|receives?)\s*(\d+)$/i,
     /^(?:everyone|all students|entire class|everybody|whole class)\s*(?:present|presents|filled|here)?\s*(?:gets?|get|scores?|score|receives?)\s*(\d+)\s*(?:for|in|on)\s*(.+?)$/i,
     /^(?:give|set)\s+(?:everyone|all students|entire class|everybody|whole class)\s*(?:present|presents|filled|here)?\s*(\d+)\s*(?:for|in|on)\s*(.+?)$/i
   ];
-  
+
   for (const pattern of everyonePatterns) {
     const match = transcript.match(pattern);
     if (match) {
       let column, score, condition;
-      
+
       if (match[1] && match[2]) { // Pattern 1
         column = match[1].trim();
         score = match[2];
@@ -355,7 +355,7 @@ const parseBatchCommand = (transcript) => {
         column = match[2].trim();
         condition = transcript.includes('present') ? 'present' : 'all';
       }
-      
+
       console.log('✅ Everyone batch detected:', { column, score, condition });
       return {
         type: 'BATCH_EVERYONE',
@@ -368,15 +368,15 @@ const parseBatchCommand = (transcript) => {
       };
     }
   }
-  
+
   // 🔥 NEW Pattern 4: Percentage-based batch commands
   const percentagePattern = /^(.+?):\s*(?:everyone|all students|entire class|everybody)\s*(?:gets?|get|scores?|score)\s*(\d+)\s*(?:percent|%|percentage)$/i;
   const percentageMatch = transcript.match(percentagePattern);
-  
+
   if (percentageMatch) {
     const column = percentageMatch[1].trim();
     const percentage = percentageMatch[2];
-    
+
     console.log('✅ Percentage batch detected:', { column, percentage });
     return {
       type: 'BATCH_PERCENTAGE',
@@ -387,16 +387,16 @@ const parseBatchCommand = (transcript) => {
       }
     };
   }
-  
+
   // 🔥 NEW Pattern 5: Conditional batch commands
   const conditionalPattern = /^(.+?):\s*(?:all|everyone)\s*(present|absent|empty|filled|blank|completed)\s*(?:gets?|get|scores?|score)\s*(\d+)$/i;
   const conditionalMatch = transcript.match(conditionalPattern);
-  
+
   if (conditionalMatch) {
     const column = conditionalMatch[1].trim();
     const condition = conditionalMatch[2].toLowerCase();
     const score = conditionalMatch[3];
-    
+
     console.log('✅ Conditional batch detected:', { column, condition, score });
     return {
       type: 'BATCH_CONDITIONAL',
@@ -408,23 +408,23 @@ const parseBatchCommand = (transcript) => {
       }
     };
   }
-  
+
   return null;
 };
 
 const parseStudentId = (idText) => {
   console.log('🆔 Parsing Student ID:', idText);
-  
+
   // Clean the text
   let cleanId = idText.trim();
-  
+
   // Replace dash words with actual dashes
   cleanId = cleanId.replace(/\b(dash|dashed|hyphen|minus)\b/gi, '-');
-  
+
   // Handle multiple dash patterns
   cleanId = cleanId.replace(/\s*-\s*/g, '-'); // Remove spaces around dashes
   cleanId = cleanId.replace(/\s+/g, ''); // Remove all remaining spaces
-  
+
   // Convert word numbers to digits in ID context
   const idNumberMap = {
     'zero': '0', 'one': '1', 'two': '2', 'three': '3', 'four': '4', 'five': '5',
@@ -433,7 +433,7 @@ const parseStudentId = (idText) => {
     'fifteen': '15', 'sixteen': '16', 'seventeen': '17', 'eighteen': '18', 'nineteen': '19',
     'twenty': '20', 'thirty': '30', 'forty': '40', 'fifty': '50'
   };
-  
+
   // Handle compound numbers for years (like "twenty two" -> "22")
   cleanId = cleanId.replace(/twenty[\s-]?two/gi, '22');
   cleanId = cleanId.replace(/twenty[\s-]?one/gi, '21');
@@ -444,23 +444,23 @@ const parseStudentId = (idText) => {
   cleanId = cleanId.replace(/twenty[\s-]?seven/gi, '27');
   cleanId = cleanId.replace(/twenty[\s-]?eight/gi, '28');
   cleanId = cleanId.replace(/twenty[\s-]?nine/gi, '29');
-  
+
   // Replace individual word numbers
   Object.entries(idNumberMap).forEach(([word, digit]) => {
     const regex = new RegExp(`\\b${word}\\b`, 'gi');
     cleanId = cleanId.replace(regex, digit);
   });
-  
+
   // Validate the format (should be like XX-XXXX-XXX)
   const idPattern = /^(\d{2})-?(\d{4})-?(\d{3})$/;
   const match = cleanId.match(idPattern);
-  
+
   if (match) {
     const formattedId = `${match[1]}-${match[2]}-${match[3]}`;
     console.log('✅ Formatted Student ID:', formattedId);
     return formattedId;
   }
-  
+
   // If no exact match, try to extract numbers and format them
   const numbers = cleanId.match(/\d+/g);
   if (numbers && numbers.length >= 3) {
@@ -468,7 +468,7 @@ const parseStudentId = (idText) => {
     console.log('✅ Constructed Student ID:', formattedId);
     return formattedId;
   }
-  
+
   console.log('⚠️ Could not parse Student ID, returning as-is:', cleanId);
   return cleanId;
 };
@@ -477,21 +477,21 @@ const parseStudentId = (idText) => {
 const levenshteinDistance = (str1, str2) => {
   // Early return for identical strings
   if (str1 === str2) return 0;
-  
+
   // Early return for empty strings
   if (str1.length === 0) return str2.length;
   if (str2.length === 0) return str1.length;
-  
+
   // Ensure str1 is the shorter string for optimization
   if (str1.length > str2.length) {
     [str1, str2] = [str2, str1];
   }
-  
+
   const track = Array(str2.length + 1).fill(null).map(() => Array(str1.length + 1).fill(null));
-  
+
   for (let i = 0; i <= str1.length; i += 1) track[0][i] = i;
   for (let j = 0; j <= str2.length; j += 1) track[j][0] = j;
-  
+
   for (let j = 1; j <= str2.length; j += 1) {
     for (let i = 1; i <= str1.length; i += 1) {
       const indicator = str1[i - 1] === str2[j - 1] ? 0 : 1;
@@ -502,14 +502,14 @@ const levenshteinDistance = (str1, str2) => {
       );
     }
   }
-  
+
   return track[str2.length][str1.length];
 };
 
 // 🚀 NEW: Advanced phonetic matching using Soundex
 const generateSoundex = (word) => {
   if (!word) return '';
-  
+
   const soundexMap = {
     'b': '1', 'f': '1', 'p': '1', 'v': '1',
     'c': '2', 'g': '2', 'j': '2', 'k': '2', 'q': '2', 's': '2', 'x': '2', 'z': '2',
@@ -518,94 +518,94 @@ const generateSoundex = (word) => {
     'm': '5', 'n': '5',
     'r': '6'
   };
-  
+
   const clean = word.toLowerCase().replace(/[^a-z]/g, '');
   if (!clean) return '';
-  
+
   let soundex = clean[0].toUpperCase();
-  
+
   for (let i = 1; i < clean.length && soundex.length < 4; i++) {
     const code = soundexMap[clean[i]];
     if (code && code !== soundex[soundex.length - 1]) {
       soundex += code;
     }
   }
-  
+
   return soundex.padEnd(4, '0');
 };
 
 // 🚀 MASSIVELY ENHANCED: Context-aware phonetic corrections
 const applyContextPhoneticCorrections = (transcript, contextWords = []) => {
   console.log('🔧 BEFORE context phonetic correction:', transcript);
-  
+
   let corrected = transcript;
   let changesFound = false;
-  
+
   // 🔥 ENHANCED: Apply standard phonetic corrections first
   Object.keys(phoneticCorrections).forEach(misheard => {
     const correct = phoneticCorrections[misheard];
     const regex = new RegExp(`\\b${misheard}\\b`, 'gi');
-    
+
     if (regex.test(corrected)) {
       console.log(`🎯 PHONETIC CORRECTION: "${misheard}" → "${correct}"`);
       corrected = corrected.replace(regex, correct);
       changesFound = true;
     }
   });
-  
+
   // 🔧 FIXED: More intelligent context corrections with better validation
   const words = corrected.split(' ');
   const correctedWords = words.map((word, index) => {
     const cleanWord = word.toLowerCase().replace(/[^a-z0-9]/g, '');
-    
+
     if (cleanWord.length < 2) return word;
-    
+
     // 🔧 CRITICAL FIX: Don't correct words that are already part of valid patterns
     const currentPhrase = words.slice(Math.max(0, index - 1), index + 2).join(' ').toLowerCase();
-    
+
     // Skip correction if word is part of a valid quiz/lab pattern
     if (/\b(quiz|lab|exam)\s+\d+\b/.test(currentPhrase)) {
       console.log(`🛡️ SKIPPING context correction for "${word}" - part of valid pattern: "${currentPhrase}"`);
       return word;
     }
-    
+
     // Skip correction if word is a number or part of a name + number pattern
     if (/^\d+$/.test(cleanWord) || /\b\w+\s+\d+\b/.test(currentPhrase)) {
       console.log(`🛡️ SKIPPING context correction for "${word}" - number or name+number pattern`);
       return word;
     }
-    
+
     // Find best context match using multiple algorithms
     let bestMatch = null;
     let bestScore = 0;
     let matchMethod = '';
-    
+
     contextWords.forEach(contextWord => {
       if (cleanWord.length > 2 && contextWord.length > 2) {
         // 🔧 HIGHER THRESHOLD: Only correct if very confident
         const levenshteinSim = calculateWordSimilarity(cleanWord, contextWord);
-        
+
         // Method 2: Soundex phonetic matching
         const soundex1 = generateSoundex(cleanWord);
         const soundex2 = generateSoundex(contextWord);
         const phoneticSim = soundex1 === soundex2 ? 1.0 : 0.0;
-        
+
         // Method 3: Substring matching (be more careful)
         const substringSim = (cleanWord.includes(contextWord) || contextWord.includes(cleanWord)) ? 0.6 : 0.0;
-        
+
         // Method 4: Starting characters similarity
         const startingSim = cleanWord.substring(0, 2) === contextWord.substring(0, 2) ? 0.5 : 0.0;
-        
+
         // Combined score with weights (more conservative)
         const combinedScore = (levenshteinSim * 0.5) + (phoneticSim * 0.3) + (substringSim * 0.1) + (startingSim * 0.1);
-        
+
         // 🔧 MUCH HIGHER THRESHOLD: Only correct if 90%+ confident AND not conflicting
         if (combinedScore > bestScore && combinedScore > 0.90) {
           // Additional check: make sure we're not corrupting existing valid patterns
           const potentialResult = word.replace(new RegExp(cleanWord, 'gi'), contextWord);
           const newPhrase = words.slice(Math.max(0, index - 1), index + 2).join(' ').toLowerCase()
-                                 .replace(word.toLowerCase(), potentialResult.toLowerCase());
-          
+            .replace(word.toLowerCase(), potentialResult.toLowerCase());
+
           // Don't apply if it would create invalid patterns
           if (!newPhrase.includes('quiz 1 4') && !newPhrase.includes('lab 1 2')) {
             bestMatch = contextWord;
@@ -615,59 +615,59 @@ const applyContextPhoneticCorrections = (transcript, contextWords = []) => {
         }
       }
     });
-    
+
     if (bestMatch) {
       console.log(`🧠 CONTEXT CORRECTION: "${word}" → "${bestMatch}" (${bestScore.toFixed(2)}, ${matchMethod})`);
       changesFound = true;
       return word.replace(new RegExp(cleanWord, 'gi'), bestMatch);
     }
-    
+
     return word;
   });
-  
+
   corrected = correctedWords.join(' ');
-  
+
   console.log('🔧 AFTER context phonetic correction:', corrected);
   console.log('🔧 Changes made:', changesFound);
-  
+
   return corrected;
 };
 
 // 🚀 ENHANCED: Better word similarity calculation
 const calculateWordSimilarity = (word1, word2) => {
   if (word1 === word2) return 1.0;
-  
+
   const longer = word1.length > word2.length ? word1 : word2;
   const shorter = word1.length > word2.length ? word2 : word1;
   const editDistance = levenshteinDistance(longer, shorter);
-  
+
   return (longer.length - editDistance) / longer.length;
 };
 
 // 🚀 ENHANCED: Standard phonetic corrections with logging
 export const applyPhoneticCorrections = (transcript) => {
   console.log('🔧 BEFORE phonetic correction:', transcript);
-  
+
   let corrected = transcript;
   let changesFound = false;
-  
+
   // Apply corrections word by word with priority order
   const sortedCorrections = Object.entries(phoneticCorrections)
     .sort(([a], [b]) => b.length - a.length); // Longer phrases first
-  
+
   sortedCorrections.forEach(([misheard, correct]) => {
     const regex = new RegExp(`\\b${misheard}\\b`, 'gi');
-    
+
     if (regex.test(corrected)) {
       console.log(`🎯 FOUND "${misheard}" - will replace with "${correct}"`);
       corrected = corrected.replace(regex, correct);
       changesFound = true;
     }
   });
-  
+
   console.log('🔧 AFTER phonetic correction:', corrected);
   console.log('🔧 Changes made:', changesFound);
-  
+
   return corrected;
 };
 
@@ -721,75 +721,75 @@ export const cleanName = (name) => {
 const soundsLike = (name1, name2) => {
   const clean1 = cleanName(name1);
   const clean2 = cleanName(name2);
-  
+
   // Check exact match first
   if (clean1 === clean2) return true;
-  
+
   // Check name variations
   for (const [key, variations] of Object.entries(nameVariations)) {
     if (variations.includes(clean1) && variations.includes(clean2)) {
       return true;
     }
   }
-  
+
   // 🔥 ENHANCED: Multi-layer phonetic similarity
   if (clean1.length > 2 && clean2.length > 2) {
     // Method 1: Soundex matching
     const soundex1 = generateSoundex(clean1);
     const soundex2 = generateSoundex(clean2);
     if (soundex1 === soundex2) return true;
-    
+
     // Method 2: Starting consonants
     const start1 = clean1.substring(0, 2);
     const start2 = clean2.substring(0, 2);
     if (start1 === start2) return true;
-    
+
     // Method 3: High similarity score
     // 🔥 FIXED: Increased from 0.8 to 0.85 to prevent false matches like "Capuras" and "Karl"
     const similarity = calculateWordSimilarity(clean1, clean2);
     if (similarity > 0.85) return true;
   }
-  
+
   return false;
 };
 
 // 🚀 ENHANCED: Smarter name extraction with context awareness
 const extractNameFromText = (text, recentStudents = []) => {
   const commonWords = [
-    'quiz', 'lab', 'exam', 'midterm', 'final', 'test', 'and', 'the', 'a', 'an', 
+    'quiz', 'lab', 'exam', 'midterm', 'final', 'test', 'and', 'the', 'a', 'an',
     'basic', 'activity', 'html', 'css', 'javascript', 'score', 'grade', 'points',
     'assignment', 'homework', 'project', 'assessment', 'evaluation'
   ];
-  
+
   const words = text.split(/\s+/).filter(word => word.length > 1);
-  
+
   // 🔥 FIXED: Check recent students with MUCH HIGHER threshold and better logic
   for (const recent of recentStudents) {
     const recentWords = recent.toLowerCase().split(' ');
-    
+
     // 🔥 NEW: Check if the ENTIRE input text closely matches a recent student
     const fullTextSimilarity = calculateWordSimilarity(text.toLowerCase().trim(), recent.toLowerCase());
-    
+
     if (fullTextSimilarity > 0.85) {
       console.log('🎯 Found EXACT recent student match:', recent);
       return recent;
     }
-    
+
     // 🔥 FIXED: Only match if MOST words match, not just ANY word
     let matchingWords = 0;
     let totalRecentWords = recentWords.length;
-    
+
     recentWords.forEach(rw => {
       const hasWordMatch = words.some(w => {
         const similarity = calculateWordSimilarity(w.toLowerCase(), rw);
         return similarity > 0.90;  // 🔥 MUCH HIGHER THRESHOLD (was 0.7)
       });
-      
+
       if (hasWordMatch) {
         matchingWords++;
       }
     });
-    
+
     // 🔥 FIXED: Only return recent student if MAJORITY of words match
     const matchRatio = matchingWords / totalRecentWords;
     if (matchRatio > 0.7 && matchingWords >= 2) {  // Need at least 70% match AND at least 2 words
@@ -797,38 +797,38 @@ const extractNameFromText = (text, recentStudents = []) => {
       return recent;
     }
   }
-  
+
   // 🔥 ENHANCED: Filter out common words and numbers more intelligently
   const nameWords = words
     .filter(word => {
       const lowerWord = word.toLowerCase();
-      return !commonWords.includes(lowerWord) && 
-             !/^\d+$/.test(word) && // Remove pure numbers
-             word.length > 1 &&
-             !/^(one|two|three|four|five|six|seven|eight|nine|ten)$/i.test(word); // Remove number words
+      return !commonWords.includes(lowerWord) &&
+        !/^\d+$/.test(word) && // Remove pure numbers
+        word.length > 1 &&
+        !/^(one|two|three|four|five|six|seven|eight|nine|ten)$/i.test(word); // Remove number words
     });
-  
+
   // 🔥 FIXED: Return the ORIGINAL filtered text, not a recent student
   const extractedName = nameWords.join(' ').trim();
   console.log(`🔍 Extracted name from text "${text}": "${extractedName}"`);
-  
+
   return extractedName;
 };
 
 // 🚀 ENHANCED: Better gradeable column detection
 const getGradeableColumns = (headers) => {
   const infoColumns = [
-    'no', 'no.', 'number', 'last name', 'lastname', 'first name', 'firstname', 
+    'no', 'no.', 'number', 'last name', 'lastname', 'first name', 'firstname',
     'student id', 'id', 'name', 'email', 'total', 'grade', 'average', 'sum',
     'phone', 'contact', 'address', 'birthday', 'age', 'gender', 'section',
     'year', 'course', 'department', 'status', 'remarks', 'notes'
   ];
-  
+
   return headers.filter(header => {
     const headerLower = header.toLowerCase().trim();
-    return !infoColumns.some(info => 
-      headerLower === info || 
-      headerLower.startsWith(info + ' ') || 
+    return !infoColumns.some(info =>
+      headerLower === info ||
+      headerLower.startsWith(info + ' ') ||
       headerLower.endsWith(' ' + info) ||
       headerLower.includes('total') ||
       headerLower.includes('average')
@@ -840,39 +840,39 @@ const getGradeableColumns = (headers) => {
 const findBestColumnMatch = (transcript, headers) => {
   console.log('🔍 Finding column match for:', transcript);
   console.log('📋 Available headers:', headers);
-  
+
   const gradeableColumns = getGradeableColumns(headers);
   console.log('📊 Gradeable columns:', gradeableColumns);
-  
+
   const transcriptLower = transcript.toLowerCase();
   let bestMatch = null;
   let bestScore = 0;
   let matches = [];
-  
+
   gradeableColumns.forEach(header => {
     const headerLower = header.toLowerCase();
     const headerWords = headerLower.split(/\s+/);
     const transcriptWords = transcriptLower.split(/\s+/);
     let score = 0;
     let matchMethod = '';
-    
+
     // 🔧 PRIORITY 1: Exact full match (like "quiz 4" matching "QUIZ 4")
     if (transcriptLower.includes(headerLower)) {
       score = 100;
       matchMethod = 'exact_full';
       console.log('✅ Exact full match found:', header);
     }
-    
+
     // 🔧 PRIORITY 2: Look for specific number matches (quiz 4, lab 2, etc.)
     else {
       const numberPattern = /(\w+)\s+(\d+)/;
       const transcriptMatch = transcriptLower.match(numberPattern);
       const headerMatch = headerLower.match(numberPattern);
-      
+
       if (transcriptMatch && headerMatch) {
         const [, transcriptType, transcriptNum] = transcriptMatch;
         const [, headerType, headerNum] = headerMatch;
-        
+
         if (transcriptType === headerType && transcriptNum === headerNum) {
           score = 95; // Very high score for exact type+number match
           matchMethod = 'type_number_match';
@@ -884,13 +884,13 @@ const findBestColumnMatch = (transcript, headers) => {
           console.log('✅ Type match (wrong number):', header, 'Score:', score);
         }
       }
-      
+
       // 🔧 PRIORITY 3: All header words found in transcript
       if (score < 90) {
-        const allWordsFound = headerWords.every(hw => 
+        const allWordsFound = headerWords.every(hw =>
           transcriptWords.some(tw => tw.includes(hw) || hw.includes(tw))
         );
-        
+
         if (allWordsFound) {
           const newScore = 85 + (headerWords.length / transcriptWords.length) * 5;
           if (newScore > score) {
@@ -900,7 +900,7 @@ const findBestColumnMatch = (transcript, headers) => {
           }
         }
       }
-      
+
       // Lower priority methods only if no good match found
       if (score < 80) {
         // Phonetic matching
@@ -920,7 +920,7 @@ const findBestColumnMatch = (transcript, headers) => {
             }
           });
         });
-        
+
         const avgPhoneticScore = phoneticScore / headerWords.length;
         if (avgPhoneticScore > score) {
           score = avgPhoneticScore;
@@ -931,18 +931,18 @@ const findBestColumnMatch = (transcript, headers) => {
         }
       }
     }
-    
+
     matches.push({ header, score, matchMethod });
-    
+
     if (score > bestScore) {
       bestMatch = header;
       bestScore = score;
     }
   });
-  
+
   console.log('🎯 All matches:', matches.sort((a, b) => b.score - a.score));
   console.log('🏆 Best column match:', bestMatch, 'Score:', bestScore);
-  
+
   return bestScore >= 25 ? bestMatch : null;
 };
 
@@ -957,13 +957,13 @@ const extractScoreFromEnd = (transcript) => {
     /has\s+score\s+(\d+(?:\.\d+)?)\s*[)\].,!?:;-]*$/i,                // "has score 30"
     /received\s+score\s+(\d+(?:\.\d+)?)\s*[)\].,!?:;-]*$/i,           // "received score 30"
     /earned\s+score\s+(\d+(?:\.\d+)?)\s*[)\].,!?:;-]*$/i,             // "earned score 30"
-    
+
     // 🔥 NEW: Grade keyword patterns  
     /grade\s+(\d+(?:\.\d+)?)\s*[)\].,!?:;-]*$/i,                      // "grade 30"
     /grade\s+is\s+(\d+(?:\.\d+)?)\s*[)\].,!?:;-]*$/i,                 // "grade is 30"
     /grade\s+of\s+(\d+(?:\.\d+)?)\s*[)\].,!?:;-]*$/i,                 // "grade of 30"
     /gets?\s+grade\s+(\d+(?:\.\d+)?)\s*[)\].,!?:;-]*$/i,              // "gets grade 30"
-    
+
     // 🔥 Existing patterns (keep these for compatibility)
     /(\d+(?:\.\d+)?)\s*[)\].,!?:;-]*$/,                               // "30" (plain number)
     /(\d+)\s*(?:percent|%)\s*[)\].,!?:;-]*$/,                         // "30 percent"
@@ -973,28 +973,31 @@ const extractScoreFromEnd = (transcript) => {
     /received\s*(\d+(?:\.\d+)?)\s*[)\].,!?:;-]*$/,                    // "received 30"
     /earned\s*(\d+(?:\.\d+)?)\s*[)\].,!?:;-]*$/                       // "earned 30"
   ];
-  
+
   for (const pattern of patterns) {
     const match = transcript.match(pattern);
     if (match) {
       const score = parseFloat(match[1]);
-      if (score >= 0 && score <= 100) { // Validate score range
+      // 🔥 REMOVED: Hardcoded score <= 100 validation
+      // This was preventing scores > 100 from being extracted
+      // Now we extract ANY numeric score and validate against column max later
+      if (score >= 0) { // Only check that score is non-negative
         console.log('✅ Score found with pattern:', pattern, 'Score:', match[1]);
         return match[1];
       }
     }
   }
-  
+
   return null;
 };
 
 // 🚀 MASSIVELY ENHANCED: Main parsing function with improved logic flow
 export const parseVoiceCommand = (transcript, headers, tableData, context = {}) => {
-  const { recentStudents = [], commandHistory = [], alternatives = [] } = context;
-  
+  const { recentStudents = [], commandHistory = [], alternatives = [], maxScores = {} } = context;
+
   // 🔥 ENHANCED: Multi-stage transcript processing 
   let normalizedTranscript = transcript.toLowerCase().trim();
-  
+
   // Stage 1: Apply basic phonetic corrections
   normalizedTranscript = applyPhoneticCorrections(normalizedTranscript);
   console.log('🎙️ After phonetic corrections:', normalizedTranscript);
@@ -1014,11 +1017,11 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
     /(?:delete|remove)\s+student\s+(.+)$/i,                          // "Delete student Omen"
     /(?:remove|delete)\s+(.+?)\s+from\s+(?:class|sheet|record)$/i,   // "Remove Omen from class"
     /(?:kick\s+out|expel|drop)\s+(?:student\s+)?(.+)$/i,             // "Kick out student Omen"
-    
+
     // ID-based deletion
     /(?:delete|remove)\s+student\s+(?:with\s+)?id\s+(.+)$/i,         // "Delete student with ID 22-2711-726"
     /(?:remove|delete)\s+id\s+(.+)$/i,                               // "Remove ID 22-2711-726"
-    
+
     // Name-specific patterns
     /(?:delete|remove)\s+(.+?)\s+(?:student|pupil)$/i,               // "Delete Omen student"
   ];
@@ -1027,13 +1030,13 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
     const deleteMatch = normalizedTranscript.match(pattern);
     if (deleteMatch) {
       const studentIdentifier = deleteMatch[1].trim();
-      
+
       console.log('🗑️ DELETE_STUDENT command detected:', { studentIdentifier });
-      
+
       // Check if it's an ID or name
-      const isStudentId = /^\d{2}-\d{4}-\d{3}$/.test(studentIdentifier) || 
-                        /^\d{9}$/.test(studentIdentifier);
-      
+      const isStudentId = /^\d{2}-\d{4}-\d{3}$/.test(studentIdentifier) ||
+        /^\d{9}$/.test(studentIdentifier);
+
       if (isStudentId) {
         const normalizedId = parseStudentId(studentIdentifier);
         return {
@@ -1053,7 +1056,7 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
         ];
         const enhancedName = applyContextPhoneticCorrections(studentIdentifier, contextWords);
         const cleanedName = cleanName(enhancedName);
-        
+
         return {
           type: 'DELETE_STUDENT_BY_NAME',
           data: {
@@ -1078,7 +1081,7 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
       };
     }
   }
-  
+
   for (const redoWord of undoRedoPatterns.redo) {
     if (normalizedTranscript.includes(redoWord)) {
       console.log('✅ REDO command detected');
@@ -1088,17 +1091,17 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
       };
     }
   }
-  
+
   // Stage 4: Check for row selection commands
   const rowSelectPattern = /(?:row|option|choice|number|select)\s+(\d+)/i;
   const rowSelectMatch = normalizedTranscript.match(rowSelectPattern);
-  
+
   if (rowSelectMatch) {
     const selectedOption = parseInt(rowSelectMatch[1]);
     console.log('✅ ROW_SELECTION command detected:', selectedOption);
     return {
       type: 'SELECT_DUPLICATE',
-      data: { 
+      data: {
         selectedOption,
         originalText: transcript,
         confidence: 'high'
@@ -1108,11 +1111,11 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
 
   // Stage 5: Convert spoken numbers to digits
   let processedTranscript = normalizedTranscript;
-  
+
   // Sort by length (longer phrases first) to avoid partial replacements
   const sortedNumbers = Object.entries(wordsToNumbers)
     .sort(([a], [b]) => b.length - a.length);
-  
+
   sortedNumbers.forEach(([word, number]) => {
     const regex = new RegExp(`\\b${word}\\b`, 'g');
     processedTranscript = processedTranscript.replace(regex, number);
@@ -1134,18 +1137,18 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
       const sortType = sortMatch[1]?.toLowerCase() || 'alphabetical';
       let command = 'alphabetical';
       let direction = 'asc';
-      
-      if (sortType.includes('z to a') || sortType.includes('reverse') || 
-          processedTranscript.includes('reverse') || processedTranscript.includes('descending')) {
+
+      if (sortType.includes('z to a') || sortType.includes('reverse') ||
+        processedTranscript.includes('reverse') || processedTranscript.includes('descending')) {
         direction = 'desc';
       }
-      
+
       if (sortType.includes('first')) {
         command = 'firstName';
       } else if (sortType.includes('last')) {
         command = 'lastName';
       }
-      
+
       console.log('✅ SORT command detected:', { command, direction });
       return {
         type: 'SORT_STUDENTS',
@@ -1164,13 +1167,13 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
     /(?:export|save|download|generate)\s+(?:to\s+)?pdf/i,           // "export PDF"
     /(?:create|make)\s+pdf/i,                                       // "create PDF"
     /pdf\s+(?:export|download|save)/i,                              // "PDF export"
-    
+
     // Excel Export Patterns  
     /(?:export|save|download|generate)\s+(?:to\s+)?excel/i,         // "export Excel"
     /(?:export|save|download|generate)\s+(?:to\s+)?xlsx?/i,         // "export XLSX"
     /(?:create|make)\s+excel/i,                                     // "create Excel"
     /excel\s+(?:export|download|save)/i,                            // "Excel export"
-    
+
     // CSV Export Patterns
     /(?:export|save|download|generate)\s+(?:to\s+)?csv/i,           // "export CSV"
     /(?:create|make)\s+csv/i,                                       // "create CSV"
@@ -1181,9 +1184,9 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
     const exportMatch = processedTranscript.match(pattern);
     if (exportMatch) {
       const fullMatch = exportMatch[0].toLowerCase();
-      
+
       let exportType = 'EXPORT_EXCEL'; // Default
-      
+
       if (fullMatch.includes('pdf')) {
         exportType = 'EXPORT_PDF';
       } else if (fullMatch.includes('csv')) {
@@ -1191,13 +1194,13 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
       } else if (fullMatch.includes('excel') || fullMatch.includes('xlsx')) {
         exportType = 'EXPORT_EXCEL';
       }
-      
-      console.log('✅ EXPORT command detected:', { 
+
+      console.log('✅ EXPORT command detected:', {
         originalText: transcript,
         exportType,
         confidence: 'high'
       });
-      
+
       return {
         type: exportType,
         data: {
@@ -1225,17 +1228,17 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
     if (maxScoreMatch) {
       const columnText = maxScoreMatch[1].trim();
       const maxScore = parseFloat(maxScoreMatch[2]);
-      
+
       // Find the best matching column
       const matchedColumn = findBestColumnMatch(columnText, headers);
-      
+
       if (matchedColumn && maxScore >= 0) {
-        console.log('✅ MAX_SCORE command detected:', { 
+        console.log('✅ MAX_SCORE command detected:', {
           columnText,
-          matchedColumn, 
-          maxScore 
+          matchedColumn,
+          maxScore
         });
-        
+
         return {
           type: 'UPDATE_MAX_SCORE',
           data: {
@@ -1261,17 +1264,17 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
     if (batchMatch) {
       const categoryText = batchMatch[1].trim();
       const maxScore = parseFloat(batchMatch[2]);
-      
+
       // Find columns that match the category
       const matchingColumns = findColumnsByCategory(categoryText, headers);
-      
+
       if (matchingColumns.length > 0 && maxScore >= 0) {
-        console.log('✅ BATCH_MAX_SCORE command detected:', { 
+        console.log('✅ BATCH_MAX_SCORE command detected:', {
           categoryText,
-          matchingColumns, 
-          maxScore 
+          matchingColumns,
+          maxScore
         });
-        
+
         return {
           type: 'UPDATE_BATCH_MAX_SCORE',
           data: {
@@ -1292,7 +1295,7 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
 
   // Stage 7: Extract score and process grade entry
   const score = extractScoreFromEnd(processedTranscript);
-  
+
   if (score) {
     // Remove score from transcript to get name + column part
     const withoutScore = processedTranscript.replace(
@@ -1300,60 +1303,86 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
       ''
     ).trim();
     console.log('📝 Text without score:', withoutScore);
-    
+
     // Apply context-aware corrections
     const contextWords = [
       ...headers.map(h => h.toLowerCase()),
       ...recentStudents.map(s => s.toLowerCase())
     ];
     const enhancedText = applyContextPhoneticCorrections(withoutScore, contextWords);
-    
+
     // Try to find column in the transcript
     const matchedColumn = findBestColumnMatch(enhancedText, headers);
-    
+
     if (matchedColumn) {
       // Remove column words from transcript to get name
       const columnWords = matchedColumn.toLowerCase().split(/\s+/);
       let nameText = enhancedText;
-      
+
       // Smart column word removal
       columnWords.forEach(colWord => {
         const regex = new RegExp(`\\b${colWord}\\b`, 'gi');
         nameText = nameText.replace(regex, '').trim();
       });
-      
+
       // Remove grade-related words
       const gradeWords = [
-        'math', 'science', 'english', 'quiz', 'test', 'exam', 'lab', 
-        'laboratory', 'midterm', 'final', 'assignment', 'homework', 
+        'math', 'science', 'english', 'quiz', 'test', 'exam', 'lab',
+        'laboratory', 'midterm', 'final', 'assignment', 'homework',
         'activity', 'assessment', 'evaluation', 'grade', 'score'
       ];
       gradeWords.forEach(gradeWord => {
         const regex = new RegExp(`\\b${gradeWord}\\b`, 'gi');
         nameText = nameText.replace(regex, '').trim();
       });
-      
+
       // Clean up extra spaces and limit words
       nameText = nameText.replace(/\s+/g, ' ').trim();
       const nameWords = nameText.split(' ').filter(word => word.length > 0);
       if (nameWords.length > 2) {
         nameText = nameWords.slice(0, 2).join(' '); // Take first 2 words max
       }
-      
+
       // Enhanced name extraction with context
       const extractedName = extractNameFromText(nameText, recentStudents);
       const cleanedName = cleanName(extractedName);
-      
-      console.log('✅ EXCEL_COLUMN pattern matched:', { 
+
+      console.log('✅ EXCEL_COLUMN pattern matched:', {
         originalText: withoutScore,
         enhancedText,
-        nameText, 
+        nameText,
         extractedName,
-        cleanedName, 
-        matchedColumn, 
+        cleanedName,
+        matchedColumn,
         score,
         usedContext: recentStudents.length > 0
       });
+
+      // 🔥 NEW: Validate score against max score for the column
+      const maxScore = maxScores[matchedColumn];
+      const numericScore = parseFloat(score);
+
+      if (maxScore && numericScore > maxScore) {
+        console.log('❌ SCORE EXCEEDS MAX:', {
+          column: matchedColumn,
+          score: numericScore,
+          maxScore: maxScore
+        });
+
+        return {
+          type: 'SCORE_EXCEEDS_MAX',
+          data: {
+            searchName: cleanedName,
+            column: matchedColumn,
+            value: score,
+            maxScore: maxScore,
+            exceedsBy: (numericScore - maxScore).toFixed(1),
+            confidence: 'high',
+            extractedName: extractedName,
+            errorMessage: `Score ${numericScore} exceeds maximum of ${maxScore} for ${matchedColumn}`
+          }
+        };
+      }
 
       return {
         type: 'SMART_NAME_GRADE_ENTRY',
@@ -1382,22 +1411,22 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
   for (let i = 0; i < studentIdGradePatterns.length; i++) {
     const pattern = studentIdGradePatterns[i];
     const idGradeMatch = processedTranscript.match(pattern);
-    
+
     console.log(`🔍 Pattern ${i + 1}: ${pattern}`);
     console.log(`🔍 Match result:`, idGradeMatch);
-    
+
     if (idGradeMatch) {
       const columnText = idGradeMatch[1].trim();
       let studentId = idGradeMatch[2].trim();
       const score = parseFloat(idGradeMatch[3]);
-      
-      console.log('🆔 STUDENT_ID_GRADE_ENTRY MATCHED:', { 
+
+      console.log('🆔 STUDENT_ID_GRADE_ENTRY MATCHED:', {
         columnText,
         studentId,
         score,
         pattern: i + 1
       });
-      
+
       // 🔥 NORMALIZE the student ID format
       if (studentId.match(/^\d{2}-\d{4}-\d{3}$/)) {
         // Already in correct format
@@ -1408,18 +1437,42 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
         // Format: 222711726 -> 22-2711-726
         studentId = studentId.replace(/(\d{2})(\d{4})(\d{3})/, '$1-$2-$3');
       }
-      
+
       // Find the best matching column
       const matchedColumn = findBestColumnMatch(columnText, headers);
-      
+
       if (matchedColumn && score >= 0) {
-        console.log('🆔 STUDENT_ID_GRADE_ENTRY detected:', { 
+        // 🔥 NEW: Validate score against max score for the column
+        const maxScore = maxScores[matchedColumn];
+
+        if (maxScore && score > maxScore) {
+          console.log('❌ SCORE EXCEEDS MAX (Student ID Entry):', {
+            column: matchedColumn,
+            score: score,
+            maxScore: maxScore
+          });
+
+          return {
+            type: 'SCORE_EXCEEDS_MAX',
+            data: {
+              studentId: studentId,
+              column: matchedColumn,
+              value: score.toString(),
+              maxScore: maxScore,
+              exceedsBy: (score - maxScore).toFixed(1),
+              confidence: 'high',
+              errorMessage: `Score ${score} exceeds maximum of ${maxScore} for ${matchedColumn}`
+            }
+          };
+        }
+
+        console.log('🆔 STUDENT_ID_GRADE_ENTRY detected:', {
           columnText,
           matchedColumn,
           studentId,
           score
         });
-        
+
         return {
           type: 'STUDENT_ID_GRADE_ENTRY',
           data: {
@@ -1452,7 +1505,7 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
     if (studentIdMatch) {
       let studentName = '';
       let studentIdValue = '';
-      
+
       // Different patterns have different group arrangements
       if (pattern.toString().includes('for')) {
         // Pattern: "set student id 22-2711-726 for Omen"
@@ -1463,9 +1516,9 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
         studentName = studentIdMatch[1].trim();
         studentIdValue = parseStudentId(studentIdMatch[2].trim());
       }
-      
+
       console.log('🆔 STUDENT_ID_UPDATE detected:', { studentName, studentIdValue });
-      
+
       // Apply context-aware corrections to student name
       const contextWords = [
         ...headers.map(h => h.toLowerCase()),
@@ -1473,7 +1526,7 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
       ];
       const enhancedName = applyContextPhoneticCorrections(studentName, contextWords);
       const cleanedName = cleanName(enhancedName);
-      
+
       return {
         type: 'UPDATE_STUDENT_ID',
         data: {
@@ -1509,133 +1562,133 @@ export const parseVoiceCommand = (transcript, headers, tableData, context = {}) 
 
   // Stage 9: Enhanced student addition patterns
   const addStudentPatterns = [
-  // 🔥 NEW: Patterns with Middle Name and Student ID
-  /(?:add|new|create)\s+student\s+(.+?)\s+(?:with\s+)?(?:student\s+)?id\s+(.+)$/i,
-  /(?:add|new|create)\s+student\s+(.+)$/i,
-  /(?:register|enroll)\s+(.+?)(?:\s+as\s+(?:new\s+)?student)?$/i,
-  /(?:student|pupil)\s+(.+?)(?:\s+(?:add|new|create))?$/i
-];
+    // 🔥 NEW: Patterns with Middle Name and Student ID
+    /(?:add|new|create)\s+student\s+(.+?)\s+(?:with\s+)?(?:student\s+)?id\s+(.+)$/i,
+    /(?:add|new|create)\s+student\s+(.+)$/i,
+    /(?:register|enroll)\s+(.+?)(?:\s+as\s+(?:new\s+)?student)?$/i,
+    /(?:student|pupil)\s+(.+?)(?:\s+(?:add|new|create))?$/i
+  ];
 
-for (const pattern of addStudentPatterns) {
-  const addStudentMatch = processedTranscript.match(pattern);
-  if (addStudentMatch) {
-    const fullCommand = addStudentMatch[1].trim();
-    const studentIdPart = addStudentMatch[2] ? addStudentMatch[2].trim() : '';
-    
-    console.log('🔥 Full student command to parse:', fullCommand);
-    console.log('🔥 Student ID part:', studentIdPart);
-    
-    // 🔧 ENHANCED: Better field extraction logic with Middle Name
-    let lastName = '';
-    let firstName = '';
-    let middleName = '';  // 🔥 NEW
-    let studentId = '';
-    
-    // 🔥 NEW: Parse Student ID if provided in the pattern
-    if (studentIdPart) {
-      studentId = parseStudentId(studentIdPart);
-      console.log('🆔 Parsed Student ID from pattern:', studentId);
-    }
-    
-    // 🔧 METHOD 1: Handle "lastname X firstname Y middle name Z" pattern
-    const lastFirstMiddlePattern = /(?:last\s*name|lastname)\s+([^\s]+)(?:\s+(?:first\s*name|firstname)\s+([^\s]+))?(?:\s+(?:middle\s*name|middlename)\s+([^\s]+))?/i;
-    const lastFirstMiddleMatch = fullCommand.match(lastFirstMiddlePattern);
-    
-    if (lastFirstMiddleMatch) {
-      lastName = lastFirstMiddleMatch[1];
-      if (lastFirstMiddleMatch[2]) {
-        firstName = lastFirstMiddleMatch[2];
+  for (const pattern of addStudentPatterns) {
+    const addStudentMatch = processedTranscript.match(pattern);
+    if (addStudentMatch) {
+      const fullCommand = addStudentMatch[1].trim();
+      const studentIdPart = addStudentMatch[2] ? addStudentMatch[2].trim() : '';
+
+      console.log('🔥 Full student command to parse:', fullCommand);
+      console.log('🔥 Student ID part:', studentIdPart);
+
+      // 🔧 ENHANCED: Better field extraction logic with Middle Name
+      let lastName = '';
+      let firstName = '';
+      let middleName = '';  // 🔥 NEW
+      let studentId = '';
+
+      // 🔥 NEW: Parse Student ID if provided in the pattern
+      if (studentIdPart) {
+        studentId = parseStudentId(studentIdPart);
+        console.log('🆔 Parsed Student ID from pattern:', studentId);
       }
-      if (lastFirstMiddleMatch[3]) {  // 🔥 NEW
-        middleName = lastFirstMiddleMatch[3];
+
+      // 🔧 METHOD 1: Handle "lastname X firstname Y middle name Z" pattern
+      const lastFirstMiddlePattern = /(?:last\s*name|lastname)\s+([^\s]+)(?:\s+(?:first\s*name|firstname)\s+([^\s]+))?(?:\s+(?:middle\s*name|middlename)\s+([^\s]+))?/i;
+      const lastFirstMiddleMatch = fullCommand.match(lastFirstMiddlePattern);
+
+      if (lastFirstMiddleMatch) {
+        lastName = lastFirstMiddleMatch[1];
+        if (lastFirstMiddleMatch[2]) {
+          firstName = lastFirstMiddleMatch[2];
+        }
+        if (lastFirstMiddleMatch[3]) {  // 🔥 NEW
+          middleName = lastFirstMiddleMatch[3];
+        }
+        console.log('🎯 Method 1 - Last First Middle pattern:', { lastName, firstName, middleName });
       }
-      console.log('🎯 Method 1 - Last First Middle pattern:', { lastName, firstName, middleName });
-    }
-    
-    // 🔧 METHOD 2: Handle "firstname X lastname Y middle name Z" pattern  
-    const firstLastMiddlePattern = /(?:first\s*name|firstname)\s+([^\s]+)(?:\s+(?:last\s*name|lastname)\s+([^\s]+))?(?:\s+(?:middle\s*name|middlename)\s+([^\s]+))?/i;
-    const firstLastMiddleMatch = fullCommand.match(firstLastMiddlePattern);
-    
-    if (firstLastMiddleMatch && !lastName && !firstName) {
-      firstName = firstLastMiddleMatch[1];
-      if (firstLastMiddleMatch[2]) {
-        lastName = firstLastMiddleMatch[2];
+
+      // 🔧 METHOD 2: Handle "firstname X lastname Y middle name Z" pattern  
+      const firstLastMiddlePattern = /(?:first\s*name|firstname)\s+([^\s]+)(?:\s+(?:last\s*name|lastname)\s+([^\s]+))?(?:\s+(?:middle\s*name|middlename)\s+([^\s]+))?/i;
+      const firstLastMiddleMatch = fullCommand.match(firstLastMiddlePattern);
+
+      if (firstLastMiddleMatch && !lastName && !firstName) {
+        firstName = firstLastMiddleMatch[1];
+        if (firstLastMiddleMatch[2]) {
+          lastName = firstLastMiddleMatch[2];
+        }
+        if (firstLastMiddleMatch[3]) {  // 🔥 NEW
+          middleName = firstLastMiddleMatch[3];
+        }
+        console.log('🎯 Method 2 - First Last Middle pattern:', { firstName, lastName, middleName });
       }
-      if (firstLastMiddleMatch[3]) {  // 🔥 NEW
-        middleName = firstLastMiddleMatch[3];
+
+      // 🔧 METHOD 3: Handle mixed patterns - extract all separately
+      if (!lastName || !firstName) {
+        // Extract last name separately
+        const lastNameOnlyPattern = /(?:last\s*name|lastname)\s+([^\s]+)/i;
+        const lastNameMatch = fullCommand.match(lastNameOnlyPattern);
+        if (lastNameMatch) {
+          lastName = lastNameMatch[1];
+        }
+
+        // Extract first name separately  
+        const firstNameOnlyPattern = /(?:first\s*name|firstname)\s+([^\s]+)/i;
+        const firstNameMatch = fullCommand.match(firstNameOnlyPattern);
+        if (firstNameMatch) {
+          firstName = firstNameMatch[1];
+        }
+
+        // 🔥 NEW: Extract middle name separately
+        const middleNameOnlyPattern = /(?:middle\s*name|middlename)\s+([^\s]+)/i;
+        const middleNameMatch = fullCommand.match(middleNameOnlyPattern);
+        if (middleNameMatch) {
+          middleName = middleNameMatch[1];
+        }
+
+        console.log('🎯 Method 3 - Separate extraction:', { lastName, firstName, middleName });
       }
-      console.log('🎯 Method 2 - First Last Middle pattern:', { firstName, lastName, middleName });
-    }
-    
-    // 🔧 METHOD 3: Handle mixed patterns - extract all separately
-    if (!lastName || !firstName) {
-      // Extract last name separately
-      const lastNameOnlyPattern = /(?:last\s*name|lastname)\s+([^\s]+)/i;
-      const lastNameMatch = fullCommand.match(lastNameOnlyPattern);
-      if (lastNameMatch) {
-        lastName = lastNameMatch[1];
-      }
-      
-      // Extract first name separately  
-      const firstNameOnlyPattern = /(?:first\s*name|firstname)\s+([^\s]+)/i;
-      const firstNameMatch = fullCommand.match(firstNameOnlyPattern);
-      if (firstNameMatch) {
-        firstName = firstNameMatch[1];
-      }
-      
-      // 🔥 NEW: Extract middle name separately
-      const middleNameOnlyPattern = /(?:middle\s*name|middlename)\s+([^\s]+)/i;
-      const middleNameMatch = fullCommand.match(middleNameOnlyPattern);
-      if (middleNameMatch) {
-        middleName = middleNameMatch[1];
-      }
-      
-      console.log('🎯 Method 3 - Separate extraction:', { lastName, firstName, middleName });
-    }
-    
-    // 🔥 NEW: Extract Student ID if not already found
-    if (!studentId) {
-      // Look for ID patterns in the full command
-      const idPatterns = [
-        /(?:with\s+)?(?:student\s+)?id\s+(.+?)(?:\s|$)/i,
-        /(?:student\s+)?(?:id|number)\s+(.+?)(?:\s|$)/i,
-        /id\s*[:=]\s*(.+?)(?:\s|$)/i
-      ];
-      
-      for (const idPattern of idPatterns) {
-        const idMatch = fullCommand.match(idPattern);
-        if (idMatch) {
-          studentId = parseStudentId(idMatch[1]);
-          console.log('🆔 Extracted Student ID:', studentId);
-          break;
+
+      // 🔥 NEW: Extract Student ID if not already found
+      if (!studentId) {
+        // Look for ID patterns in the full command
+        const idPatterns = [
+          /(?:with\s+)?(?:student\s+)?id\s+(.+?)(?:\s|$)/i,
+          /(?:student\s+)?(?:id|number)\s+(.+?)(?:\s|$)/i,
+          /id\s*[:=]\s*(.+?)(?:\s|$)/i
+        ];
+
+        for (const idPattern of idPatterns) {
+          const idMatch = fullCommand.match(idPattern);
+          if (idMatch) {
+            studentId = parseStudentId(idMatch[1]);
+            console.log('🆔 Extracted Student ID:', studentId);
+            break;
+          }
         }
       }
+
+      console.log('✅ ADD_STUDENT final result:', {
+        fullCommand,
+        lastName,
+        firstName,
+        middleName,  // 🔥 NEW
+        studentId
+      });
+
+      return {
+        type: 'ADD_STUDENT',
+        data: {
+          'LASTNAME': lastName,
+          'FIRST NAME': firstName,
+          'MIDDLE NAME': middleName,  // 🔥 NEW
+          'STUDENT ID': studentId,
+          confidence: 'high'
+        }
+      };
     }
-    
-    console.log('✅ ADD_STUDENT final result:', { 
-      fullCommand, 
-      lastName, 
-      firstName, 
-      middleName,  // 🔥 NEW
-      studentId 
-    });
-    
-    return {
-      type: 'ADD_STUDENT',
-      data: {
-        'LASTNAME': lastName,
-        'FIRST NAME': firstName,
-        'MIDDLE NAME': middleName,  // 🔥 NEW
-        'STUDENT ID': studentId,
-        confidence: 'high'
-      }
-    };
   }
-}
 
   // 🔥 If no patterns matched, this is likely a fallback case
   console.log('❌ No specific pattern matched, falling back to basic processing');
-  
+
   return {
     type: 'UNKNOWN_COMMAND',
     data: {
@@ -1652,88 +1705,149 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
   console.log('🔍 Searching for student:', cleanedSearchName);
   console.log('👥 Recent context:', recentStudents);
   console.log('🎯 Target column:', targetColumn);
-  
+
   let allMatches = [];
-  
+
   tableData.forEach((row, index) => {
     // Skip empty rows more intelligently
-    const hasData = Object.values(row).some(value => 
+    const hasData = Object.values(row).some(value =>
       value && typeof value === 'string' && value.trim() !== '' && value.trim() !== '0'
     );
     if (!hasData) return;
-    
+
     const firstName = cleanName(row['FIRST NAME'] || '');
     const lastName = cleanName(row['LASTNAME'] || '');
-    const middleName = cleanName(row['MIDDLE NAME'] || '');  // 🔥 NEW: Add middle name
+    const middleName = cleanName(row['MIDDLE NAME'] || '');
     const fullName = `${firstName} ${lastName}`.trim();
-    const fullNameWithMiddle = `${firstName} ${middleName} ${lastName}`.trim(); // 🔥 NEW: Full name with middle
+    const fullNameWithMiddle = `${firstName} ${middleName} ${lastName}`.trim();
 
-    
     // Enhanced candidate generation
     const candidates = [
-      firstName, 
-      lastName, 
-      middleName,  // 🔥 NEW: Add middle name as a candidate
+      firstName,
+      lastName,
+      middleName,
       fullName,
-      fullNameWithMiddle,  // 🔥 NEW: Full name with middle name
+      fullNameWithMiddle,
       `${lastName} ${firstName}`, // Reversed order
-      `${lastName} ${firstName} ${middleName}`, // 🔥 NEW: Reversed with middle
+      `${lastName} ${firstName} ${middleName}`,
       firstName.split(' ')[0], // First word of first name
       lastName.split(' ')[0],   // First word of last name
-      middleName.split(' ')[0]  // 🔥 NEW: First word of middle name
+      middleName.split(' ')[0]
     ].filter(c => c && c.length > 1);
-      
+
     candidates.forEach(candidate => {
       let score = Infinity;
       let matchType = '';
       let confidence = 0;
-      
+
+      // 🔥 🔥 🔥 CRITICAL: Calculate length difference FIRST (universal gate check)
+      const lengthDiff = Math.abs(candidate.length - cleanedSearchName.length);
+      const longerLength = Math.max(candidate.length, cleanedSearchName.length);
+      const shorterLength = Math.min(candidate.length, cleanedSearchName.length);
+      const lengthRatio = lengthDiff / longerLength;
+
+      // 🔥 GATE CHECK 1: Reject if length difference is too extreme (>40%)
+      // Example: "Kapuras" (7) vs "Karl" (4) = 43% difference → REJECTED! 
+      if (lengthRatio > 0.40 && shorterLength < 5) {
+        console.log(`🚫 REJECTED by length check: "${candidate}" vs "${cleanedSearchName}" (${(lengthRatio * 100).toFixed(0)}% diff)`);
+        return; // Skip this candidate entirely
+      }
+
+      // 🔥 GATE CHECK 2: First character validation
+      const firstChar1 = cleanedSearchName[0]?.toLowerCase() || '';
+      const firstChar2 = candidate[0]?.toLowerCase() || '';
+      const firstCharMatch = firstChar1 === firstChar2;
+
       // 🔥 Algorithm 1: Exact match (highest priority)
       if (candidate === cleanedSearchName) {
         score = 0;
         matchType = 'exact';
         confidence = 1.0;
+        console.log(`✅ EXACT MATCH: "${candidate}"`);
       }
-      
+
       // 🔥 Algorithm 2: Soundex phonetic matching
       else if (soundsLike(candidate, cleanedSearchName)) {
-        score = 1;
-        matchType = 'phonetic';
-        confidence = 0.9;
+        // 🔥 ENHANCED: Validate phonetic matches with length check
+        if (lengthRatio < 0.35) { // Only if length is reasonably similar
+          score = 1;
+          matchType = 'phonetic';
+          confidence = 0.9;
+          console.log(`✅ PHONETIC MATCH: "${candidate}" sounds like "${cleanedSearchName}"`);
+        } else {
+          console.log(`🚫 REJECTED phonetic (length diff too large): "${candidate}" vs "${cleanedSearchName}"`);
+          return;
+        }
       }
-      
-      // 🔥 Algorithm 3: Substring matching
-      // 🔥 FIXED: Only match if substring is substantial (at least 4 chars)
-      else if (candidate.length >= 4 && cleanedSearchName.length >= 4 &&
-               (candidate.includes(cleanedSearchName) || cleanedSearchName.includes(candidate))) {
-        score = Math.abs(candidate.length - cleanedSearchName.length);
-        matchType = 'substring';
-        confidence = 0.8;
+
+      // 🔥 Algorithm 3: STRICT Substring matching
+      else if (candidate.length >= 5 && cleanedSearchName.length >= 5) {
+        const isSubstring = candidate.includes(cleanedSearchName) || cleanedSearchName.includes(candidate);
+
+        if (isSubstring) {
+          // 🔥 NEW: Calculate overlap ratio for validation
+          const overlapLength = Math.min(candidate.length, cleanedSearchName.length);
+          const overlapRatio = overlapLength / longerLength;
+
+          // 🔥 STRICT: Require at least 75% overlap
+          if (overlapRatio >= 0.75) {
+            score = Math.abs(candidate.length - cleanedSearchName.length);
+            matchType = 'substring';
+            confidence = 0.85 * overlapRatio; // Adjusted confidence
+            console.log(`✅ SUBSTRING MATCH: "${candidate}" contains "${cleanedSearchName}" (${(overlapRatio * 100).toFixed(0)}% overlap)`);
+          } else {
+            console.log(`🚫 REJECTED substring (overlap too small): "${candidate}" vs "${cleanedSearchName}" (${(overlapRatio * 100).toFixed(0)}% overlap)`);
+            return;
+          }
+        }
       }
-      
-      // 🔥 Algorithm 4: Levenshtein distance with adaptive threshold
+
+      // 🔥 Algorithm 4: ULTRA STRICT Levenshtein distance with adaptive threshold
       else {
         const distance = levenshteinDistance(candidate, cleanedSearchName);
         const maxLength = Math.max(candidate.length, cleanedSearchName.length);
         const similarity = 1 - (distance / maxLength);
-        
-        // 🔥 FIXED: Increased threshold from 0.65 to 0.78 to prevent false matches
-        // This prevents "Capuras" from matching "Karl" and other clearly different names
-        if (similarity > 0.78) { // More strict threshold to avoid false positives
+
+        console.log(`🔍 Fuzzy check: "${candidate}" vs "${cleanedSearchName}" = ${(similarity * 100).toFixed(1)}% similar`);
+
+        // 🔥 🔥 🔥 CRITICAL IMPROVEMENT: Multi-tier threshold system
+        let requiredSimilarity = 0.90; // Default: 90% required!
+
+        // If first characters don't match, be EVEN MORE strict
+        if (!firstCharMatch) {
+          requiredSimilarity = 0.95; // 95% required if first letter differs!
+          console.log(`⚠️ First char mismatch: "${firstChar1}" vs "${firstChar2}" - requiring ${requiredSimilarity * 100}% similarity`);
+        }
+
+        // If length difference is significant (20-40%), be MORE strict
+        if (lengthRatio > 0.20 && lengthRatio <= 0.40) {
+          requiredSimilarity = Math.max(requiredSimilarity, 0.92); // At least 92%
+          console.log(`⚠️ Length diff ${(lengthRatio * 100).toFixed(0)}% - requiring ${requiredSimilarity * 100}% similarity`);
+        }
+
+        // Apply the threshold
+        if (similarity >= requiredSimilarity) {
           score = distance;
           matchType = 'fuzzy';
-          confidence = similarity;
+
+          // 🔥 Penalize confidence if first char doesn't match
+          confidence = firstCharMatch ? similarity : similarity * 0.85;
+
+          console.log(`✅ FUZZY MATCH: "${candidate}" (${(similarity * 100).toFixed(1)}% similar, confidence: ${(confidence * 100).toFixed(1)}%)`);
+        } else {
+          console.log(`🚫 REJECTED fuzzy (below ${requiredSimilarity * 100}% threshold): "${candidate}" vs "${cleanedSearchName}"`);
+          return;
         }
       }
-      
-      // 🔥 FIXED: Tightened threshold from 15 to 10 and require minimum confidence
-      // This prevents weak matches from being considered
-      if (score < 10 && confidence > 0.70) { // Only collect strong matches
+
+      // 🔥 🔥 🔥 FINAL GATE: Only accept matches with high confidence and low score
+      // Changed from score < 10 && confidence > 0.70 to MORE STRICT
+      if (score < 8 && confidence > 0.80) { // Much stricter!
         // Check if this column already has a score
-        const hasExistingScore = targetColumn && row[targetColumn] && 
-                                String(row[targetColumn]).trim() !== '' && 
-                                String(row[targetColumn]).trim() !== '0';
-        
+        const hasExistingScore = targetColumn && row[targetColumn] &&
+          String(row[targetColumn]).trim() !== '' &&
+          String(row[targetColumn]).trim() !== '0';
+
         allMatches.push({
           index,
           student: `${row['FIRST NAME']} ${row['LASTNAME']}`,
@@ -1745,33 +1859,39 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
           existingValue: hasExistingScore ? row[targetColumn] : null,
           rowData: row
         });
+
+        console.log(`✅ ADDED TO MATCHES: Row ${index}, "${candidate}", Score: ${score}, Confidence: ${(confidence * 100).toFixed(1)}%, Type: ${matchType}`);
+      } else {
+        console.log(`🚫 REJECTED (final gate): Score ${score} or Confidence ${(confidence * 100).toFixed(1)}% too low`);
       }
     });
   });
-  
+
   // Enhanced sorting: primary by score, secondary by confidence
   allMatches.sort((a, b) => {
     if (a.score !== b.score) return a.score - b.score;
     return b.confidence - a.confidence;
   });
-  
+
+  console.log(`📊 Total matches found: ${allMatches.length}`);
+
   // 🔥 🔥 🔥 DEDUPLICATE BY ROW INDEX - Keep only the best match per student row
   const deduplicatedMatches = [];
   const seenIndices = new Set();
-  
+
   allMatches.forEach(match => {
     if (!seenIndices.has(match.index)) {
       deduplicatedMatches.push(match);
       seenIndices.add(match.index);
     }
   });
-  
+
   console.log('🔧 Before deduplication:', allMatches.length, 'matches');
   console.log('🔧 After deduplication:', deduplicatedMatches.length, 'matches');
-  
+
   // Replace allMatches with deduplicated version
   allMatches = deduplicatedMatches;
-  
+
   // 🔥 ENHANCED: Smart resolution strategies
   if (allMatches.length === 0) {
     console.log('❌ No student match found for:', cleanedSearchName);
@@ -1783,21 +1903,21 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
       needsConfirmation: false
     };
   }
-  
+
   if (allMatches.length === 1) {
     const match = allMatches[0];
     console.log('✅ Single student match:', match);
     return {
       bestMatch: match.index,
       possibleMatches: [match],
-      confidence: match.confidence > 0.9 ? 'high' : match.confidence > 0.7 ? 'medium' : 'low',
+      confidence: match.confidence > 0.9 ? 'high' : match.confidence > 0.8 ? 'medium' : 'low',
       hasDuplicates: false,
       needsConfirmation: false
     };
   }
-  
+
   console.log('🔍 Multiple matches found:', allMatches);
-  
+
   // 🔥 Strategy 1: Single exact match resolution
   const exactMatches = allMatches.filter(match => match.score === 0);
   if (exactMatches.length === 1) {
@@ -1810,18 +1930,18 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
       needsConfirmation: false
     };
   }
-  
+
   // 🔥 Strategy 2: Smart duplicate detection - check if they're the SAME person
   if (exactMatches.length > 1) {
     // Check if all exact matches are actually the same student (duplicate entries)
-    const uniqueStudents = new Set(exactMatches.map(match => 
+    const uniqueStudents = new Set(exactMatches.map(match =>
       `${match.rowData['FIRST NAME']}|${match.rowData['LASTNAME']}`
     ));
-    
+
     console.log('🔥 EXACT MATCHES DETECTED:', exactMatches.length);
     console.log('🔥 UNIQUE STUDENTS:', uniqueStudents.size);
     console.log('🔥 STUDENT NAMES:', Array.from(uniqueStudents));
-    
+
     if (uniqueStudents.size === 1) {
       // 🔥 🔥 🔥 CRITICAL CHANGE: ALWAYS force modal for same person duplicates
       console.log('🚨 SAME PERSON WITH MULTIPLE EXACT MATCHES - FORCING MODAL');
@@ -1834,7 +1954,7 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
         resolvedBy: 'same_person_exact_matches_forced_modal'
       };
     }
-    
+
     // Different people with same search term - still need confirmation
     console.log('🤔 Multiple different people need confirmation:', exactMatches);
     return {
@@ -1845,10 +1965,10 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
       needsConfirmation: true
     };
   }
-  
+
   // 🔥 🔥 🔥 PRIORITY DUPLICATE DETECTION - Check for both different people AND same person duplicates
   const uniqueStudentNames = new Set(allMatches.map(match => match.student.toLowerCase()));
-  
+
   // Case 1: Different people (like Michelle Capuras vs Vaness Capuras)
   if (uniqueStudentNames.size > 1) {
     console.log('🚨 DIFFERENT PEOPLE DETECTED - FORCING CONFIRMATION:', Array.from(uniqueStudentNames));
@@ -1861,14 +1981,14 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
       resolvedBy: 'forced_different_people_confirmation'
     };
   }
-  
+
   // Case 2: Same person but multiple entries (like Owen Jared appears twice)
   // 🔥 🔥 🔥 CRITICAL FIX: ALWAYS force modal for multiple entries, ignore recent context
   if (uniqueStudentNames.size === 1 && allMatches.length > 1) {
     console.log('🚨 SAME PERSON - MULTIPLE ENTRIES DETECTED:', allMatches[0].student);
     console.log('📋 All entries:', allMatches.map(m => `Row ${m.index}: ${m.student}`));
     console.log('🚨 FORCING DUPLICATE MODAL - BYPASSING ALL OTHER STRATEGIES');
-    
+
     // ALWAYS show modal for multiple entries of the same person
     return {
       bestMatch: -1,
@@ -1879,16 +1999,16 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
       resolvedBy: 'same_person_multiple_entries_forced_modal'
     };
   }
-  
+
   // 🔥 Strategy 3: Recent context resolution - MOVED AFTER duplicate detection
   if (recentStudents.length > 0) {
     // Only use recent context if we haven't detected multiple entries above
     for (const recent of recentStudents) {
-      const recentMatch = allMatches.find(match => 
+      const recentMatch = allMatches.find(match =>
         match.student.toLowerCase() === recent.toLowerCase() ||
         soundsLike(match.student, recent)
       );
-      if (recentMatch && recentMatch.confidence > 0.7) {
+      if (recentMatch && recentMatch.confidence > 0.8) { // Increased from 0.7 to 0.8
         console.log('✅ Found recent context match (no duplicates detected):', recentMatch);
         return {
           bestMatch: recentMatch.index,
@@ -1901,12 +2021,12 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
       }
     }
   }
-  
+
   // 🔥 Strategy 4: Empty score preference
   if (targetColumn) {
     const emptyMatches = allMatches.filter(match => !match.hasExistingScore);
-    
-    if (emptyMatches.length === 1 && emptyMatches[0].confidence > 0.7) {
+
+    if (emptyMatches.length === 1 && emptyMatches[0].confidence > 0.8) { // Increased from 0.7 to 0.8
       console.log('✅ Found single empty score match:', emptyMatches[0]);
       return {
         bestMatch: emptyMatches[0].index,
@@ -1918,9 +2038,9 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
       };
     }
   }
-  
-  // 🔥 Strategy 5: High confidence single match
-  const highConfidenceMatches = allMatches.filter(match => match.confidence > 0.85);
+
+  // 🔥 Strategy 5: High confidence single match (MORE STRICT)
+  const highConfidenceMatches = allMatches.filter(match => match.confidence > 0.90); // Increased from 0.85 to 0.90
   if (highConfidenceMatches.length === 1) {
     console.log('✅ Found high confidence match:', highConfidenceMatches[0]);
     return {
@@ -1932,20 +2052,20 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
       resolvedBy: 'high_confidence'
     };
   }
-  
-  // Strategy 6: Best available match
+
+  // Strategy 6: Best available match (MORE STRICT)
   const bestMatch = allMatches[0];
-  if (bestMatch.confidence > 0.6) {
+  if (bestMatch.confidence > 0.75) { // Increased from 0.6 to 0.75
     console.log('✅ Using best available match:', bestMatch);
     return {
       bestMatch: bestMatch.index,
       possibleMatches: allMatches.slice(0, 3),
-      confidence: bestMatch.confidence > 0.8 ? 'medium' : 'low',
+      confidence: bestMatch.confidence > 0.85 ? 'medium' : 'low', // Adjusted thresholds
       hasDuplicates: false,
       needsConfirmation: false
     };
   }
-  
+
   // Last resort - ask for confirmation
   console.log('🤔 Low confidence matches found:', allMatches.slice(0, 3));
   return {
@@ -1960,7 +2080,7 @@ export const findStudentRowSmart = (tableData, searchName, recentStudents = [], 
 const findColumnsByCategory = (categoryText, headers) => {
   const categoryLower = categoryText.toLowerCase();
   const gradeableColumns = getGradeableColumns(headers);
-  
+
   const categoryPatterns = {
     'quiz': /quiz/i,
     'lab': /lab/i,
@@ -1968,7 +2088,7 @@ const findColumnsByCategory = (categoryText, headers) => {
     'assignment': /assignment|homework/i,
     'activity': /activity/i
   };
-  
+
   // Find which category matches
   let matchingPattern = null;
   for (const [category, pattern] of Object.entries(categoryPatterns)) {
@@ -1977,11 +2097,11 @@ const findColumnsByCategory = (categoryText, headers) => {
       break;
     }
   }
-  
+
   if (!matchingPattern) return [];
-  
+
   // Find all columns that match this category
-  return gradeableColumns.filter(header => 
+  return gradeableColumns.filter(header =>
     matchingPattern.test(header.toLowerCase())
   );
 };

@@ -430,6 +430,9 @@ GOOGLE_SHEETS_TEMPLATE_ID = os.getenv('GOOGLE_SHEETS_TEMPLATE_ID', '1h-dR0ergnvg
 # Google API Key for public sheet access (fallback when user auth fails)
 GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 
+# Google Apps Script Web App URL for SETTINGS tab management
+GOOGLE_APPS_SCRIPT_WEB_APP_URL = os.getenv('GOOGLE_APPS_SCRIPT_WEB_APP_URL', '')
+
 # Load Google Service Account Credentials - improved error handling
 GOOGLE_SERVICE_ACCOUNT_CREDENTIALS = {}
 SERVICE_ACCOUNT_FILE = os.path.join(BASE_DIR.parent, 'vocalyx2-service-account.json')

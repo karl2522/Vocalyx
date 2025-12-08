@@ -1,5 +1,18 @@
 import { AlertTriangle, BookOpen, CheckCircle, Download, Hash, Lightbulb, Megaphone, Mic, Plus, Settings, Target, Trash2, User, Users, Wrench, X, Zap, Volume2, HelpCircle, Award } from 'lucide-react';
 import React, { useState } from 'react';
+import {
+  FaMicrophoneAlt,
+  FaEdit,
+  FaBullseye,
+  FaRocket,
+  FaLightbulb,
+  FaCheckCircle,
+  FaInfoCircle,
+  FaTimesCircle,
+  FaTrash,
+  FaExclamationTriangle,
+  FaChartBar,
+} from 'react-icons/fa';
 
 const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
   const [activeTab, setActiveTab] = useState('basics');
@@ -15,33 +28,30 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
         className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Modal Header - Enhanced */}
-        <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 px-6 py-6">
+        {/* Modal Header - match InteractiveTutorialModal colors */}
+        <div className="bg-gradient-to-r from-[#333D79] to-[#4A5491] px-6 py-4 rounded-t-2xl flex-shrink-0">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <div className="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center shadow-lg">
-                <Mic className="w-7 h-7 text-white" />
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+                <Mic className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h2 className="text-2xl font-bold text-white flex items-center space-x-2">
-                  <span>Voice Command Guide</span>
-                  <Volume2 className="w-5 h-5 animate-pulse" />
-                </h2>
-                <p className="text-sm text-indigo-100 mt-1">Grade faster by speaking naturally - no typing needed!</p>
+                <h2 className="text-xl font-bold text-white">Voice Command Guide</h2>
+                <p className="text-sm text-white/80">Grade faster by speaking naturally - no typing needed!</p>
               </div>
             </div>
             <button
               onClick={() => setShowVoiceGuide(false)}
-              className="text-white/80 hover:text-white hover:bg-white/20 rounded-lg p-2 transition-colors"
+              className="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
               aria-label="Close guide"
             >
-              <X className="w-6 h-6" />
+              <X className="w-5 h-5" />
             </button>
           </div>
         </div>
 
         {/* Tab Navigation - Enhanced */}
-        <div className="bg-gray-50 border-b border-gray-200 px-6">
+        <div className="bg-gray-50 border-b border-gray-200 px-6 flex-shrink-0">
           <div className="flex space-x-1 overflow-x-auto">
             <button
               onClick={() => setActiveTab('basics')}
@@ -99,7 +109,7 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
         </div>
 
         {/* Modal Content */}
-        <div className="flex-1 overflow-y-auto p-6 bg-gradient-to-b from-gray-50 to-white">
+        <div className="flex-1 overflow-y-auto p-6 bg-gradient-to-b from-gray-50 to-white custom-scrollbar">
           
           {/* BASICS TAB - Enhanced */}
           {activeTab === 'basics' && (
@@ -112,7 +122,7 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                   </div>
                   <div>
                     <h3 className="text-xl font-bold text-gray-900 mb-2 flex items-center space-x-2">
-                      <span>Welcome to Voice Grading!  👋</span>
+                      <span>Welcome to Voice Grading!</span>
                     </h3>
                     <p className="text-gray-700 text-base leading-relaxed mb-3">
                       Our voice command system lets you <strong className="text-indigo-600">record grades, manage students, and update your gradebook</strong> by simply <strong className="text-indigo-600">speaking</strong> instead of typing.  
@@ -173,35 +183,35 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
               {/* How to Start - Enhanced */}
               <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
                 <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center space-x-2">
-                  <span className="text-2xl">🎤</span>
+                  <FaMicrophoneAlt className="w-5 h-5 text-indigo-600" />
                   <span>How to Get Started in 4 Easy Steps</span>
                 </h3>
                 <div className="space-y-4">
                   <div className="flex items-start space-x-4 group">
                     <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-white text-lg shadow-md group-hover:scale-110 transition-transform">1</div>
                     <div className="flex-1">
-                      <p className="text-gray-900 font-semibold mb-1 text-base">Find the microphone button 🎤</p>
+                      <p className="text-gray-900 font-semibold mb-1 text-base">Find the microphone button</p>
                       <p className="text-gray-600 leading-relaxed">Look for the <strong className="text-blue-600">floating blue circular button</strong> at the bottom-right corner of your screen</p>
                     </div>
                   </div>
                   <div className="flex items-start space-x-4 group">
                     <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-white text-lg shadow-md group-hover:scale-110 transition-transform">2</div>
                     <div className="flex-1">
-                      <p className="text-gray-900 font-semibold mb-1 text-base">Click to start listening 🔴</p>
+                      <p className="text-gray-900 font-semibold mb-1 text-base">Click to start listening</p>
                       <p className="text-gray-600 leading-relaxed">The button will turn <strong className="text-red-600">red</strong> and pulse when it's actively listening to your voice</p>
                     </div>
                   </div>
                   <div className="flex items-start space-x-4 group">
                     <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-white text-lg shadow-md group-hover:scale-110 transition-transform">3</div>
                     <div className="flex-1">
-                      <p className="text-gray-900 font-semibold mb-1 text-base">Speak your command clearly 🗣️</p>
+                      <p className="text-gray-900 font-semibold mb-1 text-base">Speak your command clearly</p>
                       <p className="text-gray-600 leading-relaxed">Use a normal speaking voice - no need to shout or speak too slowly!  Just talk naturally and clearly</p>
                     </div>
                   </div>
                   <div className="flex items-start space-x-4 group">
                     <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-white text-lg shadow-md group-hover:scale-110 transition-transform">✓</div>
                     <div className="flex-1">
-                      <p className="text-gray-900 font-semibold mb-1 text-base">That's it! Grade recorded automatically ✨</p>
+                      <p className="text-gray-900 font-semibold mb-1 text-base">That's it! Grade recorded automatically</p>
                       <p className="text-gray-600 leading-relaxed">You'll see a <strong className="text-green-600">success message</strong> and the grade appears instantly in your gradebook.  No save button needed!</p>
                     </div>
                   </div>
@@ -266,15 +276,15 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                   <p className="text-lg font-bold mb-2">Say these 3 things in order:</p>
                   <div className="flex items-center justify-center space-x-3 text-center flex-wrap">
                     <div className="bg-white text-indigo-900 px-4 py-2 rounded-lg font-bold shadow-md">
-                      1️⃣ Assignment Name
+                      1. Assignment Name
                     </div>
                     <span className="text-2xl">→</span>
                     <div className="bg-white text-indigo-900 px-4 py-2 rounded-lg font-bold shadow-md">
-                      2️⃣ Student Name
+                      2. Student Name
                     </div>
                     <span className="text-2xl">→</span>
                     <div className="bg-white text-indigo-900 px-4 py-2 rounded-lg font-bold shadow-md">
-                      3️⃣ Score
+                      3. Score
                     </div>
                   </div>
                 </div>
@@ -293,7 +303,10 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                 </div>
                 
                 <div className="bg-green-50 border-2 border-green-300 rounded-lg p-5 mb-5">
-                  <p className="text-gray-800 font-bold mb-3 text-base">📝 Basic Pattern:</p>
+                  <p className="text-gray-800 font-bold mb-3 text-base flex items-center space-x-2">
+                    <FaEdit className="w-4 h-4 text-green-600" />
+                    <span>Basic Pattern:</span>
+                  </p>
                   <div className="space-y-3">
                     <div className="flex items-start space-x-3">
                       <span className="bg-green-500 text-white px-3 py-1 rounded-full font-bold text-sm shadow-sm">1st</span>
@@ -320,7 +333,10 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                 </div>
 
                 <div className="space-y-4">
-                  <p className="font-bold text-gray-900 text-base">🎯 Real Examples You Can Try Right Now:</p>
+                  <p className="font-bold text-gray-900 text-base flex items-center space-x-2">
+                    <FaBullseye className="w-4 h-4 text-indigo-600" />
+                    <span>Real Examples You Can Try Right Now:</span>
+                  </p>
                   
                   <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-5 border-2 border-blue-300 shadow-sm hover:shadow-md transition-shadow">
                     <div className="flex items-start space-x-3 mb-3">
@@ -328,13 +344,13 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                         <span className="text-white font-bold">1</span>
                       </div>
                       <div className="flex-1">
-                        <p className="text-gray-600 text-sm mb-2">🎤 Say exactly this:</p>
+                        <p className="text-gray-600 text-sm mb-2">Say exactly this:</p>
                         <p className="text-xl font-mono font-bold text-indigo-900 bg-blue-100 px-4 py-3 rounded-lg">"Quiz 1 Maria eighty-five"</p>
                       </div>
                     </div>
                     <div className="ml-11 bg-white rounded-lg p-3 border border-blue-200">
                       <p className="text-sm text-gray-700">
-                        <strong className="text-green-600">✅ Result:</strong> Maria gets 85 points in Quiz 1
+                        <strong className="text-green-600">Result:</strong> Maria gets 85 points in Quiz 1
                       </p>
                     </div>
                   </div>
@@ -345,13 +361,13 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                         <span className="text-white font-bold">2</span>
                       </div>
                       <div className="flex-1">
-                        <p className="text-gray-600 text-sm mb-2">🎤 Say exactly this:</p>
+                        <p className="text-gray-600 text-sm mb-2">Say exactly this:</p>
                         <p className="text-xl font-mono font-bold text-purple-900 bg-purple-100 px-4 py-3 rounded-lg">"Lab 2 John ninety"</p>
                       </div>
                     </div>
                     <div className="ml-11 bg-white rounded-lg p-3 border border-purple-200">
                       <p className="text-sm text-gray-700">
-                        <strong className="text-green-600">✅ Result:</strong> John gets 90 points in Lab 2
+                        <strong className="text-green-600">Result:</strong> John gets 90 points in Lab 2
                       </p>
                     </div>
                   </div>
@@ -362,13 +378,13 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                         <span className="text-white font-bold">3</span>
                       </div>
                       <div className="flex-1">
-                        <p className="text-gray-600 text-sm mb-2">🎤 Say exactly this:</p>
+                        <p className="text-gray-600 text-sm mb-2">Say exactly this:</p>
                         <p className="text-xl font-mono font-bold text-orange-900 bg-orange-100 px-4 py-3 rounded-lg">"Midterm Sarah seventy-eight"</p>
                       </div>
                     </div>
                     <div className="ml-11 bg-white rounded-lg p-3 border border-orange-200">
                       <p className="text-sm text-gray-700">
-                        <strong className="text-green-600">✅ Result:</strong> Sarah gets 78 points in Midterm
+                        <strong className="text-green-600">Result:</strong> Sarah gets 78 points in Midterm
                       </p>
                     </div>
                   </div>
@@ -390,7 +406,8 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                 <div className="bg-purple-50 border-2 border-purple-300 rounded-lg p-5 mb-5">
                   <p className="text-gray-800 font-bold mb-4 text-base flex items-center space-x-2">
                     <Zap className="w-5 h-5 text-yellow-500" />
-                    <span>🚀 Perfect for grading 10-30+ students in one go! </span>
+                    <FaRocket className="w-4 h-4 text-yellow-500" />
+                    <span>Perfect for grading 10-30+ students in one go!</span>
                   </p>
                   <div className="space-y-4">
                     <div className="flex items-start space-x-3">
@@ -418,28 +435,31 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                 </div>
 
                 <div className="space-y-4">
-                  <p className="font-bold text-gray-900 text-base">🎯 Real Batch Grading Examples:</p>
+                  <p className="font-bold text-gray-900 text-base flex items-center space-x-2">
+                    <FaBullseye className="w-4 h-4 text-purple-600" />
+                    <span>Real Batch Grading Examples:</span>
+                  </p>
                   
                   <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg p-5 border-2 border-purple-300">
-                    <p className="text-gray-600 text-sm mb-2">🎤 Example 1: Grade 3 students</p>
+                    <p className="text-gray-600 text-sm mb-2">Example 1: Grade 3 students</p>
                     <p className="text-lg font-mono font-bold text-purple-900 bg-purple-100 px-4 py-3 rounded-lg mb-3">
                       "Maria 85, John 90, Sarah 78"
                     </p>
                     <div className="bg-white rounded-lg p-3 border border-purple-200">
                       <p className="text-sm text-gray-700">
-                        <strong className="text-green-600">✅ Result:</strong> All three grades recorded instantly! 
+                        <strong className="text-green-600">Result:</strong> All three grades recorded instantly! 
                       </p>
                     </div>
                   </div>
 
                   <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg p-5 border-2 border-blue-300">
-                    <p className="text-gray-600 text-sm mb-2">🎤 Example 2: Grade 5 students</p>
+                    <p className="text-gray-600 text-sm mb-2">Example 2: Grade 5 students</p>
                     <p className="text-lg font-mono font-bold text-blue-900 bg-blue-100 px-4 py-3 rounded-lg mb-3">
                       "Tom 88, Lisa 92, Mike 75, Emma 95, David 82"
                     </p>
                     <div className="bg-white rounded-lg p-3 border border-blue-200">
                       <p className="text-sm text-gray-700">
-                        <strong className="text-green-600">✅ Result:</strong> 5 grades in seconds!
+                        <strong className="text-green-600">Result:</strong> 5 grades in seconds!
                       </p>
                     </div>
                   </div>
@@ -449,12 +469,15 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                   <div className="flex items-start space-x-3">
                     <Lightbulb className="w-6 h-6 text-yellow-600 flex-shrink-0 mt-0.5" />
                     <div>
-                      <p className="font-bold text-gray-900 mb-2">💡 Super Quick Tip: Same Score for Everyone</p>
+                      <p className="font-bold text-gray-900 mb-2 flex items-center space-x-2">
+                        <FaLightbulb className="w-4 h-4 text-yellow-600" />
+                        <span>Super Quick Tip: Same Score for Everyone</span>
+                      </p>
                       <p className="text-sm text-gray-700 mb-2">If all students got the same grade, use this shortcut:</p>
                       <p className="text-base font-mono bg-yellow-100 px-4 py-2 rounded-lg text-yellow-900 font-bold">
                         "Quiz 1: everyone gets 50"
                       </p>
-                      <p className="text-xs text-gray-600 mt-2">✨ Gives all students 50 points on Quiz 1 in one command!</p>
+                      <p className="text-xs text-gray-600 mt-2">Gives all students 50 points on Quiz 1 in one command!</p>
                     </div>
                   </div>
                 </div>
@@ -476,7 +499,10 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                   <div className="bg-green-50 border-2 border-green-300 rounded-lg p-5">
                     <div className="flex items-center space-x-2 mb-4">
                       <CheckCircle className="w-6 h-6 text-green-600" />
-                      <p className="font-bold text-gray-900 text-base">✅ Best Way (Recommended)</p>
+                      <p className="font-bold text-gray-900 text-base flex items-center space-x-2">
+                        <FaCheckCircle className="w-4 h-4 text-green-600" />
+                        <span>Best Way (Recommended)</span>
+                      </p>
                     </div>
                     <p className="text-sm text-gray-600 mb-3">Speak numbers as full words:</p>
                     <div className="space-y-2. 5">
@@ -506,7 +532,10 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                   <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-5">
                     <div className="flex items-center space-x-2 mb-4">
                       <AlertTriangle className="w-6 h-6 text-blue-600" />
-                      <p className="font-bold text-gray-900 text-base">ℹ️ Also Works (Alternative)</p>
+                      <p className="font-bold text-gray-900 text-base flex items-center space-x-2">
+                        <FaInfoCircle className="w-4 h-4 text-blue-600" />
+                        <span>Also Works (Alternative)</span>
+                      </p>
                     </div>
                     <p className="text-sm text-gray-600 mb-3">Add "score", "grade", or "points":</p>
                     <div className="space-y-2. 5">
@@ -538,7 +567,10 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                   <div className="flex items-start space-x-2">
                     <X className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
                     <div>
-                      <p className="font-bold text-gray-900 mb-1">❌ Avoid These (May Not Work):</p>
+                      <p className="font-bold text-gray-900 mb-1 flex items-center space-x-2">
+                        <FaTimesCircle className="w-4 h-4 text-red-600" />
+                        <span>Avoid These (May Not Work):</span>
+                      </p>
                       <p className="text-sm text-gray-700">Don't say digits individually: <span className="font-mono bg-red-100 px-2 py-1 rounded">"eight five"</span> or <span className="font-mono bg-red-100 px-2 py-1 rounded">"9 2"</span></p>
                     </div>
                   </div>
@@ -564,14 +596,20 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                 </div>
 
                 <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-5 mb-5">
-                  <p className="text-gray-800 font-bold mb-3 text-base">📝 Command Pattern:</p>
+                  <p className="text-gray-800 font-bold mb-3 text-base flex items-center space-x-2">
+                    <FaEdit className="w-4 h-4 text-blue-600" />
+                    <span>Command Pattern:</span>
+                  </p>
                   <p className="text-xl font-mono font-bold text-blue-900 bg-blue-100 px-5 py-4 rounded-lg">
                     "Add student lastname [Last Name] firstname [First Name]"
                   </p>
                 </div>
 
                 <div className="space-y-4">
-                  <p className="font-bold text-gray-900 text-base">🎯 Real Examples:</p>
+                  <p className="font-bold text-gray-900 text-base flex items-center space-x-2">
+                    <FaBullseye className="w-4 h-4 text-blue-600" />
+                    <span>Real Examples:</span>
+                  </p>
                   
                   <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-5 border-2 border-blue-300">
                     <div className="flex items-start space-x-3 mb-3">
@@ -579,7 +617,7 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                         <span className="text-white font-bold">1</span>
                       </div>
                       <div className="flex-1">
-                        <p className="text-gray-600 text-sm mb-2">🎤 Say this:</p>
+                        <p className="text-gray-600 text-sm mb-2">Say this:</p>
                         <p className="text-lg font-mono font-bold text-indigo-900 bg-blue-100 px-4 py-3 rounded-lg">
                           "Add student lastname Smith firstname John"
                         </p>
@@ -587,7 +625,7 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                     </div>
                     <div className="ml-11 bg-white rounded-lg p-3 border border-blue-200">
                       <p className="text-sm text-gray-700">
-                        <strong className="text-green-600">✅ Result:</strong> John Smith is added to your class roster
+                        <strong className="text-green-600">Result:</strong> John Smith is added to your class roster
                       </p>
                     </div>
                   </div>
@@ -598,7 +636,7 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                         <span className="text-white font-bold">2</span>
                       </div>
                       <div className="flex-1">
-                        <p className="text-gray-600 text-sm mb-2">🎤 Say this:</p>
+                        <p className="text-gray-600 text-sm mb-2">Say this:</p>
                         <p className="text-lg font-mono font-bold text-purple-900 bg-purple-100 px-4 py-3 rounded-lg">
                           "Add student lastname Garcia firstname Maria"
                         </p>
@@ -606,7 +644,7 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                     </div>
                     <div className="ml-11 bg-white rounded-lg p-3 border border-purple-200">
                       <p className="text-sm text-gray-700">
-                        <strong className="text-green-600">✅ Result:</strong> Maria Garcia is added to your class roster
+                        <strong className="text-green-600">Result:</strong> Maria Garcia is added to your class roster
                       </p>
                     </div>
                   </div>
@@ -615,7 +653,8 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                 <div className="mt-5 bg-indigo-50 border-2 border-indigo-300 rounded-lg p-5">
                   <p className="font-bold text-gray-900 mb-3 flex items-center space-x-2">
                     <User className="w-5 h-5 text-indigo-600" />
-                    <span>💡 Adding with Student ID Number</span>
+                    <FaLightbulb className="w-4 h-4 text-indigo-600" />
+                    <span>Adding with Student ID Number</span>
                   </p>
                   <p className="text-sm text-gray-700 mb-3">You can also include their student ID when adding them:</p>
                   <p className="text-base font-mono font-bold bg-indigo-100 px-4 py-3 rounded-lg text-indigo-900 mb-3">
@@ -623,7 +662,7 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                   </p>
                   <div className="bg-white rounded-lg p-3 border border-indigo-200">
                     <p className="text-sm text-gray-700">
-                      <strong className="text-green-600">✅ Result:</strong> John Smith added with ID 22-2711-726
+                      <strong className="text-green-600">Result:</strong> John Smith added with ID 22-2711-726
                     </p>
                   </div>
                 </div>
@@ -645,18 +684,26 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                   <div className="flex items-start space-x-3 mb-4">
                     <AlertTriangle className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-red-900 font-bold text-base">⚠️ Warning: This Cannot Be Undone! </p>
+                      <p className="text-red-900 font-bold text-base flex items-center space-x-2">
+                        <span>Warning: This Cannot Be Undone!</span>
+                      </p>
                       <p className="text-red-800 text-sm mt-1">This permanently removes the student and all their grades from your gradebook.</p>
                     </div>
                   </div>
-                  <p className="text-gray-800 font-bold mb-3 text-base">🗑️ Command Pattern:</p>
+                  <p className="text-gray-800 font-bold mb-3 text-base flex items-center space-x-2">
+                    <FaTrash className="w-4 h-4 text-red-600" />
+                    <span>Command Pattern:</span>
+                  </p>
                   <p className="text-xl font-mono font-bold text-red-900 bg-red-100 px-5 py-4 rounded-lg">
                     "Delete student [Name]"
                   </p>
                 </div>
 
                 <div className="space-y-4">
-                  <p className="font-bold text-gray-900 text-base">🎯 Examples:</p>
+                  <p className="font-bold text-gray-900 text-base flex items-center space-x-2">
+                    <FaBullseye className="w-4 h-4 text-red-600" />
+                    <span>Examples:</span>
+                  </p>
                   
                   <div className="bg-red-50 rounded-lg p-5 border-2 border-red-300">
                     <div className="flex items-start space-x-3 mb-3">
@@ -664,7 +711,7 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                         <X className="w-4 h-4 text-white font-bold" />
                       </div>
                       <div className="flex-1">
-                        <p className="text-gray-600 text-sm mb-2">🎤 Say this:</p>
+                        <p className="text-gray-600 text-sm mb-2">Say this:</p>
                         <p className="text-lg font-mono font-bold text-red-900 bg-red-100 px-4 py-3 rounded-lg">
                           "Delete student Maria"
                         </p>
@@ -672,7 +719,7 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                     </div>
                     <div className="ml-11 bg-white rounded-lg p-3 border border-red-200">
                       <p className="text-sm text-gray-700">
-                        <strong className="text-red-600">❌ Result:</strong> Maria is removed from your class permanently
+                        <strong className="text-red-600">Result:</strong> Maria is removed from your class permanently
                       </p>
                     </div>
                   </div>
@@ -683,7 +730,7 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                         <X className="w-4 h-4 text-white font-bold" />
                       </div>
                       <div className="flex-1">
-                        <p className="text-gray-600 text-sm mb-2">🎤 Or say this:</p>
+                        <p className="text-gray-600 text-sm mb-2">Or say this:</p>
                         <p className="text-lg font-mono font-bold text-red-900 bg-red-100 px-4 py-3 rounded-lg">
                           "Remove student John Smith"
                         </p>
@@ -691,7 +738,7 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                     </div>
                     <div className="ml-11 bg-white rounded-lg p-3 border border-red-200">
                       <p className="text-sm text-gray-700">
-                        <strong className="text-red-600">❌ Result:</strong> John Smith is removed from your class permanently
+                        <strong className="text-red-600">Result:</strong> John Smith is removed from your class permanently
                       </p>
                     </div>
                   </div>
@@ -719,7 +766,7 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                         <span className="text-white font-bold">1</span>
                       </div>
                       <div className="flex-1">
-                        <p className="text-gray-600 text-sm mb-2">🎤 Method 1:</p>
+                        <p className="text-gray-600 text-sm mb-2">Method 1:</p>
                         <p className="text-lg font-mono font-bold text-indigo-900 bg-indigo-100 px-4 py-3 rounded-lg">
                           "Maria add student id 22-2711-726"
                         </p>
@@ -727,7 +774,7 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                     </div>
                     <div className="ml-11 bg-white rounded-lg p-3 border border-indigo-200">
                       <p className="text-sm text-gray-700">
-                        <strong className="text-green-600">✅ Result:</strong> ID number 22-2711-726 is added to Maria's record
+                        <strong className="text-green-600">Result:</strong> ID number 22-2711-726 is added to Maria's record
                       </p>
                     </div>
                   </div>
@@ -738,7 +785,7 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                         <span className="text-white font-bold">2</span>
                       </div>
                       <div className="flex-1">
-                        <p className="text-gray-600 text-sm mb-2">🎤 Method 2:</p>
+                        <p className="text-gray-600 text-sm mb-2">Method 2:</p>
                         <p className="text-lg font-mono font-bold text-purple-900 bg-purple-100 px-4 py-3 rounded-lg">
                           "Set student id 22-2711-726 for John"
                         </p>
@@ -746,7 +793,7 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                     </div>
                     <div className="ml-11 bg-white rounded-lg p-3 border border-purple-200">
                       <p className="text-sm text-gray-700">
-                        <strong className="text-green-600">✅ Result:</strong> ID number 22-2711-726 is added to John's record
+                        <strong className="text-green-600">Result:</strong> ID number 22-2711-726 is added to John's record
                       </p>
                     </div>
                   </div>
@@ -756,7 +803,9 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                   <div className="flex items-start space-x-2">
                     <Lightbulb className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
                     <div>
-                      <p className="font-bold text-gray-900 mb-1">💡 Why use Student IDs?</p>
+                      <p className="font-bold text-gray-900 mb-1 flex items-center space-x-2">
+                        <span>Why use Student IDs?</span>
+                      </p>
                       <p className="text-sm text-gray-700">Student IDs help when you have students with similar names (like two "John Smith"s).  Using IDs ensures you grade the right student every time! </p>
                     </div>
                   </div>
@@ -850,7 +899,7 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                   <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-5 border-2 border-green-300">
                     <div className="flex items-start space-x-3">
                       <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center flex-shrink-0">
-                        <span className="text-white text-xl">🚀</span>
+                        <FaRocket className="w-5 h-5 text-white" />
                       </div>
                       <div>
                         <p className="font-bold text-gray-900 mb-2 text-base">Use Batch Grading for groups</p>
@@ -862,7 +911,7 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                   <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg p-5 border-2 border-blue-300">
                     <div className="flex items-start space-x-3">
                       <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center flex-shrink-0">
-                        <span className="text-white text-xl">⚡</span>
+                        <Zap className="w-5 h-5 text-white" />
                       </div>
                       <div>
                         <p className="font-bold text-gray-900 mb-2 text-base">Last names are usually enough</p>
@@ -874,7 +923,7 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                   <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg p-5 border-2 border-purple-300">
                     <div className="flex items-start space-x-3">
                       <div className="w-10 h-10 bg-purple-500 rounded-xl flex items-center justify-center flex-shrink-0">
-                        <span className="text-white text-xl">📋</span>
+                        <FaChartBar className="w-5 h-5 text-white" />
                       </div>
                       <div>
                         <p className="font-bold text-gray -900 mb-2 text-base">Check the transcript after speaking</p> 
@@ -884,7 +933,7 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                   </div><div className="bg-gradient-to-r from-amber-50 to-yellow-50 rounded-lg p-5 border-2 border-amber-300">
                 <div className="flex items-start space-x-3">
                   <div className="w-10 h-10 bg-amber-500 rounded-xl flex items-center justify-center flex-shrink-0">
-                    <span className="text-white text-xl">🎯</span>
+                    <FaBullseye className="w-5 h-5 text-white" />
                   </div>
                   <div>
                     <p className="font-bold text-gray-900 mb-2 text-base">Use assignment shortcuts</p>
@@ -911,15 +960,15 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
               <div className="bg-red-50 border-2 border-red-200 rounded-lg p-5">
                 <div className="flex items-start space-x-3 mb-3">
                   <div className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0">
-                    <span className="text-white font-bold">❌</span>
+                    <FaTimesCircle className="w-4 h-4 text-white" />
                   </div>
                   <div className="flex-1">
                     <p className="font-bold text-gray-900 mb-2">Problem: "It recorded the wrong grade"</p>
                     <p className="text-sm text-gray-700 mb-3">Don't worry!  Just say the command again with the correct score.  The new grade will replace the old one.</p>
                     <div className="bg-white rounded-lg p-3 border border-red-300">
-                      <p className="text-sm font-mono text-gray-800 mb-1">🎤 Say:</p>
+                      <p className="text-sm font-mono text-gray-800 mb-1">Say:</p>
                       <p className="text-base font-mono font-bold text-red-900">"Quiz 1 Maria ninety"</p>
-                      <p className="text-xs text-gray-600 mt-2">✅ This will replace Maria's old Quiz 1 score with 90</p>
+                      <p className="text-xs text-gray-600 mt-2">This will replace Maria's old Quiz 1 score with 90</p>
                     </div>
                   </div>
                 </div>
@@ -928,7 +977,7 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
               <div className="bg-orange-50 border-2 border-orange-200 rounded-lg p-5">
                 <div className="flex items-start space-x-3 mb-3">
                   <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center flex-shrink-0">
-                    <span className="text-white font-bold">❌</span>
+                    <FaTimesCircle className="w-4 h-4 text-white" />
                   </div>
                   <div className="flex-1">
                     <p className="font-bold text-gray-900 mb-2">Problem: "The system can't hear me"</p>
@@ -936,7 +985,7 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
                     <div className="bg-white rounded-lg p-3 border border-orange-300">
                       <p className="text-sm text-gray-800 mb-2"><strong>Steps to fix:</strong></p>
                       <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
-                        <li>Look for a microphone icon 🎤 in your browser's address bar</li>
+                        <li>Look for a microphone icon in your browser's address bar</li>
                         <li>Click it and select "Allow" for microphone access</li>
                         <li>Refresh the page if needed</li>
                         <li>Try clicking the microphone button again</li>
@@ -949,16 +998,16 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
               <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-5">
                 <div className="flex items-start space-x-3 mb-3">
                   <div className="w-8 h-8 bg-yellow-500 rounded-full flex items-center justify-center flex-shrink-0">
-                    <span className="text-white font-bold">❌</span>
+                    <FaTimesCircle className="w-4 h-4 text-white" />
                   </div>
                   <div className="flex-1">
                     <p className="font-bold text-gray-900 mb-2">Problem: "It found the wrong student"</p>
                     <p className="text-sm text-gray-700 mb-3">This happens when multiple students have similar names (like "Maria Garcia" and "Maria Rodriguez")</p>
                     <div className="bg-white rounded-lg p-3 border border-yellow-300">
                       <p className="text-sm text-gray-800 mb-2"><strong>Solution:</strong> Use their full name or student ID</p>
-                      <p className="text-sm font-mono text-gray-800 mb-2">🎤 Option 1: Use full name:</p>
+                      <p className="text-sm font-mono text-gray-800 mb-2">Option 1: Use full name:</p>
                       <p className="text-base font-mono font-bold text-yellow-900 mb-3">"Quiz 1 Maria Garcia eighty-five"</p>
-                      <p className="text-sm font-mono text-gray-800 mb-2">🎤 Option 2: Use student ID (most accurate):</p>
+                      <p className="text-sm font-mono text-gray-800 mb-2">Option 2: Use student ID (most accurate):</p>
                       <p className="text-base font-mono font-bold text-yellow-900">"Quiz 1 student id 22-2711-726 score 85"</p>
                     </div>
                   </div>
@@ -968,7 +1017,7 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
               <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-5">
                 <div className="flex items-start space-x-3 mb-3">
                   <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
-                    <span className="text-white font-bold">❌</span>
+                    <FaTimesCircle className="w-4 h-4 text-white" />
                   </div>
                   <div className="flex-1">
                     <p className="font-bold text-gray-900 mb-2">Problem: "It doesn't understand the assignment name"</p>
@@ -988,7 +1037,7 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
               <div className="bg-purple-50 border-2 border-purple-200 rounded-lg p-5">
                 <div className="flex items-start space-x-3 mb-3">
                   <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center flex-shrink-0">
-                    <span className="text-white font-bold">❌</span>
+                    <FaTimesCircle className="w-4 h-4 text-white" />
                   </div>
                   <div className="flex-1">
                     <p className="font-bold text-gray-900 mb-2">Problem: "The microphone button isn't responding"</p>
@@ -1023,7 +1072,7 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
               <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg p-4 border-2 border-indigo-200">
                 <div className="flex items-start space-x-3">
                   <div className="w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center flex-shrink-0">
-                    <span className="text-white text-lg">📊</span>
+                    <FaChartBar className="w-4 h-4 text-white" />
                   </div>
                   <div className="flex-1">
                     <p className="font-semibold text-gray-900 mb-1">Sort students alphabetically:</p>
@@ -1065,7 +1114,7 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
     </div>
 
     {/* Modal Footer - Enhanced */}
-    <div className="border-t border-gray-200 px-6 py-5 bg-gradient-to-r from-gray-50 to-white">
+    <div className="border-t border-gray-200 px-6 py-5 bg-gradient-to-r from-gray-50 to-white rounded-b-2xl flex-shrink-0">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center space-x-4">
           <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center shadow-md animate-pulse">
@@ -1073,7 +1122,7 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
           </div>
           <div>
             <p className="text-sm font-bold text-gray-900">
-              Ready to start grading with your voice?  🎤
+              Ready to start grading with your voice?
             </p>
             <p className="text-xs text-gray-600">
               Click the <strong className="text-blue-600">blue microphone button</strong> at the bottom-right corner to begin! 
@@ -1082,9 +1131,9 @@ const VoiceGuideModal = ({ showVoiceGuide, setShowVoiceGuide }) => {
         </div>
         <button
           onClick={() => setShowVoiceGuide(false)}
-          className="px-6 py-3 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white rounded-xl hover:from-indigo-700 hover:via-purple-700 hover:to-pink-700 transition-all font-bold shadow-lg hover:shadow-xl transform hover:scale-105"
+          className="px-6 py-2.5 bg-[#333D79] text-white rounded-lg hover:bg-[#2A2F66] transition-all font-medium text-sm shadow-lg hover:shadow-xl"
         >
-          Got It! Let's Start Grading ✨
+          Let's Start Grading →
         </button>
       </div>
     </div>

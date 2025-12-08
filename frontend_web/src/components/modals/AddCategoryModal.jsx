@@ -25,8 +25,14 @@ const AddCategoryModal = ({
       newErrors.categoryName = 'Category name must be at least 2 characters';
     }
     
-    if (subCategoryCount < 1 || subCategoryCount > 20) {
-      newErrors.subCategoryCount = 'Number of subcategories must be between 1 and 20';
+    if (subCategoryCount < 1 || subCategoryCount > 5) {
+      newErrors.subCategoryCount = 'Number of subcategories must be between 1 and 5';
+    }
+    
+    if (remainingAvailable <= 0) {
+      newErrors.categoryWeight = 'Cannot add more weight — current total is already 100%.';
+    } else if (categoryWeight > remainingAvailable) {
+      newErrors.categoryWeight = `Weight exceeds available ${remainingAvailable}%. Reduce the value.`;
     }
     
     setErrors(newErrors);
@@ -36,7 +42,7 @@ const AddCategoryModal = ({
   const handleSubmit = () => {
     if (!validateForm()) return;
 
-    const weightInt = Math.max(0, Math.min(parseInt(Number.isFinite(categoryWeight) ? categoryWeight : 0), remainingAvailable));
+    const weightInt = Math.max(0, parseInt(Number.isFinite(categoryWeight) ? categoryWeight : 0));
 
     const categoryData = {
         categoryName: categoryName.trim(),
@@ -85,8 +91,19 @@ const AddCategoryModal = ({
   const handleReset = () => {
     setCategoryName('');
     setSubCategoryCount(5);
+    setCategoryWeight(10);
     setErrors({});
   };
+
+  const isSubCategoryLimitExceeded = subCategoryCount > 5;
+  const isWeightExceeded = categoryWeight > remainingAvailable;
+  const isNoRemainingWeight = remainingAvailable <= 0;
+  const isFormBlocked = 
+    !categoryName.trim() || 
+    subCategoryCount < 1 || 
+    isSubCategoryLimitExceeded || 
+    isWeightExceeded || 
+    isNoRemainingWeight;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -153,9 +170,16 @@ const AddCategoryModal = ({
                   <input
                     type="number"
                     min="1"
-                    max="20"
+                    max="5"
                     value={subCategoryCount}
-                    onChange={(e) => setSubCategoryCount(parseInt(e.target.value) || 1)}
+                    onChange={(e) => {
+                      const parsed = parseInt(e.target.value);
+                      if (Number.isNaN(parsed)) {
+                        setSubCategoryCount(1);
+                        return;
+                      }
+                      setSubCategoryCount(Math.min(Math.max(parsed, 1), 5));
+                    }}
                     disabled={isLoading}
                     className={`w-24 px-3 py-2 border rounded-lg text-center focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                       errors.subCategoryCount 
@@ -164,7 +188,7 @@ const AddCategoryModal = ({
                     } disabled:bg-slate-100`}
                   />
                   <div className="flex space-x-2">
-                    {[3, 5, 10].map(num => (
+                    {[1, 3, 5].map(num => (
                       <button
                         key={num}
                         onClick={() => setSubCategoryCount(num)}
@@ -183,6 +207,11 @@ const AddCategoryModal = ({
                 {errors.subCategoryCount && (
                   <p className="text-red-600 text-sm mt-1">{errors.subCategoryCount}</p>
                 )}
+                {isSubCategoryLimitExceeded && !errors.subCategoryCount && (
+                  <p className="text-red-600 text-sm mt-1">
+                    Maximum of 5 subcategories allowed.
+                  </p>
+                )}
                 <p className="text-xs text-slate-500 mt-1">
                   This will create {subCategoryCount} individual columns under this category
                 </p>
@@ -197,17 +226,16 @@ const AddCategoryModal = ({
                 <input
                 type="number"
                 min="0"
-                max={remainingAvailable}
+                max="100"
                 step="1"
                 value={Number.isFinite(categoryWeight) ? parseInt(categoryWeight) : 0}
                 onChange={(e) => {
                   const v = parseInt(e.target.value || '0');
                   if (Number.isNaN(v)) {
                     setCategoryWeight(0);
-                  } else {
-                    const clamped = Math.max(0, Math.min(v, remainingAvailable));
-                    setCategoryWeight(clamped);
+                    return;
                   }
+                  setCategoryWeight(Math.max(0, v));
                 }}
                 disabled={isLoading}
                 className={`w-24 px-3 py-2 border rounded-lg text-center focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
@@ -222,7 +250,7 @@ const AddCategoryModal = ({
                 {[5, 10, 15, 20].map(num => (
                     <button
                     key={num}
-                    onClick={() => setCategoryWeight(Math.min(num, remainingAvailable))}
+                    onClick={() => setCategoryWeight(num)}
                     disabled={isLoading}
                     className={`px-3 py-1 text-sm rounded-lg transition-colors disabled:opacity-50 ${
                         categoryWeight === num
@@ -241,9 +269,15 @@ const AddCategoryModal = ({
             <p className="text-xs text-slate-600 mt-1">
               Remaining available: <span className="font-semibold">{remainingAvailable}%</span>
             </p>
-            {remainingAvailable === 0 && (
-              <p className="text-sm text-red-600 mt-2">
-                Current total is already 100%.
+            {(errors.categoryWeight || isNoRemainingWeight || isWeightExceeded) && (
+              <p className="text-sm text-red-600 mt-2 flex items-center space-x-1">
+                <AlertTriangle className="w-4 h-4" />
+                <span>
+                  {errors.categoryWeight 
+                    || (isNoRemainingWeight 
+                        ? 'Current total is already 100%. Reduce other categories first.' 
+                        : `Weight exceeds available ${remainingAvailable}%.`)}
+                </span>
               </p>
             )}
             </div>
@@ -342,7 +376,7 @@ const AddCategoryModal = ({
               </button>
               <button
                 onClick={handleSubmit}
-                disabled={isLoading || !categoryName.trim() || subCategoryCount < 1}
+                disabled={isLoading || isFormBlocked}
                 className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
               >
                 {isLoading ? (

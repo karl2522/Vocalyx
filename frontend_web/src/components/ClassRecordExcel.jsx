@@ -1,8 +1,9 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { ArrowLeft, BarChart3, CheckCircle2, ChevronDown, Edit, FileSpreadsheet, HelpCircle, Menu, Mic, MicOff, MoreVertical, PieChart, Plus, RefreshCw, Star, Trash2, Upload, Users, X } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Award, BarChart3, CheckCircle, CheckCircle2, ChevronDown, Clock, Edit, FileSpreadsheet, HelpCircle, Lightbulb, Menu, Mic, MicOff, MoreVertical, PieChart, Plus, RefreshCw, Star, Target, Trash2, Upload, Users, X, Zap } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
+import { FiCheckCircle } from 'react-icons/fi';
 import { useNavigate, useParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { useAuth } from '../auth/AuthContext';
@@ -125,20 +126,23 @@ const ClassRecordExcel = () => {
   const hasShownInitialToast = useRef(false);
   const [isRefreshingAllocation, setIsRefreshingAllocation] = useState(false);
 
+  // 🔥 PHASE 6: Sync status tracking
+  const [syncStatus, setSyncStatus] = useState({}); // {sheetName: {isSynced: bool, differences: []}}
+
   // 🔄 AUTO-SYNC: Refs for tracking sync status
   const midtermFinalSyncInProgress = useRef(false);
   const lastMidtermHashRef = useRef(null);
   const lastSyncToastRef = useRef(null); // Track last toast to prevent duplicates
   const lastSyncResultRef = useRef({ syncCount: 0, clearCount: 0 }); // Track last sync result
   const toastDebounceTimeoutRef = useRef(null); // Debounce toast to prevent multiple toasts
-  
+
   // 🔥 OPTIMIZATION: Calculate hash of STUDENT INFO data for change detection
   // This allows us to skip sync if no changes detected (reduces server load by 90%+)
   const calculateStudentInfoHash = useCallback((tableData, studentInfoCols) => {
     if (!tableData || !Array.isArray(tableData) || !studentInfoCols) {
       return null;
     }
-    
+
     // Extract only STUDENT INFO columns (A-E: NO., LASTNAME, FIRST NAME, MIDDLE NAME, STUDENT ID)
     const studentInfoData = tableData.map(row => {
       const info = {};
@@ -151,7 +155,7 @@ const ClassRecordExcel = () => {
       });
       return info;
     });
-    
+
     // Create hash from student info data (simple string hash)
     const hashString = JSON.stringify(studentInfoData);
     // Simple hash function (fast, not cryptographically secure - just for change detection)
@@ -172,80 +176,58 @@ const ClassRecordExcel = () => {
       const res = await classRecordService.syncCategoryPercentages(id, currentSheet.sheet_name);
       const data = res.data || {};
       setClassStandingRemaining(Math.max(0, data.remaining || 0));
+
+      // 🔥 NEW: Show SETTINGS tab sync feedback
+      if (data.settings_synced && Object.keys(data.settings_synced).length > 0) {
+        const sheetType = currentSheet.sheet_name?.toLowerCase().includes('midterm') ? 'Midterm' :
+          currentSheet.sheet_name?.toLowerCase().includes('final') ? 'Final' : 'sheet';
+        const syncedCount = Object.keys(data.settings_synced).length;
+        toast.success(`✅ Synced ${syncedCount} categor${syncedCount === 1 ? 'y' : 'ies'} to SETTINGS_${sheetType.toUpperCase()} tab`, {
+          duration: 3000
+        });
+      }
+
+      if (data.settings_errors && Object.keys(data.settings_errors).length > 0) {
+        const errorCount = Object.keys(data.settings_errors).length;
+        toast.error(`⚠️ ${errorCount} categor${errorCount === 1 ? 'y' : 'ies'} failed to sync to SETTINGS tab`, {
+          duration: 4000
+        });
+      }
     } catch (e) {
-      // Fallback: read via service account and compute from header row (row 1)
+      // 🔥 PHASE 4: Fallback: Read from SETTINGS tab (source of truth) instead of fixed columns
       try {
-        if (!classRecord?.google_sheet_id || !currentSheet?.sheet_name) return;
-        // 🔥 OPTIMIZATION: Use cached data in fallback too
-        const sa = await classRecordService.getSpecificSheetData(classRecord.google_sheet_id, currentSheet.sheet_name);
-        const headersRow = sa?.data?.headers || [];
-        const idxFromLetter = (letter) => {
-          let total = 0;
-          const up = letter.toUpperCase();
-          for (let i = 0; i < up.length; i++) {
-            total = total * 26 + (up.charCodeAt(i) - 64);
-          }
-          return total - 1; // zero-based
-        };
-        const letters = ['K', 'Q', 'W', 'AC'];
-        const sum = letters.reduce((acc, l) => {
-          const idx = idxFromLetter(l);
-          const cell = headersRow[idx];
-          if (!cell) return acc;
-          let s = String(cell).trim();
-          if (s.endsWith('%')) s = s.slice(0, -1).trim();
-          const val = parseInt(parseFloat(s));
-          if (Number.isFinite(val)) return acc + Math.max(0, val);
-          return acc;
-        }, 0);
-        const remaining = Math.max(0, 100 - sum);
+        if (!id || !currentSheet?.sheet_name) return;
+
+        // Try to read from SETTINGS tab directly
+        const settingsRes = await classRecordService.getSettingsPercentages(id, currentSheet.sheet_name);
+        const settingsData = settingsRes.data || {};
+
+        if (settingsData.error) {
+          console.warn('⚠️ Fallback: Failed to read SETTINGS tab:', settingsData.error);
+          return;
+        }
+
+        const remaining = settingsData.remaining || 0;
         setClassStandingRemaining(remaining);
+        console.log(`📊 Fallback: Read remaining from SETTINGS tab (${settingsData.source}): ${remaining}%`);
       } catch (ignored) {
-        // ignore
+        console.warn('⚠️ Fallback: Both sync and SETTINGS read failed:', ignored);
+        // ignore - keep previous value
       }
     }
   }, [id, currentSheet?.sheet_name, classRecord?.google_sheet_id]);
 
-  // Helper: Generate hash from percentage values for change detection
-  const generatePercentageHash = useCallback((headers) => {
-    if (!headers || !Array.isArray(headers)) return null;
+  // 🔥 PHASE 1: Removed generatePercentageHash - no longer needed (SETTINGS tabs use formulas that auto-update)
 
-    // Extract percentage values from specific columns (K, Q, W, AC)
-    // Convert column letters to indices
-    const idxFromLetter = (letter) => {
-      let total = 0;
-      const up = letter.toUpperCase();
-      for (let i = 0; i < up.length; i++) {
-        total = total * 26 + (up.charCodeAt(i) - 64);
-      }
-      return total - 1; // zero-based
-    };
+  // 🔥 PHASE 1: Removed comparePercentages - no longer needed (SETTINGS tabs use formulas that auto-update)
 
-    const letters = ['K', 'Q', 'W', 'AC'];
-    const percentageValues = [];
-
-    letters.forEach(letter => {
-      const idx = idxFromLetter(letter);
-      const cell = headers[idx];
-      if (cell) {
-        let s = String(cell).trim();
-        if (s.endsWith('%')) s = s.slice(0, -1).trim();
-        const val = parseInt(parseFloat(s));
-        if (Number.isFinite(val)) {
-          percentageValues.push(`${letter}:${val}`);
-        }
-      }
-    });
-
-    return percentageValues.join('|');
-  }, []);
-
-  // Check both Midterm and Final sheets for percentage changes
-  const checkAllSheetsForPercentageChanges = useCallback(async () => {
+  // 🔥 PHASE 1: Simplified checker - reads ONLY from SETTINGS tabs
+  // Renamed from checkAllSheetsForPercentageChanges to checkAllSheetsAllocation
+  const checkAllSheetsAllocation = useCallback(async () => {
     try {
-      // Don't check percentages if user is not authenticated
+      // Don't check if user is not authenticated
       if (!user) {
-        console.log('🔔 User not authenticated, skipping percentage check');
+        console.log('🔔 User not authenticated, skipping allocation check');
         return;
       }
 
@@ -253,7 +235,7 @@ const ClassRecordExcel = () => {
 
       // 🔥 OPTIMIZATION: Debounce - prevent multiple simultaneous checks
       if (percentageCheckInProgress.current) {
-        console.log('⏭️ Percentage check already in progress, skipping...');
+        console.log('⏭️ Allocation check already in progress, skipping...');
         return;
       }
 
@@ -289,91 +271,40 @@ const ClassRecordExcel = () => {
       const problematicSheets = [];
       let totalRemaining = 0;
 
-      // Helper function to calculate percentage for a sheet
-      const calculateSheetPercentage = async (sheet) => {
+      // 🔥 PHASE 1: Simplified - Read ONLY from SETTINGS tabs (no sheet reading needed)
+      // SETTINGS tabs use formulas that auto-update, so no sync needed
+      for (const sheet of sheetsToCheck) {
         try {
-          // 🔥 OPTIMIZATION: Use cached data (30s cache) instead of force_refresh
-          const response = await classRecordService.getSpecificSheetData(classRecord.google_sheet_id, sheet.sheet_name);
-          const headersRow = response?.data?.main_headers || response?.data?.headers || [];
+          // Read from SETTINGS tab only
+          const settingsRes = await classRecordService.getSettingsPercentages(id, sheet.sheet_name);
+          const settingsData = settingsRes.data || {};
 
-          if (headersRow.length > 0) {
-            const currentHash = generatePercentageHash(headersRow);
+          if (settingsData.error) {
+            console.warn(`⚠️ Failed to read SETTINGS tab for ${sheet.sheet_name}:`, settingsData.error);
+            continue;
+          }
 
-            // Check if this sheet has changes (for current sheet only)
-            if (sheet.sheet_name === currentSheet?.sheet_name && currentHash && currentHash !== lastPercentageHash) {
-              console.log('🔄 Percentage values changed, syncing...');
-              console.log('🔄 Old hash:', lastPercentageHash);
-              console.log('🔄 New hash:', currentHash);
+          const total = settingsData.total || 0;
+          const remaining = settingsData.remaining || 0;
+          const source = settingsData.source || 'SETTINGS';
+          const sheetType = settingsData.sheet_type || 'unknown';
+          const percentages = settingsData.percentages || {};
 
-              // Force sync with cache bypass and manual calculation
-              try {
-                const res = await classRecordService.syncCategoryPercentages(id, sheet.sheet_name, { force: true });
-                const data = res.data || {};
-                console.log('🔄 Backend sync result:', data);
+          console.log(`📊 SETTINGS tab (${source}): total=${total}%, remaining=${remaining}%`);
 
-                if (currentHash) {
-                  console.log('🔄 Calculating manually from hash:', currentHash);
-                  const hashParts = currentHash.split('|');
-                  let total = 0;
-                  hashParts.forEach(part => {
-                    const match = part.match(/:(\d+)$/);
-                    if (match) {
-                      total += parseInt(match[1]);
-                    }
-                  });
-                  const remaining = Math.max(0, 100 - total);
-                  console.log('🔄 Manual calculation - total:', total, 'remaining:', remaining);
-                  console.log('🔄 Backend said remaining:', data.remaining, 'but we calculated:', remaining);
-
-                  setLastPercentageHash(currentHash);
-                  return { sheetName: sheet.sheet_name, remaining, total };
-                }
-              } catch (e) {
-                console.warn('⚠️ Force sync failed, trying regular sync:', e);
-              }
-            }
-
-            // Calculate manually from header row (same logic as before)
-            const idxFromLetter = (letter) => {
-              let total = 0;
-              const up = letter.toUpperCase();
-              for (let i = 0; i < up.length; i++) {
-                total = total * 26 + (up.charCodeAt(i) - 64);
-              }
-              return total - 1; // zero-based
-            };
-
-            const letters = ['K', 'Q', 'W', 'AC'];
-            let total = 0;
-
-            letters.forEach(letter => {
-              const idx = idxFromLetter(letter);
-              const cell = headersRow[idx];
-              if (cell) {
-                let s = String(cell).trim();
-                if (s.endsWith('%')) s = s.slice(0, -1).trim();
-                const val = parseInt(parseFloat(s));
-                if (Number.isFinite(val)) {
-                  total += Math.max(0, val);
-                }
-              }
+          // Only add to problematic sheets if there's an allocation issue
+          if (remaining !== 0) {
+            problematicSheets.push({
+              sheetName: sheet.sheet_name,
+              total,
+              remaining,
+              source: `SETTINGS_${sheetType.toUpperCase()}`,
+              percentages
             });
-
-            const remaining = Math.max(0, 100 - total);
-            return { sheetName: sheet.sheet_name, remaining, total };
+            totalRemaining += remaining;
           }
         } catch (error) {
-          console.warn(`Failed to calculate percentage for sheet ${sheet.sheet_name}:`, error);
-          return { sheetName: sheet.sheet_name, remaining: 0, total: 0 };
-        }
-      };
-
-      // Check all sheets
-      for (const sheet of sheetsToCheck) {
-        const result = await calculateSheetPercentage(sheet);
-        if (result && result.remaining > 0) {
-          problematicSheets.push(result);
-          totalRemaining += result.remaining;
+          console.error(`Failed to check ${sheet.sheet_name}:`, error);
         }
       }
 
@@ -397,25 +328,26 @@ const ClassRecordExcel = () => {
       } catch { }
 
     } catch (error) {
-      console.warn('⚠️ Error checking percentage changes, falling back to sync:', error);
-      // Fallback to regular sync if change detection fails
-      await syncRemaining();
+      console.error('⚠️ Error checking allocation:', error);
     } finally {
       // 🔥 OPTIMIZATION: Always reset the in-progress flag
       percentageCheckInProgress.current = false;
     }
-  }, [classRecord?.google_sheet_id, classRecord?.id, currentSheet?.sheet_name, lastPercentageHash, generatePercentageHash, syncRemaining, id, user]);
+  }, [classRecord?.google_sheet_id, classRecord?.id, id, user]);
 
-  // Smart polling: Check for percentage changes before syncing (legacy function for current sheet only)
+  // Legacy function name for backward compatibility
   const checkForPercentageChanges = useCallback(async () => {
-    // Use the new function that checks all sheets
-    await checkAllSheetsForPercentageChanges();
-  }, [checkAllSheetsForPercentageChanges]);
+    // Use the simplified function that checks all sheets
+    await checkAllSheetsAllocation();
+  }, [checkAllSheetsAllocation]);
+
+  // Alias for backward compatibility (deprecated - use checkAllSheetsAllocation)
+  const checkAllSheetsForPercentageChanges = checkAllSheetsAllocation;
 
   // 🔄 AUTO-SYNC: Identify STUDENT INFO columns in headers
   const identifyStudentInfoColumns = useCallback((headers) => {
     if (!headers || !Array.isArray(headers)) return {};
-    
+
     const studentInfoPatterns = {
       'NO.': ['NO.', 'NO', 'NUMBER', '#'],
       'LASTNAME': ['LASTNAME', 'LAST NAME', 'LAST', 'SURNAME'],
@@ -423,76 +355,76 @@ const ClassRecordExcel = () => {
       'MIDDLE NAME': ['MIDDLE NAME', 'MIDDLENAME', 'MIDDLE', 'MI'],
       'STUDENT ID': ['STUDENT ID', 'STUDENTID', 'ID', 'STUDENT NUMBER']
     };
-    
+
     const foundColumns = {};
-    
+
     headers.forEach((header, index) => {
       const normalizedHeader = header.trim().toUpperCase();
-      
+
       Object.entries(studentInfoPatterns).forEach(([colName, patterns]) => {
         if (!foundColumns[colName]) {
           const matches = patterns.some(pattern => {
             const patternUpper = pattern.toUpperCase();
-            return normalizedHeader === patternUpper || 
-                   normalizedHeader.includes(patternUpper) ||
-                   patternUpper.includes(normalizedHeader);
+            return normalizedHeader === patternUpper ||
+              normalizedHeader.includes(patternUpper) ||
+              patternUpper.includes(normalizedHeader);
           });
-          
+
           if (matches) {
             foundColumns[colName] = index;
           }
         }
       });
     });
-    
+
     return foundColumns;
   }, []);
 
   // 🔄 AUTO-SYNC: Find matching student in Final sheet
   const findMatchingStudent = useCallback((finalTableData, finalHeaders, midtermStudent, midtermRowIndex, finalStudentInfoCols) => {
     if (!finalTableData || !finalHeaders || !midtermStudent) return null;
-    
+
     // Try matching by STUDENT ID first (most reliable)
     if (midtermStudent['STUDENT ID'] && finalStudentInfoCols['STUDENT ID'] !== undefined) {
       const studentIdCol = finalStudentInfoCols['STUDENT ID'];
       const midtermStudentId = String(midtermStudent['STUDENT ID'] || '').trim();
-      
+
       if (midtermStudentId) {
         const match = finalTableData.find((row, index) => {
           if (row.length <= studentIdCol) return false;
           const finalStudentId = String(row[studentIdCol] || '').trim();
           return finalStudentId === midtermStudentId && finalStudentId !== '';
         });
-        
+
         if (match) {
-          return { 
-            rowIndex: finalTableData.indexOf(match), 
-            matchType: 'student_id' 
+          return {
+            rowIndex: finalTableData.indexOf(match),
+            matchType: 'student_id'
           };
         }
       }
     }
-    
+
     // Try matching by full name
     const midtermLastName = String(midtermStudent['LASTNAME'] || '').trim().toLowerCase();
     const midtermFirstName = String(midtermStudent['FIRST NAME'] || '').trim().toLowerCase();
     const midtermMiddleName = String(midtermStudent['MIDDLE NAME'] || '').trim().toLowerCase();
-    
+
     if (midtermLastName && midtermFirstName) {
       const lastNameCol = finalStudentInfoCols['LASTNAME'];
       const firstNameCol = finalStudentInfoCols['FIRST NAME'];
       const middleNameCol = finalStudentInfoCols['MIDDLE NAME'];
-      
+
       if (lastNameCol !== undefined && firstNameCol !== undefined) {
         const match = finalTableData.find((row, index) => {
           if (row.length <= Math.max(lastNameCol, firstNameCol)) return false;
-          
+
           const finalLastName = String(row[lastNameCol] || '').trim().toLowerCase();
           const finalFirstName = String(row[firstNameCol] || '').trim().toLowerCase();
           const finalMiddleName = middleNameCol !== undefined && row.length > middleNameCol
             ? String(row[middleNameCol] || '').trim().toLowerCase()
             : '';
-          
+
           // Match by last name + first name (required)
           if (finalLastName === midtermLastName && finalFirstName === midtermFirstName) {
             // If middle names exist, they should match (or one is empty)
@@ -502,39 +434,39 @@ const ClassRecordExcel = () => {
           }
           return false;
         });
-        
+
         if (match) {
-          return { 
-            rowIndex: finalTableData.indexOf(match), 
-            matchType: 'name' 
+          return {
+            rowIndex: finalTableData.indexOf(match),
+            matchType: 'name'
           };
         }
       }
     }
-    
+
     // Try matching by row number (same position) - only if row is empty
     if (midtermRowIndex < finalTableData.length) {
       const rowAtSameIndex = finalTableData[midtermRowIndex];
       if (rowAtSameIndex) {
         const lastNameCol = finalStudentInfoCols['LASTNAME'];
         const firstNameCol = finalStudentInfoCols['FIRST NAME'];
-        
-        if (lastNameCol !== undefined && firstNameCol !== undefined && 
-            rowAtSameIndex.length > Math.max(lastNameCol, firstNameCol)) {
+
+        if (lastNameCol !== undefined && firstNameCol !== undefined &&
+          rowAtSameIndex.length > Math.max(lastNameCol, firstNameCol)) {
           const finalLastName = String(rowAtSameIndex[lastNameCol] || '').trim();
           const finalFirstName = String(rowAtSameIndex[firstNameCol] || '').trim();
-          
+
           // Row is empty, can use same position
           if (!finalLastName && !finalFirstName) {
-            return { 
-              rowIndex: midtermRowIndex, 
-              matchType: 'row_position' 
+            return {
+              rowIndex: midtermRowIndex,
+              matchType: 'row_position'
             };
           }
         }
       }
     }
-    
+
     return null; // No match found
   }, []);
 
@@ -543,9 +475,9 @@ const ClassRecordExcel = () => {
     if (!tableData || !headers || !Array.isArray(tableData) || !Array.isArray(headers)) {
       return null;
     }
-    
+
     const studentInfoCols = identifyStudentInfoColumns(headers);
-    
+
     // Extract STUDENT INFO data for each row
     const studentInfoRows = tableData
       .map((row, index) => {
@@ -557,7 +489,7 @@ const ClassRecordExcel = () => {
             studentInfo[colName] = '';
           }
         });
-        
+
         // Only include rows with actual student data
         if (studentInfo['LASTNAME'] || studentInfo['FIRST NAME']) {
           return {
@@ -568,7 +500,7 @@ const ClassRecordExcel = () => {
         return null;
       })
       .filter(Boolean);
-    
+
     // Generate hash string
     const hashString = JSON.stringify(studentInfoRows);
     return hashString;
@@ -605,44 +537,45 @@ const ClassRecordExcel = () => {
       if (matchResult) {
         // Student exists - UPDATE
         const updates = [];
-        const finalRowNumber = matchResult.rowIndex + 4; // +3 headers + 1 for 1-based
-        
+        // Row 1: Internal IDs, Row 2: Category names, Row 3: Subcategory headers, Row 4: Max scores
+        const finalRowNumber = matchResult.rowIndex + 5; // +4 for header rows (Row 1-4), +1 for 1-based
+
         // 🔥 FIX: Use Final sheet's column indices, not Midterm's
         // This ensures we sync to the correct columns even if column positions differ
         Object.entries(finalStudentInfoCols).forEach(([colName, finalColIndex]) => {
           if (finalColIndex === undefined) return;
-          
+
           // 🔥 CRITICAL: For STUDENT ID, verify we're using the correct column
           // Check that the header at this index actually says "STUDENT ID"
           if (colName === 'STUDENT ID') {
             const headerAtIndex = finalHeaders[finalColIndex];
             const normalizedHeader = headerAtIndex ? String(headerAtIndex).trim().toUpperCase() : '';
-            const isStudentIdColumn = normalizedHeader.includes('STUDENT ID') || 
-                                     normalizedHeader.includes('STUDENTID') || 
-                                     (normalizedHeader === 'ID' && !normalizedHeader.includes('MIDDLE'));
-            
+            const isStudentIdColumn = normalizedHeader.includes('STUDENT ID') ||
+              normalizedHeader.includes('STUDENTID') ||
+              (normalizedHeader === 'ID' && !normalizedHeader.includes('MIDDLE'));
+
             if (!isStudentIdColumn) {
               // 🔥 FIX: Find the correct STUDENT ID column index in Final sheet
               let correctStudentIdIndex = -1;
               for (let i = 0; i < finalHeaders.length; i++) {
                 const header = String(finalHeaders[i] || '').trim().toUpperCase();
-                if (header.includes('STUDENT ID') || header.includes('STUDENTID') || 
-                    (header === 'ID' && !header.includes('MIDDLE'))) {
+                if (header.includes('STUDENT ID') || header.includes('STUDENTID') ||
+                  (header === 'ID' && !header.includes('MIDDLE'))) {
                   correctStudentIdIndex = i;
                   break;
                 }
               }
-              
+
               if (correctStudentIdIndex === -1) {
                 console.error(`🔄 SYNC ERROR: STUDENT ID column not found in Final sheet headers!`);
                 return; // Skip - can't find STUDENT ID column
               }
-              
+
               // Use the correct index instead
               finalColIndex = correctStudentIdIndex;
             }
           }
-          
+
           // Skip NO. column - handled separately
           if (colName === 'NO.') {
             const currentValue = finalTableData[matchResult.rowIndex]?.[finalColIndex];
@@ -656,24 +589,24 @@ const ClassRecordExcel = () => {
             }
             return;
           }
-          
+
           // 🔥 CRITICAL FIX: Get Midterm value correctly
           // For STUDENT ID, use extracted value, but re-search if empty AND row has other data
           // This handles misalignment while respecting explicit clearing
           let midtermValue = midtermStudent[colName];
-          
+
           // 🔥 SMART HANDLING FOR STUDENT ID:
           // 1. If extracted value exists → use it (STUDENT ID is in correct column)
           // 2. If extracted value is empty BUT row has other data → re-search (might be misaligned)
           // 3. If extracted value is empty AND row is empty → use empty (explicitly cleared)
           if (colName === 'STUDENT ID') {
             const extractedStudentId = String(midtermStudent[colName] || '').trim();
-            
+
             // If extracted value is empty, check if row has other student data
             if (!extractedStudentId) {
               const hasOtherStudentData = (midtermStudent['LASTNAME'] && midtermStudent['LASTNAME'].trim() !== '') ||
-                                        (midtermStudent['FIRST NAME'] && midtermStudent['FIRST NAME'].trim() !== '');
-              
+                (midtermStudent['FIRST NAME'] && midtermStudent['FIRST NAME'].trim() !== '');
+
               // Only re-search if row has other data (might be misaligned)
               // If row is empty, STUDENT ID is explicitly cleared - respect empty value
               if (hasOtherStudentData) {
@@ -701,12 +634,12 @@ const ClassRecordExcel = () => {
               midtermValue = extractedStudentId;
             }
           }
-          
+
           // Update other columns (including STUDENT ID, MIDDLE NAME, etc.)
-          const midtermValueStr = midtermValue !== undefined && midtermValue !== null 
-            ? String(midtermValue).trim() 
+          const midtermValueStr = midtermValue !== undefined && midtermValue !== null
+            ? String(midtermValue).trim()
             : '';
-          
+
           // 🔥 CRITICAL: For STUDENT ID, validate the value if it exists
           // But allow empty values to be synced (to clear Final if Midterm is empty)
           if (colName === 'STUDENT ID') {
@@ -718,16 +651,16 @@ const ClassRecordExcel = () => {
             }
             // If midtermValueStr is empty, we'll allow it to sync (to clear Final)
           }
-          
+
           // Get current Final value - normalize to empty string if undefined/null/empty
           const finalRow = finalTableData[matchResult.rowIndex];
-          const finalValue = finalRow && finalRow.length > finalColIndex && 
-                           finalRow[finalColIndex] !== undefined && 
-                           finalRow[finalColIndex] !== null &&
-                           String(finalRow[finalColIndex]).trim() !== ''
+          const finalValue = finalRow && finalRow.length > finalColIndex &&
+            finalRow[finalColIndex] !== undefined &&
+            finalRow[finalColIndex] !== null &&
+            String(finalRow[finalColIndex]).trim() !== ''
             ? String(finalRow[finalColIndex]).trim()
             : '';
-          
+
           // 🔥 EFFICIENT & ROBUST: Sync if values are different
           // This handles ALL cases efficiently:
           // 1. Empty in Midterm, has value in Final → Clear Final (sync empty string)
@@ -742,7 +675,7 @@ const ClassRecordExcel = () => {
             });
           }
         });
-        
+
         // 🔥 OPTIMIZATION: Collect updates into provided array instead of making API call
         // All updates will be batched into single API call later
         if (updates.length > 0 && updatesArray) {
@@ -768,104 +701,104 @@ const ClassRecordExcel = () => {
       if (midtermFinalSyncInProgress.current) {
         return;
       }
-      
+
       midtermFinalSyncInProgress.current = true;
-      
+
       if (!classRecord?.google_sheet_id) {
         midtermFinalSyncInProgress.current = false;
         return;
       }
-      
+
       // Get all sheets
       const sheetsList = await classRecordService.getSheetsList(classRecord.google_sheet_id);
       const sheets = sheetsList?.data?.sheets || [];
-      
+
       if (!sheets || sheets.length === 0) {
         midtermFinalSyncInProgress.current = false;
         return;
       }
-      
+
       // Find Midterm and Final sheets
-      const midtermSheet = sheets.find(sheet => 
-        sheet.sheet_name?.toLowerCase().includes('midterm') && 
+      const midtermSheet = sheets.find(sheet =>
+        sheet.sheet_name?.toLowerCase().includes('midterm') &&
         !sheet.sheet_name?.toLowerCase().includes('premidterm')
       );
-      
-      const finalSheet = sheets.find(sheet => 
-        sheet.sheet_name?.toLowerCase().includes('final') && 
+
+      const finalSheet = sheets.find(sheet =>
+        sheet.sheet_name?.toLowerCase().includes('final') &&
         !sheet.sheet_name?.toLowerCase().includes('prefinal')
       );
-      
+
       if (!midtermSheet || !finalSheet) {
         midtermFinalSyncInProgress.current = false;
         return;
       }
-      
+
       // Get Midterm sheet data
       const midtermData = await classRecordService.getSpecificSheetData(
         classRecord.google_sheet_id,
         midtermSheet.sheet_name
       );
-      
+
       if (!midtermData.data?.success) {
         console.error('🔄 SYNC: Failed to load Midterm sheet');
         midtermFinalSyncInProgress.current = false;
         return;
       }
-      
+
       // Extract STUDENT INFO columns from Midterm to calculate hash
       const midtermStudentInfoCols = identifyStudentInfoColumns(midtermData.data.headers);
-      
+
       // 🔥 OPTIMIZATION: Calculate hash of Midterm STUDENT INFO data
       // If hash hasn't changed, skip sync (no changes detected)
       const currentMidtermHash = calculateStudentInfoHash(
         midtermData.data.tableData,
         midtermStudentInfoCols
       );
-      
+
       // Check if Midterm data has changed
-      if (lastMidtermHashRef.current !== null && 
-          lastMidtermHashRef.current === currentMidtermHash) {
+      if (lastMidtermHashRef.current !== null &&
+        lastMidtermHashRef.current === currentMidtermHash) {
         // No changes detected - skip sync to reduce server load
         midtermFinalSyncInProgress.current = false;
         return;
       }
-      
+
       // Get Final sheet data (only if Midterm has changes)
       const finalData = await classRecordService.getSpecificSheetData(
         classRecord.google_sheet_id,
         finalSheet.sheet_name
       );
-      
+
       if (!finalData.data?.success) {
         console.error('🔄 SYNC: Failed to load Final sheet');
         midtermFinalSyncInProgress.current = false;
         return;
       }
-      
+
       // Extract STUDENT INFO from Final sheet
       const finalStudentInfoCols = identifyStudentInfoColumns(finalData.data.headers);
-      
+
       // Validate required columns exist
       if (!midtermStudentInfoCols['LASTNAME'] || !midtermStudentInfoCols['FIRST NAME']) {
         console.warn('🔄 SYNC: Midterm sheet missing required STUDENT INFO columns');
         midtermFinalSyncInProgress.current = false;
         return;
       }
-      
+
       if (!finalStudentInfoCols['LASTNAME'] || !finalStudentInfoCols['FIRST NAME']) {
         console.warn('🔄 SYNC: Final sheet missing required STUDENT INFO columns');
         midtermFinalSyncInProgress.current = false;
         return;
       }
-      
+
       // 🔥 EFFICIENT & ROBUST: Extract ALL rows from Midterm (including empty ones)
       // This ensures we detect when rows are cleared/deleted and sync them to Final
       // We check all rows under STUDENT INFO category (columns A-E: NO., LASTNAME, FIRST NAME, MIDDLE NAME, STUDENT ID)
       const midtermRows = midtermData.data.tableData.map((row, index) => {
         const student = {};
         let hasAnyData = false;
-        
+
         Object.entries(midtermStudentInfoCols).forEach(([colName, colIndex]) => {
           // 🔥 FIX: Handle sparse arrays - check if value exists, not just row length
           // Google Sheets API returns sparse arrays (empty cells are undefined, not included)
@@ -873,13 +806,13 @@ const ClassRecordExcel = () => {
             // Get raw value - may be undefined if cell is empty or row is sparse
             let rawValue = row[colIndex];
             let actualIndex = colIndex;
-            
+
             // 🔥 FIX: If STUDENT ID is empty at identified index, search for it in the row
             // This handles cases where headers and data rows are misaligned
             if (colName === 'STUDENT ID' && (!rawValue || String(rawValue).trim() === '')) {
               // Pattern to match STUDENT ID format: XX-XXXX-XXX (e.g., 22-1234-567)
               const studentIdPattern = /^\d{2}-\d{4}-\d{3}$/;
-              
+
               // Search the row for a value matching STUDENT ID pattern
               for (let i = 0; i < row.length; i++) {
                 const cellValue = String(row[i] || '').trim();
@@ -890,13 +823,13 @@ const ClassRecordExcel = () => {
                 }
               }
             }
-            
+
             // Convert to string, handling undefined/null/empty
-            const stringValue = rawValue !== undefined && rawValue !== null 
-              ? String(rawValue) 
+            const stringValue = rawValue !== undefined && rawValue !== null
+              ? String(rawValue)
               : '';
             student[colName] = stringValue.trim();
-            
+
             // Check if this column has data (for STUDENT INFO columns A-E)
             if (student[colName] && student[colName] !== '') {
               hasAnyData = true;
@@ -905,29 +838,29 @@ const ClassRecordExcel = () => {
             student[colName] = '';
           }
         });
-        
+
         // Return ALL rows, including empty ones - mark if they have data
-        return { 
-          rowIndex: index, 
-          data: student, 
+        return {
+          rowIndex: index,
+          data: student,
           hasData: hasAnyData || (student['LASTNAME'] || student['FIRST NAME'])
         };
       });
-      
+
       // Use all rows for comparison, but filter for syncing (only sync rows with data)
       const midtermStudents = midtermRows.filter(row => row.hasData);
-      
+
       if (midtermStudents.length === 0) {
         midtermFinalSyncInProgress.current = false;
         return;
       }
-      
+
       // 🔥 OPTIMIZATION: Collect all updates first, then batch into single API call
       // This reduces API calls from N to 1, making it much more efficient
       let syncCount = 0;
       const allUpdates = []; // Collect ALL updates (syncs + clears) for batching
       const newStudentsToAdd = []; // Collect new students to add
-      
+
       // Process syncs and collect updates
       for (const midtermStudent of midtermStudents) {
         const match = findMatchingStudent(
@@ -937,38 +870,38 @@ const ClassRecordExcel = () => {
           midtermStudent.rowIndex,
           finalStudentInfoCols
         );
-        
+
         // Check if sync is needed
         let needsSync = false;
-        
+
         if (!match) {
           // New student - needs to be added
           needsSync = true;
         } else {
           // Student exists - check if info is different
           const finalRow = finalData.data.tableData[match.rowIndex];
-          
+
           // 🔥 EFFICIENT & ROBUST: Check all columns for differences
           // This includes empty values - if Midterm is empty, Final should be empty too
           Object.entries(finalStudentInfoCols).forEach(([colName, colIndex]) => {
             if (colIndex === undefined) return;
-            
+
             // 🔥 ROBUST: Normalize Midterm value - treat undefined/null/empty as empty string
-            const midtermValue = midtermStudent.data[colName] !== undefined && 
-                                midtermStudent.data[colName] !== null &&
-                                String(midtermStudent.data[colName]).trim() !== ''
+            const midtermValue = midtermStudent.data[colName] !== undefined &&
+              midtermStudent.data[colName] !== null &&
+              String(midtermStudent.data[colName]).trim() !== ''
               ? String(midtermStudent.data[colName]).trim()
               : '';
-            
+
             // 🔥 ROBUST: Normalize Final value - treat undefined/null/empty as empty string
-            const finalValue = finalRow && 
-                              finalRow.length > colIndex && 
-                              finalRow[colIndex] !== undefined && 
-                              finalRow[colIndex] !== null &&
-                              String(finalRow[colIndex]).trim() !== ''
+            const finalValue = finalRow &&
+              finalRow.length > colIndex &&
+              finalRow[colIndex] !== undefined &&
+              finalRow[colIndex] !== null &&
+              String(finalRow[colIndex]).trim() !== ''
               ? String(finalRow[colIndex]).trim()
               : '';
-            
+
             // Skip NO. column for comparison (can differ)
             // 🔥 EFFICIENT & ROBUST: For all other fields, sync if different
             // This includes:
@@ -980,9 +913,9 @@ const ClassRecordExcel = () => {
               needsSync = true;
             }
           });
-          
+
         }
-        
+
         if (needsSync) {
           if (!match) {
             // New student - collect for batch addition
@@ -990,15 +923,15 @@ const ClassRecordExcel = () => {
               'LASTNAME': midtermStudent.data['LASTNAME'],
               'FIRST NAME': midtermStudent.data['FIRST NAME']
             };
-            
+
             if (midtermStudent.data['MIDDLE NAME']) {
               studentData['MIDDLE NAME'] = midtermStudent.data['MIDDLE NAME'];
             }
-            
+
             if (midtermStudent.data['STUDENT ID']) {
               studentData['STUDENT ID'] = midtermStudent.data['STUDENT ID'];
             }
-            
+
             newStudentsToAdd.push(
               classRecordService.addStudentToGoogleSheetsWithAutoNumber(
                 classRecord.google_sheet_id,
@@ -1022,31 +955,31 @@ const ClassRecordExcel = () => {
               midtermData.data.tableData,
               allUpdates // Pass updates array to collect updates
             );
-            
+
             if (updateCount && updateCount > 0) {
               syncCount++;
             }
           }
         }
       }
-      
+
       // Wait for all new students to be added
       await Promise.all(newStudentsToAdd);
       if (newStudentsToAdd.length > 0) {
         syncCount += newStudentsToAdd.length;
       }
-      
+
       // 🔥 EFFICIENT & ROBUST: Clear rows in Final that are empty/null in Midterm
       // Check ALL rows in Final against ALL rows in Midterm (by position and by matching)
       // This handles cases where data was deleted/cleared in Midterm
       // 🔥 OPTIMIZATION: Collect clear updates into allUpdates array for batching
       let clearCount = 0;
-      
+
       // Get ALL rows from Final sheet (including empty ones)
       const finalRows = finalData.data.tableData.map((row, index) => {
         const student = {};
         let hasAnyStudentInfoData = false;
-        
+
         Object.entries(finalStudentInfoCols).forEach(([colName, colIndex]) => {
           if (colIndex !== undefined && row.length > colIndex) {
             student[colName] = String(row[colIndex] || '').trim();
@@ -1057,34 +990,34 @@ const ClassRecordExcel = () => {
             student[colName] = '';
           }
         });
-        
+
         // Return ALL rows with their data state
-        return { 
-          rowIndex: index, 
+        return {
+          rowIndex: index,
           data: student,
           hasData: hasAnyStudentInfoData || (student['LASTNAME'] || student['FIRST NAME'])
         };
       });
-      
+
       // 🔥 EFFICIENT & ROBUST: Check each Final row against ALL Midterm rows (including empty ones)
       // Verify that each Final row matches a Midterm row WITH DATA - if not, clear it
       for (const finalRow of finalRows) {
         // Only process rows that have data in Final
         if (!finalRow.hasData) continue;
-        
+
         // 🔥 CRITICAL FIX: Match by IDENTIFIER first (STUDENT ID or name), then check if Midterm row has data
         // This detects when a Midterm row is empty but still has the same identifier
         let matchFound = false;
         let matchedMidtermRow = null;
         let matchedMidtermRowHasData = false;
-        
+
         // First priority: Match by STUDENT ID (most reliable)
         // Check ALL Midterm rows, including empty ones, to find matching STUDENT ID
         if (finalRow.data['STUDENT ID'] && finalRow.data['STUDENT ID'] !== '') {
           for (const midtermRow of midtermRows) {
             // Match by STUDENT ID regardless of whether Midterm row has data
-            if (midtermRow.data['STUDENT ID'] && 
-                midtermRow.data['STUDENT ID'] === finalRow.data['STUDENT ID']) {
+            if (midtermRow.data['STUDENT ID'] &&
+              midtermRow.data['STUDENT ID'] === finalRow.data['STUDENT ID']) {
               matchFound = true;
               matchedMidtermRow = midtermRow;
               matchedMidtermRowHasData = midtermRow.hasData;
@@ -1092,20 +1025,20 @@ const ClassRecordExcel = () => {
             }
           }
         }
-        
+
         // Second priority: Match by name (LASTNAME + FIRST NAME) if no STUDENT ID match
         // Check ALL Midterm rows, including empty ones, to find matching name
         if (!matchFound && finalRow.data['LASTNAME'] && finalRow.data['FIRST NAME']) {
           const finalLastName = finalRow.data['LASTNAME'].toLowerCase().trim();
           const finalFirstName = finalRow.data['FIRST NAME'].toLowerCase().trim();
-          
+
           for (const midtermRow of midtermRows) {
             const midtermLastName = (midtermRow.data['LASTNAME'] || '').toLowerCase().trim();
             const midtermFirstName = (midtermRow.data['FIRST NAME'] || '').toLowerCase().trim();
-            
+
             // Match by name regardless of whether Midterm row has data
-            if (midtermLastName === finalLastName && 
-                midtermFirstName === finalFirstName) {
+            if (midtermLastName === finalLastName &&
+              midtermFirstName === finalFirstName) {
               matchFound = true;
               matchedMidtermRow = midtermRow;
               matchedMidtermRowHasData = midtermRow.hasData;
@@ -1113,16 +1046,17 @@ const ClassRecordExcel = () => {
             }
           }
         }
-        
+
         // 🔥 CLEAR LOGIC: Clear Final row if:
         // 1. No match found in Midterm (student doesn't exist), OR
         // 2. Match found but Midterm row is empty (student was deleted/cleared)
         const shouldClear = !matchFound || (matchFound && !matchedMidtermRowHasData);
-        
+
         if (shouldClear) {
-          const finalRowNumber = finalRow.rowIndex + 4; // +3 headers + 1 for 1-based
+          // Row 1: Internal IDs, Row 2: Category names, Row 3: Subcategory headers, Row 4: Max scores
+          const finalRowNumber = finalRow.rowIndex + 5; // +4 for header rows (Row 1-4), +1 for 1-based
           const clearUpdates = [];
-          
+
           // Clear all STUDENT INFO columns (A-E: NO., LASTNAME, FIRST NAME, MIDDLE NAME, STUDENT ID)
           Object.entries(finalStudentInfoCols).forEach(([colName, colIndex]) => {
             if (colIndex !== undefined) {
@@ -1133,7 +1067,7 @@ const ClassRecordExcel = () => {
               });
             }
           });
-          
+
           if (clearUpdates.length > 0) {
             // 🔥 OPTIMIZATION: Collect clear updates into allUpdates array for batching
             allUpdates.push(...clearUpdates);
@@ -1141,7 +1075,7 @@ const ClassRecordExcel = () => {
           }
         }
       }
-      
+
       // 🔥 OPTIMIZATION: Batch ALL updates (syncs + clears) into single API call
       // This reduces API calls from N to 1, making it much more efficient
       if (allUpdates.length > 0) {
@@ -1155,33 +1089,33 @@ const ClassRecordExcel = () => {
           // Don't throw - continue to update hash even if some updates failed
         }
       }
-      
+
       // 🔥 OPTIMIZATION: Update hash after successful sync
       // This ensures we don't re-sync the same data
       lastMidtermHashRef.current = currentMidtermHash;
-      
+
       const totalChanges = syncCount + clearCount;
-      
+
       // 🔥 PREVENT DUPLICATE TOASTS: Only show toast if result is different from last sync
       // This prevents showing the same toast multiple times for the same changes
       const currentSyncResult = { syncCount, clearCount, timestamp: Date.now() };
-      const isDuplicateResult = 
+      const isDuplicateResult =
         lastSyncResultRef.current.syncCount === syncCount &&
         lastSyncResultRef.current.clearCount === clearCount &&
         (Date.now() - (lastSyncResultRef.current.timestamp || 0)) < 2000; // Same result within 2 seconds = duplicate
-      
+
       if (totalChanges > 0 && !isDuplicateResult) {
         // Clear any pending toast debounce
         if (toastDebounceTimeoutRef.current) {
           clearTimeout(toastDebounceTimeoutRef.current);
           toastDebounceTimeoutRef.current = null;
         }
-        
+
         // Dismiss any existing toast first
         if (lastSyncToastRef.current) {
           toast.dismiss(lastSyncToastRef.current);
         }
-        
+
         let message = '';
         if (syncCount > 0 && clearCount > 0) {
           message = `Synced ${syncCount} student(s) and cleared ${clearCount} student(s) in Final sheet`;
@@ -1190,18 +1124,18 @@ const ClassRecordExcel = () => {
         } else if (clearCount > 0) {
           message = `Cleared ${clearCount} student(s) in Final sheet`;
         }
-        
+
         // Show toast immediately (no debounce)
         const toastId = toast.success(message, { duration: 3000 });
         lastSyncToastRef.current = toastId;
-        
+
         // Update last sync result to prevent duplicates
         lastSyncResultRef.current = currentSyncResult;
       } else if (totalChanges === 0) {
         // No changes - reset last sync result so next change will show toast
         lastSyncResultRef.current = { syncCount: 0, clearCount: 0, timestamp: 0 };
       }
-      
+
     } catch (error) {
       console.error('🔄 SYNC: Error checking Midterm-Final sync:', error);
       // Don't show error toast - this is background operation
@@ -1210,26 +1144,67 @@ const ClassRecordExcel = () => {
     }
   }, [classRecord?.google_sheet_id, identifyStudentInfoColumns, findMatchingStudent, syncStudentInfoToFinal]);
 
-  // 🔥 NEW: Manual refresh function for allocation status
-  const manualRefreshAllocation = useCallback(async () => {
+  // 🔥 PHASE 5: Manual sync function - syncs to SETTINGS tab and checks allocation
+  const manualSyncToSettings = useCallback(async (sheetName = null) => {
     if (isRefreshingAllocation || percentageCheckInProgress.current) {
-      console.log('⏭️ Refresh already in progress');
+      console.log('⏭️ Sync already in progress');
       return;
     }
 
     setIsRefreshingAllocation(true);
     try {
-      // Bypass rate limiting for manual refresh
-      lastPercentageCheckTime.current = 0;
+      const targetSheet = sheetName || currentSheet?.sheet_name;
+      if (!targetSheet) {
+        toast.error('No sheet selected for sync');
+        return;
+      }
+
+      console.log(`🔄 Manual sync triggered for ${targetSheet}`);
+
+      // Force sync to SETTINGS tab
+      const syncRes = await classRecordService.syncCategoryPercentages(id, targetSheet, { force: true });
+      const syncData = syncRes.data || {};
+
+      // Show sync feedback
+      if (syncData.settings_synced && Object.keys(syncData.settings_synced).length > 0) {
+        const syncedCount = Object.keys(syncData.settings_synced).length;
+        const sheetType = targetSheet?.toLowerCase().includes('midterm') ? 'SETTINGS_MIDTERM' :
+          targetSheet?.toLowerCase().includes('final') ? 'SETTINGS_FINAL' : 'SETTINGS';
+        toast.success(
+          `✅ Synced ${syncedCount} categor${syncedCount === 1 ? 'y' : 'ies'} to ${sheetType} tab`,
+          { duration: 3000 }
+        );
+      }
+
+      if (syncData.settings_errors && Object.keys(syncData.settings_errors).length > 0) {
+        const errorCount = Object.keys(syncData.settings_errors).length;
+        toast.error(
+          `⚠️ ${errorCount} categor${errorCount === 1 ? 'y' : 'ies'} failed to sync`,
+          { duration: 4000 }
+        );
+      }
+
+      // Wait a bit for sync to complete
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Then check allocation (which reads from SETTINGS tab)
+      lastPercentageCheckTime.current = 0; // Bypass rate limiting
       await checkAllSheetsForPercentageChanges();
-      toast.success('Allocation status refreshed', { duration: 2000 });
+
+      toast.success('Allocation status updated from SETTINGS tab', { duration: 2000 });
     } catch (error) {
-      console.error('Failed to refresh allocation:', error);
-      toast.error('Failed to refresh allocation');
+      console.error('Failed to sync to SETTINGS:', error);
+      toast.error('Failed to sync to SETTINGS tab');
     } finally {
       setIsRefreshingAllocation(false);
     }
-  }, [isRefreshingAllocation, checkAllSheetsForPercentageChanges]);
+  }, [isRefreshingAllocation, checkAllSheetsForPercentageChanges, currentSheet?.sheet_name, id]);
+
+  // 🔥 PHASE 5: Manual refresh function for allocation status (kept for backward compatibility)
+  const manualRefreshAllocation = useCallback(async () => {
+    // This now calls manualSyncToSettings to ensure sync happens first
+    await manualSyncToSettings();
+  }, [manualSyncToSettings]);
 
   // No ref sync needed; we use state directly for simplicity
 
@@ -1357,14 +1332,14 @@ const ClassRecordExcel = () => {
   // 🔄 AUTO-SYNC: Periodic checker for Midterm to Final sync (every 10 seconds for faster sync)
   useEffect(() => {
     if (!classRecord?.google_sheet_id) return;
-    
+
     // Initial check after 3 seconds (let page load, but faster than before)
     const initialTimeout = setTimeout(() => {
       if (!midtermFinalSyncInProgress.current) {
         checkMidtermFinalSync();
       }
     }, 3000); // Reduced from 5s to 3s for faster initial sync
-    
+
     // Then check every 10 seconds (faster polling for quicker sync detection)
     // This ensures changes are synced within 30 seconds (3 checks max)
     const interval = setInterval(() => {
@@ -1372,10 +1347,10 @@ const ClassRecordExcel = () => {
       if (midtermFinalSyncInProgress.current) {
         return;
       }
-      
+
       checkMidtermFinalSync();
     }, 10000); // 10 seconds - faster polling for quicker sync
-    
+
     return () => {
       clearTimeout(initialTimeout);
       clearInterval(interval);
@@ -1589,10 +1564,21 @@ const ClassRecordExcel = () => {
           console.log("📋 Sheets list response:", sheetsListResponse.data);
 
           if (sheetsListResponse.data?.success && sheetsListResponse.data.sheets?.length > 0) {
-            setAvailableSheets(sheetsListResponse.data.sheets);
+            // Filter out Settings_Midterm and Settings_Final sheets from the dropdown
+            const filteredSheets = sheetsListResponse.data.sheets.filter(sheet => {
+              const sheetName = sheet.sheet_name?.toLowerCase() || '';
+              return !sheetName.includes('settings_midterm') && !sheetName.includes('settings_final');
+            });
+
+            if (filteredSheets.length === 0) {
+              console.warn('⚠️ No sheets available after filtering out Settings sheets');
+              return;
+            }
+
+            setAvailableSheets(filteredSheets);
 
             // Set the first sheet as current by default
-            const firstSheet = sheetsListResponse.data.sheets[0];
+            const firstSheet = filteredSheets[0];
             setCurrentSheet(firstSheet);
 
             // Load data from the first sheet
@@ -1729,18 +1715,6 @@ const ClassRecordExcel = () => {
 
         // After loading sheet data, refresh mirrored CLASS STANDING percentages
         await syncRemaining();
-
-        // 🔥 OPTIMIZATION: Use data we already fetched above to initialize hash
-        // No need for another API call - we already have the headers!
-        if (sheetsResponse.data?.main_headers) {
-          const initialHash = generatePercentageHash(sheetsResponse.data.main_headers);
-          setLastPercentageHash(initialHash);
-          console.log('🔍 Initialized percentage hash from existing data:', initialHash);
-        } else if (sheetsResponse.data?.headers) {
-          const initialHash = generatePercentageHash(sheetsResponse.data.headers);
-          setLastPercentageHash(initialHash);
-          console.log('🔍 Initialized percentage hash from existing data (fallback):', initialHash);
-        }
       } else {
         console.log(`⚠️ LOAD SHEET: No data available for sheet: "${sheetName}"`);
         toast(`No data found in sheet: ${sheetName}`);
@@ -2234,6 +2208,32 @@ const ClassRecordExcel = () => {
       case 'BATCH_ROW_RANGE':
         handleBatchRowRangeCommand(command.data);
         break;
+      case 'SCORE_EXCEEDS_MAX':
+        // 🔥 NEW: Handle score exceeding maximum
+        console.log('❌ SCORE_EXCEEDS_MAX detected:', command.data);
+        const errorMessage = command.data.errorMessage ||
+          `Score ${command.data.value} exceeds maximum of ${command.data.maxScore} for ${command.data.column}`;
+
+        toast.error(`❌ ${errorMessage}`);
+        if (voiceEnabled) {
+          const voiceMessage = command.data.searchName
+            ? `Cannot update ${command.data.searchName}. ${errorMessage}`
+            : errorMessage;
+          speakText(voiceMessage);
+        }
+
+        // Show error state in voice overlay
+        setVoicePhase('error');
+        setVoiceBusy(true);
+        setVoiceStatus('Score exceeds maximum');
+
+        // Auto-clear error state after 4 seconds
+        setTimeout(() => {
+          setVoiceBusy(false);
+          setVoicePhase('idle');
+          setVoiceStatus('');
+        }, 4000);
+        break;
       default:
         toast.error(`🎙️ Command not recognized: "${command.data?.originalText || 'Unknown command'}"`);
         if (voiceEnabled) {
@@ -2523,7 +2523,8 @@ const ClassRecordExcel = () => {
       // 🔥 Step 1: Clear existing data columns (preserve formulas)
       const originalSize = tableData.length;
       for (let rowIndex = 0; rowIndex < originalSize; rowIndex++) {
-        const sheetRow = rowIndex + 4; // +3 for headers, +1 for 1-based indexing
+        // Row 1: Internal IDs, Row 2: Category names, Row 3: Subcategory headers, Row 4: Max scores
+        const sheetRow = rowIndex + 5; // +4 for header rows (Row 1-4), +1 for 1-based indexing
 
         for (let colIndex = 0; colIndex < headers.length; colIndex++) {
           // 🔥 SKIP formula columns
@@ -2637,15 +2638,22 @@ const ClassRecordExcel = () => {
     try {
       toast('🆔 Finding student by ID...');
 
-      // Get fresh sheet data
-      const sheetsResponse = await getSheetDataCached();
-
-      if (!sheetsResponse.data?.success) {
-        toast.error('Could not load sheet data');
+      // Ensure sheet data is loaded
+      if (!classRecord?.google_sheet_id || !currentSheet?.sheet_name) {
+        toast.error('No sheet selected');
         return;
       }
 
-      const { headers, tableData } = sheetsResponse.data;
+      // Load fresh sheet data if needed
+      if (headers.length === 0 || tableData.length === 0) {
+        await loadSheetData(classRecord.google_sheet_id, currentSheet.sheet_name);
+      }
+
+      // Use current state variables
+      if (headers.length === 0 || tableData.length === 0) {
+        toast.error('Could not load sheet data');
+        return;
+      }
 
       // Find student by ID
       const studentIdColumnIndex = headers.findIndex(h =>
@@ -3025,17 +3033,61 @@ const ClassRecordExcel = () => {
 
       console.log(`🎯 Found column: "${foundColumn}" for "${columnName}"`);
 
-      // 🔥 STEP 2: Find and update students
+      // 🔥 STEP 2: Validate all scores first
+      const invalidScores = [];
+      students.forEach(({ name, score }) => {
+        const validation = validateScore(foundColumn, score);
+        if (!validation.valid) {
+          invalidScores.push({ name, score, error: validation.error });
+        }
+      });
+
+      if (invalidScores.length > 0) {
+        const errorMsg = invalidScores.map(e => `${e.name}: ${e.score} - ${e.error}`).join(', ');
+        toast.error(`Cannot process batch: Invalid scores detected - ${errorMsg}`);
+        if (voiceEnabled) {
+          speakText(`Cannot process batch. ${invalidScores.length} invalid scores detected.`);
+        }
+        return;
+      }
+
+      // 🔥 STEP 3: Find and update students
       const updatedData = [...tableData];
       let updatedCount = 0;
       const updates = [];
 
+      // Find name column indices
+      const lastNameIndex = headers.findIndex(h => h.toLowerCase().includes('lastname'));
+      const firstNameIndex = headers.findIndex(h => h.toLowerCase().includes('first'));
+
       students.forEach(({ name, score }) => {
-        const studentIndex = findStudentIndex(name);
+        // Search for student by name (try matching against last name, first name, or full name)
+        const nameLower = name.toLowerCase().trim();
+        const studentIndex = tableData.findIndex((row, index) => {
+          if (lastNameIndex !== -1 && firstNameIndex !== -1) {
+            const lastName = String(row[lastNameIndex] || '').toLowerCase().trim();
+            const firstName = String(row[firstNameIndex] || '').toLowerCase().trim();
+            const fullName = `${firstName} ${lastName}`.trim();
+            return lastName === nameLower ||
+              firstName === nameLower ||
+              fullName === nameLower ||
+              fullName.includes(nameLower) ||
+              nameLower.includes(fullName);
+          } else if (lastNameIndex !== -1) {
+            const lastName = String(row[lastNameIndex] || '').toLowerCase().trim();
+            return lastName === nameLower || lastName.includes(nameLower) || nameLower.includes(lastName);
+          } else if (firstNameIndex !== -1) {
+            const firstName = String(row[firstNameIndex] || '').toLowerCase().trim();
+            return firstName === nameLower || firstName.includes(nameLower) || nameLower.includes(firstName);
+          }
+          return false;
+        });
+
         if (studentIndex !== -1) {
           updatedData[studentIndex][foundColumn] = score;
           updates.push({
-            row: studentIndex + 3, // +3 for header rows
+            // Row 1: Internal IDs, Row 2: Category names, Row 3: Subcategory headers, Row 4: Max scores
+            row: studentIndex + 5, // +4 for header rows (Row 1-4), +1 for 1-based
             column: foundColumn,
             value: score
           });
@@ -3112,7 +3164,17 @@ const ClassRecordExcel = () => {
 
       console.log(`🎯 Found column: "${foundColumn}" for "${columnName}"`);
 
-      // 🔥 STEP 2: Validate rows
+      // 🔥 STEP 2: Validate score against max score
+      const validation = validateScore(foundColumn, score);
+      if (!validation.valid) {
+        toast.error(`❌ ${validation.error}`);
+        if (voiceEnabled) {
+          speakText(validation.error);
+        }
+        return;
+      }
+
+      // 🔥 STEP 3: Validate rows
       if (startRow < 0 || endRow < 0 || startRow > endRow) {
         toast.error('Invalid row range');
         return;
@@ -3309,7 +3371,7 @@ const ClassRecordExcel = () => {
       if (fileOrDriveFile.fromComputer && fileOrDriveFile.file) {
         // File is from computer, process directly
         const file = fileOrDriveFile.file;
-        
+
         // Process based on import type
         if (importType === 'students') {
           await processImportFile(file);
@@ -3558,19 +3620,61 @@ const ClassRecordExcel = () => {
     setCategoryLoading(true);
     try {
       console.log('Creating category:', categoryData);
+      // 🔥 DEBUG: Log currentSheet to trace sheet_name issue
+      console.log('🔥 DEBUG: currentSheet:', currentSheet);
+      console.log('🔥 DEBUG: currentSheet?.sheet_name:', currentSheet?.sheet_name);
+      console.log('🔥 DEBUG: window.currentActiveSheet:', window.currentActiveSheet);
+
+      // 🔥 FIX: Get the most up-to-date sheet name
+      // Check multiple sources to ensure we have the correct sheet name
+      let targetSheetName = currentSheet?.sheet_name;
+
+      // Fallback 1: Check window.currentActiveSheet (set during sheet switch)
+      if (!targetSheetName && window.currentActiveSheet) {
+        console.log('🔥 FIX: Using window.currentActiveSheet:', window.currentActiveSheet);
+        targetSheetName = window.currentActiveSheet;
+      }
+
+      // Fallback 2: Check localStorage (persisted during sheet switch)
+      if (!targetSheetName) {
+        const savedSheetName = localStorage.getItem('activeSheetName');
+        if (savedSheetName) {
+          console.log('🔥 FIX: Using localStorage activeSheetName:', savedSheetName);
+          targetSheetName = savedSheetName;
+        }
+      }
+
+      // Fallback 3: Check availableSheets state (if available)
+      if (!targetSheetName && availableSheets.length > 0) {
+        // Try to find Final sheet first, then Midterm
+        const finalSheet = availableSheets.find(s => s.sheet_name?.toLowerCase().includes('final'));
+        const midtermSheet = availableSheets.find(s => s.sheet_name?.toLowerCase().includes('midterm'));
+        targetSheetName = finalSheet?.sheet_name || midtermSheet?.sheet_name || availableSheets[0]?.sheet_name;
+        console.log('🔥 FIX: Using availableSheets fallback:', targetSheetName);
+      }
+
+      if (!targetSheetName) {
+        throw new Error('Cannot determine target sheet name. Please switch to a sheet first.');
+      }
+
+      console.log('🔥 FINAL: Using sheet_name:', targetSheetName);
 
       const response = await classRecordService.addCategoryToSheet(
         classRecord.google_sheet_id,
         categoryData,
-        currentSheet?.sheet_name
+        targetSheetName
       );
 
       if (response.data?.success) {
         toast.success(`Successfully created "${categoryData.categoryName}" with ${categoryData.subCategoryCount} columns!`);
 
         // 🔥 FIX: Pass the required parameters to loadSheetData
-        await loadSheetData(classRecord.google_sheet_id, currentSheet?.sheet_name);
+        // Use the same targetSheetName we used for adding the category
+        await loadSheetData(classRecord.google_sheet_id, targetSheetName);
         await syncRemaining();
+
+        // 🔥 FIX: Refresh categories list so DeleteCategoryModal can detect the newly added category
+        await loadCategories();
 
         // Reset percentage hash after category changes
         setLastPercentageHash(null);
@@ -3665,11 +3769,30 @@ const ClassRecordExcel = () => {
         classRecord.google_sheet_id,
         columnData.categoryName,
         columnData.newColumnName,
+        columnData.categoryWeight, // Pass category weight (required)
         currentSheet?.sheet_name
       );
 
       if (response.data.success) {
-        toast.success(`Successfully added column to "${columnData.categoryName}"!`);
+        // Show success message with SETTINGS sync status
+        let successMessage = `Successfully added column to "${columnData.categoryName}"!`;
+
+        if (response.data.settings_synced) {
+          successMessage += ` Category registered in SETTINGS tab.`;
+          toast.success(successMessage);
+        } else if (response.data.settings_warning) {
+          // Sheet operation succeeded but SETTINGS sync failed
+          toast.success(successMessage);
+          toast.warning(`Note: ${response.data.settings_warning}`);
+        } else {
+          toast.success(successMessage);
+        }
+
+        // Log internal ID for debugging
+        if (response.data.internal_id) {
+          console.log(`✅ Category registered with internal ID: ${response.data.internal_id}`);
+        }
+
         setShowAddColumnModal(false);
 
         // Reload the sheet data
@@ -3682,7 +3805,8 @@ const ClassRecordExcel = () => {
       }
     } catch (error) {
       console.error('Add column to category error:', error);
-      toast.error('Failed to add column to category');
+      const errorMessage = error.response?.data?.error || error.message || 'Failed to add column to category';
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -4434,7 +4558,8 @@ const ClassRecordExcel = () => {
     const command = parseVoiceCommand(transcript, headers, [], {
       recentStudents,
       commandHistory: [],
-      alternatives: []
+      alternatives: [],
+      maxScores: maxScores  // 🔥 NEW: Pass maxScores for validation
     });
     // If parser fails to recognize a meaningful command, surface an error and exit busy
     if (!command || !command.type || command.type === 'UNKNOWN_COMMAND') {
@@ -4522,6 +4647,17 @@ const ClassRecordExcel = () => {
     if (!currentBatchColumn) {
       console.log('🔥 PROCESS BATCH: ❌ No column selected');
       toast.error('Please select a column first');
+      return;
+    }
+
+    // 🔥 VALIDATION: Check if score exceeds max score
+    const validation = validateScore(currentBatchColumn, score);
+    if (!validation.valid) {
+      console.log('🔥 PROCESS BATCH: ❌ Validation failed:', validation.error);
+      toast.error(`❌ ${validation.error}`);
+      if (voiceEnabled) {
+        speakText(validation.error);
+      }
       return;
     }
 
@@ -4670,6 +4806,28 @@ const ClassRecordExcel = () => {
       return;
     }
 
+    // 🔥 VALIDATION: Validate all scores before executing batch
+    const invalidEntries = [];
+    for (const entry of validEntries) {
+      const validation = validateScore(currentBatchColumn, entry.score);
+      if (!validation.valid) {
+        invalidEntries.push({
+          student: entry.studentName,
+          score: entry.score,
+          error: validation.error
+        });
+      }
+    }
+
+    if (invalidEntries.length > 0) {
+      const errorMsg = invalidEntries.map(e => `${e.student}: ${e.score} - ${e.error}`).join('\n');
+      toast.error(`Cannot execute batch: Invalid scores detected\n${errorMsg}`);
+      if (voiceEnabled) {
+        speakText(`Cannot execute batch. ${invalidEntries.length} invalid scores detected.`);
+      }
+      return;
+    }
+
     try {
       window.batchModeFinishing = true;
       setIsProcessingBatch(true);
@@ -4688,8 +4846,9 @@ const ClassRecordExcel = () => {
         // Convert column index to letter (A, B, C, etc.)
         const columnLetter = String.fromCharCode(65 + columnIndex);
 
-        // Calculate actual sheet row (skip 3 header rows, convert to 1-based)
-        const sheetRow = entry.rowIndex + 4; // +3 for headers, +1 for 1-based indexing
+        // Calculate actual sheet row (skip 4 header rows, convert to 1-based)
+        // Row 1: Internal IDs, Row 2: Category names, Row 3: Subcategory headers, Row 4: Max scores
+        const sheetRow = entry.rowIndex + 5; // +4 for header rows (Row 1-4), +1 for 1-based indexing
 
         // Build cell range
         const sheetPrefix = currentSheet?.sheet_name ? `'${currentSheet.sheet_name}'!` : '';
@@ -5412,6 +5571,8 @@ const ClassRecordExcel = () => {
         };
       } else {
         // If currently closed, close all others and open this one
+        // Also close sheet selector when opening a dropdown
+        setShowSheetSelector(false);
         return {
           tools: false,
           voice: false,
@@ -5465,12 +5626,22 @@ const ClassRecordExcel = () => {
                 <div className="h-5 w-px bg-slate-300 flex-shrink-0"></div>
                 <div className="min-w-0 overflow-hidden">
                   <h1 className="text-lg sm:text-xl font-semibold text-slate-900 break-words">{classRecord?.name}</h1>
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs sm:text-sm text-slate-500">
-                    <span>{classRecord?.section_name}</span>
-                    <span className="hidden sm:inline">•</span>
-                    <span>{classRecord?.semester}</span>
-                    <span className="hidden sm:inline">•</span>
-                    <span>{classRecord?.teacher_name}</span>
+                  <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                    {classRecord?.academic_year && (
+                      <span className="text-[11px] sm:text-xs bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-800 px-2 py-0.5 rounded-full font-medium border border-blue-200/50">
+                        {classRecord.academic_year}
+                      </span>
+                    )}
+                    {classRecord?.semester && (
+                      <span className="text-[11px] sm:text-xs bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-800 px-2 py-0.5 rounded-full font-medium border border-blue-200/50">
+                        {classRecord.semester}
+                      </span>
+                    )}
+                    {classRecord?.section_name && (
+                      <span className="text-[11px] sm:text-xs bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-800 px-2 py-0.5 rounded-full font-medium border border-blue-200/50">
+                        {classRecord.section_name}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -5489,6 +5660,37 @@ const ClassRecordExcel = () => {
 
                 {/* Allocation Badge */}
                 <div className="relative">
+                  {/* 🔥 PHASE 6: Sync Status Indicator */}
+                  {currentSheet?.sheet_name && syncStatus[currentSheet.sheet_name] && (
+                    <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg shadow-sm border ${syncStatus[currentSheet.sheet_name].isSynced
+                      ? 'bg-green-50 border-green-200'
+                      : 'bg-orange-50 border-orange-200'
+                      }`}>
+                      {syncStatus[currentSheet.sheet_name].isSynced ? (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 text-green-600" />
+                          <span className="text-xs font-medium text-green-700">
+                            Synced with {syncStatus[currentSheet.sheet_name].source || 'SETTINGS'}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <AlertCircle className="w-4 h-4 text-orange-600" />
+                          <span className="text-xs font-medium text-orange-700">
+                            Not synced with SETTINGS
+                          </span>
+                          <button
+                            onClick={() => manualSyncToSettings(currentSheet.sheet_name)}
+                            disabled={isRefreshingAllocation}
+                            className="ml-2 px-2 py-0.5 bg-orange-600 text-white text-xs rounded hover:bg-orange-700 disabled:opacity-50"
+                          >
+                            Sync Now
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+
                   {classStandingRemaining > 0 ? (
                     <div className="flex items-center space-x-2 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg shadow-sm">
                       <div className="flex items-center space-x-1.5">
@@ -5551,7 +5753,13 @@ const ClassRecordExcel = () => {
                 {availableSheets.length > 1 && (
                   <div className="relative" onClick={(e) => e.stopPropagation()}>
                     <button
-                      onClick={() => setShowSheetSelector(!showSheetSelector)}
+                      onClick={() => {
+                        // Close tools dropdown (and other dropdowns) when opening sheet selector
+                        if (!showSheetSelector) {
+                          setDropdowns({ tools: false, voice: false, edit: false });
+                        }
+                        setShowSheetSelector(!showSheetSelector);
+                      }}
                       disabled={loadingSheets}
                       className="flex items-center space-x-2 bg-indigo-50 text-indigo-700 px-3 py-2 rounded-lg font-medium hover:bg-indigo-100 transition-colors shadow-sm border border-indigo-200 disabled:opacity-50"
                     >
@@ -5606,8 +5814,8 @@ const ClassRecordExcel = () => {
                             onClick={() => switchToSheet(sheet)}
                             disabled={loadingSheets}
                             className={`flex items-center space-x-3 px-4 py-2 text-sm w-full text-left transition-colors disabled:opacity-50 ${currentSheet?.sheet_name === sheet.sheet_name
-                                ? 'bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500'
-                                : 'text-slate-700 hover:bg-slate-50'
+                              ? 'bg-indigo-50 text-indigo-700 border-r-2 border-indigo-500'
+                              : 'text-slate-700 hover:bg-slate-50'
                               }`}
                           >
                             <span className="w-6 h-6 bg-slate-100 rounded text-xs flex items-center justify-center font-medium">
@@ -5736,6 +5944,10 @@ const ClassRecordExcel = () => {
                         <RefreshCw className={`w-4 h-4 text-indigo-600 ${midtermFinalSyncInProgress.current ? 'animate-spin' : ''}`} />
                         <span>{midtermFinalSyncInProgress.current ? 'Syncing...' : 'Sync Midterm to Final'}</span>
                       </button>
+
+                      <div className="px-4 py-2 text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                        Category Tools
+                      </div>
 
                       <button
                         onClick={() => {
@@ -5901,7 +6113,7 @@ const ClassRecordExcel = () => {
 
                   {/* Save Status */}
                   <div className="flex items-center justify-between text-sm bg-slate-50 p-3 rounded-lg border border-slate-100">
-                    <span className="text-slate-600">Sync Status</span>
+                    <span className="text-slate-600">Save Status</span>
                     {lastSaved ? (
                       <span className="text-emerald-600 flex items-center gap-1 font-medium">
                         <CheckCircle2 className="w-3 h-3" />
@@ -5910,10 +6122,64 @@ const ClassRecordExcel = () => {
                     ) : null}
                   </div>
 
+                  {/* 🔥 PHASE 6: SETTINGS Sync Status */}
+                  {currentSheet?.sheet_name && syncStatus[currentSheet.sheet_name] && (
+                    <div className={`text-sm p-3 rounded-lg border ${syncStatus[currentSheet.sheet_name].isSynced
+                      ? 'bg-green-50 border-green-200'
+                      : 'bg-orange-50 border-orange-200'
+                      }`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-slate-600 font-medium">SETTINGS Sync</span>
+                        {syncStatus[currentSheet.sheet_name].isSynced ? (
+                          <span className="text-green-600 flex items-center gap-1 font-medium">
+                            <CheckCircle2 className="w-3 h-3" />
+                            Synced
+                          </span>
+                        ) : (
+                          <span className="text-orange-600 flex items-center gap-1 font-medium">
+                            <AlertCircle className="w-3 h-3" />
+                            Not Synced
+                          </span>
+                        )}
+                      </div>
+                      {!syncStatus[currentSheet.sheet_name].isSynced && (
+                        <div className="mt-2 space-y-1">
+                          <p className="text-xs text-orange-700">
+                            Sheet percentages differ from {syncStatus[currentSheet.sheet_name].source || 'SETTINGS'} tab
+                          </p>
+                          {syncStatus[currentSheet.sheet_name].differences.length > 0 && (
+                            <div className="text-xs text-orange-600 mt-1">
+                              {syncStatus[currentSheet.sheet_name].differences.slice(0, 2).map((diff, idx) => (
+                                <div key={idx}>
+                                  {diff.category}: {diff.sheet}% → {diff.settings}%
+                                </div>
+                              ))}
+                              {syncStatus[currentSheet.sheet_name].differences.length > 2 && (
+                                <div>+{syncStatus[currentSheet.sheet_name].differences.length - 2} more</div>
+                              )}
+                            </div>
+                          )}
+                          <button
+                            onClick={() => manualSyncToSettings(currentSheet.sheet_name)}
+                            disabled={isRefreshingAllocation}
+                            className="mt-2 w-full px-3 py-1.5 bg-orange-600 text-white text-xs rounded hover:bg-orange-700 disabled:opacity-50 transition-colors"
+                          >
+                            Sync Now
+                          </button>
+                        </div>
+                      )}
+                      {syncStatus[currentSheet.sheet_name].isSynced && (
+                        <p className="text-xs text-green-700 mt-1">
+                          Using {syncStatus[currentSheet.sheet_name].source || 'SETTINGS'} tab
+                        </p>
+                      )}
+                    </div>
+                  )}
+
                   {/* Allocation Badge (Mobile) */}
                   <div className={`flex items-center justify-between p-3 rounded-lg border ${classStandingRemaining > 0
-                      ? 'bg-amber-50 border-amber-200'
-                      : 'bg-sky-50 border-sky-200'
+                    ? 'bg-amber-50 border-amber-200'
+                    : 'bg-sky-50 border-sky-200'
                     }`}>
                     {classStandingRemaining > 0 ? (
                       <>
@@ -5950,8 +6216,8 @@ const ClassRecordExcel = () => {
                             setIsDrawerOpen(false);
                           }}
                           className={`flex items-center gap-3 p-3 rounded-lg text-sm font-medium transition-all ${currentSheet?.sheet_name === sheet.sheet_name
-                              ? 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-500'
-                              : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                            ? 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-500'
+                            : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
                             }`}
                         >
                           <span className="w-6 h-6 flex items-center justify-center bg-white rounded border border-slate-200 text-xs">
@@ -6126,8 +6392,8 @@ const ClassRecordExcel = () => {
               <button
                 onClick={handleVoiceRecord}
                 className={`relative p-4 rounded-full shadow-2xl transition-all duration-300 transform hover:scale-105 ${isListening
-                    ? 'bg-red-500 text-white shadow-red-500/50 animate-pulse hover:bg-red-600'
-                    : 'bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white shadow-blue-600/50 hover:bg-blue-[#4A5491]'
+                  ? 'bg-red-500 text-white shadow-red-500/50 animate-pulse hover:bg-red-600'
+                  : 'bg-gradient-to-r from-[#333D79] to-[#4A5491] text-white shadow-blue-600/50 hover:bg-blue-[#4A5491]'
                   }`}
                 title={isListening ? 'Stop voice recording' : 'Start voice recording'}
               >
@@ -6149,81 +6415,244 @@ const ClassRecordExcel = () => {
         {/* 🔥 NEW: Mode Selection Modal */}
         {showModeSelectionModal && (
           <div
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]"
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4"
             onClick={() => setShowModeSelectionModal(false)}
           >
             <div
-              className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 overflow-hidden"
+              className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full mx-4 overflow-hidden max-h-[85vh] flex flex-col"
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Header */}
-              <div className="bg-gradient-to-r from-[#333D79] to-[#4A5491] px-6 py-4 flex items-center justify-between">
-                <h3 className="text-xl font-semibold text-white">Select Recording Mode</h3>
-                <button
-                  onClick={() => setShowModeSelectionModal(false)}
-                  className="text-white hover:text-gray-200 transition-colors"
-                  title="Close"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Content */}
-              <div className="p-6">
-                <p className="text-gray-600 mb-6 text-center">
-                  Choose how you want to record voice commands:
-                </p>
-
-                <div className="space-y-4">
-                  {/* Single Mode Button */}
+              {/* Header - match VoiceGuideModal colors */}
+              <div className="bg-gradient-to-r from-[#333D79] to-[#4A5491] px-6 py-4 rounded-t-2xl flex-shrink-0">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+                      <Mic className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-white">Choose Your Recording Mode</h3>
+                      <p className="text-sm text-white/80">Pick the best way to record grades for your workflow</p>
+                    </div>
+                  </div>
                   <button
-                    onClick={handleSingleModeSelected}
-                    className="w-full p-4 rounded-lg border-2 border-blue-200 hover:border-blue-400 bg-blue-50 hover:bg-blue-100 transition-all duration-200 flex items-center space-x-4 group"
+                    onClick={() => setShowModeSelectionModal(false)}
+                    className="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                    title="Close"
+                    aria-label="Close modal"
                   >
-                    <div className="flex-shrink-0 w-12 h-12 rounded-full bg-blue-500 flex items-center justify-center group-hover:bg-blue-600 transition-colors">
-                      <Mic className="w-6 h-6 text-white" />
-                    </div>
-                    <div className="flex-1 text-left">
-                      <h4 className="font-semibold text-gray-900 group-hover:text-blue-700">
-                        Single Mode
-                      </h4>
-                      <p className="text-sm text-gray-600">
-                        Record one command at a time
-                      </p>
-                    </div>
-                  </button>
-
-                  {/* Batch Mode Button */}
-                  <button
-                    onClick={handleBatchModeSelected}
-                    className="w-full p-4 rounded-lg border-2 border-purple-200 hover:border-purple-400 bg-purple-50 hover:bg-purple-100 transition-all duration-200 flex items-center space-x-4 group relative overflow-hidden"
-                  >
-                    {/* Recommended Badge */}
-                    <div className="absolute top-2 right-2 flex items-center space-x-1.5 bg-gradient-to-r from-amber-400 to-amber-500 text-white px-3 py-1.5 rounded-full text-xs font-semibold shadow-lg z-10">
-                      <Star className="w-3.5 h-3.5 fill-current" />
-                      <span>Recommended</span>
-                    </div>
-                    
-                    <div className="flex-shrink-0 w-12 h-12 rounded-full bg-purple-500 flex items-center justify-center group-hover:bg-purple-600 transition-colors">
-                      <Users className="w-6 h-6 text-white" />
-                    </div>
-                    <div className="flex-1 text-left pr-16">
-                      <h4 className="font-semibold text-gray-900 group-hover:text-purple-700">
-                        Batch Mode
-                      </h4>
-                      <p className="text-sm text-gray-600">
-                        Record multiple student scores in sequence
-                      </p>
-                    </div>
+                    <X className="w-5 h-5" />
                   </button>
                 </div>
               </div>
 
-              {/* Footer */}
-              <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end">
+              {/* Content - SIDE BY SIDE LAYOUT */}
+              <div className="p-6 overflow-y-auto flex-1 custom-scrollbar">
+                {/* Quick Guide - Compact */}
+                <div className="bg-blue-50 border-l-4 border-blue-500 rounded-lg p-3 mb-5">
+                  <div className="flex items-start space-x-2">
+                    <Lightbulb className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-blue-800">
+                      <strong className="text-blue-900">Quick Guide:</strong> <strong>Single Mode:</strong> Best for grading 1-5 students.  <strong>Batch Mode:</strong> Best for grading 10+ students quickly!
+                    </p>
+                  </div>
+                </div>
+
+                {/* TWO COLUMN LAYOUT - SIDE BY SIDE */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
+                  {/* LEFT SIDE: Single Mode */}
+                  <button
+                    onClick={handleSingleModeSelected}
+                    className="p-5 rounded-xl border-2 border-blue-200 hover:border-blue-400 bg-gradient-to-br from-blue-50 to-cyan-50 hover:shadow-lg transition-all duration-200 group text-left h-full"
+                  >
+                    {/* Badge */}
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform shadow-md">
+                          <Mic className="w-6 h-6 text-white" />
+                        </div>
+                        <div>
+                          <h4 className="text-lg font-bold text-gray-900 group-hover:text-blue-700">Single Mode</h4>
+                          <span className="text-xs bg-blue-200 text-blue-800 px-2 py-0.5 rounded-full font-semibold">One at a time</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="text-sm text-gray-700 mb-3 leading-relaxed">
+                      Record <strong>one grade at a time</strong>. Click microphone → Speak → Done. Perfect for small classes or individual grade corrections.
+                    </p>
+
+                    {/* Example */}
+                    <div className="bg-white rounded-lg p-3 border border-blue-200 mb-3">
+                      <p className="text-xs font-semibold text-gray-700 mb-1">🎤 Example:</p>
+                      <p className="text-xs font-mono text-blue-900 bg-blue-100 px-3 py-2 rounded">
+                        "Quiz 1 Maria eighty-five"
+                      </p>
+                      <p className="text-xs text-gray-600 mt-1.5 flex items-center space-x-1">
+                        <FiCheckCircle className="w-3 h-3 text-green-600 flex-shrink-0" />
+                        <span>Records one grade, then stops</span>
+                      </p>
+                    </div>
+
+                    {/* When to Use */}
+                    <div className="flex items-start space-x-2">
+                      <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-gray-600">
+                        <span className="font-semibold text-gray-700">Best for:</span> Grading 1-5 students, fixing individual grades, or when you're new to voice commands
+                      </p>
+                    </div>
+                  </button>
+
+                  {/* RIGHT SIDE: Batch Mode */}
+                  <button
+                    onClick={handleBatchModeSelected}
+                    className="p-5 rounded-xl border-2 border-purple-300 hover:border-purple-500 bg-gradient-to-br from-purple-50 via-pink-50 to-purple-50 hover:shadow-xl transition-all duration-200 group relative text-left h-full"
+                  >
+                    {/* Recommended Badge - Top Right */}
+                    <div className="absolute -top-2 -right-2 flex items-center space-x-2 bg-gradient-to-r from-amber-400 to-orange-500 text-white px-4 py-2 rounded-full text-xs font-bold shadow-lg z-10 animate-pulse">
+                      <Star className="w-3.5 h-3.5 fill-current" />
+                      <span>RECOMMENDED</span>
+                    </div>
+
+                    {/* Time Saver Badge - Top Left */}
+                    <div className="absolute -top-2 -left-2 flex items-center space-x-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white px-3 py-1.5 rounded-full text-xs font-bold shadow-lg z-10">
+                      <Zap className="w-3.5 h-3.5 fill-current" />
+                      <span>Saves Hours!</span>
+                    </div>
+
+                    {/* Header */}
+                    <div className="flex items-center justify-between mb-3 mt-2">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center group-hover:scale-110 transition-transform shadow-md">
+                          <Users className="w-6 h-6 text-white" />
+                        </div>
+                        <div>
+                          <h4 className="text-lg font-bold text-gray-900 group-hover:text-purple-700">Batch Mode</h4>
+                          <span className="text-xs bg-purple-200 text-purple-800 px-2 py-0.5 rounded-full font-semibold">Grade many students</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="text-sm text-gray-700 mb-3 leading-relaxed">
+                      Record <strong>multiple grades in one session</strong>.  Speak all student names and scores together, separated by commas. <span className="font-bold text-purple-700">Up to 3x faster!</span>
+                    </p>
+
+                    {/* Example */}
+                    <div className="bg-white rounded-lg p-3 border border-purple-300 mb-3">
+                      <p className="text-xs font-semibold text-gray-700 mb-1">🎤 Example:</p>
+                      <p className="text-xs font-mono text-purple-900 bg-purple-100 px-3 py-2 rounded leading-relaxed">
+                        "Maria 85, John 90, Sarah 78, Tom 92, Lisa 88"
+                      </p>
+                      <p className="text-xs text-gray-600 mt-1.5 flex items-center space-x-1">
+                        <FiCheckCircle className="w-3 h-3 text-green-600 flex-shrink-0" />
+                        <span>Records <strong className="text-green-600">5 grades instantly</strong> in one command!</span>
+                      </p>
+                    </div>
+
+                    {/* Benefits List - Compact */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-start space-x-2">
+                        <Zap className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
+                        <p className="text-xs text-gray-700">
+                          <span className="font-semibold">Super Fast:</span> Grade 20-30 students in under 2 minutes
+                        </p>
+                      </div>
+                      <div className="flex items-start space-x-2">
+                        <Target className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+                        <p className="text-xs text-gray-700">
+                          <span className="font-semibold">Perfect for:</span> Quizzes, homework, tests with whole-class grading
+                        </p>
+                      </div>
+                      <div className="flex items-start space-x-2">
+                        <Award className="w-3.5 h-3.5 text-purple-600 flex-shrink-0" />
+                        <p className="text-xs text-gray-700">
+                          <span className="font-semibold">Best for:</span> Grading 10+ students at once
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+
+                {/* Comparison Table - Enhanced */}
+                <div className="mt-5 bg-gradient-to-br from-slate-50 to-gray-50 rounded-xl p-5 border-2 border-gray-200 shadow-sm">
+                  <div className="flex items-center justify-center space-x-2 mb-4">
+                    <BarChart3 className="w-5 h-5 text-indigo-600" />
+                    <h5 className="font-bold text-gray-900 text-base">Quick Comparison</h5>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Single Mode */}
+                    <div className="bg-white rounded-lg p-4 border-2 border-blue-200 shadow-sm">
+                      <div className="flex items-center justify-center space-x-2 mb-3">
+                        <Mic className="w-4 h-4 text-blue-600" />
+                        <p className="font-bold text-blue-900 text-sm">Single Mode</p>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-center space-x-1.5">
+                          <Clock className="w-4 h-4 text-blue-600" />
+                          <p className="text-blue-700 text-xs font-semibold">~20 seconds/student</p>
+                        </div>
+                        <div className="bg-blue-50 rounded-lg p-2.5 border border-blue-200 mt-2">
+                          <p className="text-gray-700 text-xs mb-0.5">For 20 students:</p>
+                          <p className="text-blue-900 font-bold text-sm">~7 minutes</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Batch Mode */}
+                    <div className="bg-white rounded-lg p-4 border-2 border-purple-300 shadow-sm relative">
+                      <div className="absolute -top-2 -right-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white px-2 py-0.5 rounded-full text-[10px] font-bold">
+                        3.5x FASTER
+                      </div>
+                      <div className="flex items-center justify-center space-x-2 mb-3">
+                        <Users className="w-4 h-4 text-purple-600" />
+                        <p className="font-bold text-purple-900 text-sm">Batch Mode</p>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-center space-x-1.5">
+                          <Zap className="w-4 h-4 text-purple-600" />
+                          <p className="text-purple-700 text-xs font-semibold">~6 seconds/student</p>
+                        </div>
+                        <div className="bg-purple-50 rounded-lg p-2.5 border border-purple-200 mt-2">
+                          <p className="text-gray-700 text-xs mb-0.5">For 20 students:</p>
+                          <p className="text-purple-900 font-bold text-sm">~2 minutes</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Time Savings Highlight */}
+                  <div className="mt-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-3 border-2 border-green-200">
+                    <div className="flex items-center justify-center space-x-2">
+                      <Zap className="w-4 h-4 text-green-600" />
+                      <p className="text-green-900 text-xs font-bold">
+                        <span className="text-sm">Save ~5 minutes</span> per assignment with Batch Mode!
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Help Text - Compact */}
+                <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <div className="flex items-start space-x-2">
+                    <HelpCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-semibold text-amber-900 mb-0.5">Not sure which to choose?</p>
+                      <p className="text-xs text-amber-800">
+                        <strong>Try Batch Mode first!</strong> It's faster and easier for most teachers.  You can always switch back to Single Mode anytime.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer - Compact */}
+              <div className="px-6 py-3 bg-gradient-to-r from-gray-50 to-gray-100 border-t border-gray-200 flex items-center justify-between rounded-b-2xl flex-shrink-0">
+                <p className="text-xs text-gray-600">
+                  💡 <strong>Tip:</strong> You can change modes anytime!
+                </p>
                 <button
                   onClick={() => setShowModeSelectionModal(false)}
-                  className="px-4 py-2 text-gray-700 hover:text-gray-900 transition-colors"
+                  className="px-4 py-2 text-sm text-gray-700 hover:text-gray-900 hover:bg-white rounded-lg transition-all font-medium border border-gray-300"
                 >
                   Cancel
                 </button>
@@ -6238,31 +6667,31 @@ const ClassRecordExcel = () => {
             <div className="bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden backdrop-blur-sm">
               {/* Header */}
               <div className={`px-4 py-3 flex items-center justify-between ${isListening
+                ? 'bg-gradient-to-r from-red-50 to-red-100 border-b border-red-200'
+                : (voicePhase === 'error'
                   ? 'bg-gradient-to-r from-red-50 to-red-100 border-b border-red-200'
-                  : (voicePhase === 'error'
-                    ? 'bg-gradient-to-r from-red-50 to-red-100 border-b border-red-200'
-                    : (voicePhase === 'done'
-                      ? 'bg-gradient-to-r from-emerald-50 to-emerald-100 border-b border-emerald-200'
-                      : (voiceBusy
-                        ? 'bg-gradient-to-r from-amber-50 to-amber-100 border-b border-amber-200'
-                        : 'bg-gradient-to-r from-green-50 to-green-100 border-b border-green-200')))
+                  : (voicePhase === 'done'
+                    ? 'bg-gradient-to-r from-emerald-50 to-emerald-100 border-b border-emerald-200'
+                    : (voiceBusy
+                      ? 'bg-gradient-to-r from-amber-50 to-amber-100 border-b border-amber-200'
+                      : 'bg-gradient-to-r from-green-50 to-green-100 border-b border-green-200')))
                 }`}>
                 <div className="flex items-center space-x-2">
                   <div className={`w-2 h-2 rounded-full ${isListening
-                      ? 'bg-red-500 animate-pulse'
-                      : (voicePhase === 'error'
-                        ? 'bg-red-500'
-                        : (voicePhase === 'done'
-                          ? 'bg-emerald-500'
-                          : (voiceBusy ? 'bg-amber-500 animate-pulse' : 'bg-green-500')))
+                    ? 'bg-red-500 animate-pulse'
+                    : (voicePhase === 'error'
+                      ? 'bg-red-500'
+                      : (voicePhase === 'done'
+                        ? 'bg-emerald-500'
+                        : (voiceBusy ? 'bg-amber-500 animate-pulse' : 'bg-green-500')))
                     }`}></div>
                   <span className={`text-sm font-medium ${isListening
+                    ? 'text-red-700'
+                    : (voicePhase === 'error'
                       ? 'text-red-700'
-                      : (voicePhase === 'error'
-                        ? 'text-red-700'
-                        : (voicePhase === 'done'
-                          ? 'text-emerald-700'
-                          : (voiceBusy ? 'text-amber-700' : 'text-green-700')))
+                      : (voicePhase === 'done'
+                        ? 'text-emerald-700'
+                        : (voiceBusy ? 'text-amber-700' : 'text-green-700')))
                     }`}>
                     {isListening
                       ? '🎙️ Listening...'
@@ -6304,8 +6733,8 @@ const ClassRecordExcel = () => {
                     }
                   }}
                   className={`p-1 rounded-full transition-colors ${isListening
-                      ? 'hover:bg-red-200 text-red-600'
-                      : (voiceBusy ? 'hover:bg-amber-200 text-amber-700' : 'hover:bg-green-200 text-green-600')
+                    ? 'hover:bg-red-200 text-red-600'
+                    : (voiceBusy ? 'hover:bg-amber-200 text-amber-700' : 'hover:bg-green-200 text-green-600')
                     }`}
                   title={voiceBusy ? 'Cancel' : 'Clear transcript'}
                 >

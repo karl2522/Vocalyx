@@ -1325,6 +1325,7 @@ def sheets_get_specific_sheet_data_service_account(request, sheet_id, sheet_name
         complete_response = {
             'success': result.get('success', True),
             'headers': result.get('headers') or result.get('main_headers') or [],
+            'row1_internal_ids': result.get('row1_internal_ids', []),  # 🔥 NEW: Row 1 - Internal IDs
             'main_headers': result.get('main_headers') or result.get('headers') or [],
             'sub_headers': result.get('sub_headers', []),
             'max_scores': result.get('max_scores', []),
@@ -1979,12 +1980,14 @@ def sheets_add_category_service_account(request, sheet_id):
     """Add a new category with multiple columns to Google Sheet using service account"""
     try:
         from utils.google_service_account_sheets import GoogleServiceAccountSheets
+        from utils.google_apps_script_service import GoogleAppsScriptService
+        from utils.id_generator import generate_category_id
 
         category_name = request.data.get('category_name')  # e.g., 'Lab Exercises'
         sub_categories = request.data.get('sub_categories', [])  # e.g., ['Lab 1', 'Lab 2', 'Lab 3']
         sub_category_count = request.data.get('sub_category_count', len(sub_categories))
         sheet_name = request.data.get('sheet_name')  # Optional specific sheet
-        percentage = request.data.get('percentage', '10.00%')  # 🔥 NEW: Get percentage from request
+        percentage = request.data.get('percentage', '10.00%')  # Get percentage from request
 
         if not category_name:
             return Response({'error': 'category_name is required'}, status=400)
@@ -1995,18 +1998,140 @@ def sheets_add_category_service_account(request, sheet_id):
         if sub_category_count < 1 or sub_category_count > 20:
             return Response({'error': 'sub_category_count must be between 1 and 20'}, status=400)
 
-        print(f"🔥 API: Adding category '{category_name}' with {sub_category_count} subcategories and {percentage} to sheet: {sheet_name}")
-        print(f"🔥 API: Full request data: {request.data}")
+        # Require explicit sheet_name to avoid writing to the wrong sheet/tab
+        if not sheet_name:
+            return Response({'error': 'sheet_name is required (e.g., Midterm or Final sheet name)'}, status=400)
 
+        # STEP 1: Generate internal ID BEFORE adding to sheet
+        internal_id = generate_category_id(category_name)
+        logger.info(f"Generated internal ID '{internal_id}' for category '{category_name}'")
+
+        print(f"🔥 API: Adding category '{category_name}' with {sub_category_count} subcategories and {percentage} to sheet: {sheet_name}")
+        print(f"🔥 API: Generated internal ID: {internal_id}")
+        logger.info(f"🔥 API: Adding category '{category_name}' to sheet_name='{sheet_name}' (sheet_id='{sheet_id}')")
+
+        # STEP 2: Add category to sheet via Google Sheets API
         service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
-        result = service.add_category_to_sheet(sheet_id, category_name, sub_categories, sheet_name, percentage)  # 🔥 Pass percentage
+        logger.info(f"🔥 API: Calling add_category_to_sheet with sheet_id='{sheet_id}', sheet_name='{sheet_name}'")
+        result = service.add_category_to_sheet(sheet_id, category_name, sub_categories, sheet_name, percentage)
+        logger.info(f"🔥 API: add_category_to_sheet returned: success={result.get('success')}, insert_position={result.get('insert_position')}")
         
         print(f"🔥 API: Service result: {result}")
 
-        if result['success']:
-            return Response(result, status=200)
-        else:
+        if not result['success']:
             return Response(result, status=400)
+
+        # STEP 3: Register category in SETTINGS via Apps Script with pre-generated ID
+        try:
+            # Convert percentage string to decimal (e.g., "40.00%" -> 0.40)
+            weight_decimal = float(percentage.replace('%', '')) / 100.0
+        except (ValueError, AttributeError):
+            logger.warning(f"Invalid percentage format '{percentage}', defaulting to 0.10")
+            weight_decimal = 0.10  # Default to 10%
+
+        # 🔥 NEW: Determine sheet type to use correct SETTINGS tab
+        from utils.google_apps_script_service import determine_sheet_type
+        
+        # 🔥 DEBUG: Log sheet_name to trace the issue
+        logger.info(f"DEBUG: Received sheet_name='{sheet_name}' (type: {type(sheet_name).__name__})")
+        logger.info(f"DEBUG: sheet_name value: '{sheet_name}'")
+        
+        sheet_type = determine_sheet_type(sheet_name)
+        logger.info(f"DEBUG: determine_sheet_type('{sheet_name}') returned: '{sheet_type}'")
+        
+        if not sheet_type:
+            return Response({
+                'error': f"Cannot determine sheet type for '{sheet_name}'. Sheet name must contain 'midterm' or 'final'.",
+                'sheet_name': sheet_name
+            }, status=400)
+
+        # 🔥 PHASE 2: Calculate formula reference if column indices are available
+        formula_reference = None
+        if result.get('total_column_index') is not None and sheet_name:
+            # Get total column index (0-based)
+            total_col_index = result['total_column_index']
+            # Convert to column letter (A, B, C, ..., Z, AA, AB, ...)
+            # Note: openpyxl's get_column_letter uses 1-based indexing, so add 1
+            total_col_letter = get_column_letter(total_col_index + 1)
+            # Row 2 contains the percentage value
+            # 🔥 CRITICAL: Use the actual sheet_name passed (not hardcoded)
+            formula_reference = f"={sheet_name}!{total_col_letter}2"
+            
+            logger.info(f"📊 PHASE 2: Formula calculation: sheet_name='{sheet_name}', "
+                  f"category_col={result.get('category_column_index')}, "
+                  f"num_sub_columns={result.get('num_sub_columns')}, "
+                  f"total_col={total_col_index} ({total_col_letter}), "
+                  f"formula={formula_reference}")
+        else:
+            logger.warning(f"⚠️ PHASE 2: Cannot calculate formula reference - missing total_column_index or sheet_name")
+
+        # DEBUG: Log sheet_id before passing to Apps Script
+        logger.info(f"DEBUG: About to call Apps Script with sheet_id='{sheet_id}' (type: {type(sheet_id).__name__})")
+        if not sheet_id:
+            logger.error(f"CRITICAL: sheet_id is None/empty! Apps Script will write to TEMPLATE instead of user's sheet!")
+        else:
+            logger.info(f"DEBUG: sheet_id is valid: '{sheet_id}'")
+        
+        apps_script_service = GoogleAppsScriptService()
+        apps_script_result = apps_script_service.register_category(
+            display_name=category_name,
+            weight_decimal=weight_decimal,
+            internal_id=internal_id,  # Pass pre-generated ID for consistency
+            sheet_type=sheet_type,  # 🔥 NEW: Pass sheet type
+            formula_reference=formula_reference,  # 🔥 PHASE 2: Pass formula reference
+            spreadsheet_id=sheet_id  # 🔥 FIX: Pass user's sheet ID so Apps Script writes to user's sheet, not template
+        )
+
+        # STEP 4: Handle Apps Script result (graceful degradation)
+        if apps_script_result.get('success'):
+            # Verify ID consistency
+            returned_id = apps_script_result.get('internal_id', '').upper().strip()
+            written_id = apps_script_result.get('written_id', '').upper().strip()
+            
+            # Use the ID that Apps Script actually wrote to SETTINGS (prefer written_id, fallback to returned_id, then generated)
+            final_internal_id = written_id or returned_id or internal_id.upper().strip()
+            
+            if returned_id and returned_id != internal_id.upper():
+                logger.warning(f"ID mismatch: Generated '{internal_id}' but Apps Script returned '{returned_id}'")
+            elif written_id and written_id != internal_id.upper():
+                logger.warning(f"ID mismatch: Generated '{internal_id}' but Apps Script wrote '{written_id}'")
+            else:
+                logger.info(f"Verified ID consistency: '{internal_id}' matches Apps Script")
+            
+            # 🔥 PHASE 1: Write internal ID to Row 1 of the sheet (subcategory columns only, NOT Total column)
+            if final_internal_id and result.get('insert_position') is not None:
+                try:
+                    write_result = service.write_internal_id_to_row1(
+                        sheet_id=sheet_id,
+                        sheet_name=sheet_name,
+                        internal_id=final_internal_id,
+                        insert_position=result.get('insert_position'),
+                        num_subcategories=len(sub_categories)  # Only subcategories, Total column is excluded
+                    )
+                    
+                    if write_result.get('success'):
+                        logger.info(f"✅ Wrote internal ID '{final_internal_id}' to Row 1 (subcategory columns only)")
+                        result['internal_id_written_to_row1'] = True
+                    else:
+                        logger.warning(f"⚠️ Failed to write internal ID to Row 1: {write_result.get('error')}")
+                        result['internal_id_row1_warning'] = write_result.get('error')
+                except Exception as e:
+                    logger.error(f"Error writing internal ID to Row 1: {str(e)}")
+                    result['internal_id_row1_error'] = str(e)
+            else:
+                if not final_internal_id:
+                    logger.warning("⚠️ No internal ID available to write to Row 1")
+                if result.get('insert_position') is None:
+                    logger.warning("⚠️ Missing insert_position - cannot write internal ID to Row 1")
+            
+            result['settings_synced'] = True
+            result['internal_id'] = final_internal_id
+        else:
+            logger.warning(f"Failed to register category in SETTINGS: {apps_script_result.get('error')}")
+            result['settings_warning'] = apps_script_result.get('error')
+            result['internal_id'] = internal_id  # Still return the ID we generated
+
+        return Response(result, status=200)
 
     except Exception as e:
         logger.error(f"Add category API error: {str(e)}")
@@ -2034,12 +2159,43 @@ def sheets_delete_category_service_account(request, sheet_id):
         if not category_name:
             return Response({'error': 'category_name is required'}, status=400)
 
-        print(f"🗑️ API: Deleting category '{category_name}' from sheet: {sheet_name}")
+        print(f"API: Deleting category '{category_name}' from sheet: {sheet_name}")
 
         service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
         result = service.delete_category_from_sheet(sheet_id, category_name, sheet_name)
 
+        # Log the result for debugging
+        logger.info(f"Delete category result: {result}")
+        if not result.get('success'):
+            logger.error(f"Failed to delete category '{category_name}': {result.get('error', 'Unknown error')}")
+
+        # If category deleted from sheet successfully, also delete from SETTINGS tab
         if result['success']:
+            internal_id = result.get('internal_id')
+            if internal_id:
+                # Determine sheet type to use correct SETTINGS tab
+                from utils.google_apps_script_service import determine_sheet_type, GoogleAppsScriptService
+                sheet_type = determine_sheet_type(sheet_name)
+                
+                # Delete from SETTINGS tab via Apps Script
+                apps_script_service = GoogleAppsScriptService()
+                apps_script_result = apps_script_service.delete_category(
+                    internal_id=internal_id,
+                    sheet_type=sheet_type,
+                    spreadsheet_id=sheet_id  # FIX: Pass user's sheet ID so Apps Script deletes from user's sheet, not template
+                )
+                
+                if apps_script_result.get('success'):
+                    logger.info(f"Successfully deleted category '{category_name}' (ID: {internal_id}) from SETTINGS tab")
+                    result['settings_deleted'] = True
+                else:
+                    logger.warning(f"Failed to delete category from SETTINGS tab: {apps_script_result.get('error')}")
+                    result['settings_warning'] = apps_script_result.get('error')
+                    # Still return success since sheet deletion worked
+            else:
+                logger.warning(f"No internal ID found for category '{category_name}', skipping SETTINGS deletion")
+                result['settings_warning'] = 'No internal ID found'
+            
             return Response(result, status=200)
         else:
             return Response(result, status=400)
@@ -2051,6 +2207,52 @@ def sheets_delete_category_service_account(request, sheet_id):
             'error': f'Server error: {str(e)}'
         }, status=500)
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def migrate_settings_to_formulas(request, sheet_id):
+    """
+    🔥 PHASE 3: Migrate existing categories in SETTINGS tab from values to formulas.
+    
+    Converts categories that have decimal values (not formulas) to formulas that
+    reference the sheet cells (e.g., =Midterm!O2)
+    """
+    try:
+        from utils.google_apps_script_service import GoogleAppsScriptService, determine_sheet_type
+        
+        sheet_name = request.data.get('sheet_name')
+        sheet_type = request.data.get('sheet_type')  # Optional: 'midterm' or 'final'
+        
+        # If sheet_type not provided, try to determine from sheet_name
+        if not sheet_type and sheet_name:
+            sheet_type = determine_sheet_type(sheet_name)
+        
+        if not sheet_type:
+            return Response({
+                'success': False,
+                'error': 'sheet_type is required (or provide sheet_name to auto-detect)'
+            }, status=400)
+        
+        logger.info(f"🔥 PHASE 3: Starting migration for sheet_type='{sheet_type}', sheet_name='{sheet_name}'")
+        
+        apps_script_service = GoogleAppsScriptService()
+        result = apps_script_service.migrate_settings_to_formulas(sheet_type)
+        
+        if result.get('success'):
+            logger.info(f"✅ PHASE 3: Migration complete: {result.get('migrated', 0)} migrated, "
+                       f"{result.get('skipped', 0)} skipped, {len(result.get('errors', []))} errors")
+            return Response(result, status=200)
+        else:
+            logger.error(f"❌ PHASE 3: Migration failed: {result.get('error')}")
+            return Response(result, status=400)
+            
+    except Exception as e:
+        logger.error(f"Migration API error: {str(e)}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return Response({
+            'success': False,
+            'error': f'Server error: {str(e)}'
+        }, status=500)
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -2058,24 +2260,87 @@ def sheets_add_column_to_category_service_account(request, sheet_id):
     """Add a new column to an existing category in Google Sheet using service account"""
     try:
         from utils.google_service_account_sheets import GoogleServiceAccountSheets
+        from utils.google_apps_script_service import GoogleAppsScriptService
+        from utils.id_generator import generate_category_id
 
         category_name = request.data.get('category_name')  # e.g., 'Quizzes'
         new_column_name = request.data.get('new_column_name')  # e.g., 'Quiz 6' (optional, auto-generated if not provided)
         sheet_name = request.data.get('sheet_name')  # Optional specific sheet
+        category_weight = request.data.get('category_weight')  # Weight in decimal format (e.g., 0.40 for 40%)
 
         if not category_name:
             return Response({'error': 'category_name is required'}, status=400)
 
+        # Weight is ALWAYS required - user can't add column without weight
+        if category_weight is None:
+            return Response({
+                'success': False,
+                'error': 'category_weight is required'
+            }, status=400)
+
+        # Validate weight is a valid decimal
+        try:
+            weight_decimal = float(category_weight)
+            if weight_decimal < 0 or weight_decimal > 1:
+                return Response({
+                    'success': False,
+                    'error': 'category_weight must be between 0 and 1 (e.g., 0.40 for 40%)'
+                }, status=400)
+        except (ValueError, TypeError):
+            return Response({
+                'success': False,
+                'error': 'category_weight must be a valid decimal number (e.g., 0.40 for 40%)'
+            }, status=400)
+
         print(f"➕ API: Adding column to category '{category_name}' in sheet: {sheet_name}")
         print(f"➕ API: New column name: {new_column_name or 'auto-generated'}")
+        print(f"➕ API: Category weight: {weight_decimal}")
 
+        # STEP 1: Add column to sheet via Google Sheets API
         service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
         result = service.add_column_to_category(sheet_id, category_name, new_column_name, sheet_name)
 
-        if result['success']:
-            return Response(result, status=200)
-        else:
+        if not result['success']:
             return Response(result, status=400)
+
+        # STEP 2: Generate internal ID and register in SETTINGS via Apps Script
+        # Weight is always provided, so we always register in SETTINGS
+        internal_id = generate_category_id(category_name)
+        logger.info(f"Generated internal ID '{internal_id}' for category '{category_name}'")
+
+        # 🔥 NEW: Determine sheet type to use correct SETTINGS tab
+        from utils.google_apps_script_service import determine_sheet_type
+        sheet_type = determine_sheet_type(sheet_name)
+
+        apps_script_service = GoogleAppsScriptService()
+        apps_script_result = apps_script_service.register_category(
+            display_name=category_name,
+            weight_decimal=weight_decimal,  # Already in decimal format
+            internal_id=internal_id,  # Pass pre-generated ID for consistency
+            sheet_type=sheet_type  # 🔥 NEW: Pass sheet type
+        )
+
+        # STEP 3: Handle Apps Script result (graceful degradation)
+        if apps_script_result.get('success'):
+            # Verify ID consistency
+            returned_id = apps_script_result.get('internal_id', '').upper().strip()
+            written_id = apps_script_result.get('written_id', '').upper().strip()
+            
+            if returned_id and returned_id != internal_id.upper():
+                logger.warning(f"ID mismatch: Generated '{internal_id}' but Apps Script returned '{returned_id}'")
+            elif written_id and written_id != internal_id.upper():
+                logger.warning(f"ID mismatch: Generated '{internal_id}' but Apps Script wrote '{written_id}'")
+            else:
+                logger.info(f"Verified ID consistency: '{internal_id}' matches Apps Script")
+            
+            result['settings_synced'] = True
+            result['internal_id'] = internal_id
+        else:
+            logger.warning(f"Failed to register category in SETTINGS: {apps_script_result.get('error')}")
+            result['settings_warning'] = apps_script_result.get('error')
+            result['internal_id'] = internal_id  # Still return the ID we generated
+
+        return Response(result, status=200)
 
     except Exception as e:
         logger.error(f"Add column to category API error: {str(e)}")
