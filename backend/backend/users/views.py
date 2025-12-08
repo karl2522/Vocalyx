@@ -1317,6 +1317,7 @@ def sheets_get_specific_sheet_data_service_account(request, sheet_id, sheet_name
         complete_response = {
             'success': result.get('success', True),
             'headers': result.get('headers') or result.get('main_headers') or [],
+            'row1_internal_ids': result.get('row1_internal_ids', []),  # 🔥 NEW: Row 1 - Internal IDs
             'main_headers': result.get('main_headers') or result.get('headers') or [],
             'sub_headers': result.get('sub_headers', []),
             'max_scores': result.get('max_scores', []),
@@ -1989,16 +1990,23 @@ def sheets_add_category_service_account(request, sheet_id):
         if sub_category_count < 1 or sub_category_count > 20:
             return Response({'error': 'sub_category_count must be between 1 and 20'}, status=400)
 
+        # Require explicit sheet_name to avoid writing to the wrong sheet/tab
+        if not sheet_name:
+            return Response({'error': 'sheet_name is required (e.g., Midterm or Final sheet name)'}, status=400)
+
         # STEP 1: Generate internal ID BEFORE adding to sheet
         internal_id = generate_category_id(category_name)
         logger.info(f"Generated internal ID '{internal_id}' for category '{category_name}'")
 
         print(f"🔥 API: Adding category '{category_name}' with {sub_category_count} subcategories and {percentage} to sheet: {sheet_name}")
         print(f"🔥 API: Generated internal ID: {internal_id}")
+        logger.info(f"🔥 API: Adding category '{category_name}' to sheet_name='{sheet_name}' (sheet_id='{sheet_id}')")
 
         # STEP 2: Add category to sheet via Google Sheets API
         service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+        logger.info(f"🔥 API: Calling add_category_to_sheet with sheet_id='{sheet_id}', sheet_name='{sheet_name}'")
         result = service.add_category_to_sheet(sheet_id, category_name, sub_categories, sheet_name, percentage)
+        logger.info(f"🔥 API: add_category_to_sheet returned: success={result.get('success')}, insert_position={result.get('insert_position')}")
         
         print(f"🔥 API: Service result: {result}")
 
@@ -2015,7 +2023,19 @@ def sheets_add_category_service_account(request, sheet_id):
 
         # 🔥 NEW: Determine sheet type to use correct SETTINGS tab
         from utils.google_apps_script_service import determine_sheet_type
+        
+        # 🔥 DEBUG: Log sheet_name to trace the issue
+        logger.info(f"DEBUG: Received sheet_name='{sheet_name}' (type: {type(sheet_name).__name__})")
+        logger.info(f"DEBUG: sheet_name value: '{sheet_name}'")
+        
         sheet_type = determine_sheet_type(sheet_name)
+        logger.info(f"DEBUG: determine_sheet_type('{sheet_name}') returned: '{sheet_type}'")
+        
+        if not sheet_type:
+            return Response({
+                'error': f"Cannot determine sheet type for '{sheet_name}'. Sheet name must contain 'midterm' or 'final'.",
+                'sheet_name': sheet_name
+            }, status=400)
 
         # 🔥 PHASE 2: Calculate formula reference if column indices are available
         formula_reference = None
@@ -2026,9 +2046,11 @@ def sheets_add_category_service_account(request, sheet_id):
             # Note: openpyxl's get_column_letter uses 1-based indexing, so add 1
             total_col_letter = get_column_letter(total_col_index + 1)
             # Row 2 contains the percentage value
+            # 🔥 CRITICAL: Use the actual sheet_name passed (not hardcoded)
             formula_reference = f"={sheet_name}!{total_col_letter}2"
             
-            print(f"📊 PHASE 2: Formula calculation: category_col={result.get('category_column_index')}, "
+            logger.info(f"📊 PHASE 2: Formula calculation: sheet_name='{sheet_name}', "
+                  f"category_col={result.get('category_column_index')}, "
                   f"num_sub_columns={result.get('num_sub_columns')}, "
                   f"total_col={total_col_index} ({total_col_letter}), "
                   f"formula={formula_reference}")

@@ -116,6 +116,9 @@ const BatchGradingModal = ({
   const prevEntriesLenRef = useRef(batchEntries?. length || 0);
   const prevEntriesRef = useRef([]); // Track previous entries to detect new ones
   const clearTranscriptTimeoutRef = useRef(null); // Track clearing timeout
+  const [gradeableColumns, setGradeableColumns] = useState([]); // 🔥 NEW: Gradeable columns from API
+  const [isLoadingColumns, setIsLoadingColumns] = useState(false); // 🔥 NEW: Loading state
+  const [columnsLoadError, setColumnsLoadError] = useState(null); // 🔥 NEW: Error state
 
   // 🔊 Initialize sound feedback
   const { playSuccessSound, playErrorSound } = useSoundFeedback();
@@ -162,7 +165,10 @@ const BatchGradingModal = ({
       setTimeout(() => {
         try {
           transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-        } catch {}
+        } catch (error) {
+          // Ignore scroll errors
+          console.debug('Scroll error:', error);
+        }
       }, 30);
     }
 
@@ -178,6 +184,55 @@ const BatchGradingModal = ({
     };
   }, [batchEntries, playSuccessSound, playErrorSound, clearTranscript]); // Removed transcript from deps to prevent timeout cancellation
 
+  // 🔥 NEW: Load gradeable columns from API
+  const loadGradeableColumns = useCallback(async () => {
+    if (!classRecord?.id || !currentSheet?.sheet_name) {
+      return;
+    }
+
+    setIsLoadingColumns(true);
+    setColumnsLoadError(null);
+
+    try {
+      const response = await classRecordService.getGradeableColumns(
+        classRecord.id,
+        currentSheet.sheet_name
+      );
+
+      if (response.data?.success) {
+        const columns = response.data.gradeable_columns || [];
+        setGradeableColumns(columns);
+        console.log(`✅ Loaded ${columns.length} gradeable columns for batch grading`);
+      } else {
+        throw new Error(response.data?.error || 'Failed to load gradeable columns');
+      }
+    } catch (error) {
+      console.error('❌ Failed to load gradeable columns:', error);
+      // 🔥 DEBUG: Log detailed error information
+      if (error.response) {
+        console.error('❌ Error response status:', error.response.status);
+        console.error('❌ Error response data:', error.response.data);
+        console.error('❌ Error message from backend:', error.response.data?.error);
+      }
+      setColumnsLoadError(error.response?.data?.error || error.message || 'Failed to load columns');
+      // Fallback: Keep empty array, will use old method
+      setGradeableColumns([]);
+    } finally {
+      setIsLoadingColumns(false);
+    }
+  }, [classRecord?.id, currentSheet?.sheet_name, classRecordService]);
+
+  // 🔥 NEW: Load gradeable columns when modal opens
+  useEffect(() => {
+    if (showBatchModal && !currentBatchColumn && currentSheet && classRecord) {
+      loadGradeableColumns();
+    } else {
+      // Reset when modal closes or column is selected
+      setGradeableColumns([]);
+      setColumnsLoadError(null);
+    }
+  }, [showBatchModal, currentSheet, classRecord, currentBatchColumn, loadGradeableColumns]);
+
   // Cleanup on modal close/unmount
   useEffect(() => {
     return () => {
@@ -189,7 +244,10 @@ const BatchGradingModal = ({
           clearTimeout(clearTranscriptTimeoutRef.current);
           clearTranscriptTimeoutRef.current = null;
         }
-      } catch {}
+      } catch (error) {
+        // Ignore cleanup errors
+        console.debug('Cleanup error:', error);
+      }
     };
   }, [stopListening]);
 
@@ -428,41 +486,72 @@ const BatchGradingModal = ({
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                  {headers.filter(h => {
-                    const normalizedHeader = h.trim().toUpperCase();
-                    
-                    // Exclude columns that are part of STUDENT INFO category
-                    const excludedColumns = [
-                      'NO.', 'NO', 'NO. ', 'NO ', // Number column variations
-                      'LASTNAME', 'LAST NAME', 'LAST', // Last name variations
-                      'FIRST NAME', 'FIRSTNAME', 'FIRST', // First name variations
-                      'STUDENT ID', 'STUDENTID', 'ID', // Student ID variations
-                      'MIDDLE NAME', 'MIDDLENAME', 'MIDDLE', // Middle name variations
-                      'TOTAL', 'TOTAL SCORE', 'TOTALSCORE' // Total columns
-                    ];
-                    
-                    // Check exact matches
-                    if (excludedColumns.some(col => normalizedHeader === col.toUpperCase())) return false;
-                    
-                    // Check if header contains "STUDENT INFO" (category header)
-                    if (normalizedHeader.includes('STUDENT INFO')) return false;
-                    
-                    // Check if header starts with "NO" (handles NO., NO, NO. , etc.)
-                    if (normalizedHeader.startsWith('NO') && (normalizedHeader.length <= 3 || normalizedHeader[2] === '.' || normalizedHeader[2] === ' ')) return false;
-                    
-                    // Exclude percentage columns
-                    if (h.includes('%')) return false;
-                    
-                    return true;
-                  }).map(header => (
-                    <button
-                      key={header}
-                      onClick={() => handleColumnSelect(header)}
-                      className="bg-purple-50 hover:bg-purple-100 text-purple-800 px-4 py-3 rounded-lg transition-colors border border-purple-200 font-medium"
-                    >
-                      {header}
-                    </button>
-                  ))}
+                  {isLoadingColumns ? (
+                    <div className="col-span-full text-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-2"></div>
+                      <p className="text-sm text-gray-500">Loading gradeable columns...</p>
+                    </div>
+                  ) : columnsLoadError ? (
+                    <div className="col-span-full text-center py-8">
+                      <p className="text-sm text-red-600 mb-2">Failed to load columns: {columnsLoadError}</p>
+                      <p className="text-xs text-gray-500">Using fallback method...</p>
+                    </div>
+                  ) : gradeableColumns.length > 0 ? (
+                    // 🔥 NEW: Use gradeable columns from API
+                    gradeableColumns.map(col => (
+                      <button
+                        key={`${col.column_index}-${col.column_name}`}
+                        onClick={() => handleColumnSelect(col.column_name)}
+                        className="bg-purple-50 hover:bg-purple-100 text-purple-800 px-4 py-3 rounded-lg transition-colors border border-purple-200 font-medium flex flex-col items-center justify-center min-h-[60px]"
+                        title={col.category_name ? `Category: ${col.category_name}${col.max_score ? ` (Max: ${col.max_score})` : ''}` : col.is_subcategory ? 'Subcategory Column' : 'Grade Column'}
+                      >
+                        <span className="font-medium">{col.column_name}</span>
+                        {col.max_score && (
+                          <span className="text-xs text-gray-500 mt-1">Max: {col.max_score}</span>
+                        )}
+                        {col.category_name && (
+                          <span className="text-xs text-purple-600 mt-0.5">{col.category_name}</span>
+                        )}
+                      </button>
+                    ))
+                  ) : (
+                    // 🔥 FALLBACK: Use old method if API fails or returns no columns
+                    headers.filter(h => {
+                      const normalizedHeader = h.trim().toUpperCase();
+                      
+                      // Exclude columns that are part of STUDENT INFO category
+                      const excludedColumns = [
+                        'NO.', 'NO', 'NO. ', 'NO ', // Number column variations
+                        'LASTNAME', 'LAST NAME', 'LAST', // Last name variations
+                        'FIRST NAME', 'FIRSTNAME', 'FIRST', // First name variations
+                        'STUDENT ID', 'STUDENTID', 'ID', // Student ID variations
+                        'MIDDLE NAME', 'MIDDLENAME', 'MIDDLE', // Middle name variations
+                        'TOTAL', 'TOTAL SCORE', 'TOTALSCORE' // Total columns
+                      ];
+                      
+                      // Check exact matches
+                      if (excludedColumns.some(col => normalizedHeader === col.toUpperCase())) return false;
+                      
+                      // Check if header contains "STUDENT INFO" (category header)
+                      if (normalizedHeader.includes('STUDENT INFO')) return false;
+                      
+                      // Check if header starts with "NO" (handles NO., NO, NO. , etc.)
+                      if (normalizedHeader.startsWith('NO') && (normalizedHeader.length <= 3 || normalizedHeader[2] === '.' || normalizedHeader[2] === ' ')) return false;
+                      
+                      // Exclude percentage columns
+                      if (h.includes('%')) return false;
+                      
+                      return true;
+                    }).map(header => (
+                      <button
+                        key={header}
+                        onClick={() => handleColumnSelect(header)}
+                        className="bg-purple-50 hover:bg-purple-100 text-purple-800 px-4 py-3 rounded-lg transition-colors border border-purple-200 font-medium"
+                      >
+                        {header}
+                      </button>
+                    ))
+                  )}
                 </div>
               </div>
             </div>
@@ -508,10 +597,10 @@ const BatchGradingModal = ({
                         {desiredListening ? 'Listening...' : readiness === 'readying' ? 'Loading student data...' : readiness === 'ready' ? 'Ready to record' : 'Initializing...'}
                       </h3>
                       <p className="text-slate-500 max-w-xs mx-auto">
-                        Say "Student Name + Score" (e.g., "Capuras 85")
+                        Say &quot;Student Name + Score&quot; (e.g., &quot;Capuras 85&quot;)
                       </p>
                       <p className="text-xs text-slate-400 mt-2">
-                        🔊 You'll hear a beep when a student is found
+                        🔊 You&apos;ll hear a beep when a student is found
                       </p>
                     </div>
                   </div>
@@ -540,7 +629,7 @@ const BatchGradingModal = ({
                     <div className="text-xs text-slate-500 mb-1">You said:</div>
                     {transcript && transcript.trim() ? (
                       <div className="text-slate-800 font-medium leading-relaxed">
-                        "{transcript}"
+                        &quot;{transcript}&quot;
                       </div>
                     ) : (
                       <div className="text-slate-400 italic text-sm">

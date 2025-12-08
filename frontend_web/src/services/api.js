@@ -315,6 +315,19 @@ export const classRecordService = {
         });
     },
 
+    // 🔥 PHASE 2: Get gradeable columns for batch grading
+    getGradeableColumns: (classRecordId, sheetName) => {
+        const googleAccessToken = localStorage.getItem('googleAccessToken');
+        const config = { headers: {} };
+        if (googleAccessToken) {
+            config.headers['X-Access-Token'] = googleAccessToken;
+        }
+        return api.get(`/class-records/${classRecordId}/get-gradeable-columns/`, {
+            params: { sheet_name: sheetName },
+            ...config
+        });
+    },
+
     getCategoryPercentages: (classRecordId, sheetName) => 
         api.get(`/class-records/${classRecordId}/category_percentages/`, { params: { sheet_name: sheetName } }),
 

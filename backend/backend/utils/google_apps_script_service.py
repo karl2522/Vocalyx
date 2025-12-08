@@ -135,8 +135,8 @@ class GoogleAppsScriptService:
                         logger.warning(f"ID mismatch: Sent '{expected_id}' but got '{returned_id}'")
                     elif written_id and written_id != expected_id:
                         logger.warning(f"ID mismatch: Sent '{expected_id}' but Apps Script wrote '{written_id}'")
-                    else:
-                        logger.info(f"Verified ID consistency: '{expected_id}' matches Apps Script")
+                else:
+                    logger.info(f"Verified ID consistency: '{expected_id}' matches Apps Script")
                 
                 return {
                     'success': result.get('status') == 'success',

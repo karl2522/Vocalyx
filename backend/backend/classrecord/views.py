@@ -862,10 +862,11 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
             # Each row: [INTERNAL_ID, DISPLAY_NAME, WEIGHT]
             percentages = {}  # {display_name: percentage}
             weights = []  # List of weight decimals
+            categories_list = []  # 🔥 NEW: List of category objects with internal_id, display_name, weight
             
             for row in settings_data:
                 if len(row) >= 3:
-                    internal_id = str(row[0]).strip() if len(row) > 0 else ''
+                    internal_id = str(row[0]).strip().upper() if len(row) > 0 else ''  # Normalize to uppercase
                     display_name = str(row[1]).strip() if len(row) > 1 else ''
                     weight_str = str(row[2]).strip() if len(row) > 2 else ''
                     
@@ -881,6 +882,14 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
                         if weight_percentage > 0:
                             percentages[display_name] = weight_percentage
                             weights.append(weight_decimal)
+                            
+                            # 🔥 NEW: Add to categories list for get_gradeable_columns
+                            categories_list.append({
+                                'internal_id': internal_id,
+                                'display_name': display_name,
+                                'weight': weight_decimal,
+                                'weight_percentage': weight_percentage
+                            })
                     except (ValueError, TypeError):
                         # Skip invalid weight values
                         continue
@@ -896,6 +905,8 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
                 'total': total_percentage,
                 'remaining': remaining,
                 'percentages': percentages,  # {category_name: percentage}
+                'categories': categories_list,  # 🔥 NEW: List of categories with internal_id
+                'internal_ids': [cat['internal_id'] for cat in categories_list if cat['internal_id']],  # 🔥 NEW: List of valid internal IDs
                 'source': settings_tab_name,
                 'sheet_type': sheet_type,
                 'sheet_name': sheet_name,
@@ -905,7 +916,328 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
             
         except Exception as e:
             response_time = round(time.time() - start_time, 2)
-            logger.error(f"get_settings_percentages failed in {response_time}s: {str(e)}")
+            logger.error(f"get_settings_percentages failed in {str(e)}")
+            return Response({
+                'error': str(e),
+                'response_time': response_time
+            }, status=400)
+
+    @action(detail=True, methods=['get'], url_path='get-gradeable-columns')
+    def get_gradeable_columns(self, request, pk=None):
+        """Get list of gradeable columns for batch grading.
+        
+        Returns subcategory columns (Row 3) from valid categories (from SETTINGS tab),
+        plus special columns (PRELIM, MIDTERM, PREFINALS, FINALS).
+        
+        Only includes columns before "Class Standing" boundary.
+        """
+        import time
+        start_time = time.time()
+        
+        try:
+            class_record = self.get_object()
+            sheet_name = request.query_params.get('sheet_name')
+            
+            if not sheet_name:
+                return Response({'error': 'sheet_name is required'}, status=400)
+            
+            if not class_record.google_sheet_id:
+                return Response({'error': 'Class record has no linked Google Sheet'}, status=400)
+            
+            # Step 1: Get SETTINGS tab data (valid category internal IDs)
+            # Call the internal logic directly to avoid Response object issues
+            from utils.google_apps_script_service import determine_sheet_type
+            sheet_type = determine_sheet_type(sheet_name)
+            
+            valid_internal_ids = []
+            categories_map = {}
+            
+            if sheet_type:
+                settings_tab_name = 'SETTINGS_MIDTERM' if sheet_type == 'midterm' else 'SETTINGS_FINAL'
+                
+                # Try to read SETTINGS tab
+                try:
+                    access_token = self._get_access_token(request)
+                    read_ok = False
+                    settings_data = None
+                    
+                    # Try user token first
+                    if access_token:
+                        try:
+                            import requests
+                            range_name = f"'{settings_tab_name}'!B2:D100"
+                            api_url = f"https://sheets.googleapis.com/v4/spreadsheets/{class_record.google_sheet_id}/values/{range_name}"
+                            headers = {
+                                'Authorization': f'Bearer {access_token}',
+                                'Accept': 'application/json'
+                            }
+                            response = requests.get(api_url, headers=headers, timeout=6)
+                            if response.status_code == 200:
+                                data = response.json()
+                                settings_data = data.get('values', [])
+                                read_ok = True
+                        except Exception:
+                            pass
+                    
+                    # Fallback: Service account
+                    if not read_ok:
+                        try:
+                            from utils.google_service_account_sheets import GoogleServiceAccountSheets
+                            if hasattr(settings, 'GOOGLE_SERVICE_ACCOUNT_CREDENTIALS'):
+                                sa = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+                            else:
+                                sa = GoogleServiceAccountSheets()
+                            range_name = f"'{settings_tab_name}'!B2:D100"
+                            result = sa.sheets_service.spreadsheets().values().get(
+                                spreadsheetId=class_record.google_sheet_id,
+                                range=range_name,
+                                valueRenderOption='UNFORMATTED_VALUE'
+                            ).execute()
+                            settings_data = result.get('values', [])
+                            read_ok = True
+                        except Exception:
+                            pass
+                    
+                    # Parse settings data
+                    if read_ok and settings_data:
+                        for row in settings_data:
+                            if len(row) >= 3:
+                                internal_id = str(row[0]).strip().upper() if len(row) > 0 else ''
+                                display_name = str(row[1]).strip() if len(row) > 1 else ''
+                                weight_str = str(row[2]).strip() if len(row) > 2 else ''
+                                
+                                if internal_id and display_name and weight_str:
+                                    try:
+                                        weight_decimal = float(weight_str)
+                                        if weight_decimal > 0:
+                                            valid_internal_ids.append(internal_id)
+                                            categories_map[internal_id] = display_name
+                                    except (ValueError, TypeError):
+                                        continue
+                        
+                        logger.info(f"Found {len(valid_internal_ids)} valid categories from SETTINGS tab")
+                    else:
+                        logger.warning(f"SETTINGS tab '{settings_tab_name}' not available, falling back to direct sheet reading")
+                except Exception as e:
+                    logger.warning(f"Error reading SETTINGS tab: {str(e)}, falling back to direct sheet reading")
+            else:
+                logger.warning(f"Cannot determine sheet type for {sheet_name}, falling back to direct sheet reading")
+            
+            # Step 2: Read sheet rows 1, 2, 3, 4
+            from utils.google_service_account_sheets import GoogleServiceAccountSheets
+            if hasattr(settings, 'GOOGLE_SERVICE_ACCOUNT_CREDENTIALS'):
+                sa_sheets_service = GoogleServiceAccountSheets(settings.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS)
+            else:
+                sa_sheets_service = GoogleServiceAccountSheets()
+            
+            sheet_data = sa_sheets_service.get_specific_sheet_data(
+                class_record.google_sheet_id,
+                sheet_name
+            )
+            
+            if not sheet_data.get('success'):
+                return Response({
+                    'error': f"Failed to read sheet data: {sheet_data.get('error', 'Unknown error')}"
+                }, status=400)
+            
+            # Extract rows
+            # Handle backward compatibility: row1_internal_ids might not exist in older responses
+            row1_internal_ids = sheet_data.get('row1_internal_ids', [])  # Row 1: Internal IDs
+            row2_category_names = sheet_data.get('main_headers', [])  # Row 2: Category names
+            row3_subcategory_headers = sheet_data.get('sub_headers', [])  # Row 3: Subcategory headers
+            row4_max_scores = sheet_data.get('max_scores', [])  # Row 4: Max scores
+            
+            # 🔥 PHASE 3.2: Validate and handle missing Row 1 internal IDs
+            if not row1_internal_ids or len(row1_internal_ids) == 0:
+                logger.warning(f"Row 1 (internal IDs) not available for {sheet_name}, using fallback detection based on Row 2 category names")
+            elif len(row1_internal_ids) < len(row3_subcategory_headers):
+                logger.warning(f"Row 1 (internal IDs) has fewer columns ({len(row1_internal_ids)}) than Row 3 ({len(row3_subcategory_headers)}), some columns may not have internal IDs")
+            
+            # 🔥 PHASE 3.4: Validate row lengths
+            if not row2_category_names or len(row2_category_names) == 0:
+                return Response({
+                    'error': f'Row 2 (category names) is empty or missing for sheet "{sheet_name}"',
+                    'sheet_name': sheet_name
+                }, status=400)
+            
+            if not row3_subcategory_headers or len(row3_subcategory_headers) == 0:
+                return Response({
+                    'error': f'Row 3 (subcategory headers) is empty or missing for sheet "{sheet_name}"',
+                    'sheet_name': sheet_name
+                }, status=400)
+            
+            # Step 3: Find "Class Standing" column index
+            # 🔥 PHASE 3.5: Enhanced boundary detection
+            class_standing_index = None
+            boundary_found = False
+            
+            # First, try to find "CLASS STANDING" (most reliable boundary)
+            for i, cell in enumerate(row2_category_names):
+                cell_str = str(cell).strip().upper()
+                if 'CLASS STANDING' in cell_str and 'TOTAL SCORE' not in cell_str:
+                    class_standing_index = i
+                    boundary_found = True
+                    logger.info(f"Found 'Class Standing' boundary at column index {i} for {sheet_name}")
+                    break
+            
+            # If not found, try to find "TOTAL SCORE" as boundary
+            if not boundary_found:
+                for i in range(len(row2_category_names) - 1, -1, -1):
+                    cell_str = str(row2_category_names[i]).strip().upper()
+                    if 'TOTAL SCORE' in cell_str:
+                        class_standing_index = i
+                        boundary_found = True
+                        logger.info(f"Found 'TOTAL SCORE' boundary at column index {i} for {sheet_name}")
+                        break
+            
+            # If still not found, try to find last percentage column
+            if not boundary_found:
+                last_percentage_index = None
+                for i in range(len(row2_category_names) - 1, -1, -1):
+                    cell_str = str(row2_category_names[i]).strip()
+                    if '%' in cell_str:
+                        last_percentage_index = i
+                        break
+                
+                if last_percentage_index is not None:
+                    # Stop after the last percentage column (include it, but don't go beyond)
+                    class_standing_index = last_percentage_index + 1
+                    boundary_found = True
+                    logger.warning(f"Using last percentage column ({last_percentage_index}) as boundary for {sheet_name}")
+            
+            # Final fallback: use end of row3_subcategory_headers
+            if not boundary_found:
+                class_standing_index = len(row3_subcategory_headers)
+                logger.warning(f"No boundary found for {sheet_name}, using end of subcategory headers ({class_standing_index})")
+            
+            # Step 4: Build gradeable columns list
+            gradeable_columns = []
+            special_columns = ['PRELIM', 'MIDTERM', 'PREFINALS', 'FINALS']
+            
+            # Determine max column index to check
+            max_col_index = min(
+                len(row3_subcategory_headers),
+                len(row2_category_names),
+                class_standing_index if class_standing_index is not None else len(row3_subcategory_headers)
+            )
+            
+            for i in range(max_col_index):
+                # Stop at Class Standing
+                if class_standing_index is not None and i >= class_standing_index:
+                    break
+                
+                # 🔥 PHASE 3.3: Check for special columns (in Row 2)
+                row2_cell = str(row2_category_names[i] if i < len(row2_category_names) else '').strip().upper()
+                
+                # Validate special column detection
+                is_special_column = False
+                special_col_name = None
+                for special_col in special_columns:
+                    if row2_cell == special_col or row2_cell.startswith(special_col + ' ') or row2_cell.endswith(' ' + special_col):
+                        is_special_column = True
+                        # Use the exact special column name for consistency
+                        special_col_name = special_col
+                        break
+                
+                if is_special_column and special_col_name:
+                    gradeable_columns.append({
+                        'column_name': special_col_name,
+                        'column_index': i,
+                        'category_name': None,
+                        'internal_id': None,
+                        'is_subcategory': False,
+                        'max_score': None
+                    })
+                    continue
+                
+                # Check for subcategory columns
+                row1_cell = str(row1_internal_ids[i] if i < len(row1_internal_ids) else '').strip().upper()
+                row3_cell = str(row3_subcategory_headers[i] if i < len(row3_subcategory_headers) else '').strip()
+                
+                # 🔥 PHASE 3.4: Skip empty subcategory columns (enhanced validation)
+                if not row3_cell or row3_cell == '' or row3_cell.upper() == 'TOTAL':
+                    continue
+                
+                # Skip if subcategory header is just whitespace or placeholder
+                if row3_cell.upper() in ['', 'N/A', 'NULL', 'EMPTY']:
+                    continue
+                
+                # Exclude Total columns (check Row 2 for "%" or "TOTAL")
+                if '%' in row2_cell or ('TOTAL' in row2_cell and 'TOTAL SCORE' not in row2_cell):
+                    continue
+                
+                # Check if this column belongs to a valid category
+                is_valid = False
+                category_name = None
+                
+                # 🔥 PHASE 3.1 & 3.2: Enhanced validation with fallback logic
+                if valid_internal_ids and row1_cell:
+                    # Use SETTINGS tab: check if internal ID is valid
+                    if row1_cell in valid_internal_ids:
+                        is_valid = True
+                        category_name = categories_map.get(row1_cell, row2_cell if row2_cell else None)
+                        logger.debug(f"Column {i} ({row3_cell}) validated via SETTINGS tab internal ID: {row1_cell}")
+                    else:
+                        # Internal ID exists but not in SETTINGS tab - might be old category
+                        logger.debug(f"Column {i} ({row3_cell}) has internal ID {row1_cell} but not in SETTINGS tab")
+                else:
+                    # 🔥 PHASE 3.2: Fallback: Use Row 2 category names (if not empty and not a percentage)
+                    if row2_cell and '%' not in row2_cell and 'TOTAL' not in row2_cell:
+                        # Check if it's a category name (not a special column, not STUDENT INFO)
+                        if row2_cell not in special_columns and 'STUDENT INFO' not in row2_cell:
+                            is_valid = True
+                            category_name = row2_cell
+                            logger.debug(f"Column {i} ({row3_cell}) validated via fallback Row 2 category: {row2_cell}")
+                
+                if is_valid:
+                    max_score = None
+                    if i < len(row4_max_scores) and row4_max_scores[i]:
+                        try:
+                            max_score = float(row4_max_scores[i])
+                        except (ValueError, TypeError):
+                            pass
+                    
+                    gradeable_columns.append({
+                        'column_name': row3_cell,
+                        'column_index': i,
+                        'category_name': category_name,
+                        'internal_id': row1_cell if row1_cell else None,
+                        'is_subcategory': True,
+                        'max_score': max_score
+                    })
+            
+            response_time = round(time.time() - start_time, 2)
+            
+            # 🔥 PHASE 3: Final validation
+            if len(gradeable_columns) == 0:
+                logger.warning(f"No gradeable columns found for {sheet_name}. This might indicate:")
+                logger.warning(f"  - No valid categories in SETTINGS tab (found {len(valid_internal_ids)} valid IDs)")
+                logger.warning(f"  - All subcategory columns are empty or invalid")
+                logger.warning(f"  - Sheet structure might be incorrect")
+            else:
+                logger.info(f"get_gradeable_columns: Found {len(gradeable_columns)} gradeable columns for {sheet_name} in {response_time}s")
+                logger.debug(f"  - Subcategory columns: {sum(1 for col in gradeable_columns if col['is_subcategory'])}")
+                logger.debug(f"  - Special columns: {sum(1 for col in gradeable_columns if not col['is_subcategory'])}")
+            
+            return Response({
+                'success': True,
+                'gradeable_columns': gradeable_columns,
+                'sheet_name': sheet_name,
+                'class_standing_index': class_standing_index,
+                'total_columns': len(gradeable_columns),
+                'response_time': response_time,
+                'warnings': {
+                    'missing_settings_tab': len(valid_internal_ids) == 0 and sheet_type is not None,
+                    'missing_row1_ids': not row1_internal_ids or len(row1_internal_ids) == 0,
+                    'boundary_not_found': not boundary_found
+                } if len(gradeable_columns) > 0 else {}
+            })
+            
+        except Exception as e:
+            response_time = round(time.time() - start_time, 2)
+            logger.error(f"get_gradeable_columns failed in {response_time}s: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
             return Response({
                 'error': str(e),
                 'response_time': response_time

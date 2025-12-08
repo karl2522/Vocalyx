@@ -586,8 +586,9 @@ class GoogleServiceAccountSheets:
             # Convert column index to letter (A, B, C, etc.)
             column_letter = chr(65 + column_index)
 
-            # 🔥 FIXED: Skip 3 header rows now, convert to 1-based
-            sheet_row = row_index + 4  # +3 for headers, +1 for 1-based indexing
+            # 🔥 FIXED: Skip 4 header rows now, convert to 1-based
+            # Row 1: Internal IDs, Row 2: Category names, Row 3: Subcategory headers, Row 4: Max scores
+            sheet_row = row_index + 5  # +4 for header rows (Row 1-4), +1 for 1-based indexing
 
             cell_range = f"{sheet_name}!{column_letter}{sheet_row}"
 
@@ -744,11 +745,13 @@ class GoogleServiceAccountSheets:
             # 🔥 FIXED: Use first empty row instead of last row
             if first_empty_row_index is not None:
                 # Insert at the first empty row
-                next_row = first_empty_row_index + 4  # +3 for headers, +1 for 1-based indexing
+                # Row 1: Internal IDs, Row 2: Category names, Row 3: Subcategory headers, Row 4: Max scores
+                next_row = first_empty_row_index + 5  # +4 for header rows (Row 1-4), +1 for 1-based indexing
                 student_number = actual_student_count + 1
             else:
                 # No empty rows found, append at the end
-                next_row = len(current_data) + 4
+                # Row 1: Internal IDs, Row 2: Category names, Row 3: Subcategory headers, Row 4: Max scores
+                next_row = len(current_data) + 5  # +4 for header rows (Row 1-4), +1 for 1-based indexing
                 student_number = actual_student_count + 1
 
             print(f"🔍 ADD STUDENT: Found {actual_student_count} actual students")
@@ -1072,38 +1075,46 @@ class GoogleServiceAccountSheets:
                     'error': f'No data found in sheet "{sheet_name}"'
                 }
 
-            # 🔥 UPDATED: Handle 3-row header structure (same as main get_sheet_data)
-            main_headers = values[0] if len(values) > 0 else []  # Row 1: Categories
-            sub_headers = values[1] if len(values) > 1 else []  # Row 2: Column names
-            max_scores = values[2] if len(values) > 2 else []  # Row 3: Max scores/totals
+            # 🔥 UPDATED: Handle 4-row header structure
+            # Row 1 (index 0): Internal IDs (hidden)
+            # Row 2 (index 1): Category names and percentages
+            # Row 3 (index 2): Subcategory headers
+            # Row 4 (index 3): Max scores
+            row1_internal_ids = values[0] if len(values) > 0 else []  # Row 1: Internal IDs
+            row2_category_names = values[1] if len(values) > 1 else []  # Row 2: Category names and percentages
+            row3_subcategory_headers = values[2] if len(values) > 2 else []  # Row 3: Subcategory headers
+            row4_max_scores = values[3] if len(values) > 3 else []  # Row 4: Max scores
 
-            # 🔥 Use sub_headers (Row 2) as the actual column names for voice recognition
+            # 🔥 Use subcategory headers (Row 3) as the actual column names for voice recognition
+            # Fallback to category names (Row 2) if subcategory header is empty
             combined_headers = []
-            for i, header in enumerate(sub_headers):
+            for i, header in enumerate(row3_subcategory_headers):
                 if header and str(header).strip():  # If header exists and is not empty
                     combined_headers.append(str(header).strip())
-                elif i < len(main_headers) and main_headers[i] and str(main_headers[i]).strip():
-                    combined_headers.append(str(main_headers[i]).strip())
+                elif i < len(row2_category_names) and row2_category_names[i] and str(row2_category_names[i]).strip():
+                    combined_headers.append(str(row2_category_names[i]).strip())
                 else:
                     combined_headers.append(f"Column_{i + 1}")
 
-            # 🔥 FIXED: Skip first 3 rows (categories, column names, max scores)
-            tableData = values[3:] if len(values) > 3 else []
+            # 🔥 FIXED: Skip first 4 rows (internal IDs, category names, subcategory headers, max scores)
+            tableData = values[4:] if len(values) > 4 else []
 
             print(f"🔍 DEBUG get_specific_sheet_data: {sheet_name}")
-            print(f"   Row 1 (Categories): {main_headers}")
-            print(f"   Row 2 (Column Names): {sub_headers}")
-            print(f"   Row 3 (Max Scores): {max_scores}")
-            print(f"   Combined Headers: {combined_headers}")
+            print(f"   Row 1 (Internal IDs): {row1_internal_ids[:10]}...")  # Print first 10 for debugging
+            print(f"   Row 2 (Category Names): {row2_category_names[:10]}...")
+            print(f"   Row 3 (Subcategory Headers): {row3_subcategory_headers[:10]}...")
+            print(f"   Row 4 (Max Scores): {row4_max_scores[:10]}...")
+            print(f"   Combined Headers: {combined_headers[:10]}...")
             print(f"   Student Data Rows: {len(tableData)}")
             print(f"🔍 GET SPECIFIC SHEET: Successfully got data from '{sheet_name}'")
 
             return {
                 'success': True,
                 'headers': combined_headers,
-                'main_headers': main_headers,
-                'sub_headers': sub_headers,
-                'max_scores': max_scores,  # 🔥 NEW: Include max scores
+                'row1_internal_ids': row1_internal_ids,  # 🔥 NEW: Row 1 - Internal IDs
+                'main_headers': row2_category_names,  # Row 2 - Category names (for backward compatibility)
+                'sub_headers': row3_subcategory_headers,  # Row 3 - Subcategory headers (for backward compatibility)
+                'max_scores': row4_max_scores,  # Row 4 - Max scores
                 'tableData': tableData,
                 'sheet_name': sheet_name  # IMPORTANT: Return the requested sheet name, not a derived one
             }
@@ -1273,8 +1284,9 @@ class GoogleServiceAccountSheets:
             # Convert column index to letter (A, B, C, etc.)
             column_letter = chr(65 + column_index)
 
-            # Calculate actual sheet row (skip 2 header rows, convert to 1-based)
-            sheet_row = row_index + 4 # +2 for headers, +1 for 1-based indexing
+            # Calculate actual sheet row (skip 4 header rows, convert to 1-based)
+            # Row 1: Internal IDs, Row 2: Category names, Row 3: Subcategory headers, Row 4: Max scores
+            sheet_row = row_index + 5  # +4 for header rows (Row 1-4), +1 for 1-based indexing
 
             cell_range = f"'{target_sheet_name}'!{column_letter}{sheet_row}"
 
@@ -1624,7 +1636,8 @@ class GoogleServiceAccountSheets:
                 first_empty_row = len(current_data)
 
             # 🔥 FIXED: Calculate actual sheet row correctly
-            next_row = first_empty_row + 4  # +3 for headers, +1 for 1-based indexing
+            # Row 1: Internal IDs, Row 2: Category names, Row 3: Subcategory headers, Row 4: Max scores
+            next_row = first_empty_row + 5  # +4 for header rows (Row 1-4), +1 for 1-based indexing
             student_number = actual_student_count + 1
 
             print(f"🔍 DEBUG add_student_with_auto_number_to_sheet:")
@@ -1812,19 +1825,22 @@ class GoogleServiceAccountSheets:
             print(f"   Current tableData length: {len(current_data)}")
             print(f"   Actual student count: {actual_student_count}")
             print(f"   First empty row in tableData: {first_empty_row}")
+            print(f"   Number of students to import: {len(all_students)}")
+            print(f"   First student will be at tableData[{first_empty_row}] → sheet row {first_empty_row + 5}")
 
             # Prepare ALL student data at once
             all_updates = []
 
             for i, student in enumerate(all_students):
                 # Use the correct row calculation
+                # Row 1: Internal IDs, Row 2: Category names, Row 3: Subcategory headers, Row 4: Max scores
                 tableData_row_index = first_empty_row + i
-                sheet_row_number = tableData_row_index + 4  # +3 for headers, +1 for 1-based
+                sheet_row_number = tableData_row_index + 5  # +4 for header rows (Row 1-4), +1 for 1-based
                 student_number = actual_student_count + i + 1
 
                 print(
-                    f"   Student {i + 1}: {student.get('FIRST NAME', '')} {student.get('LASTNAME', '')} (ID: {student.get('STUDENT ID', 'None')})")
-                print(f"      → tableData[{tableData_row_index}] → sheet row {sheet_row_number}")
+                    f"   Student {i + 1}/{len(all_students)}: {student.get('FIRST NAME', '')} {student.get('LASTNAME', '')} (ID: {student.get('STUDENT ID', 'None')})")
+                print(f"      → tableData[{tableData_row_index}] → sheet row {sheet_row_number}, student_number={student_number}")
 
                 # Add student number
                 all_updates.append({
@@ -1870,7 +1886,7 @@ class GoogleServiceAccountSheets:
                 'total_updates': len(all_updates),
                 'updated_cells': result.get('totalUpdatedCells', 0),
                 'first_empty_row': first_empty_row,
-                'starting_sheet_row': first_empty_row + 4
+                'starting_sheet_row': first_empty_row + 5  # +4 for header rows (Row 1-4), +1 for 1-based
             }
 
         except Exception as e:
@@ -2995,7 +3011,8 @@ class GoogleServiceAccountSheets:
                                 pass
 
                         if should_update:
-                            sheet_row = student_row_index + 4  # +3 for headers, +1 for 1-based
+                            # Row 1: Internal IDs, Row 2: Category names, Row 3: Subcategory headers, Row 4: Max scores
+                            sheet_row = student_row_index + 5  # +4 for header rows (Row 1-4), +1 for 1-based
                             all_data_updates.append({
                                 'range': f"'{target_sheet_name}'!{column_letter}{sheet_row}",
                                 'values': [[str(final_score)]]
@@ -3554,8 +3571,9 @@ class GoogleServiceAccountSheets:
                     ]
                 }
 
-            # Calculate actual sheet row (add 4 for header rows and 1-based indexing)
-            sheet_row = student_row_index + 4
+            # Calculate actual sheet row (skip 4 header rows, convert to 1-based)
+            # Row 1: Internal IDs, Row 2: Category names, Row 3: Subcategory headers, Row 4: Max scores
+            sheet_row = student_row_index + 5  # +4 for header rows (Row 1-4), +1 for 1-based indexing
 
             print(f"🗑️ DELETE STUDENT: Found student at row index {student_row_index} (sheet row {sheet_row})")
             print(f"🗑️ DELETE STUDENT: Student info: {student_info}")
@@ -4059,9 +4077,9 @@ class GoogleServiceAccountSheets:
             if not sheet_data['success']:
                 return 5  # Fallback position
             
-            # 🔥 FIXED: Use Row 2 headers (sub_headers) which contains category names and percentage values
+            # 🔥 FIXED: Use Row 2 headers (main_headers) which contain category names and percentage values
             # Row 1 = Internal IDs (hidden), Row 2 = Category names and percentages (like "30.00%")
-            headers = sheet_data.get('sub_headers', sheet_data.get('headers', []))
+            headers = sheet_data.get('main_headers', sheet_data.get('headers', []))
             if not headers:
                 headers = sheet_data.get('headers', [])
             
@@ -4177,15 +4195,19 @@ class GoogleServiceAccountSheets:
         """
         try:
             print(f"🔥 COPY_MODIFY: Copying template structure for '{target_category_name}'")
-            
+            logger.info(f"🔥 COPY_MODIFY: sheet_id='{sheet_id}', sheet_name='{sheet_name}', target_category='{target_category_name}'")
+
             # Get sheet data to find target sheet name
             if sheet_name:
                 target_sheet_name = sheet_name
+                logger.info(f"🔥 COPY_MODIFY: Using provided sheet_name='{sheet_name}' as target_sheet_name")
             else:
+                logger.warning(f"🔥 COPY_MODIFY: No sheet_name provided, falling back to get_sheet_data")
                 sheet_data = self.get_sheet_data(sheet_id)
                 if not sheet_data['success']:
                     return {'success': False, 'error': 'Failed to get sheet data'}
                 target_sheet_name = sheet_data['sheet_name']
+                logger.info(f"🔥 COPY_MODIFY: Fallback target_sheet_name='{target_sheet_name}'")
             
             num_subcategories = len(sub_categories)
             num_total_columns = num_subcategories + 1  # + Total (percentage goes in same column)
@@ -4617,8 +4639,9 @@ class GoogleServiceAccountSheets:
                             }
                         })
                         
-                        # 2. Data rows (5+): Light green 2 WITHOUT borders, RIGHT-aligned
+                        # 2. Data rows (5+): Light green 2 with LEFT and RIGHT borders only, RIGHT-aligned
                         # Row 5+ = Student data rows
+                        # NOTE: Only vertical borders (left and right) - no horizontal borders (top and bottom) between data rows
                         override_requests.append({
                             'repeatCell': {
                                 'range': {
@@ -4633,18 +4656,24 @@ class GoogleServiceAccountSheets:
                                         'backgroundColor': {'red': 0.713, 'green': 0.843, 'blue': 0.659},  # Light green 2 (#b6d7a8)
                                         'textFormat': {'fontSize': 10},
                                         'horizontalAlignment': 'RIGHT',  # 🔥 FIX: Right-align numbers in Total column data rows
-                                        'verticalAlignment': 'MIDDLE'
-                                        # No borders for data rows
+                                        'verticalAlignment': 'MIDDLE',
+                                        'borders': {
+                                            'left': {'style': 'SOLID', 'width': 2, 'color': {'red': 0.0, 'green': 0.0, 'blue': 0.0}},  # Thick left border (vertical separator)
+                                            'right': {'style': 'SOLID', 'width': 2, 'color': {'red': 0.0, 'green': 0.0, 'blue': 0.0}}   # Thick right border (vertical separator)
+                                            # NO top or bottom borders - creates continuous vertical block
+                                        }
                                     }
                                 },
-                                'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment)'
+                                'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment,borders)'
                             }
                         })
                         
                         # 🔥 FIX: Apply #fae2d5 color to subcategory data rows (Row 5+)
                         # This ensures newly added categories match the color of existing categories
                         # #fae2d5 = rgb(250, 226, 213) = (0.980, 0.886, 0.835)
-                        print(f"🔥 COPY_FORMATTING: Applying #fae2d5 color to subcategory data rows (Row 5+) for '{target_category_name}'")
+                        # NOTE: Only vertical borders (left and right) - no horizontal borders (top and bottom) between data rows
+                        # This matches the default category style and ensures consistency between Midterm and Final sheets
+                        print(f"🔥 COPY_FORMATTING: Applying #fae2d5 color to subcategory data rows (Row 5+) for '{target_category_name}' (with vertical borders)")
                         subcategory_data_format_request = {
                             'repeatCell': {
                                 'range': {
@@ -4659,10 +4688,15 @@ class GoogleServiceAccountSheets:
                                         'backgroundColor': {'red': 0.980, 'green': 0.886, 'blue': 0.835},  # #fae2d5 (light orange/peach)
                                         'textFormat': {'fontSize': 10},
                                         'horizontalAlignment': 'RIGHT',  # Right-align numbers
-                                        'verticalAlignment': 'MIDDLE'
+                                        'verticalAlignment': 'MIDDLE',
+                                        'borders': {
+                                            'left': {'style': 'SOLID', 'width': 2, 'color': {'red': 0.0, 'green': 0.0, 'blue': 0.0}},  # Thick left border (vertical separator between columns)
+                                            'right': {'style': 'SOLID', 'width': 2, 'color': {'red': 0.0, 'green': 0.0, 'blue': 0.0}}   # Thick right border (vertical separator between columns)
+                                            # NO top or bottom borders - creates continuous vertical blocks per column
+                                        }
                                     }
                                 },
-                                'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment)'
+                                'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment,borders)'
                             }
                         }
                         override_requests.append(subcategory_data_format_request)
@@ -4819,51 +4853,94 @@ class GoogleServiceAccountSheets:
             
             requests = []
             
-            # 1. Apply light orange to sub-column data rows (Row 4+)
+            # 1. Apply light orange to sub-column data rows (Row 5+)
+            # Row 1: Internal IDs, Row 2: Category names, Row 3: Subcategory headers, Row 4: Max scores, Row 5+: Data rows
+            # NOTE: Only vertical borders (left and right) - no horizontal borders (top and bottom) between data rows
+            # This matches the default category style and ensures consistency between Midterm and Final sheets
             sub_column_data_range = {
                 'repeatCell': {
                     'range': {
                         'sheetId': target_sheet_id,
-                        'startRowIndex': 3,  # Row 4 (data rows start)
+                        'startRowIndex': 4,  # Row 5 (data rows start) - 0-based index 4
                         'endRowIndex': 100,  # All data rows
                         'startColumnIndex': dest_start_col,  # First sub-column
                         'endColumnIndex': dest_total_col     # Last sub-column (exclude Total)
                     },
                     'cell': {
                         'userEnteredFormat': {
-                            'backgroundColor': {'red': 1.0, 'green': 0.9, 'blue': 0.8},  # Light orange/peach
+                            'backgroundColor': {'red': 0.980, 'green': 0.886, 'blue': 0.835},  # #fae2d5 (light orange/peach)
                             'textFormat': {'fontSize': 10},
-                            'horizontalAlignment': 'CENTER',
-                            'verticalAlignment': 'MIDDLE'
+                            'horizontalAlignment': 'RIGHT',  # Right-align numbers
+                            'verticalAlignment': 'MIDDLE',
+                            'borders': {
+                                'left': {'style': 'SOLID', 'width': 2, 'color': {'red': 0.0, 'green': 0.0, 'blue': 0.0}},  # Thick left border (vertical separator between columns)
+                                'right': {'style': 'SOLID', 'width': 2, 'color': {'red': 0.0, 'green': 0.0, 'blue': 0.0}}   # Thick right border (vertical separator between columns)
+                                # NO top or bottom borders - creates continuous vertical blocks per column
+                            }
                         }
                     },
-                    'fields': 'userEnteredFormat'
+                    'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment,borders)'
                 }
             }
             requests.append(sub_column_data_range)
             
-            # 2. Apply dark green to Total column (all rows)
-            total_column_range = {
+            # 2. Apply light green 2 to Total column header rows (Rows 2-4)
+            total_column_header_range = {
                 'repeatCell': {
                     'range': {
                         'sheetId': target_sheet_id,
-                        'startRowIndex': 0,  # Row 1 (percentage)
-                        'endRowIndex': 100,  # All rows
+                        'startRowIndex': 1,  # Row 2 (category header/percentage) - 0-based index 1
+                        'endRowIndex': 4,    # Row 4 (max score) - 0-based index 3, endRowIndex is exclusive so 4
                         'startColumnIndex': dest_total_col,  # Total column
                         'endColumnIndex': dest_total_col + 1
                     },
                     'cell': {
                         'userEnteredFormat': {
-                            'backgroundColor': {'red': 0.0, 'green': 0.5, 'blue': 0.0},  # Dark green
+                            'backgroundColor': {'red': 0.713, 'green': 0.843, 'blue': 0.659},  # Light green 2 (#b6d7a8)
                             'textFormat': {'bold': True, 'fontSize': 10},
                             'horizontalAlignment': 'CENTER',
-                            'verticalAlignment': 'MIDDLE'
+                            'verticalAlignment': 'MIDDLE',
+                            'borders': {
+                                'top': {'style': 'SOLID', 'width': 2, 'color': {'red': 0.0, 'green': 0.0, 'blue': 0.0}},    # Bold top border
+                                'bottom': {'style': 'SOLID', 'width': 2, 'color': {'red': 0.0, 'green': 0.0, 'blue': 0.0}}, # Bold bottom border
+                                'left': {'style': 'SOLID', 'width': 2, 'color': {'red': 0.0, 'green': 0.0, 'blue': 0.0}},  # Bold left border (separator)
+                                'right': {'style': 'SOLID', 'width': 2, 'color': {'red': 0.0, 'green': 0.0, 'blue': 0.0}}   # Bold right border
+                            }
                         }
                     },
-                    'fields': 'userEnteredFormat'
+                    'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment,borders)'
                 }
             }
-            requests.append(total_column_range)
+            requests.append(total_column_header_range)
+            
+            # 3. Apply light green 2 to Total column data rows (Row 5+)
+            # NOTE: Only vertical borders (left and right) - no horizontal borders (top and bottom) between data rows
+            total_column_data_range = {
+                'repeatCell': {
+                    'range': {
+                        'sheetId': target_sheet_id,
+                        'startRowIndex': 4,  # Row 5 (data rows start) - 0-based index 4
+                        'endRowIndex': 100,  # All data rows
+                        'startColumnIndex': dest_total_col,  # Total column
+                        'endColumnIndex': dest_total_col + 1
+                    },
+                    'cell': {
+                        'userEnteredFormat': {
+                            'backgroundColor': {'red': 0.713, 'green': 0.843, 'blue': 0.659},  # Light green 2 (#b6d7a8)
+                            'textFormat': {'fontSize': 10},
+                            'horizontalAlignment': 'RIGHT',  # Right-align numbers
+                            'verticalAlignment': 'MIDDLE',
+                            'borders': {
+                                'left': {'style': 'SOLID', 'width': 2, 'color': {'red': 0.0, 'green': 0.0, 'blue': 0.0}},  # Thick left border (vertical separator)
+                                'right': {'style': 'SOLID', 'width': 2, 'color': {'red': 0.0, 'green': 0.0, 'blue': 0.0}}   # Thick right border (vertical separator)
+                                # NO top or bottom borders - creates continuous vertical block
+                            }
+                        }
+                    },
+                    'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment,borders)'
+                }
+            }
+            requests.append(total_column_data_range)
             
             # Apply all formatting
             if requests:
@@ -5198,13 +5275,21 @@ class GoogleServiceAccountSheets:
     def _insert_columns(self, sheet_id: str, sheet_name: str, start_index: int, count: int) -> dict:
         """Insert new columns into the sheet"""
         try:
+            # 🔥 DEBUG: Log sheet_name to trace insertion issue
+            logger.info(f"🔥 _INSERT_COLUMNS: sheet_id='{sheet_id}', sheet_name='{sheet_name}', start_index={start_index}, count={count}")
+            
             # Get sheet properties to get the sheet ID (different from spreadsheet ID)
             spreadsheet = self.sheets_service.spreadsheets().get(spreadsheetId=sheet_id).execute()
             target_sheet_id = None
 
+            # 🔥 DEBUG: Log all available sheets
+            available_sheets = [s['properties']['title'] for s in spreadsheet['sheets']]
+            logger.info(f"🔥 _INSERT_COLUMNS: Available sheets in spreadsheet: {available_sheets}")
+
             for sheet in spreadsheet['sheets']:
                 if sheet['properties']['title'] == sheet_name:
                     target_sheet_id = sheet['properties']['sheetId']
+                    logger.info(f"🔥 _INSERT_COLUMNS: Found target sheet '{sheet_name}' with sheetId={target_sheet_id}")
                     break
 
             if target_sheet_id is None:
@@ -5696,6 +5781,11 @@ class GoogleServiceAccountSheets:
             # Find category start and end indices
             category_start = None
             category_end = None
+            # Boundaries we must never cross
+            boundary_keywords = [
+                'CLASS STANDING', 'CLASS', 'FINAL GRADE',
+                'PRELIM', 'MIDTERM', 'PREFINAL', 'PREFINALS', 'FINALS'
+            ]
 
             # Strategy 1: Try to find by display name in Row 2
             for i, cell in enumerate(categories_row):
@@ -5722,11 +5812,70 @@ class GoogleServiceAccountSheets:
             if category_start is not None:
                 print(f"DELETE_CATEGORY: Category found at column {category_start}")
 
-                # Find the end of this category
-                # Category structure: [Category Name | Sub1 | Sub2 | ... | SubN | Total (with %)]
-                # We need to find the Total column (which contains the percentage)
-                for j in range(category_start + 1, len(categories_row)):
-                        if j >= len(categories_row):
+                # Primary span detection using Row 1 internal IDs (most reliable)
+                internal_id_for_span = None
+                if category_start < len(row1):
+                    internal_id_for_span = str(row1[category_start]).strip().upper() if row1[category_start] else ""
+
+                # Compute earliest boundary (Class Standing / grade columns)
+                boundary_index = None
+                for idx in range(category_start + 1, len(categories_row)):
+                    cell_upper = str(categories_row[idx]).strip().upper()
+                    if any(keyword in cell_upper for keyword in boundary_keywords) and 'TOTAL SCORE' not in cell_upper:
+                        boundary_index = idx
+                        break
+
+                if internal_id_for_span:
+                    category_end = category_start
+                    # Extend through contiguous internal IDs
+                    for j in range(category_start + 1, len(row1)):
+                        # Stop if boundary reached
+                        if boundary_index is not None and j >= boundary_index:
+                            break
+                        cell_id = str(row1[j]).strip().upper() if row1[j] else ""
+                        if cell_id == internal_id_for_span:
+                            category_end = j
+                        else:
+                            break
+
+                    # Try to include Total/percentage column right after span (before boundary)
+                    if boundary_index is None:
+                        search_limit = len(categories_row)
+                    else:
+                        search_limit = boundary_index
+                    for k in range(category_end + 1, search_limit):
+                        cell_upper = str(categories_row[k]).strip().upper()
+                        if any(keyword in cell_upper for keyword in boundary_keywords) and 'TOTAL SCORE' not in cell_upper:
+                            break
+                        cell_str = str(categories_row[k]).strip()
+                        if cell_str:
+                            # Treat numeric decimals or numbers as percentage cells too
+                            is_percent_symbol = '%' in cell_str
+                            is_numeric_percent = False
+                            try:
+                                num_val = float(cell_str)
+                                # Accept common percentage representations: 0-1 or 0-100
+                                if 0 <= num_val <= 100:
+                                    is_numeric_percent = True
+                            except Exception:
+                                pass
+
+                            if is_percent_symbol or is_numeric_percent:
+                                category_end = k
+                                print(f"DELETE_CATEGORY: Found Total/percentage column at column {k} (value: {cell_str}), will include in deletion")
+                                break
+
+                # Fallback if no internal ID span was usable
+                if category_end is None:
+                    # Scan forward, respecting boundaries and category keywords
+                    category_keywords = [
+                        'PROJECTS', 'QUIZZES', 'ASSIGNMENT', 'SEATWORK',
+                        'LABORATORY', 'ACTIVITIES', 'TEST', 'EXAM', 'HOMEWORK'
+                    ] + boundary_keywords
+
+                    for j in range(category_start + 1, len(categories_row)):
+                        # Stop if boundary reached
+                        if boundary_index is not None and j >= boundary_index:
                             break
 
                         next_cell = categories_row[j] if j < len(categories_row) else ""
@@ -5735,54 +5884,86 @@ class GoogleServiceAccountSheets:
                         if next_cell and str(next_cell).strip():
                             next_cell_str = str(next_cell).strip()
 
-                            # Check if it's a percentage (ends with % or contains %)
-                            # This is the Total column - we need to include it in the deletion
-                            if '%' in next_cell_str:
-                                category_end = j  # Include the Total column
-                                print(f"DELETE_CATEGORY: Found Total column (with %) at column {j}, will include in deletion")
+                            # Percentage → Total column
+                            is_percent_symbol = '%' in next_cell_str
+                            is_numeric_percent = False
+                            try:
+                                num_val = float(next_cell_str)
+                                if 0 <= num_val <= 100:
+                                    is_numeric_percent = True
+                            except Exception:
+                                pass
+
+                            if is_percent_symbol or is_numeric_percent:
+                                category_end = j
+                                print(f"DELETE_CATEGORY: Found Total/percentage column at column {j} (value: {next_cell_str}), will include in deletion")
                                 break
 
-                            # Check if it's another category name
-                            category_keywords = ['PROJECTS', 'QUIZZES', 'ASSIGNMENT', 'SEATWORK',
-                                                 'LABORATORY', 'ACTIVITIES', 'TEST', 'EXAM', 'HOMEWORK',
-                                                 'CLASS STANDING', 'CLASS', 'FINAL GRADE']
+                            # Next category detected
                             if any(keyword in next_cell_str.upper() for keyword in category_keywords):
-                                # Found next category, so previous category ends at j-1
-                                # But we need to check if there's a Total column before this
-                                # Look backwards from j-1 to find percentage
                                 found_total = False
+                                # Look backwards from j-1 to find percentage
                                 for k in range(j - 1, category_start, -1):
                                     if k < len(categories_row) and categories_row[k]:
                                         cell_str = str(categories_row[k]).strip()
                                         if '%' in cell_str:
-                                            category_end = k  # Include Total column
+                                            category_end = k
                                             found_total = True
                                             print(f"DELETE_CATEGORY: Found Total column (with %) at column {k} before next category")
                                             break
-                                
                                 if not found_total:
-                                    # No Total found, but we still need to include it
-                                    # Assume Total is at j-1 (last column before next category)
                                     category_end = j - 1
                                     print(f"DELETE_CATEGORY: No percentage found, assuming Total at column {category_end}")
                                 break
 
-                # If no clear end found, look for percentage in remaining columns
-                if category_end is None:
-                    # Search for percentage column
-                    for j in range(category_start + 1, min(category_start + 10, len(categories_row))):
-                        if j < len(categories_row) and categories_row[j]:
-                            cell_str = str(categories_row[j]).strip()
-                            if '%' in cell_str:
-                                category_end = j
-                                print(f"DELETE_CATEGORY: Found Total column (with %) at column {j}")
-                                break
-                    
-                    # If still no percentage found, use a reasonable default
+                    # If no clear end found, look for percentage in remaining columns (within a small window)
                     if category_end is None:
-                        # Assume standard pattern: category + 5 subcategories + 1 Total = 7 columns
-                        category_end = min(category_start + 6, len(categories_row) - 1)
-                        print(f"DELETE_CATEGORY: No percentage found, using default end at column {category_end}")
+                        search_limit = min(category_start + 10, len(categories_row))
+                        if boundary_index is not None:
+                            search_limit = min(search_limit, boundary_index)
+                        for j in range(category_start + 1, search_limit):
+                            if j < len(categories_row) and categories_row[j]:
+                                cell_str = str(categories_row[j]).strip()
+                                if '%' in cell_str:
+                                    category_end = j
+                                    print(f"DELETE_CATEGORY: Found Total column (with %) at column {j}")
+                                    break
+
+                        # If still no percentage found, use a conservative default width
+                        if category_end is None:
+                            default_width = 7  # category + up to 5 subs + total
+                            category_end = min(category_start + default_width - 1, len(categories_row) - 1)
+                            if boundary_index is not None:
+                                category_end = min(category_end, boundary_index - 1)
+                            print(f"DELETE_CATEGORY: No percentage found, using default end at column {category_end}")
+
+                # Final safety: never cross boundary
+                if boundary_index is not None and category_end is not None and category_end >= boundary_index:
+                    print(f"DELETE_CATEGORY: Clamping category_end from {category_end} to boundary {boundary_index - 1}")
+                    category_end = boundary_index - 1
+
+                # Final check: ensure we included the percentage/Total column if it exists just to the right
+                def _is_percentage_cell(cell_val: str) -> bool:
+                    if not cell_val:
+                        return False
+                    val = str(cell_val).strip()
+                    if '%' in val:
+                        return True
+                    try:
+                        num_val = float(val)
+                        return 0 <= num_val <= 100
+                    except Exception:
+                        return False
+
+                if category_end is not None:
+                    search_limit = boundary_index if boundary_index is not None else len(categories_row)
+                    # If current end is not a percentage, search ahead (within the same window)
+                    if not _is_percentage_cell(categories_row[category_end] if category_end < len(categories_row) else ""):
+                        for j in range(category_end + 1, min(category_end + 5, search_limit)):
+                            if j < len(categories_row) and _is_percentage_cell(categories_row[j]):
+                                print(f"DELETE_CATEGORY: Extending category_end to include percentage at column {j}")
+                                category_end = j
+                                break
 
             if category_start is None:
                 # Log all category names found for debugging

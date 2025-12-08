@@ -537,7 +537,8 @@ const ClassRecordExcel = () => {
       if (matchResult) {
         // Student exists - UPDATE
         const updates = [];
-        const finalRowNumber = matchResult.rowIndex + 4; // +3 headers + 1 for 1-based
+        // Row 1: Internal IDs, Row 2: Category names, Row 3: Subcategory headers, Row 4: Max scores
+        const finalRowNumber = matchResult.rowIndex + 5; // +4 for header rows (Row 1-4), +1 for 1-based
 
         // 🔥 FIX: Use Final sheet's column indices, not Midterm's
         // This ensures we sync to the correct columns even if column positions differ
@@ -1052,7 +1053,8 @@ const ClassRecordExcel = () => {
         const shouldClear = !matchFound || (matchFound && !matchedMidtermRowHasData);
 
         if (shouldClear) {
-          const finalRowNumber = finalRow.rowIndex + 4; // +3 headers + 1 for 1-based
+          // Row 1: Internal IDs, Row 2: Category names, Row 3: Subcategory headers, Row 4: Max scores
+          const finalRowNumber = finalRow.rowIndex + 5; // +4 for header rows (Row 1-4), +1 for 1-based
           const clearUpdates = [];
 
           // Clear all STUDENT INFO columns (A-E: NO., LASTNAME, FIRST NAME, MIDDLE NAME, STUDENT ID)
@@ -1562,10 +1564,21 @@ const ClassRecordExcel = () => {
           console.log("📋 Sheets list response:", sheetsListResponse.data);
 
           if (sheetsListResponse.data?.success && sheetsListResponse.data.sheets?.length > 0) {
-            setAvailableSheets(sheetsListResponse.data.sheets);
+            // Filter out Settings_Midterm and Settings_Final sheets from the dropdown
+            const filteredSheets = sheetsListResponse.data.sheets.filter(sheet => {
+              const sheetName = sheet.sheet_name?.toLowerCase() || '';
+              return !sheetName.includes('settings_midterm') && !sheetName.includes('settings_final');
+            });
+            
+            if (filteredSheets.length === 0) {
+              console.warn('⚠️ No sheets available after filtering out Settings sheets');
+              return;
+            }
+            
+            setAvailableSheets(filteredSheets);
 
             // Set the first sheet as current by default
-            const firstSheet = sheetsListResponse.data.sheets[0];
+            const firstSheet = filteredSheets[0];
             setCurrentSheet(firstSheet);
 
             // Load data from the first sheet
@@ -2510,7 +2523,8 @@ const ClassRecordExcel = () => {
       // 🔥 Step 1: Clear existing data columns (preserve formulas)
       const originalSize = tableData.length;
       for (let rowIndex = 0; rowIndex < originalSize; rowIndex++) {
-        const sheetRow = rowIndex + 4; // +3 for headers, +1 for 1-based indexing
+        // Row 1: Internal IDs, Row 2: Category names, Row 3: Subcategory headers, Row 4: Max scores
+        const sheetRow = rowIndex + 5; // +4 for header rows (Row 1-4), +1 for 1-based indexing
 
         for (let colIndex = 0; colIndex < headers.length; colIndex++) {
           // 🔥 SKIP formula columns
@@ -3072,7 +3086,8 @@ const ClassRecordExcel = () => {
         if (studentIndex !== -1) {
           updatedData[studentIndex][foundColumn] = score;
           updates.push({
-            row: studentIndex + 3, // +3 for header rows
+            // Row 1: Internal IDs, Row 2: Category names, Row 3: Subcategory headers, Row 4: Max scores
+            row: studentIndex + 5, // +4 for header rows (Row 1-4), +1 for 1-based
             column: foundColumn,
             value: score
           });
@@ -3599,18 +3614,57 @@ const ClassRecordExcel = () => {
     setCategoryLoading(true);
     try {
       console.log('Creating category:', categoryData);
+      // 🔥 DEBUG: Log currentSheet to trace sheet_name issue
+      console.log('🔥 DEBUG: currentSheet:', currentSheet);
+      console.log('🔥 DEBUG: currentSheet?.sheet_name:', currentSheet?.sheet_name);
+      console.log('🔥 DEBUG: window.currentActiveSheet:', window.currentActiveSheet);
+      
+      // 🔥 FIX: Get the most up-to-date sheet name
+      // Check multiple sources to ensure we have the correct sheet name
+      let targetSheetName = currentSheet?.sheet_name;
+      
+      // Fallback 1: Check window.currentActiveSheet (set during sheet switch)
+      if (!targetSheetName && window.currentActiveSheet) {
+        console.log('🔥 FIX: Using window.currentActiveSheet:', window.currentActiveSheet);
+        targetSheetName = window.currentActiveSheet;
+      }
+      
+      // Fallback 2: Check localStorage (persisted during sheet switch)
+      if (!targetSheetName) {
+        const savedSheetName = localStorage.getItem('activeSheetName');
+        if (savedSheetName) {
+          console.log('🔥 FIX: Using localStorage activeSheetName:', savedSheetName);
+          targetSheetName = savedSheetName;
+        }
+      }
+      
+      // Fallback 3: Check availableSheets state (if available)
+      if (!targetSheetName && availableSheets.length > 0) {
+        // Try to find Final sheet first, then Midterm
+        const finalSheet = availableSheets.find(s => s.sheet_name?.toLowerCase().includes('final'));
+        const midtermSheet = availableSheets.find(s => s.sheet_name?.toLowerCase().includes('midterm'));
+        targetSheetName = finalSheet?.sheet_name || midtermSheet?.sheet_name || availableSheets[0]?.sheet_name;
+        console.log('🔥 FIX: Using availableSheets fallback:', targetSheetName);
+      }
+      
+      if (!targetSheetName) {
+        throw new Error('Cannot determine target sheet name. Please switch to a sheet first.');
+      }
+      
+      console.log('🔥 FINAL: Using sheet_name:', targetSheetName);
 
       const response = await classRecordService.addCategoryToSheet(
         classRecord.google_sheet_id,
         categoryData,
-        currentSheet?.sheet_name
+        targetSheetName
       );
 
       if (response.data?.success) {
         toast.success(`Successfully created "${categoryData.categoryName}" with ${categoryData.subCategoryCount} columns!`);
 
         // 🔥 FIX: Pass the required parameters to loadSheetData
-        await loadSheetData(classRecord.google_sheet_id, currentSheet?.sheet_name);
+        // Use the same targetSheetName we used for adding the category
+        await loadSheetData(classRecord.google_sheet_id, targetSheetName);
         await syncRemaining();
 
         // 🔥 FIX: Refresh categories list so DeleteCategoryModal can detect the newly added category
@@ -4786,8 +4840,9 @@ const ClassRecordExcel = () => {
         // Convert column index to letter (A, B, C, etc.)
         const columnLetter = String.fromCharCode(65 + columnIndex);
 
-        // Calculate actual sheet row (skip 3 header rows, convert to 1-based)
-        const sheetRow = entry.rowIndex + 4; // +3 for headers, +1 for 1-based indexing
+        // Calculate actual sheet row (skip 4 header rows, convert to 1-based)
+        // Row 1: Internal IDs, Row 2: Category names, Row 3: Subcategory headers, Row 4: Max scores
+        const sheetRow = entry.rowIndex + 5; // +4 for header rows (Row 1-4), +1 for 1-based indexing
 
         // Build cell range
         const sheetPrefix = currentSheet?.sheet_name ? `'${currentSheet.sheet_name}'!` : '';
@@ -5510,6 +5565,8 @@ const ClassRecordExcel = () => {
         };
       } else {
         // If currently closed, close all others and open this one
+        // Also close sheet selector when opening a dropdown
+        setShowSheetSelector(false);
         return {
           tools: false,
           voice: false,
@@ -5690,7 +5747,13 @@ const ClassRecordExcel = () => {
                 {availableSheets.length > 1 && (
                   <div className="relative" onClick={(e) => e.stopPropagation()}>
                     <button
-                      onClick={() => setShowSheetSelector(!showSheetSelector)}
+                      onClick={() => {
+                        // Close tools dropdown (and other dropdowns) when opening sheet selector
+                        if (!showSheetSelector) {
+                          setDropdowns({ tools: false, voice: false, edit: false });
+                        }
+                        setShowSheetSelector(!showSheetSelector);
+                      }}
                       disabled={loadingSheets}
                       className="flex items-center space-x-2 bg-indigo-50 text-indigo-700 px-3 py-2 rounded-lg font-medium hover:bg-indigo-100 transition-colors shadow-sm border border-indigo-200 disabled:opacity-50"
                     >
