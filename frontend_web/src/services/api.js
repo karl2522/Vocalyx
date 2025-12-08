@@ -1,8 +1,8 @@
 import axios from 'axios';
 
 const API_URL = import.meta.env.PROD 
-  ? (import.meta.env.VITE_BACKEND_URL_PROD || 'https://vocalyx-backend-64846917574.asia-southeast1.run.app')
-  : (import.meta.env.VITE_BACKEND_URL_DEV || 'http://127.0.0.1:8000')
+  ? 'http://127.0.0.1:8000/api'
+  : 'http://127.0.0.1:8000/api';
 
 console.log('🔍 API Environment Detection:', {
   'import.meta.env.PROD': import.meta.env.PROD,
@@ -392,7 +392,11 @@ export const classRecordService = {
         return api.get(url);
     },
 
-    // 🔥 REMOVED: Test headers endpoint - Debug only, not for production
+    // 🔥 NEW: Test headers endpoint
+    testHeaders: () => {
+        console.log('🔥 TESTING HEADERS ENDPOINT');
+        return api.get('/class-records/test_headers/');
+    },
 
     // Get mirrored CLASS STANDING percentages summary for dashboard card
     getCategoryPercentagesSummary: (classRecordId) =>

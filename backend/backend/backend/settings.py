@@ -334,25 +334,16 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SESSION_COOKIE_SECURE = False if DEBUG else True
 CSRF_COOKIE_SECURE = False if DEBUG else True
 
-# CSRF settings - production URLs should always be trusted
-CSRF_TRUSTED_ORIGINS = [
-    "https://vocalyx.online",
-    "https://www.vocalyx.online",
-]
-
-# Additional CSRF settings for development
+# CSRF settings for development
 if DEBUG:
-    CSRF_TRUSTED_ORIGINS.extend([
+    CSRF_TRUSTED_ORIGINS = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
-    ])
+    ]
     CSRF_COOKIE_SAMESITE = 'Lax'
     CSRF_COOKIE_HTTPONLY = False
-else:
-    CSRF_COOKIE_SAMESITE = 'None'
-    CSRF_COOKIE_HTTPONLY = True
 
 CELERY_BEAT_SCHEDULE = {
     'cleanup-expired-tokens': {

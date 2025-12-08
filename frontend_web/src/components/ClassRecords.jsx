@@ -18,6 +18,7 @@ import {
 } from 'react-icons/fi';
 import { RiSoundModuleLine } from 'react-icons/ri';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../auth/AuthContext';
 import { enhancedClassRecordService as classRecordService } from '../services/api';
 import { showToast } from '../utils/toast';
 import { TopNavbar } from './layouts/TopNavbar.jsx';
@@ -351,6 +352,7 @@ const Pagination = ({ currentPage, totalPages, onPageChange }) => {
 };
 
 const ClassRecords = () => {
+  const { user } = useAuth();
   const [classRecords, setClassRecords] = useState([]);
   const [remainingMap, setRemainingMap] = useState({}); // id -> { total, sheets }
   const [loading, setLoading] = useState(true);
@@ -359,6 +361,9 @@ const ClassRecords = () => {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
   const [tutorialCompleted, setTutorialCompleted] = useState(false);
+
+  // Check if user has Google Drive access (Google account OR connected Google Drive)
+  const hasGoogleDriveAccess = user?.has_google || user?.google_drive_connected;
   
   // Check if onboarding has been completed
   useEffect(() => {
@@ -454,7 +459,7 @@ const ClassRecords = () => {
           }
         }
 
-        // Fallback: fetch DB-mirrored breakdown for records with no total/breakdown
+        // Fallback: fetch Settings-based breakdown for records with no total/breakdown
         const needFallback = records.filter(r => {
           const info = initialMap[r.id];
           const hasTotal = (info?.total ?? 0) > 0;
@@ -466,15 +471,49 @@ const ClassRecords = () => {
         } else {
           const results = await Promise.all(needFallback.map(async (rec) => {
             try {
-              const res = await classRecordService.getCategoryPercentages(rec.id);
-              const remaining = Math.max(0, res?.data?.remaining ?? 0);
-              const sheets = Array.isArray(res?.data?.sheets) ? res.data.sheets : [];
-              const totalFinal = sheets.length > 0
-                ? sheets.reduce((sum, s) => sum + (Number(s.remaining) || 0), 0)
-                : remaining;
-              return [rec.id, { total: totalFinal, sheets }];
+              // Use Settings-based logic: get sheets list, then read from SETTINGS tabs
+              if (!rec.google_sheet_id) {
+                return [rec.id, { total: 0, sheets: [] }];
+              }
+              
+              const sheetsList = await classRecordService.getSheetsList(rec.google_sheet_id);
+              const sheets = sheetsList?.data?.sheets || [];
+              
+              const midtermSheet = sheets.find(s => s.sheet_name?.toLowerCase().includes('midterm'));
+              const finalSheet = sheets.find(s => s.sheet_name?.toLowerCase().includes('final'));
+              
+              const sheetsToCheck = [];
+              if (midtermSheet) sheetsToCheck.push(midtermSheet);
+              if (finalSheet) sheetsToCheck.push(finalSheet);
+              if (sheetsToCheck.length === 0 && sheets.length > 0) sheetsToCheck.push(sheets[0]);
+              
+              const problematic = [];
+              let totalRemaining = 0;
+              
+              for (const sheet of sheetsToCheck) {
+                try {
+                  const settingsRes = await classRecordService.getSettingsPercentages(rec.id, sheet.sheet_name);
+                  const settingsData = settingsRes?.data || {};
+                  const remaining = Number(settingsData?.remaining ?? (settingsData?.total ? Math.max(0, 100 - settingsData.total) : 0));
+                  const total = Number(settingsData?.total ?? 0);
+                  
+                  if (remaining > 0) {
+                    problematic.push({
+                      sheetName: sheet.sheet_name,
+                      remaining,
+                      total,
+                      source: settingsData?.source || 'SETTINGS'
+                    });
+                    totalRemaining += remaining;
+                  }
+                } catch (innerErr) {
+                  console.warn(`⚠️ Failed to load SETTINGS percentages for ${sheet.sheet_name}:`, innerErr);
+                }
+              }
+              
+              return [rec.id, { total: totalRemaining, sheets: problematic }];
             } catch (e) {
-              console.warn(`⚠️ category_percentages failed for record ${rec.id}:`, e);
+              console.warn(`⚠️ Settings-based percentage check failed for record ${rec.id}:`, e);
               return [rec.id, { total: 0, sheets: [] }];
             }
           }));
@@ -879,13 +918,39 @@ const ClassRecords = () => {
           <>
             <div className={`grid gap-4 ${viewMode === 'grid' ? 'md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1'}`}>
               {currentRecords.map((record) => (
-              <Link
+              <div
                 key={record.id}
-                to={`/class-records/${record.id}/excel`}
-                className={`group bg-white rounded-xl shadow-md border border-gray-200 p-4 hover:shadow-xl hover:shadow-blue-500/10 hover:border-blue-300 hover:-translate-y-1 transition-all duration-300 relative cursor-pointer block ${
+                className={`group bg-white rounded-xl shadow-md border border-gray-200 p-4 relative ${
                   viewMode === 'list' ? 'flex items-center gap-4' : ''
-                }`}
+                } ${!hasGoogleDriveAccess ? 'opacity-60' : 'hover:shadow-xl hover:shadow-blue-500/10 hover:border-blue-300 hover:-translate-y-1 transition-all duration-300'}`}
               >
+                {!hasGoogleDriveAccess && (
+                  <div className="absolute inset-0 bg-gray-100/80 backdrop-blur-sm rounded-xl flex items-center justify-center z-20">
+                    <div className="bg-white rounded-lg shadow-lg p-4 max-w-xs mx-4 border border-gray-200">
+                      <div className="flex items-start gap-3">
+                        <FiInfo className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <p className="text-sm font-medium text-gray-900 mb-1">
+                            Google Drive Disconnected
+                          </p>
+                          <p className="text-xs text-gray-600">
+                            Connect your Google Drive or Google account in profile settings to access this class record.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <Link
+                  to={hasGoogleDriveAccess ? `/class-records/${record.id}/excel` : '#'}
+                  onClick={(e) => {
+                    if (!hasGoogleDriveAccess) {
+                      e.preventDefault();
+                      showToast.error('Please connect Google Drive or Google account in your profile settings');
+                    }
+                  }}
+                  className={`block ${viewMode === 'list' ? 'flex items-center gap-4 flex-1' : ''} ${!hasGoogleDriveAccess ? 'pointer-events-none' : 'cursor-pointer'}`}
+                >
                 {/* 🔥 Enhanced: Top-right action icons */}
                 <div className="absolute top-3 right-3 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-all duration-300 z-10">
                   {/* Edit Icon */}
@@ -1034,7 +1099,8 @@ const ClassRecords = () => {
                     </div>
                   </div>
                 </div>
-              </Link>
+                </Link>
+              </div>
             ))}
             </div>
             
