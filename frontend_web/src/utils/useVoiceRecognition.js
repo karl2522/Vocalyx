@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 const useVoiceRecognition = () => {
   const [isListening, setIsListening] = useState(false);
@@ -88,9 +88,9 @@ const useVoiceRecognition = () => {
       }
       
       // Get backend URL
-      const backendUrl = import.meta.env.MODE === 'development' 
-        ? import.meta.env.VITE_BACKEND_URL_DEV 
-        : import.meta.env.VITE_BACKEND_URL_PROD;
+      const backendUrl = import.meta.env.PROD 
+        ? (import.meta.env.VITE_BACKEND_URL_PROD || 'https://vocalyx-backend-64846917574.asia-southeast1.run.app')
+        : (import.meta.env.VITE_BACKEND_URL_DEV || 'http://127.0.0.1:8000');
 
       // Create form data
       const formData = new FormData();
