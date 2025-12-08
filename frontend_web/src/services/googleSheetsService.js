@@ -1,13 +1,13 @@
 const BACKEND_URL = import.meta.env.PROD 
-  ? 'http://127.0.0.1:8000/api'
-  : 'http://127.0.0.1:8000/api';
+  ? (import.meta.env.VITE_BACKEND_URL_PROD || 'https://vocalyx-backend-64846917574.asia-southeast1.run.app')
+  : (import.meta.env.VITE_BACKEND_URL_DEV || 'http://127.0.0.1:8000');
 
 import { showToast } from '../utils/toast';
 import googleDriveService from './googleDriveService';
 
 class GoogleSheetsService {
   constructor() {
-    this.baseURL = BACKEND_URL; // 🔥 FIXED: Remove the extra /api
+    this.baseURL = BACKEND_URL;
   }
 
   /**
@@ -37,7 +37,7 @@ class GoogleSheetsService {
    */
   async copyTemplate(templateId, sheetName) {
     try {
-      const response = await fetch(`${this.baseURL}/sheets/copy-template/`, {
+      const response = await fetch(`${this.baseURL}/api/sheets/copy-template/`, {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify({
@@ -62,7 +62,7 @@ class GoogleSheetsService {
    */
   async getSheetInfo(sheetId) {
     try {
-      const response = await fetch(`${this.baseURL}/sheets/info/${sheetId}/`, {
+      const response = await fetch(`${this.baseURL}/api/sheets/info/${sheetId}/`, {
         method: 'GET',
         headers: this.getHeaders()
       });
@@ -83,7 +83,7 @@ class GoogleSheetsService {
    */
   async listUserSheets() {
     try {
-      const response = await fetch(`${this.baseURL}/sheets/list/`, {
+      const response = await fetch(`${this.baseURL}/api/sheets/list/`, {
         method: 'GET',
         headers: this.getHeaders()
       });
@@ -104,7 +104,7 @@ class GoogleSheetsService {
    */
   async updatePermissions(sheetId, makePublic = false, makeEditable = false) {
     try {
-      const response = await fetch(`${this.baseURL}/sheets/permissions/${sheetId}/`, {
+      const response = await fetch(`${this.baseURL}/api/sheets/permissions/${sheetId}/`, {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify({

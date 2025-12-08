@@ -2036,7 +2036,13 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=['get'])
     def test_headers(self, request):
-        """Test endpoint to verify header transmission"""
+        """Test endpoint to verify header transmission - DEBUG ONLY"""
+        # Disable in production
+        from django.conf import settings
+        if not settings.DEBUG:
+            from rest_framework.response import Response
+            from rest_framework import status
+            return Response({'error': 'This endpoint is only available in debug mode'}, status=status.HTTP_403_FORBIDDEN)
         print("🔍 TEST HEADERS ENDPOINT CALLED")
         print("🔍 ALL REQUEST HEADERS:")
         for header_name, header_value in request.headers.items():
@@ -2056,7 +2062,13 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=['post'])
     def test_headers_post(self, request):
-        """Test endpoint for POST requests to verify header transmission"""
+        """Test endpoint for POST requests to verify header transmission - DEBUG ONLY"""
+        # Disable in production
+        from django.conf import settings
+        if not settings.DEBUG:
+            from rest_framework.response import Response
+            from rest_framework import status
+            return Response({'error': 'This endpoint is only available in debug mode'}, status=status.HTTP_403_FORBIDDEN)
         print("🔍 TEST HEADERS POST ENDPOINT CALLED")
         print("🔍 ALL REQUEST HEADERS:")
         for header_name, header_value in request.headers.items():
@@ -2079,7 +2091,10 @@ class ClassRecordViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=['post'])
     def debug_frontend_interceptor(self, request):
-        """Debug endpoint to test if frontend API interceptor is working"""
+        """Debug endpoint to test if frontend API interceptor is working - DEBUG ONLY"""
+        # Disable in production
+        if not settings.DEBUG:
+            return Response({'error': 'This endpoint is only available in debug mode'}, status=status.HTTP_403_FORBIDDEN)
         print("🔥 DEBUG FRONTEND INTERCEPTOR ENDPOINT CALLED")
         print("🔥 REQUEST METHOD:", request.method)
         print("🔥 REQUEST URL:", request.get_full_path())
