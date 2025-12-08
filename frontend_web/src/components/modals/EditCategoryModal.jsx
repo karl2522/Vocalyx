@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Edit, X, Eye, AlertTriangle, CheckCircle } from 'lucide-react';
 
-const EditCategoryModal = ({ 
-  isOpen, 
-  onClose, 
+const EditCategoryModal = ({
+  isOpen,
+  onClose,
   onSubmit,
   isLoading = false,
   categories = [] // Available categories to edit
@@ -25,34 +25,34 @@ const EditCategoryModal = ({
 
   const validateForm = () => {
     const newErrors = {};
-    
+
     if (!selectedCategory) {
       newErrors.selectedCategory = 'Please select a category to edit';
     }
-    
+
     if (!newCategoryName.trim()) {
       newErrors.newCategoryName = 'New category name is required';
     } else if (newCategoryName.trim().length < 2) {
       newErrors.newCategoryName = 'Category name must be at least 2 characters';
     }
-    
+
     if (newCategoryWeight < 0 || newCategoryWeight > 100) {
       newErrors.newCategoryWeight = 'Weight must be between 0 and 100';
     }
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = () => {
     if (!validateForm()) return;
-    
+
     const editData = {
       oldCategoryName: selectedCategory,
       newCategoryName: newCategoryName.trim(),
       newPercentage: `${newCategoryWeight.toFixed(2)}%`
     };
-    
+
     console.log('🔥 EDIT MODAL: Submitting edit data:', editData);
     onSubmit(editData);
   };
@@ -84,7 +84,7 @@ const EditCategoryModal = ({
                 Modify category name and weight percentage
               </p>
             </div>
-            
+
             <button
               onClick={onClose}
               disabled={isLoading}
@@ -109,11 +109,10 @@ const EditCategoryModal = ({
                   value={selectedCategory}
                   onChange={(e) => handleCategoryChange(e.target.value)}
                   disabled={isLoading}
-                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                    errors.selectedCategory 
-                      ? 'border-red-300 bg-red-50' 
-                      : 'border-slate-300 hover:border-slate-400'
-                  } disabled:bg-slate-100 disabled:cursor-not-allowed`}
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${errors.selectedCategory
+                    ? 'border-red-300 bg-red-50'
+                    : 'border-slate-300 hover:border-slate-400'
+                    } disabled:bg-slate-100 disabled:cursor-not-allowed`}
                 >
                   <option value="">Choose a category...</option>
                   {categories.map((category) => (
@@ -141,11 +140,10 @@ const EditCategoryModal = ({
                   onChange={(e) => setNewCategoryName(e.target.value)}
                   placeholder="Enter new category name"
                   disabled={isLoading || !selectedCategory}
-                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                    errors.newCategoryName 
-                      ? 'border-red-300 bg-red-50' 
-                      : 'border-slate-300 hover:border-slate-400'
-                  } disabled:bg-slate-100 disabled:cursor-not-allowed`}
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${errors.newCategoryName
+                    ? 'border-red-300 bg-red-50'
+                    : 'border-slate-300 hover:border-slate-400'
+                    } disabled:bg-slate-100 disabled:cursor-not-allowed`}
                 />
                 {errors.newCategoryName && (
                   <p className="text-red-600 text-sm mt-1 flex items-center space-x-1">
@@ -169,11 +167,10 @@ const EditCategoryModal = ({
                     value={newCategoryWeight}
                     onChange={(e) => setNewCategoryWeight(parseFloat(e.target.value) || 0)}
                     disabled={isLoading || !selectedCategory}
-                    className={`w-24 px-3 py-2 border rounded-lg text-center focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      errors.newCategoryWeight 
-                        ? 'border-red-300 bg-red-50' 
-                        : 'border-slate-300'
-                    } disabled:bg-slate-100`}
+                    className={`w-24 px-3 py-2 border rounded-lg text-center focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.newCategoryWeight
+                      ? 'border-red-300 bg-red-50'
+                      : 'border-slate-300'
+                      } disabled:bg-slate-100`}
                     placeholder="10"
                   />
                   <span className="text-slate-600">%</span>
@@ -183,11 +180,10 @@ const EditCategoryModal = ({
                         key={num}
                         onClick={() => setNewCategoryWeight(num)}
                         disabled={isLoading || !selectedCategory}
-                        className={`px-3 py-1 text-sm rounded-lg transition-colors disabled:opacity-50 ${
-                          newCategoryWeight === num
-                            ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                        }`}
+                        className={`px-3 py-1 text-sm rounded-lg transition-colors disabled:opacity-50 ${newCategoryWeight === num
+                          ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          }`}
                       >
                         {num}%
                       </button>
@@ -223,7 +219,7 @@ const EditCategoryModal = ({
                   <Eye className="w-4 h-4" />
                   <span>Changes Preview</span>
                 </h3>
-                
+
                 {selectedCategory && newCategoryName.trim() ? (
                   <div className="space-y-4">
                     {/* Before */}
@@ -254,7 +250,7 @@ const EditCategoryModal = ({
                         </div>
                       </div>
                     </div>
-                    
+
                     {/* Info */}
                     <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                       <div className="flex items-start space-x-2">
@@ -292,7 +288,7 @@ const EditCategoryModal = ({
             >
               Reset Form
             </button>
-            
+
             <div className="flex space-x-3">
               <button
                 onClick={onClose}

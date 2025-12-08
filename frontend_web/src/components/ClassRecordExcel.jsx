@@ -1569,12 +1569,12 @@ const ClassRecordExcel = () => {
               const sheetName = sheet.sheet_name?.toLowerCase() || '';
               return !sheetName.includes('settings_midterm') && !sheetName.includes('settings_final');
             });
-            
+
             if (filteredSheets.length === 0) {
               console.warn('⚠️ No sheets available after filtering out Settings sheets');
               return;
             }
-            
+
             setAvailableSheets(filteredSheets);
 
             // Set the first sheet as current by default
@@ -3618,17 +3618,17 @@ const ClassRecordExcel = () => {
       console.log('🔥 DEBUG: currentSheet:', currentSheet);
       console.log('🔥 DEBUG: currentSheet?.sheet_name:', currentSheet?.sheet_name);
       console.log('🔥 DEBUG: window.currentActiveSheet:', window.currentActiveSheet);
-      
+
       // 🔥 FIX: Get the most up-to-date sheet name
       // Check multiple sources to ensure we have the correct sheet name
       let targetSheetName = currentSheet?.sheet_name;
-      
+
       // Fallback 1: Check window.currentActiveSheet (set during sheet switch)
       if (!targetSheetName && window.currentActiveSheet) {
         console.log('🔥 FIX: Using window.currentActiveSheet:', window.currentActiveSheet);
         targetSheetName = window.currentActiveSheet;
       }
-      
+
       // Fallback 2: Check localStorage (persisted during sheet switch)
       if (!targetSheetName) {
         const savedSheetName = localStorage.getItem('activeSheetName');
@@ -3637,7 +3637,7 @@ const ClassRecordExcel = () => {
           targetSheetName = savedSheetName;
         }
       }
-      
+
       // Fallback 3: Check availableSheets state (if available)
       if (!targetSheetName && availableSheets.length > 0) {
         // Try to find Final sheet first, then Midterm
@@ -3646,11 +3646,11 @@ const ClassRecordExcel = () => {
         targetSheetName = finalSheet?.sheet_name || midtermSheet?.sheet_name || availableSheets[0]?.sheet_name;
         console.log('🔥 FIX: Using availableSheets fallback:', targetSheetName);
       }
-      
+
       if (!targetSheetName) {
         throw new Error('Cannot determine target sheet name. Please switch to a sheet first.');
       }
-      
+
       console.log('🔥 FINAL: Using sheet_name:', targetSheetName);
 
       const response = await classRecordService.addCategoryToSheet(

@@ -8,20 +8,20 @@ const ImportStudentsInfoModal = ({ showModal, onClose, onProceed }) => {
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl overflow-hidden shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col"> {/* rounded + overflow for proper clipping */}
         {/* Header - Fixed */}
-        <div className="px-6 py-4 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-indigo-50 flex-shrink-0"> {/* 🔥 FIXED: Added flex-shrink-0 */}
+        <div className="px-6 py-5 border-b border-slate-200 bg-gradient-to-r from-blue-600 to-indigo-600 flex-shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#E6E9F7' }}>
-                <Upload className="w-5 h-5" style={{ color: '#333D79' }} />
+              <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-lg">
+                <Upload className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h2 className="text-xl font-bold text-slate-900">Import Students</h2>
-                <p className="text-sm text-slate-600">Upload an Excel file to add students to your class</p>
+                <h2 className="text-2xl font-bold text-white">Import Your Students</h2>
+                <p className="text-sm text-blue-100">Follow 3 easy steps to add students from Excel</p>
               </div>
             </div>
             <button
               onClick={onClose}
-              className="text-slate-400 hover:text-slate-600 transition-colors"
+              className="text-white/80 hover:text-white hover:bg-white/10 rounded-lg p-2 transition-all"
             >
               <X className="w-5 h-5" />
             </button>
@@ -29,124 +29,195 @@ const ImportStudentsInfoModal = ({ showModal, onClose, onProceed }) => {
         </div>
 
         {/* Content - Scrollable */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6"> {/* 🔥 FIXED: Added flex-1 overflow-y-auto */}
-          {/* Requirements Section */}
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-            <div className="flex items-start space-x-3">
-              <Info className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <h3 className="font-semibold text-amber-900 mb-2">File Requirements</h3>
-                <p className="text-sm text-amber-800 mb-3">
-                  Your Excel file must contain the following columns to match your Google Sheet structure:
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+
+          {/* Step 1 */}
+          <div className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-start space-x-4">
+              <div className="flex-shrink-0">
+                <div className="w-10 h-10 rounded-full bg-green-500 text-white flex items-center justify-center font-bold text-lg shadow-md">
+                  1
+                </div>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-slate-900 mb-3 flex items-center">
+                  <FileText className="w-5 h-5 mr-2 text-green-600" />
+                  Prepare Your Excel File
+                </h3>
+                <p className="text-slate-700 mb-4 leading-relaxed">
+                  Open your Excel file and make sure it has these column headers in the <strong>first row</strong>:
                 </p>
-                
-                {/* Required Columns */}
-                <div className="bg-white rounded-lg border border-amber-200 p-3 mb-3">
-                  <h4 className="font-medium text-slate-900 mb-2 text-sm">Required Columns:</h4>
-                  <div className="grid grid-cols-3 gap-3 text-sm">
-                    <div className="flex items-center space-x-2">
-                      <CheckCircle className="w-4 h-4 text-green-600" />
-                      <span className="font-mono bg-slate-100 px-2 py-1 rounded text-xs">NO.</span>
+
+                {/* Column Headers Visual */}
+                <div className="bg-white rounded-lg border-2 border-green-300 p-4 mb-4 shadow-sm">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="flex items-center space-x-3 bg-green-50 rounded-lg p-3 border border-green-200">
+                      <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                      <div>
+                        <span className="font-mono font-bold text-green-900 text-sm">NO.</span>
+                        <p className="text-xs text-green-700 mt-0.5">Student number (1, 2, 3...)</p>
+                      </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <CheckCircle className="w-4 h-4 text-green-600" />
-                      <span className="font-mono bg-slate-100 px-2 py-1 rounded text-xs">LASTNAME</span>
+                    <div className="flex items-center space-x-3 bg-green-50 rounded-lg p-3 border border-green-200">
+                      <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                      <div>
+                        <span className="font-mono font-bold text-green-900 text-sm">LASTNAME</span>
+                        <p className="text-xs text-green-700 mt-0.5">Student's last name</p>
+                      </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <CheckCircle className="w-4 h-4 text-green-600" />
-                      <span className="font-mono bg-slate-100 px-2 py-1 rounded text-xs">FIRST NAME</span>
+                    <div className="flex items-center space-x-3 bg-green-50 rounded-lg p-3 border border-green-200">
+                      <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                      <div>
+                        <span className="font-mono font-bold text-green-900 text-sm">FIRST NAME</span>
+                        <p className="text-xs text-green-700 mt-0.5">Student's first name</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-3 bg-blue-50 rounded-lg p-3 border border-blue-200">
+                      <Info className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                      <div>
+                        <span className="font-mono font-bold text-blue-900 text-sm">STUDENT ID</span>
+                        <p className="text-xs text-blue-700 mt-0.5">Optional - for tracking</p>
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Optional Column */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <h4 className="font-medium text-slate-900 mb-2 text-sm">Optional Column:</h4>
-                  <div className="flex items-center space-x-2 text-sm">
-                    <Info className="w-4 h-4 text-blue-600" />
-                    <span className="font-mono bg-slate-100 px-2 py-1 rounded text-xs">STUDENT ID</span>
-                    <span className="text-blue-700">(helps prevent duplicates)</span>
+                <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 flex items-start space-x-3">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm">
+                    <p className="font-semibold text-amber-900 mb-1">Important!</p>
+                    <p className="text-amber-800">The column names must be typed <strong>EXACTLY</strong> as shown above (including uppercase letters and spacing).</p>
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Example Table */}
-          <div>
-            <h3 className="font-semibold text-slate-900 mb-3 flex items-center space-x-2">
-              <FileText className="w-4 h-4 text-slate-600" />
-              <span>Example Excel Format:</span>
-            </h3>
-            
-            <div className="border border-slate-200 rounded-lg overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="px-4 py-2 text-left font-medium text-slate-700 border-r border-slate-200">NO.</th>
-                    <th className="px-4 py-2 text-left font-medium text-slate-700 border-r border-slate-200">LASTNAME</th>
-                    <th className="px-4 py-2 text-left font-medium text-slate-700 border-r border-slate-200">FIRST NAME</th>
-                    <th className="px-4 py-2 text-left font-medium text-slate-700">STUDENT ID</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="border-t border-slate-200">
-                    <td className="px-4 py-2 border-r border-slate-200 text-slate-600">1</td>
-                    <td className="px-4 py-2 border-r border-slate-200">Smith</td>
-                    <td className="px-4 py-2 border-r border-slate-200">John</td>
-                    <td className="px-4 py-2">2023001</td>
-                  </tr>
-                  <tr className="border-t border-slate-200 bg-slate-25">
-                    <td className="px-4 py-2 border-r border-slate-200 text-slate-600">2</td>
-                    <td className="px-4 py-2 border-r border-slate-200">Garcia</td>
-                    <td className="px-4 py-2 border-r border-slate-200">Maria</td>
-                    <td className="px-4 py-2">2023002</td>
-                  </tr>
-                  <tr className="border-t border-slate-200">
-                    <td className="px-4 py-2 border-r border-slate-200 text-slate-600">3</td>
-                    <td className="px-4 py-2 border-r border-slate-200">Johnson</td>
-                    <td className="px-4 py-2 border-r border-slate-200">Michael</td>
-                    <td className="px-4 py-2">2023003</td>
-                  </tr>
-                </tbody>
-              </table>
+          {/* Step 2 - Example */}
+          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-start space-x-4">
+              <div className="flex-shrink-0">
+                <div className="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold text-lg shadow-md">
+                  2
+                </div>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-slate-900 mb-3 flex items-center">
+                  <CheckCircle className="w-5 h-5 mr-2 text-blue-600" />
+                  Check Your Format
+                </h3>
+                <p className="text-slate-700 mb-4 leading-relaxed">
+                  Your Excel file should look like this example. Each student gets one row:
+                </p>
+
+                {/* Example Table with better styling */}
+                <div className="bg-white rounded-lg border-2 border-blue-300 overflow-hidden shadow-sm">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gradient-to-r from-slate-100 to-slate-200">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-bold text-slate-800 border-r border-slate-300">NO.</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-800 border-r border-slate-300">LASTNAME</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-800 border-r border-slate-300">FIRST NAME</th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-800">STUDENT ID</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-t-2 border-slate-200 bg-white hover:bg-blue-50 transition-colors">
+                        <td className="px-4 py-3 border-r border-slate-200 text-slate-600 font-medium">1</td>
+                        <td className="px-4 py-3 border-r border-slate-200 text-slate-900">Smith</td>
+                        <td className="px-4 py-3 border-r border-slate-200 text-slate-900">John</td>
+                        <td className="px-4 py-3 text-slate-600">2023001</td>
+                      </tr>
+                      <tr className="border-t border-slate-200 bg-slate-50 hover:bg-blue-50 transition-colors">
+                        <td className="px-4 py-3 border-r border-slate-200 text-slate-600 font-medium">2</td>
+                        <td className="px-4 py-3 border-r border-slate-200 text-slate-900">Garcia</td>
+                        <td className="px-4 py-3 border-r border-slate-200 text-slate-900">Maria</td>
+                        <td className="px-4 py-3 text-slate-600">2023002</td>
+                      </tr>
+                      <tr className="border-t border-slate-200 bg-white hover:bg-blue-50 transition-colors">
+                        <td className="px-4 py-3 border-r border-slate-200 text-slate-600 font-medium">3</td>
+                        <td className="px-4 py-3 border-r border-slate-200 text-slate-900">Johnson</td>
+                        <td className="px-4 py-3 border-r border-slate-200 text-slate-900">Michael</td>
+                        <td className="px-4 py-3 text-slate-600">2023003</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="mt-4 bg-blue-100 border border-blue-300 rounded-lg p-3 flex items-start space-x-3">
+                  <Info className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm text-blue-900">
+                    <p className="font-semibold mb-1">Pro Tip:</p>
+                    <p>Save your file as an Excel file (.xlsx or .xls). CSV files won't work!</p>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* What Happens Section */}
-          <div>
-            <h3 className="font-semibold text-slate-900 mb-3">What happens during import:</h3>
-            <div className="space-y-2 text-sm text-slate-700">
-              <div className="flex items-start space-x-2">
-                <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
-                <span>System will check for duplicate students using names and Student IDs</span>
+          {/* Step 3 - What Will Happen */}
+          <div className="bg-gradient-to-br from-purple-50 to-violet-50 border-2 border-purple-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-start space-x-4">
+              <div className="flex-shrink-0">
+                <div className="w-10 h-10 rounded-full bg-purple-500 text-white flex items-center justify-center font-bold text-lg shadow-md">
+                  3
+                </div>
               </div>
-              <div className="flex items-start space-x-2">
-                <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
-                <span>You'll be asked how to handle any duplicates found</span>
-              </div>
-              <div className="flex items-start space-x-2">
-                <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
-                <span>New students will be added with auto-generated numbers</span>
-              </div>
-              <div className="flex items-start space-x-2">
-                <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
-                <span>Your existing grades and data will be preserved</span>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-slate-900 mb-3 flex items-center">
+                  <Upload className="w-5 h-5 mr-2 text-purple-600" />
+                  Upload & We'll Handle the Rest!
+                </h3>
+                <p className="text-slate-700 mb-4 leading-relaxed">
+                  Click "Choose Excel File" below. Here's what happens automatically:
+                </p>
+
+                <div className="space-y-3">
+                  <div className="flex items-start space-x-3 bg-white rounded-lg p-3 border border-purple-200">
+                    <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
+                      <CheckCircle className="w-4 h-4 text-purple-600" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-slate-900 text-sm">We check for duplicates</p>
+                      <p className="text-xs text-slate-600 mt-1">If a student already exists, we'll ask you what to do</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start space-x-3 bg-white rounded-lg p-3 border border-purple-200">
+                    <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
+                      <CheckCircle className="w-4 h-4 text-purple-600" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-slate-900 text-sm">New students are added safely</p>
+                      <p className="text-xs text-slate-600 mt-1">They'll appear in your class list right away</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start space-x-3 bg-white rounded-lg p-3 border border-purple-200">
+                    <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
+                      <CheckCircle className="w-4 h-4 text-purple-600" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-slate-900 text-sm">Your existing data stays safe</p>
+                      <p className="text-xs text-slate-600 mt-1">All grades, quizzes, and attendance remain unchanged</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Warning */}
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <div className="flex items-start space-x-3">
-              <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
+          {/* Need Help Section */}
+          <div className="bg-gradient-to-r from-slate-50 to-slate-100 border border-slate-300 rounded-xl p-4">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center">
+                <Info className="w-5 h-5 text-slate-600" />
+              </div>
               <div>
-                <h4 className="font-medium text-red-900 mb-1">Important Notes:</h4>
-                <ul className="text-sm text-red-800 space-y-1">
-                  <li>• Column names must match exactly (case-sensitive)</li>
-                  <li>• Only Excel files (.xlsx, .xls) are supported</li>
-                  <li>• Make sure to review duplicates carefully before proceeding</li>
-                </ul>
+                <h4 className="font-bold text-slate-900 text-sm">Need Help?</h4>
+                <p className="text-xs text-slate-600 mt-1">
+                  Make sure your Excel file is saved and closed before uploading. If you get an error, check that your column names match exactly!
+                </p>
               </div>
             </div>
           </div>
