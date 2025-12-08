@@ -12,8 +12,8 @@ import { showToast } from '../utils/toast';
 
 // Backend URL configuration
 const BACKEND_URL = import.meta.env.PROD 
-  ? (import.meta.env.VITE_BACKEND_URL_PROD || 'https://vocalyx-backend-64846917574.asia-southeast1.run.app')
-  : (import.meta.env.VITE_BACKEND_URL_DEV || 'http://127.0.0.1:8000');
+  ? 'http://127.0.0.1:8000' 
+  : 'http://127.0.0.1:8000';
 
 // Custom animation styles
 const profileStyles = `

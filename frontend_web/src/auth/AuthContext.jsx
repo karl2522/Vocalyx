@@ -11,11 +11,11 @@ import { showToast } from '../utils/toast';
 
 // Environment variables
 const REDIRECT_URI = import.meta.env.PROD 
-  ? (import.meta.env.VITE_FRONTEND_URL_PROD || 'https://vocalyx.online/')
-  : (import.meta.env.VITE_FRONTEND_URL_DEV || 'http://localhost:5173');
+  ? 'https://vocalyx.online/' 
+  : 'http://localhost:5173';
 const BACKEND_URL = import.meta.env.PROD 
-  ? (import.meta.env.VITE_BACKEND_URL_PROD || 'https://vocalyx-backend-64846917574.asia-southeast1.run.app')
-  : (import.meta.env.VITE_BACKEND_URL_DEV || 'http://127.0.0.1:8000');
+  ? 'http://127.0.0.1:8000' 
+  : 'http://127.0.0.1:8000';
 
 console.log('🔍 Environment Detection:', {
   'import.meta.env.PROD': import.meta.env.PROD,
@@ -202,7 +202,7 @@ export const AuthProvider = ({ children }) => {
 
       console.log('Request body:', requestBody);
 
-      const response = await fetch(`${BACKEND_URL}/firebase-auth/`, {
+      const response = await fetch(`${BACKEND_URL}/api/firebase-auth/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -405,7 +405,7 @@ export const AuthProvider = ({ children }) => {
       console.log('Microsoft auth response:', response);
 
       if (response.accessToken) {
-        const res = await fetch(`${BACKEND_URL}/auth/microsoft/`, {
+        const res = await fetch(`${BACKEND_URL}/api/auth/microsoft/`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

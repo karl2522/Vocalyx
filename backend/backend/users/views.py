@@ -15,7 +15,6 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django.conf import settings
-import os
 import requests as http_requests
 from .serializers import UserRegistrationSerializer, UserLoginSerializer
 from .models import CustomUser
@@ -221,11 +220,9 @@ class VerifyEmailView(APIView):
     )
     def get(self, request, token=None):
         if not token:
-            frontend_url = os.getenv('FRONTEND_URL', 'https://vocalyx.online' if not settings.DEBUG else 'http://localhost:5173')
             return render(request, 'email_verification.html', {
                 'success': False,
-                'error_message': 'Verification token is missing.',
-                'frontend_url': frontend_url
+                'error_message': 'Verification token is missing.'
             })
 
         try:
@@ -233,18 +230,13 @@ class VerifyEmailView(APIView):
             user.email_verified = True
             user.email_verification_token = None
             user.save()
-            # Get frontend URL based on environment
-            frontend_url = os.getenv('FRONTEND_URL', 'https://vocalyx.online' if not settings.DEBUG else 'http://localhost:5173')
             return render(request, 'email_verification.html', {
-                'success': True,
-                'frontend_url': frontend_url
+                'success': True
             })
         except CustomUser.DoesNotExist:
-            frontend_url = os.getenv('FRONTEND_URL', 'https://vocalyx.online' if not settings.DEBUG else 'http://localhost:5173')
             return render(request, 'email_verification.html', {
                 'success': False,
-                'error_message': 'Invalid verification token. Please try registering again.',
-                'frontend_url': frontend_url
+                'error_message': 'Invalid verification token. Please try registering again.'
             })
 
 
