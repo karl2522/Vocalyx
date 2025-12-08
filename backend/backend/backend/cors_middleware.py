@@ -1,3 +1,6 @@
+from django.conf import settings
+
+
 class CustomCorsMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
@@ -15,11 +18,15 @@ class CustomCorsMiddleware:
                 'https://vocalyx.online',
                 'https://www.vocalyx.online',
                 'https://vocalyx-frontend.vercel.app',
-                'http://localhost:5173',
-                'http://127.0.0.1:5173',
-                'http://localhost:3000',
-                'http://127.0.0.1:3000'
             ]
+
+            if settings.DEBUG:
+                allowed_origins.extend([
+                    'http://localhost:5173',
+                    'http://127.0.0.1:5173',
+                    'http://localhost:3000',
+                    'http://127.0.0.1:3000',
+                ])
 
             if origin in allowed_origins:
                 response['Access-Control-Allow-Origin'] = origin
@@ -43,11 +50,15 @@ class CustomCorsMiddleware:
                 'https://vocalyx.online',
                 'https://www.vocalyx.online',
                 'https://vocalyx-frontend.vercel.app',
-                'http://localhost:5173',
-                'http://127.0.0.1:5173',
-                'http://localhost:3000',
-                'http://127.0.0.1:3000'
             ]
+
+            if settings.DEBUG:
+                allowed_origins.extend([
+                    'http://localhost:5173',
+                    'http://127.0.0.1:5173',
+                    'http://localhost:3000',
+                    'http://127.0.0.1:3000',
+                ])
 
             if origin in allowed_origins:
                 response['Access-Control-Allow-Origin'] = origin

@@ -39,22 +39,25 @@ DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
 # SECURITY: Remove '*' wildcard in production - use specific domains only
 ALLOWED_HOSTS = [
-    'localhost', 
-    '127.0.0.1', 
-    '10.0.165.206', 
-    '192.168.1.10', 
-    '.herokuapp.com', 
-    '192.168.254.101', 
-    '.run.app',  # Google Cloud Run
-    '.googleapis.com',
     'vocalyx-backend-64846917574.asia-southeast1.run.app',
     'vocalyx.online',
     'www.vocalyx.online',
-    'vocalyx-frontend.vercel.app'
+    'vocalyx-frontend.vercel.app',
+    '.run.app',  # Google Cloud Run
+    '.googleapis.com',
+    '.herokuapp.com',
 ]
-# Only allow wildcard in development
+
+# Extend for development only
 if DEBUG:
-    ALLOWED_HOSTS.append('*')
+    ALLOWED_HOSTS.extend([
+        'localhost',
+        '127.0.0.1',
+        '10.0.165.206',
+        '192.168.1.10',
+        '192.168.254.101',
+        '*',  # wildcard only in development
+    ])
 
 # Firebase configuration - support both file and environment variable
 FIREBASE_SERVICE_ACCOUNT_PATH = os.path.join(BASE_DIR.parent, 'firebase-service-account.json')
@@ -192,21 +195,25 @@ SIMPLE_JWT = {
 CORS_ALLOW_ALL_ORIGINS = DEBUG  # Only allow all origins in development
 CORS_ALLOW_CREDENTIALS = True
 
-# Explicitly allow common development origins
+# Explicitly allow production origins; extend with dev origins only when DEBUG
 CORS_ALLOWED_ORIGINS = [
     "https://vocalyx.online",
     "https://www.vocalyx.online",
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://10.0.165.206:8080",
-    "http://10.0.165.206",
     "https://vocalyx-frontend.vercel.app",
-    "http://192.168.254.101:8000",
-    "http://192.168.254.101",
-    "https://vocalyx-backend-64846917574.asia-southeast1.run.app"
+    "https://vocalyx-backend-64846917574.asia-southeast1.run.app",
 ]
+
+if DEBUG:
+    CORS_ALLOWED_ORIGINS.extend([
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://10.0.165.206:8080",
+        "http://10.0.165.206",
+        "http://192.168.254.101:8000",
+        "http://192.168.254.101",
+    ])
 
 CORS_ALLOW_METHODS = [
     'DELETE',
