@@ -219,10 +219,17 @@ class VerifyEmailView(APIView):
         tags=['Authentication']
     )
     def get(self, request, token=None):
+        # Get frontend URLs based on environment
+        frontend_base_url = "https://vocalyx.online" if not settings.DEBUG else "http://localhost:5173"
+        frontend_login_url = f"{frontend_base_url}/login"
+        frontend_signup_url = f"{frontend_base_url}/signup"
+        
         if not token:
             return render(request, 'email_verification.html', {
                 'success': False,
-                'error_message': 'Verification token is missing.'
+                'error_message': 'Verification token is missing.',
+                'frontend_login_url': frontend_login_url,
+                'frontend_signup_url': frontend_signup_url,
             })
 
         try:
@@ -231,12 +238,16 @@ class VerifyEmailView(APIView):
             user.email_verification_token = None
             user.save()
             return render(request, 'email_verification.html', {
-                'success': True
+                'success': True,
+                'frontend_login_url': frontend_login_url,
+                'frontend_signup_url': frontend_signup_url,
             })
         except CustomUser.DoesNotExist:
             return render(request, 'email_verification.html', {
                 'success': False,
-                'error_message': 'Invalid verification token. Please try registering again.'
+                'error_message': 'Invalid verification token. Please try registering again.',
+                'frontend_login_url': frontend_login_url,
+                'frontend_signup_url': frontend_signup_url,
             })
 
 

@@ -3100,7 +3100,10 @@ const ClassRecordExcel = () => {
 
       // 🔥 STEP 3: Save to Google Sheets
       if (updates.length > 0) {
-        const response = await fetch(`${import.meta.env.VITE_BACKEND_URL_DEV}/api/gradebook/update-scores/`, {
+        const backendUrl = import.meta.env.PROD 
+          ? (import.meta.env.VITE_BACKEND_URL_PROD || 'https://vocalyx-backend-64846917574.asia-southeast1.run.app')
+          : (import.meta.env.VITE_BACKEND_URL_DEV || 'http://127.0.0.1:8000');
+        const response = await fetch(`${backendUrl}/api/gradebook/update-scores/`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -3208,7 +3211,9 @@ const ClassRecordExcel = () => {
       console.log('💾 Saving batch row range updates to Google Sheets...');
 
       try {
-        const backendUrl = import.meta.env.VITE_BACKEND_URL_DEV;
+        const backendUrl = import.meta.env.PROD 
+          ? (import.meta.env.VITE_BACKEND_URL_PROD || 'https://vocalyx-backend-64846917574.asia-southeast1.run.app')
+          : (import.meta.env.VITE_BACKEND_URL_DEV || 'http://127.0.0.1:8000');
 
         // 🔥 FIXED: Let backend handle all the indexing - just pass the raw row index
         for (let i = startRow; i <= endRow; i++) {
@@ -3381,9 +3386,10 @@ const ClassRecordExcel = () => {
       setImportProgress({ status: 'downloading', message: 'Downloading file from Drive...', entity: importType });
 
       // Download file from Drive
-      const response = await fetch(`${import.meta.env.PROD
-        ? 'http://127.0.0.1:8000'
-        : 'http://127.0.0.1:8000'}/api/drive/download/${driveFile.id}/`, {
+      const backendUrl = import.meta.env.PROD 
+        ? (import.meta.env.VITE_BACKEND_URL_PROD || 'https://vocalyx-backend-64846917574.asia-southeast1.run.app')
+        : (import.meta.env.VITE_BACKEND_URL_DEV || 'http://127.0.0.1:8000');
+      const response = await fetch(`${backendUrl}/api/drive/download/${driveFile.id}/`, {
         headers: googleDriveService.getHeaders()
       });
 
