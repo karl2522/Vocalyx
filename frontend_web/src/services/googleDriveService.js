@@ -6,7 +6,7 @@ const BACKEND_URL = import.meta.env.PROD
 
 class GoogleDriveService {
   constructor() {
-    this.baseURL = `${BACKEND_URL}/api`;
+    this.baseURL = `${BACKEND_URL}`;
   }
 
   /**
