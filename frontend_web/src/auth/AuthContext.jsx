@@ -202,7 +202,7 @@ export const AuthProvider = ({ children }) => {
 
       console.log('Request body:', requestBody);
 
-      const response = await fetch(`${BACKEND_URL}/api/firebase-auth/`, {
+      const response = await fetch(`${BACKEND_URL}/firebase-auth/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
