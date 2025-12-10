@@ -1634,7 +1634,7 @@ const ClassRecordExcel = () => {
     if (numericScore > maxScore) {
       return {
         valid: false,
-        error: `Score ${score} exceeds maximum of ${maxScore} for ${columnName}`,
+        error: ``,
         suggestion: `Please enter a score between 0 and ${maxScore}`
       };
     }
@@ -1642,7 +1642,7 @@ const ClassRecordExcel = () => {
     if (numericScore < 0) {
       return {
         valid: false,
-        error: `Score cannot be negative`,
+        error: ``,
         suggestion: `Please enter a score between 0 and ${maxScore}`
       };
     }

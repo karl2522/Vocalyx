@@ -303,7 +303,7 @@ const Profile = () => {
       });
       
       // Send tokens to backend for Google Drive connection
-      const response = await fetch(`${BACKEND_URL}/api/google-drive/connect/`, {
+      const response = await fetch(`${BACKEND_URL}/google-drive/connect/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -374,7 +374,7 @@ const Profile = () => {
     try {
       console.log('Disconnecting Google Drive...');
       
-      const response = await fetch(`${BACKEND_URL}/api/google-drive/disconnect/`, {
+      const response = await fetch(`${BACKEND_URL}/google-drive/disconnect/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
