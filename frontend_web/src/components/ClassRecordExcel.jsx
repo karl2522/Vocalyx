@@ -4654,7 +4654,7 @@ const ClassRecordExcel = () => {
     const validation = validateScore(currentBatchColumn, score);
     if (!validation.valid) {
       console.log('🔥 PROCESS BATCH: ❌ Validation failed:', validation.error);
-      toast.error(`❌ ${validation.error}`);
+      toast.error(`❌ Score exceeded max score ${validation.error}`);
       if (voiceEnabled) {
         speakText(validation.error);
       }
