@@ -103,10 +103,10 @@ const useVoiceRecognition = () => {
         formData.append('student_names', studentNamesArray.join(','));
       }
 
-      console.log('🟢 [BACKGROUND] Sending to backend:', `${backendUrl}/api/speech/speech/transcribe/`);
+      console.log('🟢 [BACKGROUND] Sending to backend:', `${backendUrl}/speech/speech/transcribe/`);
       console.log('🔑 [BACKGROUND] Using token:', accessToken ? 'Present' : 'Missing');
 
-      const response = await fetch(`${backendUrl}/api/speech/speech/transcribe/`, {
+      const response = await fetch(`${backendUrl}/speech/speech/transcribe/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
@@ -123,7 +123,7 @@ const useVoiceRecognition = () => {
         const refreshTokenStr = localStorage.getItem('refreshToken');
         if (refreshTokenStr) {
           try {
-            const refreshResponse = await fetch(`${backendUrl}/api/token/refresh/`, {
+            const refreshResponse = await fetch(`${backendUrl}/token/refresh/`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
